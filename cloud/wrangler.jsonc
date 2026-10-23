@@ -1,0 +1,44 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "onetop-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-22",
+  "account_id": "98db30e9683ecf5ddec5623e52b6136d",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "HUBS",
+        "class_name": "AccountHub"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "AccountHub"
+      ]
+    }
+  ],
+  "vars": {
+    "FIREBASE_PROJECT_ID": "onetop-si",
+    "WEB_ORIGINS": "https://1top.si,https://onetop-si.awsmzun.chatgpt.site",
+    "WEB_URL": "https://1top.si"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.01
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "onetop-auth",
+      "database_id": "b1c5e019-b1c4-4618-a8b1-c18addb5c5e3"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "17 * * * *"
+    ]
+  }
+}

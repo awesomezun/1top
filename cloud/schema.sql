@@ -1,0 +1,17 @@
+CREATE TABLE IF NOT EXISTS devices (
+ id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL,
+ platform TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
+ created_at INTEGER NOT NULL, revoked_at INTEGER, allow_control INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS devices_user ON devices(user_id);
+CREATE TABLE IF NOT EXISTS pairings (
+ code TEXT PRIMARY KEY, secret_hash TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+ platform TEXT NOT NULL, expires_at INTEGER NOT NULL, user_id TEXT,
+ allow_control INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS tickets (
+ hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, auth_expires INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS request_limits (
+ key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_at INTEGER NOT NULL
+);
