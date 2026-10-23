@@ -69,4 +69,8 @@ def applications(rows):
     return list(seen.values())
 
 def orca_executable():
-    return os.environ.get('ORCA_CLI_COMMAND') or shutil.which('orca') or str(Path.home()/'.local/bin/orca')
+    explicit=os.environ.get('ORCA_CLI_COMMAND')
+    if explicit:return explicit
+    # Prefer the current per-user installation over a stale system-wide launcher.
+    local=Path.home()/'.local/bin/orca'
+    return str(local) if local.is_file() else shutil.which('orca') or str(local)

@@ -5,6 +5,18 @@ from onetop.bridge import CloudLink,export_snapshot,save_private
 from onetop.discovery import cli_kind,context
 
 class BoundaryTests(unittest.TestCase):
+ def test_orca_current_installation_wins_over_stale_system_launcher(self):
+  from unittest.mock import patch
+  from onetop.discovery import orca_executable
+  with tempfile.TemporaryDirectory() as folder:
+   local=Path(folder)/'.local/bin/orca';local.parent.mkdir(parents=True);local.write_text('fixture')
+   with patch('onetop.discovery.Path.home',return_value=Path(folder)),patch('onetop.discovery.shutil.which',return_value='/usr/local/bin/orca'),patch.dict('os.environ',{},clear=True):
+    self.assertEqual(orca_executable(),str(local))
+    with patch.dict('os.environ',{'ORCA_CLI_COMMAND':'/explicit/orca'}):self.assertEqual(orca_executable(),'/explicit/orca')
+ def test_confirmed_orca_identity_overrides_detached_terminal_ancestry(self):
+  s={'id':'test','kind':'Codex','control_key':'key','project':'fixture','status':'working','location':{'app':'Terminal'},'orca_terminal':{'title':'Named tab'},'input_verified':True}
+  row=export_snapshot({'sessions':[s]})['sessions'][0]
+  self.assertEqual(row['app'],'Orca');self.assertEqual(row['terminal'],'Named tab');self.assertIn('pause',row['capabilities'])
  def test_process_classification_ignores_prompt(self):
   self.assertIsNone(cli_kind('node',['node','index.js','run claude with @openai/codex']))
   self.assertEqual(cli_kind('node',['node','/lib/node_modules/@openai/codex/bin/codex.js']),'Codex')

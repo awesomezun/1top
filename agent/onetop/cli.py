@@ -1,4 +1,4 @@
-import argparse,json,os,platform,sys,threading,time,webbrowser,fcntl,signal
+import argparse,json,os,platform,sys,threading,time,fcntl,signal
 from pathlib import Path
 from . import __version__
 
@@ -13,7 +13,7 @@ def main():
         print('This release supports macOS. Windows and Linux builds are not available yet.',file=sys.stderr);sys.exit(2)
     from .server import Collector,Handler,DATA
     from .controls import Controller
-    from .bridge import CloudLink,save_private
+    from .bridge import CloudLink,save_private,open_url
     from http.server import ThreadingHTTPServer
     import secrets
     DATA.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -36,12 +36,12 @@ def main():
     signal.signal(signal.SIGTERM,stop_signal)
     try:
         if args.command=='local':
-            if not args.headless:webbrowser.open('http://127.0.0.1:'+str(args.port))
+            if not args.headless:open_url('http://127.0.0.1:'+str(args.port))
         else:
             if (args.command=='connect' or not bridge.config) and not args.headless:bridge.pair()
             if bridge.config:
                 threading.Thread(target=bridge.run,daemon=True).start()
-                if not args.headless:webbrowser.open('https://1top.si/app')
+                if not args.headless:open_url('https://1top.si/app')
         while True:time.sleep(1)
     except KeyboardInterrupt:pass
     except Exception:

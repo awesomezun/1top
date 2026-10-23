@@ -1,5 +1,5 @@
 """Outbound-only cloud connection. No inbound ports exposed to the network."""
-import json,os,platform,secrets,socket,threading,time,urllib.request,urllib.error,ssl,webbrowser
+import json,os,platform,secrets,socket,threading,time,urllib.request,urllib.error,ssl,webbrowser,subprocess
 from pathlib import Path
 import certifi
 import websocket
@@ -7,6 +7,14 @@ from . import __version__
 
 RELAY='https://onetop-relay.gitreels.workers.dev'
 SSL=ssl.create_default_context(cafile=certifi.where())
+
+def open_url(url):
+    # Open with the macOS default browser via Launch Services.
+    # Pass the URL as one argument without shell interpolation.
+    if platform.system()=='Darwin':
+        subprocess.run(['/usr/bin/open',url],check=True,timeout=10,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    else:webbrowser.open(url)
+
 
 def request(path,payload):
     raw=json.dumps(payload).encode()
@@ -39,7 +47,7 @@ def export_snapshot(state):
         if can_pause and s.get('display_status')=='paused' and status in ('idle','interrupted'):capabilities.append('resume')
         if identified and (not term or status in ('idle','interrupted') or can_pause and status in ('working','waiting')):capabilities.append('terminate')
         sessions.append({'id':s['id'],'control_key':s.get('control_key',''),'kind':s['kind'],
-            'app':loc.get('app') or ('Orca' if term else 'Unknown'),
+            'app':'Orca' if term else loc.get('app') or 'Unknown',
             'terminal':term.get('title') or loc.get('terminal',''),
             'project':s.get('project',''),'title':s.get('project','')+' · '+s['kind'],
             'model':s.get('model',''),'status':s.get('display_status') or status,'tokens':s.get('tokens'),
@@ -67,7 +75,7 @@ class CloudLink:
         code,result=request('/api/pair/start',{'name':socket.gethostname().removesuffix('.local'),'platform':platform.system()})
         if code!=200:raise RuntimeError(result.get('error','Could not start connection'))
         url=result['verification_uri_complete'];self.status='Waiting for Google sign-in'
-        if open_browser:webbrowser.open(url)
+        if open_browser:open_url(url)
         deadline=time.monotonic()+result['expires_in']
         while not self.stop.wait(result['interval']) and time.monotonic()<deadline:
             status,data=request('/api/pair/poll',{'device_code':result['device_code']})
