@@ -28,3 +28,14 @@ class BoundaryTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as folder:
    path=Path(folder)/'device.json';save_private(path,{'device_token':'fixture'})
    self.assertEqual(path.stat().st_mode&0o777,0o600)
+
+class ConnectionTests(unittest.TestCase):
+ def test_request_identifies_companion_and_handles_plain_error(self):
+  import io,urllib.error
+  from unittest.mock import patch
+  from onetop.bridge import request
+  error=urllib.error.HTTPError('https://example.invalid',403,'denied',{},io.BytesIO(b'plain gateway error'))
+  with patch('urllib.request.urlopen',side_effect=error) as send:
+   status,result=request('/test',{})
+   self.assertEqual(status,403);self.assertIn('HTTP 403',result['error'])
+   self.assertTrue(send.call_args.args[0].headers['User-agent'].startswith('1top/'))

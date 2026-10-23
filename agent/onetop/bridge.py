@@ -10,11 +10,13 @@ SSL=ssl.create_default_context(cafile=certifi.where())
 
 def request(path,payload):
     raw=json.dumps(payload).encode()
-    req=urllib.request.Request(RELAY+path,data=raw,headers={'Content-Type':'application/json'},method='POST')
+    req=urllib.request.Request(RELAY+path,data=raw,headers={'Content-Type':'application/json','User-Agent':'1top/'+__version__},method='POST')
     try:
         with urllib.request.urlopen(req,timeout=15,context=SSL) as r:return r.status,json.load(r)
     except urllib.error.HTTPError as e:
-        return e.code,json.load(e)
+        try:return e.code,json.load(e)
+        except (ValueError,UnicodeDecodeError):return e.code,{'error':'Connection service returned HTTP '+str(e.code)+'. Please try again later.'}
+        finally:e.close()
 
 
 def save_private(path,value):
@@ -112,7 +114,7 @@ class CloudLink:
         while not self.stop.is_set() and self.config:
             try:
                 self.ws=websocket.create_connection(RELAY.replace('https://','wss://')+'/api/device/socket',
-                    header={'Authorization':'Bearer '+self.config['device_token']},timeout=3,
+                    header={'Authorization':'Bearer '+self.config['device_token'],'User-Agent':'1top/'+__version__},timeout=3,
                     suppress_origin=True,sslopt={'ca_certs':certifi.where()})
                 self.status='Connected';delay=1;last=0
                 while not self.stop.is_set():
