@@ -1,0 +1,415 @@
+{
+  "schema": 1,
+  "review_date": "2026-10-24",
+  "scope": "Pinned source references; listed ranges do not imply full runtime validation. No upstream application source is vendored.",
+  "upstream": {
+    "repository": "pingdotgg/t3code",
+    "commit": "27e0c684c585f955252d65f06206dd11a143bff5",
+    "files": [
+      {
+        "path": "LICENSE",
+        "topic": "reuse notice",
+        "sha256": "935d8f2af0c703f9c39517ee57cc4930b19d02d533be930b63f0e82f93614b43",
+        "lines": 21,
+        "reference_range": {
+          "start": 1,
+          "end": 21
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/LICENSE#L1-L21"
+      },
+      {
+        "path": "apps/web/src/components/HostedEmptyState.tsx",
+        "topic": "CLI and desktop onboarding",
+        "sha256": "89ae01c8d8abcec035c7f0f818b01d6ef86749d629741ec542bbec932ab785a2",
+        "lines": 163,
+        "reference_range": {
+          "start": 1,
+          "end": 163
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/apps/web/src/components/HostedEmptyState.tsx#L1-L163"
+      },
+      {
+        "path": "scripts/npm-launcher/t3.mjs",
+        "topic": "launcher source exercised with fixtures",
+        "sha256": "9bc0b14ebb4c80139db109cdf0bc9db8aca2259a9517873417e295a1114dac6d",
+        "lines": 176,
+        "reference_range": {
+          "start": 1,
+          "end": 176
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/scripts/npm-launcher/t3.mjs#L1-L176"
+      },
+      {
+        "path": "scripts/build-npm-launcher.ts",
+        "topic": "published launcher manifest",
+        "sha256": "37ffba6778b35d3574677a02d6ec49684da014b69cf4c81c012b2bdcaa74deef",
+        "lines": 125,
+        "reference_range": {
+          "start": 35,
+          "end": 70
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/scripts/build-npm-launcher.ts#L35-L70"
+      },
+      {
+        "path": ".github/workflows/release.yml",
+        "topic": "artifact checksum and npm release order",
+        "sha256": "2028f224f80e2f7cdd1ba27b72d7e04d5542b03cd0edba48597891791ca354f4",
+        "lines": 1450,
+        "reference_range": {
+          "start": 780,
+          "end": 1005
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/.github/workflows/release.yml#L780-L1005"
+      },
+      {
+        "path": "scripts/build-desktop-artifact.ts",
+        "topic": "desktop build entry; signing references also inspected",
+        "sha256": "7da731eaa4192ad1d0940c1d9aa4861568953ee9abdfc849070e6198bf746638",
+        "lines": 4217,
+        "reference_range": {
+          "start": 1,
+          "end": 100
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/scripts/build-desktop-artifact.ts#L1-L100"
+      },
+      {
+        "path": "apps/desktop/package.json",
+        "topic": "desktop runtime and packaging dependencies",
+        "sha256": "4bf3d2f2c9d28f4cf95c0a5b40d3d39012be82384ee4a6f8bbef5bc32b6ae223",
+        "lines": 45,
+        "reference_range": {
+          "start": 1,
+          "end": 45
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/apps/desktop/package.json#L1-L45"
+      },
+      {
+        "path": "docs/internals/overview.md",
+        "topic": "capabilities and durable operation boundaries",
+        "sha256": "c55f42d36e535b134e3b1be1fc3ddd3f5315199d6352d2e5078fcc577d78ed68",
+        "lines": 126,
+        "reference_range": {
+          "start": 1,
+          "end": 126
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/internals/overview.md#L1-L126"
+      },
+      {
+        "path": "docs/internals/connection-runtime.md",
+        "topic": "shared connection lifecycle",
+        "sha256": "205746a02299f6feaaf679d099157b561629a9d6c1eef62a88f68f0aff993d93",
+        "lines": 87,
+        "reference_range": {
+          "start": 1,
+          "end": 87
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/internals/connection-runtime.md#L1-L87"
+      },
+      {
+        "path": "docs/internals/t3-connect.md",
+        "topic": "broker, tunnel, trust and webhook exception",
+        "sha256": "2f2080c63d1d1963735d38d437d299194e32055f8e9edbcc584d29c5c0faa1bd",
+        "lines": 177,
+        "reference_range": {
+          "start": 1,
+          "end": 177
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/internals/t3-connect.md#L1-L177"
+      },
+      {
+        "path": "docs/internals/environment-auth.md",
+        "topic": "scopes, credentials and proof binding",
+        "sha256": "e9bfaf7375e0e6d336320fa8b0b86cfb8b665fc491e746a13501b19f988cfbeb",
+        "lines": 129,
+        "reference_range": {
+          "start": 1,
+          "end": 129
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/internals/environment-auth.md#L1-L129"
+      },
+      {
+        "path": "infra/relay/README.md",
+        "topic": "relay deployment architecture",
+        "sha256": "e392048110eda389b8c99deaeaca4d1abdb4e9c1dd5f609a5e4e8b2958f379a2",
+        "lines": 174,
+        "reference_range": {
+          "start": 1,
+          "end": 140
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/infra/relay/README.md#L1-L140"
+      },
+      {
+        "path": "docs/internals/resource-telemetry.md",
+        "topic": "bounded demand-based resource collection",
+        "sha256": "010b7ff29d51c593e50954f61a81d9230c99558ab33bdda5be3b9c9497c96872",
+        "lines": 57,
+        "reference_range": {
+          "start": 1,
+          "end": 57
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/internals/resource-telemetry.md#L1-L57"
+      },
+      {
+        "path": "apps/server/src/resourceTelemetry/ResourceAttribution.ts",
+        "topic": "logical resource attribution",
+        "sha256": "2ae0a5a800ac4fc180b6192aebf14fd919e5b79c082fe656389e249ba306c2a0",
+        "lines": 71,
+        "reference_range": {
+          "start": 1,
+          "end": 71
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/apps/server/src/resourceTelemetry/ResourceAttribution.ts#L1-L71"
+      },
+      {
+        "path": "docs/user/usage.md",
+        "topic": "provider coverage, account usage and time windows",
+        "sha256": "1e817597ef12bdb4e401421006b804cde27868cbca5018e433a7d325234bbf40",
+        "lines": 163,
+        "reference_range": {
+          "start": 1,
+          "end": 163
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/user/usage.md#L1-L163"
+      },
+      {
+        "path": "packages/provider-core/src/server/usage.ts",
+        "topic": "usage categories, reasoning subset and identities",
+        "sha256": "7644e32d3088b85a5c93c6a3a72e9f5f956846db746c775f10b2ffae9acdb329",
+        "lines": 140,
+        "reference_range": {
+          "start": 1,
+          "end": 140
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/packages/provider-core/src/server/usage.ts#L1-L140"
+      },
+      {
+        "path": "packages/shared/src/usageMerge.ts",
+        "topic": "unknown cost and source fingerprints",
+        "sha256": "a76bfc66ed99bddc8fbc64c72b49cc95b045ae0fbfc99e5fdf841974d121d0d2",
+        "lines": 595,
+        "reference_range": {
+          "start": 1,
+          "end": 180
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/packages/shared/src/usageMerge.ts#L1-L180"
+      },
+      {
+        "path": "apps/server/src/usage/usageScanCache.ts",
+        "topic": "cache schema and tentative transcript tails",
+        "sha256": "c3eb3dc6894e8f6d6a057b6fe772f12fda6486bad40780b3b9b30bf65f3dfad5",
+        "lines": 392,
+        "reference_range": {
+          "start": 1,
+          "end": 180
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/apps/server/src/usage/usageScanCache.ts#L1-L180"
+      },
+      {
+        "path": "packages/provider-cursor/src/server/accountUsage.ts",
+        "topic": "candidate account usage adapter; not runtime tested",
+        "sha256": "40083d6daacde2ff21943b81364a0140c07ead265927b243c1ff99bb4ce430e6",
+        "lines": 369,
+        "reference_range": {
+          "start": 1,
+          "end": 100
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/packages/provider-cursor/src/server/accountUsage.ts#L1-L100"
+      },
+      {
+        "path": "docs/internals/providers.md",
+        "topic": "provider capabilities, installation and health boundaries",
+        "sha256": "983c07c57191abc7c6fd73cf2c9ed0f5ff7e20b0079ed8ec75b3a5d8c027ff5f",
+        "lines": 162,
+        "reference_range": {
+          "start": 1,
+          "end": 160
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/internals/providers.md#L1-L160"
+      },
+      {
+        "path": "packages/provider-core/src/server/ProviderAdapter.ts",
+        "topic": "adapter contract",
+        "sha256": "f0e93a3fe810764500933ec86233c2f281cef74bee84efbf7b35bfc9e6bc993b",
+        "lines": 663,
+        "reference_range": {
+          "start": 1,
+          "end": 145
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/packages/provider-core/src/server/ProviderAdapter.ts#L1-L145"
+      },
+      {
+        "path": "docs/internals/server-updates.md",
+        "topic": "trial, commit and rollback boundary",
+        "sha256": "b776d9f1335beab8012c2c30fcfde69d8ad07e792566b66de7bbe88cf9299b1d",
+        "lines": 105,
+        "reference_range": {
+          "start": 1,
+          "end": 105
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/internals/server-updates.md#L1-L105"
+      },
+      {
+        "path": "docs/user/background-service.md",
+        "topic": "service and link lifetimes",
+        "sha256": "72af2392d691b558cc7134256a7f967bb82abec8ddab8431ba586e0099b73b82",
+        "lines": 150,
+        "reference_range": {
+          "start": 1,
+          "end": 115
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/user/background-service.md#L1-L115"
+      },
+      {
+        "path": "apps/mobile/package.json",
+        "topic": "native mobile dependency and build surface",
+        "sha256": "a1dcab323ca58ccebbb6c0f544d7a7eb57be1636f36f5c413ae4cdb6865b94df",
+        "lines": 193,
+        "reference_range": {
+          "start": 1,
+          "end": 193
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/apps/mobile/package.json#L1-L193"
+      },
+      {
+        "path": "apps/mobile/README.md",
+        "topic": "native variants and stale distribution statement",
+        "sha256": "7838640d293a7cfa77c23529b6dbd60766337fbe000186726fd0c8296a8a3ca2",
+        "lines": 156,
+        "reference_range": {
+          "start": 1,
+          "end": 150
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/apps/mobile/README.md#L1-L150"
+      },
+      {
+        "path": "docs/internals/mobile-development.md",
+        "topic": "native development and lifecycle",
+        "sha256": "aea0139bb917365c15a7ec3fe39302ec1de250b738c511b4774dd9cc4d1904e1",
+        "lines": 84,
+        "reference_range": {
+          "start": 1,
+          "end": 84
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/internals/mobile-development.md#L1-L84"
+      },
+      {
+        "path": "apps/mobile/src/widgets/subscriptionUsageSnapshot.ts",
+        "topic": "widget expiry and refresh interval",
+        "sha256": "bf3cdffc6e569310373204cc45ee8b2ea7626bc3889b87fcb440cfd640053fe1",
+        "lines": 168,
+        "reference_range": {
+          "start": 1,
+          "end": 140
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/apps/mobile/src/widgets/subscriptionUsageSnapshot.ts#L1-L140"
+      },
+      {
+        "path": "docs/user/mobile-notifications.md",
+        "topic": "background notification delivery",
+        "sha256": "8a75d6dc6cd326076dd2f1ecfdf9512f72a2fed4bb5597423c7d3eb49a338366",
+        "lines": 11,
+        "reference_range": {
+          "start": 1,
+          "end": 11
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/user/mobile-notifications.md#L1-L11"
+      },
+      {
+        "path": "docs/internals/performance-regressions.md",
+        "topic": "bounded operations and regression scenarios",
+        "sha256": "057c4e7be8f3890ff57107165d2404c6a2689c7179d9035edfbd2c6214338a51",
+        "lines": 133,
+        "reference_range": {
+          "start": 1,
+          "end": 130
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/internals/performance-regressions.md#L1-L130"
+      },
+      {
+        "path": "docs/internals/open-source-licenses.md",
+        "topic": "per-client license distribution",
+        "sha256": "9a792b6a4553d31c6ba15da2333f2793682cedad20da1ffdfe997b05507206cc",
+        "lines": 108,
+        "reference_range": {
+          "start": 1,
+          "end": 108
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/internals/open-source-licenses.md#L1-L108"
+      },
+      {
+        "path": "docs/user/outside-agents.md",
+        "topic": "external agents through authenticated MCP",
+        "sha256": "b78f48901095390d4e3f184795a1139d34d9d2fc493953183ac37069711c4a5b",
+        "lines": 121,
+        "reference_range": {
+          "start": 1,
+          "end": 121
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/user/outside-agents.md#L1-L121"
+      },
+      {
+        "path": "docs/internals/terminal-runtime.md",
+        "topic": "terminal runtime reference",
+        "sha256": "df2797688ab0193917530633425b3cca0f04357946fc8355d706932c26365abb",
+        "lines": 44,
+        "reference_range": {
+          "start": 1,
+          "end": 44
+        },
+        "url": "https://github.com/pingdotgg/t3code/blob/27e0c684c585f955252d65f06206dd11a143bff5/docs/internals/terminal-runtime.md#L1-L44"
+      }
+    ]
+  },
+  "baseline": {
+    "repository": "awesomezun/1top",
+    "commit": "844778346974e3e2d9003958bea5530ff91b6117",
+    "files": [
+      {
+        "path": "README.md",
+        "sha256": "9ac3904267478c48a721e760419a469fdf03bc7bf58990b897850a230ad7bd0f",
+        "lines": 105,
+        "url": "https://github.com/awesomezun/1top/blob/844778346974e3e2d9003958bea5530ff91b6117/README.md"
+      },
+      {
+        "path": "agent/onetop/bridge.py",
+        "sha256": "fe36e822ddd548aed76c4b454fc62d52edf977d7765a4cc41c6f1db182c50f14",
+        "lines": 151,
+        "url": "https://github.com/awesomezun/1top/blob/844778346974e3e2d9003958bea5530ff91b6117/agent/onetop/bridge.py"
+      },
+      {
+        "path": "agent/onetop/discovery.py",
+        "sha256": "aef67002d1da2ac18993c6654b07907a4b3317fac71e57e629f0677377c64c05",
+        "lines": 76,
+        "url": "https://github.com/awesomezun/1top/blob/844778346974e3e2d9003958bea5530ff91b6117/agent/onetop/discovery.py"
+      },
+      {
+        "path": "cloud/src/hub.ts",
+        "sha256": "28708b6789536180a48f397a98b8032caf726cf410e69556fffde8b53392fb6e",
+        "lines": 87,
+        "url": "https://github.com/awesomezun/1top/blob/844778346974e3e2d9003958bea5530ff91b6117/cloud/src/hub.ts"
+      },
+      {
+        "path": "agent/onetop/cli.py",
+        "sha256": "3d184bd7d0f7d73c9ab8fc88aab4f470a14db16321b6d7439dc371dacc7fe52b",
+        "lines": 53,
+        "url": "https://github.com/awesomezun/1top/blob/844778346974e3e2d9003958bea5530ff91b6117/agent/onetop/cli.py"
+      },
+      {
+        "path": "scripts/build-macos.sh",
+        "sha256": "ce11e0a4843ea329bd7e7c1ebdbc3d272d33c3b21673713df1ea98045dec46b8",
+        "lines": 17,
+        "url": "https://github.com/awesomezun/1top/blob/844778346974e3e2d9003958bea5530ff91b6117/scripts/build-macos.sh"
+      }
+    ]
+  },
+  "availability_references": [
+    {
+      "url": "https://github.com/pingdotgg/t3code/releases/tag/v0.1.2",
+      "kind": "published release, not runtime tested"
+    },
+    {
+      "url": "https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824",
+      "kind": "store listing, not installed in this study"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "upstream_commit": "27e0c684c585f955252d65f06206dd11a143bff5",
+  "upstream_file": "scripts/npm-launcher/t3.mjs",
+  "upstream_sha256": "9bc0b14ebb4c80139db109cdf0bc9db8aca2259a9517873417e295a1114dac6d",
+  "platform": "darwin-arm64",
+  "node_version": "v22.22.3",
+  "scope": "Synthetic local archive and inert executable; not a real install, sign-in, mobile, or load benchmark.",
+  "cases": [
+    {
+      "case": "cold_install_verified_archive",
+      "passed": true
+    },
+    {
+      "case": "warm_cache_no_download",
+      "passed": true
+    },
+    {
+      "case": "checksum_mismatch_never_executes",
+      "passed": true
+    },
+    {
+      "case": "unlisted_archive_never_downloads_or_executes",
+      "passed": true
+    },
+    {
+      "case": "incomplete_install_recovered",
+      "passed": true
+    }
+  ]
+}
