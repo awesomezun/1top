@@ -16,12 +16,13 @@ Remote access is optional. Managed access currently requires a server-issued gra
 
 A browser login cannot inspect or control arbitrary local processes. The companion provides that local connection. Nothing is installed on a phone just to view the dashboard.
 
-**v2.3.0:** session and AI views retained, host-application navigation and model filtering, a stable menu-bar panel labeled 1top, and actual UI recordings on the landing page. The public landing page is v4.1.0. See [release notes](docs/release-notes_v2.3.0.md).
+**v2.4.0:** proportional token maps by session, host app, execution tool or model, plus a context map of the last reported request input. Existing session and AI views remain available. The public landing page is v4.2.0, with four native UI recordings and the actual menu-bar symbol. See [release notes](docs/release-notes_v2.4.0.md).
 
 ## What you can see
 
 - Computers, host applications, terminal or conversation locations, AI tools, models, and session identities. Existing AI filters remain alongside app navigation and a model selector.
 - Rolling usage for **24h, 12h, 5h, 1h, 30m, and 10m**. The current rate is an average over up to the latest 60 seconds.
+- Usage-share treemaps for the selected time window. Context maps show reported fresh/cached input and remaining input-based capacity when known; they do not infer file-level contents or a model's capacity.
 - Input, cached input, cache writes, and output from reported usage. Unknown values stay unknown; partial collection history is marked.
 - Claude Code and Codex account quota reports: 5-hour and weekly windows when reported, reset times, identity, and last update. Missing windows stay unknown; cached reports are marked.
 - Computer CPU/memory and attributable session process resources.
@@ -85,7 +86,7 @@ Build the Apple Silicon desktop app:
 scripts/build-macos.sh
 ```
 
-The resulting `build/1top_v2.3.0/1top.app` has a **local ad-hoc signature**, not a public distribution signature. Do not present it as notarized or instruct users to disable Gatekeeper. Keep the public `release.json` unavailable until the actual released artifact passes signing and notarization checks.
+The resulting `build/1top_v2.4.0/1top.app` has a **local ad-hoc signature**, not a public distribution signature. Do not present it as notarized or instruct users to disable Gatekeeper. Keep the public `release.json` unavailable until the actual released artifact passes signing and notarization checks.
 
 Web development:
 

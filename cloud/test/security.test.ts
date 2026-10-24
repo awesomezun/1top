@@ -167,3 +167,11 @@ it('bounds account limits and never forwards email or credential extras',()=>{
  expect(value.account_quotas[0].account_label).toBe('Claude · 123456');
  expect(value.account_quotas[0].windows[0].pct).toBeNull();expect(value.account_quotas[0].windows[1].pct).toBe(95);
 });
+
+it('exports only context counters and rejects invalid component totals',()=>{
+ const input:any=sample();input.sessions[0].context_usage={basis:'last_request_input',input_tokens:100,capacity:200,parts:[20,80,0],observed_at:123,model:'example',files:['PRIVATE'],prompt:'PRIVATE'};
+ const c=snapshot(input).sessions[0].context_usage;
+ expect(c?.input_tokens).toBe(100);expect(c?.parts).toEqual([20,80,0]);expect(JSON.stringify(c)).not.toContain('PRIVATE');
+ input.sessions[0].context_usage.parts=[100,80,0];expect(snapshot(input).sessions[0].context_usage?.parts).toBeNull();
+ input.sessions[0].context_usage.input_tokens=-1;expect(snapshot(input).sessions[0].context_usage).toBeNull();
+});

@@ -20,6 +20,7 @@ from .resources import ResourceSampler
 from .usage import session_usage, window_usage, WINDOWS
 from .discovery import inventory, context, applications, orca_executable
 from . import __version__
+from .context_usage import request_context, stored_context
 
 BASE = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -141,6 +142,8 @@ class Ledger:
         p = d.get('payload') or {}
         if s['kind'] == 'Codex':
             if d.get('type') == 'turn_context':
+                if p.get('model') and p['model']!=s['model']:
+                    s.update(context_usage=None,request_input=None,context_size=None)
                 s['model'] = p.get('model') or s['model']
             if d.get('type') == 'event_msg':
                 typ = p.get('type')
@@ -152,6 +155,9 @@ class Ledger:
                     if p.get('rate_limits'):
                         s['quota'] = {'t': t, 'rl': p['rate_limits']}
                     info = p.get('info') or {}
+                    if t>=s.get('context_at',0):
+                        ctx=request_context(info.get('last_token_usage'),t,s['model'],info.get('model_context_window'),codex=True)
+                        if ctx is not None:s.update(context_usage=ctx,context_at=t)
                     u = info.get('total_token_usage')
                     if not u:
                         return None
@@ -196,6 +202,13 @@ class Ledger:
         s['seen'][mid] = new
         s['total'] = [a+b for a,b in zip(s['total'], delta)]
         s['known'] = True
+        if t>=s.get('context_at',0):
+            usage=dict(m['usage'])
+            # Repeated streamed revisions of one message must not shrink input.
+            if s.get('context_mid')==mid:
+                for key,value in zip(('input_tokens','cache_read_input_tokens','cache_creation_input_tokens'),new[:3]):usage[key]=value
+            ctx=request_context(usage,t,model,(d.get('context_window') or {}).get('context_window_size'))
+            if ctx is not None:s.update(context_usage=ctx,context_at=t,context_mid=mid)
         if model:
             s['model'] = model
             if model not in s['models']:
@@ -481,6 +494,7 @@ class Collector:
         spec['last_usage'] = s['last_usage']
         spec['request_input'] = s.get('request_input')
         spec['context_size'] = s.get('context_size')
+        spec['context_usage'] = stored_context(s) if not spec['loading'] else None
         spec['quota'] = s.get('quota')
         spec['counter_reset'] = s.get('counter_reset',False)
         if spec['kind']=='Codex':
@@ -695,7 +709,7 @@ class Handler(BaseHTTPRequestHandler):
             snapshot=self.server.controller.decorate(snapshot)
             data=json.dumps({**snapshot,'action_token':self.server.action_token},ensure_ascii=False).encode()
             mime='application/json; charset=utf-8'
-        elif route in ('/','/index.html','/app.js','/style.css','/benchmark.json'):
+        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/maps.css','/benchmark.json'):
             name='index.html' if route=='/' else route[1:]
             data=(BASE/'dist'/name).read_bytes()
             mime={'html':'text/html','js':'application/javascript','css':'text/css','json':'application/json'}[name.rsplit('.',1)[1]]+'; charset=utf-8'

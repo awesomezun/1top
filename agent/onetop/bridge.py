@@ -51,6 +51,7 @@ def export_snapshot(state):
             'terminal':term.get('title') or loc.get('terminal',''),
             'project':s.get('project',''),'title':s.get('project','')+' · '+s['kind'],
             'model':s.get('model',''),'status':s.get('display_status') or status,'tokens':s.get('tokens'),
+            'context_usage':{k:s['context_usage'].get(k) for k in ('basis','input_tokens','capacity','parts','observed_at','model')} if isinstance(s.get('context_usage'),dict) else None,
             'rate':u.get('rate'),'windows':u.get('windows',{}),'cpu':r.get('cpu'),'rss':r.get('rss'),
             'capabilities':capabilities})
     host=state.get('system',{}).get('host',{});memory=host.get('memory',{})

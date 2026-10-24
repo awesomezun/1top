@@ -21,6 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: node tests/maps.mjs
       - run: npm ci --legacy-peer-deps && npm test && npm run check
         working-directory: cloud
       - run: npm ci && npm run build

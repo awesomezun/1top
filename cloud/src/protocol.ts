@@ -5,6 +5,7 @@ export interface AgentSession {
   project: string; title: string; model: string; status: string;
   tokens: number[] | null; rate: number | null; windows: Record<string, number[] | null>;
   cpu: number | null; rss: number | null; capabilities: Action[];
+  context_usage?: {basis:'last_request_input';input_tokens:number;capacity:number|null;parts:number[]|null;observed_at:number;model:string}|null;
 }
 export interface AccountQuota {
   id:string;kind:string;account_label:string;plan:string;updated:number;stale:boolean;note:string;
@@ -37,6 +38,7 @@ export function snapshot(value: any): DeviceSnapshot {
       title:text(s.title,160), model:text(s.model,80), status:text(s.status,30), tokens:vector(s.tokens),
       rate:number(s.rate), windows:Object.fromEntries(KEYS.map(k=>[k,vector(s.windows?.[k])])),
       cpu:number(s.cpu,100000),rss:number(s.rss),
+      context_usage:contextUsage(s.context_usage),
       capabilities:Array.isArray(s.capabilities)?ACTIONS.filter(a=>s.capabilities.includes(a)):[]
     };
   });
@@ -59,6 +61,12 @@ export function snapshot(value: any): DeviceSnapshot {
       total_memory:number(value.host?.total_memory)||0,cores:number(value.host?.cores,4096)||0},
     periods:Array.isArray(value.periods)?value.periods.filter((p:any)=>KEYS.includes(p.key)).slice(0,6).map((p:any)=>({key:p.key,label:text(p.label,30),tokens:vector(p.tokens)||[0,0,0,0],partial:p.partial===true,observed_seconds:number(p.observed_seconds,86400)||0})):[]
   };
+}
+function contextUsage(c:any):AgentSession['context_usage'] {
+  if(c?.basis!=='last_request_input'||number(c.input_tokens)===null)return null;
+  const parts=Array.isArray(c.parts)&&c.parts.length===3&&c.parts.every((n:unknown)=>number(n)!==null)&&Math.abs(c.parts.reduce((a:number,b:number)=>a+b,0)-c.input_tokens)<.01?c.parts:null;
+  return {basis:'last_request_input',input_tokens:c.input_tokens,capacity:number(c.capacity)||null,
+    parts,observed_at:number(c.observed_at)||0,model:text(c.model,80)};
 }
 export function action(value: any) {
   if (!value || !ACTIONS.includes(value.action) || !/^[a-f0-9-]{36}$/.test(value.request_id||'') ||
