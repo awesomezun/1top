@@ -32,7 +32,7 @@ async function device(req:Request,env:Env){
 }
 async function handle(req:Request,env:Env):Promise<Response>{
  const url=new URL(req.url),path=url.pathname;
- if(path==='/health')return json({ok:true,service:'1top relay',version:'1.2.0',access:'approved-accounts',pairing_enabled:env.PAIRING_ENABLED==='true'});
+ if(path==='/health')return json({ok:true,service:'1top relay',version:'1.3.0',access:'approved-accounts',pairing_enabled:env.PAIRING_ENABLED==='true'});
  // Stop all public pairing work before touching D1 while enrollment is closed.
  if(path.startsWith('/api/pair/')&&env.PAIRING_ENABLED!=='true')return json({error:'New managed connections are paused while remote-access plans are prepared. Existing approved connections remain available.',code:'managed_pairing_paused'},403);
  if(path==='/api/pair/start'&&req.method==='POST'){

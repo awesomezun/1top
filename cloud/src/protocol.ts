@@ -6,7 +6,12 @@ export interface AgentSession {
   tokens: number[] | null; rate: number | null; windows: Record<string, number[] | null>;
   cpu: number | null; rss: number | null; capabilities: Action[];
 }
+export interface AccountQuota {
+  id:string;kind:string;account_label:string;plan:string;updated:number;stale:boolean;note:string;
+  windows:Array<{label:string;pct:number|null;reset:number}>;
+}
 export interface DeviceSnapshot {
+  account_quotas:AccountQuota[];
   updated: number; recording_started: number; sessions: AgentSession[]; applications: Array<{name:string;evidence:string}>;
   host: { cpu: number | null; used_memory: number; total_memory: number; cores: number };
   periods: Array<{key: string; label: string; tokens: number[]; partial: boolean; observed_seconds: number}>;
@@ -39,6 +44,11 @@ export function snapshot(value: any): DeviceSnapshot {
   return {
     updated:number(value.updated)||0,recording_started:number(value.recording_started)||0,
     sessions,version:text(value.version,30),
+    account_quotas:Array.isArray(value.account_quotas)?value.account_quotas.slice(0,24).map((q:any)=>({
+      id:text(q.id,100),kind:text(q.kind,40),account_label:text(q.kind,40)+' · '+text(q.id,100).slice(-6),
+      plan:text(q.plan,40),updated:number(q.updated)||0,stale:q.stale!==false,note:text(q.note,180),
+      windows:Array.isArray(q.windows)?q.windows.slice(0,8).map((w:any)=>({label:text(w.label,30),pct:number(w.pct,100),reset:number(w.reset)||0})):[]
+    })):[],
     operations:{updated:number(value.operations?.updated),installed_skills:number(value.operations?.installed_skills,10000),
       observed_events:number(value.operations?.observed_events,10000),loop_state:'not_verified',skill_runtime:'partial',
       goals:Array.isArray(value.operations?.goals)?value.operations.goals.slice(0,100).map((g:any)=>({

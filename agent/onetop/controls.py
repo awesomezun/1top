@@ -91,6 +91,11 @@ class Controller:
             return {**snapshot,'sessions':sessions,'actions':list(self.audit[-20:]),'resume_prompt':RESUME_PROMPT}
 
     def resolve(self,sid,key):
+        if sid.startswith('aside:'):
+            from .aside import resolve
+            spec=resolve(sid,key)
+            if not spec:raise ActionError('Aside 세션 상태가 변경되었습니다. 새로고침 후 다시 확인하세요.')
+            return spec
         fresh=self.factory();fresh.discover()
         spec=next((s for s in fresh.specs if s['id']==sid),None)
         if not spec or not spec.get('control_key') or spec['control_key']!=key:
@@ -151,7 +156,17 @@ class Controller:
                 if previous!=request:raise ActionError('요청 ID가 이미 사용되었습니다.')
                 return result
             spec=self.resolve(sid,key);terminal=spec.get('orca_terminal')
-            if action=='focus':
+            if spec['kind']=='Aside' and action!='focus':
+                if action not in ('pause','interrupt'):raise ActionError('Aside에서는 작업 중단만 지원합니다. CLI 종료 대상이 아닙니다.')
+                if spec['status'] not in ('working','waiting'):raise ActionError('현재 Aside 작업 중 상태를 확인하지 못했습니다.')
+                from .aside import cli_path
+                try:
+                    completed=subprocess.run([str(cli_path()),'session','stop',spec['aside_session'],'--account',spec['aside_account']],
+                        capture_output=True,text=True,timeout=12)
+                    if completed.returncode:raise ActionError('Aside 중단 결과를 확인하지 못했습니다.')
+                except (OSError,subprocess.TimeoutExpired):raise ActionError('Aside 응답을 확인하지 못했습니다. 앱에서 상태를 확인하세요.')
+                result={'message':'Aside 세션의 작업 중단을 요청했습니다. 실제 상태는 다음 수집 때 확인합니다.'}
+            elif action=='focus':
                 if terminal:
                     self.orca('switch','--terminal',terminal['handle'])
                     result={'message':f"{terminal['title']} 터미널로 이동했습니다."}

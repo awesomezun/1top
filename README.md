@@ -10,19 +10,20 @@ See which computer, application, and terminal owns a session; inspect reported t
 
 ## Using 1top
 
-The default flow is **open 1top → Open dashboard**. Local monitoring is free and requires no login or cloud relay. Keep 1top running in the menu bar. Optional **Open at login** starts it after you sign in to macOS.
+The default flow is **open 1top → desktop dashboard**. Click the menu-bar icon for a compact summary or account limits; use **Open full dashboard** for the standalone desktop window. Local monitoring is free and requires no login or cloud relay. Keep 1top running in the menu bar. Optional **Open at login** starts it after you sign in to macOS.
 
 Remote access is optional. Managed access currently requires a server-issued grant; public device enrollment and public paid signup are closed. Google sign-in alone does not create remote access. A previously linked operator device keeps its existing connection. Customer-owned cloud setup is planned; there is no automated provisioning flow yet. See [service policy](docs/service-policy_v1.0.0.md).
 
 A browser login cannot inspect or control arbitrary local processes. The companion provides that local connection. Nothing is installed on a phone just to view the dashboard.
 
-**v2.0.0:** dark local and web workspaces, session inspector, local-first startup, Goals / Loops / Skills activity, and server-derived Admin / Pro entitlements. See [release notes](docs/release-notes_v2.0.0.md).
+**v2.1.1:** native menu-bar dashboard and desktop window, Aside internal-session usage, and account-level 5-hour / weekly quota reports. The public landing page is v3.0.0. See [release notes](docs/release-notes_v2.1.1.md).
 
 ## What you can see
 
 - Computers, apps, terminal labels where available, and active session identities.
 - Rolling usage for **24h, 12h, 5h, 1h, 30m, and 10m**. The current rate is an average over up to the latest 60 seconds.
 - Input, cached input, cache writes, and output from reported usage. Unknown values stay unknown; partial collection history is marked.
+- Claude Code and Codex account quota reports: 5-hour and weekly windows when reported, reset times, identity, and last update. Missing windows stay unknown; cached reports are marked.
 - Computer CPU/memory and attributable session process resources.
 - Codex Goal database state and Claude Code Goal transcript observations. Claude Code `/loop` / scheduled-task invocations and fires where observed.
 - Skill files in supported user/project/plugin paths, deduplicated by resolved path. Installed, invoked, tool-returned, and successful workflow are separate claims; enablement and whole-workflow success are not currently verified.
@@ -36,6 +37,7 @@ Cross-computer totals include fresh reports only. Offline computers retain their
 | --- | --- |
 | Claude Code / compatible GLM sessions | Local usage records when a running session can be matched |
 | Codex CLI | Local usage reports and process resources when matched |
+| Aside internal sessions | Read-only session index and per-request token reports; active and recent 24-hour sessions, excluding archived/private/ephemeral records. App focus and supported session stop; no shared daemon termination or per-session resource estimate |
 | Gemini CLI, OpenCode, Aider, Goose, Qwen, Copilot CLI, Droid, Amp, agy | Recognized entrypoint/process detection; detailed token support varies |
 | Cursor, VS Code, Terminal, iTerm, Warp, Zed, Orca and other recognized host apps | Process-parent attribution; opening an IDE alone does not prove an AI task is active |
 | Orca-hosted supported sessions | Verified terminal-specific controls where session identity and current input state match |
@@ -62,7 +64,7 @@ Commands require a fresh report, an allowed capability, an exact session control
 
 ## Privacy
 
-The cloud payload contains allowlisted device/app/session labels, model names, usage totals, resource measurements, control outcomes, and bounded activity summaries. It excludes raw conversations, full file paths, provider API keys, environment variables, command-line arguments, Goal text, skill paths, and raw activity events. Names can still reveal information: choose project and device names accordingly.
+The cloud payload contains allowlisted device/app/session labels, model names, usage totals, resource measurements, control outcomes, and bounded activity summaries. It excludes raw conversations, full file paths, provider API keys, environment variables, command-line arguments, Goal text, skill paths, raw activity events, and account email addresses. Remote quota cards use a hashed account identifier; provider credentials remain local. Names can still reveal information: choose project and device names accordingly.
 
 Local history and a device credential are stored under `~/Library/Application Support/1top`; the credential file uses owner-only permissions. The relay stores a hash of that credential. Latest cloud snapshots and command receipts expire after 24 hours without replacement. Disconnecting a device revokes access and removes its latest snapshot; a revocation record may remain in the authentication database.
 
@@ -83,7 +85,7 @@ Build the Apple Silicon desktop app:
 scripts/build-macos.sh
 ```
 
-The resulting `build/1top_v2.0.0/1top.app` has a **local ad-hoc signature**, not a public distribution signature. Do not present it as notarized or instruct users to disable Gatekeeper. Keep the public `release.json` unavailable until the actual released artifact passes signing and notarization checks.
+The resulting `build/1top_v2.1.1/1top.app` has a **local ad-hoc signature**, not a public distribution signature. Do not present it as notarized or instruct users to disable Gatekeeper. Keep the public `release.json` unavailable until the actual released artifact passes signing and notarization checks.
 
 Web development:
 

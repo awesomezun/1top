@@ -43,9 +43,9 @@ def export_snapshot(state):
         status=s.get('status','unknown')
         if identified and (term or loc.get('app_path')):capabilities.append('focus')
         can_pause=identified and term and s.get('input_verified') is not False and s['kind'] in ('Claude','GLM','Codex')
-        if can_pause and status in ('working','waiting'):capabilities.append('pause')
+        if (can_pause or identified and s['kind']=='Aside') and status in ('working','waiting'):capabilities.append('pause')
         if can_pause and s.get('display_status')=='paused' and status in ('idle','interrupted'):capabilities.append('resume')
-        if identified and (not term or status in ('idle','interrupted') or can_pause and status in ('working','waiting')):capabilities.append('terminate')
+        if s['kind']!='Aside' and identified and (not term or status in ('idle','interrupted') or can_pause and status in ('working','waiting')):capabilities.append('terminate')
         sessions.append({'id':s['id'],'control_key':s.get('control_key',''),'kind':s['kind'],
             'app':'Orca' if term else loc.get('app') or 'Unknown',
             'terminal':term.get('title') or loc.get('terminal',''),
@@ -61,6 +61,9 @@ def export_snapshot(state):
                  for g in ops.get('goals',[])], 'loop_state':'not_verified','skill_runtime':'partial'}
     return {'version':__version__,'updated':state.get('updated',0),'recording_started':state.get('started',0),
         'operations':operations,
+        'account_quotas':[{'id':q['id'],'kind':q['kind'],'account_label':q['kind']+' · '+q['id'][-6:],
+            'plan':q.get('plan',''),'windows':[{k:w.get(k) for k in ('label','pct','reset')} for w in q.get('windows',[])[:8]],
+            'updated':q.get('updated',0),'stale':q.get('stale',True),'note':q.get('note','')} for q in state.get('account_quotas',[])[:24]],
         'sessions':sessions,'applications':[{'name':a['name'],'evidence':a['evidence']} for a in state.get('applications',[])],'host':{'cpu':host.get('cpu'),'used_memory':memory.get('used',0),
         'total_memory':memory.get('total',0),'cores':host.get('cores',0)},
         'periods':[{k:w[k] for k in ('key','label','tokens','partial','observed_seconds')} for w in state.get('period_usage',{}).get('windows',[])]}

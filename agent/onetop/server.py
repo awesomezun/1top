@@ -24,7 +24,7 @@ from . import __version__
 BASE = Path(__file__).resolve().parent
 HOME = Path.home()
 DATA = Path(os.environ.get('ONETOP_DATA',os.environ.get('AGENT_MONITOR_DATA',str(HOME/'Library/Application Support/1top'))))
-KINDS = ['Claude', 'Codex', 'GLM', 'Antigravity']
+KINDS = ['Claude', 'Codex', 'GLM', 'Antigravity', 'Aside']
 ZERO = [0, 0, 0, 0]  # fresh input, cache read, cache write, output
 
 
@@ -171,6 +171,14 @@ class Ledger:
                         s['last_usage'] = t
                     return (t, delta) if sum(delta) else None
             return None
+        if s['kind']=='Aside':
+            if d.get('role')!='assistant' or not isinstance(d.get('usage'),dict):return None
+            usage=d['usage']
+            mid=d.get('responseId')
+            if not mid:return None
+            d={'type':'assistant','message':{'id':mid,'model':d.get('model',''),'usage':{
+                'input_tokens':usage.get('input'),'output_tokens':usage.get('output'),
+                'cache_read_input_tokens':usage.get('cacheRead'),'cache_creation_input_tokens':usage.get('cacheWrite')}}}
         if d.get('type') != 'assistant':
             return None
         m = d.get('message') or {}
@@ -202,6 +210,8 @@ class Collector:
     def __init__(self):
         from .operations import OperationalMonitor
         self.operations = OperationalMonitor()
+        from .accounts import AccountQuotaSampler
+        self.accounts = AccountQuotaSampler()
         self.lock = threading.Lock()
         self.snapshot = {'ready': False, 'updated': 0, 'sessions': [], 'error': None}
         self.agy_quota = {'kind': 'Antigravity', 'windows': [], 'note': '한도 확인 중', 'updated': 0}
@@ -531,6 +541,13 @@ class Collector:
                 s['status']='unknown'
             s['project']=Path(s['cwd']).name or '알 수 없음'
             sessions.append(s)
+        from .aside import discover as aside_sessions
+        for s in aside_sessions(now=now):
+            s.update(tokens=None,model=s.get('configured_model',''),last_usage=0,loading=False)
+            if s['path']:
+                try:self.read_tracker(s)
+                except OSError:s['note']='Aside 사용량 기록을 읽을 수 없습니다.'
+            sessions.append(s)
         self.db.execute('DELETE FROM events WHERE t<?',(now-86400,))
         self.db.commit()
         # The browser needs a chart, not a growing raw event log. Bound payloads by minute/provider.
@@ -558,10 +575,12 @@ class Collector:
                 'events':events,'recent':recent,'period_usage':periods,'quotas':quotas,'process_counts':self.process_counts,
                 'orca_terminals':self.terminal_count,'error':None,'poll_seconds':3,
                 'applications':getattr(self,'apps',[]),'system':system,'operations':self.operations.sample(sessions),
+                'account_quotas':self.accounts.snapshot(now),
                 'collection_ms':round((time.monotonic()-collect_started)*1000,1)}
         with self.lock:self.snapshot=result
 
     def loop(self):
+        self.accounts.start()
         self.initialize()
         while True:
             before=time.monotonic()

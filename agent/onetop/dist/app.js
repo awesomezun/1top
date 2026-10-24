@@ -1,6 +1,6 @@
 'use strict';
-const $=id=>document.getElementById(id),kinds=['Claude','Codex','GLM','Antigravity'];
-const colors={Claude:'#bd8965',Codex:'#378d76',GLM:'#7c86bd',Antigravity:'#619db9'};
+const $=id=>document.getElementById(id),kinds=['Claude','Codex','GLM','Antigravity','Aside'];
+const colors={Claude:'#bd8965',Codex:'#378d76',GLM:'#7c86bd',Antigravity:'#619db9',Aside:'#a99bdb'};
 const labels={working:'작업 중',waiting:'확인 필요',idle:'대기 중',unknown:'미확인',interrupted:'중단됨',paused:'일시정지',resuming:'재개 요청 중'};
 let data=null,provider='all',view='sessions',selectedId=null,busy=false,actionBusy=false,pendingAction=null,toastTimer,benchmark=null,selectedPeriod='1h';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -20,9 +20,9 @@ function showToast(message,error=false){clearTimeout(toastTimer);$('toast').text
 function actions(s){
  const identified=!!s.control_key,fresh=data?.updated&&Date.now()/1000-data.updated<20;
  const stopped=['idle','interrupted'].includes(s.status),active=['working','waiting'].includes(s.status);
- const canPause=identified&&!!s.orca_terminal&&s.input_verified!==false&&active&&['Claude','GLM','Codex'].includes(s.kind);
+ const canPause=identified&&active&&(s.kind==='Aside'||(!!s.orca_terminal&&s.input_verified!==false&&['Claude','GLM','Codex'].includes(s.kind)));
  const paused=display(s)==='paused',resuming=display(s)==='resuming';
- const list=[['focus','↗',identified&&!!(s.orca_terminal||s.location?.app_path),'실행 앱·터미널 바로가기'],paused?['resume','재개',identified&&!!s.orca_terminal&&s.input_verified!==false&&stopped,'이어서 작업하는 새 요청 보내기']:['pause','일시정지',canPause&&!resuming,'현재 작업 중단 후 세션 보존'],['terminate','정지',identified&&(stopped||canPause)&&!resuming,'해당 CLI 프로세스 종료']];
+ const list=[['focus','↗',identified&&!!(s.orca_terminal||s.location?.app_path),'실행 앱·터미널 바로가기'],paused?['resume','재개',identified&&!!s.orca_terminal&&s.input_verified!==false&&stopped,'이어서 작업하는 새 요청 보내기']:['pause','일시정지',canPause&&!resuming,'현재 작업 중단 후 세션 보존'],['terminate','정지',s.kind!=='Aside'&&identified&&(stopped||canPause)&&!resuming,'해당 CLI 프로세스 종료']];
  return `<div class="session-actions">${list.map(([a,label,enabled,hint])=>`<button class="action-button ${a}" data-action="${a}" data-target="${esc(s.id)}" ${!enabled||!fresh||actionBusy?'disabled':''} title="${esc(enabled?hint:'세션 연결 또는 작업 상태 확인 필요')}" aria-label="${esc((s.orca_terminal?.title||s.project)+' · '+hint)}">${label}</button>`).join('')}</div>`;
 }
 function selectView(next){view=next;$('pageTitle').textContent=({sessions:'세션',operations:'활동',system:'컴퓨터 리소스',benchmark:'측정 정보'})[next];for(const v of ['sessions','operations','system','benchmark'])$(v+'View').hidden=v!==view;document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));requestAnimationFrame(drawCharts);}
@@ -74,9 +74,10 @@ function renderTable(){
  if(focus)document.querySelector(`#sessionsBody [data-target="${CSS.escape(focus.id)}"][data-action="${focus.a}"]`)?.focus({preventScroll:true});
 }
 function renderQuotas(){
- const open=new Set([...document.querySelectorAll('[data-quota][open]')].map(e=>e.dataset.quota));
- const window=(w,k)=>`<div class="quota-window"><div class="quota-label"><span>${esc(w.label)}</span><b>${w.pct==null?'갱신 대기':Number(w.pct.toFixed(1))+'% 사용'}</b></div><div class="track"><i style="background:${colors[k]};width:${Math.min(100,Math.max(0,w.pct||0))}%"></i></div><div class="quota-note">${w.reset?new Date(w.reset*1000).toLocaleString('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 리셋':'리셋 시각 미보고'}</div></div>`;
- $('quotas').innerHTML=data.quotas.map(q=>`<article class="quota"><h3>${dot(q.kind)}${kindName(q.kind)}</h3>${q.windows.slice(0,2).map(w=>window(w,q.kind)).join('')}${q.windows.length>2?`<details data-quota="${q.kind}" ${open.has(q.kind)?'open':''}><summary>한도 ${q.windows.length-2}개 더 보기</summary>${q.windows.slice(2).map(w=>window(w,q.kind)).join('')}</details>`:''}<div class="quota-note">${esc(q.note)}<br>${q.updated?'마지막 보고 '+ago(q.updated):'확인 불가 · 0%를 뜻하지 않음'}</div></article>`).join('');
+ const accountRows=data.account_quotas||[],verifiedKinds=new Set(accountRows.map(q=>q.kind));
+ const rows=[...accountRows,...data.quotas.filter(q=>!verifiedKinds.has(q.kind)).map(q=>({...q,account_label:'계정 연결 미확인',stale:true}))];
+ const window=(w,k)=>`<div class="quota-window"><div class="quota-label"><span>${esc(w.label)}</span><b>${w.pct==null?'미확인':Number(w.pct.toFixed(1))+'% 사용'}</b></div><div class="track"><i style="background:${colors[k]||'#8d9ba8'};width:${Math.min(100,Math.max(0,w.pct||0))}%"></i></div><div class="quota-note">${w.reset?new Date(w.reset*1000).toLocaleString('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화':'초기화 시각 미보고'}</div></div>`;
+ $('quotas').innerHTML=rows.map(q=>`<article class="quota"><h3>${dot(q.kind)}${kindName(q.kind)} <small>${esc(q.plan||'')}</small></h3><p class="quota-account">${esc(q.account_label)}${q.id?' · '+esc(q.id.slice(-6)):''}</p>${(q.windows.length?q.windows:[{label:'5H',pct:null},{label:'주간',pct:null}]).map(w=>window(w,q.kind)).join('')}<div class="quota-note ${q.stale?'quota-stale':''}">${esc(q.note)}<br>${q.updated?'마지막 확인 '+ago(q.updated):'확인 불가 · 0%를 뜻하지 않음'}</div></article>`).join('');
 }
 function renderSystem(){
  const sys=data.system;if(!sys)return;const h=sys.host;
@@ -112,7 +113,7 @@ function prepareAction(action,id){
  const s=data?.sessions.find(s=>s.id===id);if(!s||actionBusy)return;
  const request={action,session_id:s.id,control_key:s.control_key,request_id:crypto.randomUUID()};
  if(action==='focus'){sendAction(request);return;}pendingAction=request;
- const text={pause:['이 작업을 일시정지할까요?','현재 작업에 Esc를 보내고 멈춘 상태를 확인합니다. 세션은 보존되며, 재개하면 이어서 진행하는 새 요청을 보냅니다.','일시정지'],resume:['이어서 작업할까요?','아래 문장을 새 요청으로 전송합니다. 터미널 입력 칸에 작성 중인 내용이 없는지 확인해 주세요. 재개하면 토큰을 다시 사용할 수 있습니다.','새 요청으로 재개'],terminate:['이 CLI를 정지할까요?','작업 중이면 중단을 먼저 요청합니다. 멈춘 상태가 확인되면 해당 CLI만 종료합니다. Orca 탭과 저장된 대화 기록은 유지됩니다.','CLI 정지']}[action];
+ const text={pause:['이 작업을 일시정지할까요?',s.kind==='Aside'?'Aside의 session stop으로 현재 작업 중단을 요청합니다. 세션은 보존되며 앱에서 이어서 작업할 수 있습니다.':'현재 작업에 Esc를 보내고 멈춘 상태를 확인합니다. 세션은 보존되며, 재개하면 이어서 진행하는 새 요청을 보냅니다.','일시정지'],resume:['이어서 작업할까요?','아래 문장을 새 요청으로 전송합니다. 터미널 입력 칸에 작성 중인 내용이 없는지 확인해 주세요. 재개하면 토큰을 다시 사용할 수 있습니다.','새 요청으로 재개'],terminate:['이 CLI를 정지할까요?','작업 중이면 중단을 먼저 요청합니다. 멈춘 상태가 확인되면 해당 CLI만 종료합니다. Orca 탭과 저장된 대화 기록은 유지됩니다.','CLI 정지']}[action];
  $('actionTitle').textContent=text[0];$('actionExplanation').textContent=text[1];$('confirmAction').textContent=text[2];$('confirmAction').classList.toggle('danger',action==='terminate');
  $('actionTarget').textContent=`${s.orca_terminal?.title||'Orca 탭 미연결'} · ${kindName(s.kind)}\n${s.title||s.project}\n${s.project} · PID ${s.pids.join(', ')}`;
  $('resumeText').hidden=action!=='resume';$('resumeText').textContent=data.resume_prompt||'';$('actionError').hidden=true;$('actionDialog').showModal();$('cancelAction').focus();

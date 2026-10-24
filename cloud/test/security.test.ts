@@ -160,3 +160,10 @@ describe('managed access and cost admission',()=>{
   const count:any=await e.DB.prepare('SELECT COUNT(*) n FROM devices WHERE user_id=? AND revoked_at IS NULL').bind('h').first();expect(count.n).toBe(1);
  });
 });
+
+it('bounds account limits and never forwards email or credential extras',()=>{
+ const value=snapshot({...sample(),account_quotas:[{id:'claude:123456',kind:'Claude',account_label:'PRIVATE EMAIL',token:'SECRET',windows:[{label:'5H',pct:Infinity,reset:0},{label:'Weekly',pct:95,reset:1234}]}]});
+ expect(JSON.stringify(value)).not.toContain('PRIVATE EMAIL');expect(JSON.stringify(value)).not.toContain('SECRET');
+ expect(value.account_quotas[0].account_label).toBe('Claude · 123456');
+ expect(value.account_quotas[0].windows[0].pct).toBeNull();expect(value.account_quotas[0].windows[1].pct).toBe(95);
+});
