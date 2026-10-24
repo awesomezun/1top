@@ -4,7 +4,7 @@ $version = python -c "from onetop import __version__; print(__version__)"
 New-Item -ItemType Directory -Force build/windows | Out-Null
 Copy-Item site/public/media/v4.2.0/icons/1top.png desktop/windows/1top.png
 python -c "from PIL import Image; Image.open('desktop/windows/1top.png').save('build/windows/1top.ico', format='ICO', sizes=[(48,48)])"
-python -m PyInstaller --noconfirm --clean --windowed --name 1top --onedir --collect-all webview --collect-data onetop --collect-data certifi --hidden-import pystray._win32 --add-data 'desktop/windows/1top.png;.' --icon build/windows/1top.ico --distpath build/windows/dist --workpath build/windows/work --specpath build/windows desktop/windows/main.py
+python -m PyInstaller --noconfirm --clean --windowed --name 1top --onedir --collect-all webview --collect-data onetop --collect-data certifi --hidden-import pystray._win32 --add-data "$((Resolve-Path 'desktop/windows/1top.png').Path);." --icon (Resolve-Path build/windows/1top.ico).Path --distpath build/windows/dist --workpath build/windows/work --specpath build/windows desktop/windows/main.py
 if ($LASTEXITCODE) { throw 'PyInstaller failed' }
 & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' "/DAppVersion=$version" desktop/windows/installer.iss
 if ($LASTEXITCODE) { throw 'Installer build failed' }
