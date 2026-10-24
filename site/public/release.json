@@ -14,7 +14,11 @@
       "url": "https://github.com/awesomezun/1top/releases/download/v3.0.1/1top-3.0.1-windows-x64-setup.exe"
     },
     "android": {
-      "status": "validation"
+      "status": "preview",
+      "version": "1.0.0",
+      "signed": true,
+      "url": "https://github.com/awesomezun/1top/releases/download/mobile-v1.0.0/1top-1.0.0-android.apk",
+      "sha256": "f8e70fc7a57e28c1ccc7cbf5325d5c4b35c2b06add281427cec377f2877b6519"
     },
     "ios": {
       "status": "native-build-ready-store-distribution-pending"
