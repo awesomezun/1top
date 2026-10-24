@@ -4,6 +4,14 @@
 
 [Website](https://1top.si) · [Try the demo](https://1top.si/app?demo=1) · [한국어](README.ko.md)
 
+<!-- gitreels:start -->
+<p align="center">
+  <a href="https://gitreels.com/awesomezun/1top"><img src="https://gitreels.com/awesomezun/1top.webp" alt="awesomezun/1top in 15 seconds" width="100%"></a>
+  <br>
+  <a href="https://gitreels.com"><img src="https://gitreels.com/badge.svg" alt="Made with GitReels" height="24"></a>
+</p>
+<!-- gitreels:end -->
+
 See which computer, application, and terminal owns a session; inspect reported token usage and CPU/RAM; send supported controls to the selected session.
 
 **Status: early preview.** The browser demo is available without installation. The macOS companion builds locally; the public desktop download is withheld until Developer ID signing, notarization, and first-run verification are complete. Windows and Linux companions are not yet available. Broad process detection does not imply every tool exposes tokens or supports pause/resume.
