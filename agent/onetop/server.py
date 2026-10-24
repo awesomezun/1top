@@ -663,14 +663,17 @@ class Handler(BaseHTTPRequestHandler):
         if (host not in allowed or self.headers.get('Origin')!='http://'+host or
             not secrets.compare_digest(self.headers.get('X-Monitor-Token',''),self.server.action_token)):
             self.send_error(403);return
-        if urlsplit(self.path).path!='/api/action':self.send_error(404);return
+        route=urlsplit(self.path).path
+        if route not in ('/api/action','/api/accounts/login'):self.send_error(404);return
         try:
             length=int(self.headers.get('Content-Length','0'))
             if length<1 or length>4096 or self.headers.get('Content-Type')!='application/json':
                 self.send_error(400);return
             payload=json.loads(self.rfile.read(length))
             if not isinstance(payload,dict):raise ValueError()
-            result=self.server.controller.execute(payload)
+            if route=='/api/accounts/login':
+                result=self.server.account_login.start(payload.get('kind'))
+            else:result=self.server.controller.execute(payload)
             self.json_response(200,{'ok':True,**result})
         except (ValueError,TypeError):self.json_response(400,{'ok':False,'message':'잘못된 요청입니다.'})
         except ActionError as e:self.json_response(e.status,{'ok':False,'message':str(e)})
@@ -716,6 +719,8 @@ def main():
     server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
     server.collector=collector
     server.action_token=secrets.token_urlsafe(32)
+    from .account_login import AccountLogin
+    server.account_login=AccountLogin()
     server.controller=Controller(collector,Collector,state_file=DATA/'controls-v5.json')
     threading.Thread(target=collector.loop,daemon=True).start()
     threading.Thread(target=collector.agy_loop,daemon=True).start()

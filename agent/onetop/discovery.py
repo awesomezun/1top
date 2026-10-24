@@ -63,7 +63,9 @@ def applications(rows):
     seen={}
     for row in rows.values():
         name,path=row['app']
-        if name in APP_NAMES and (name not in seen or row['pid']<seen[name]['pid']):
+        # Bundle ancestry identifies arbitrary host applications; the name list
+        # is only a fallback for processes whose executable path is unavailable.
+        if name and (path or name in APP_NAMES) and (name not in seen or row['pid']<seen[name]['pid']):
             seen[name]={'name':name,'pid':row['pid'],'path':path,'evidence':'application_process',
                         'note':'App detected; embedded AI sessions require a usage adapter.'}
     return list(seen.values())

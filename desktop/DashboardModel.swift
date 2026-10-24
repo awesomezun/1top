@@ -32,7 +32,7 @@ struct DesktopSnapshot: Decodable {
     }
 }
 struct DesktopSession: Decodable, Identifiable {
-    var id: String; var kind: String; var project: String?; var title: String?
+    var id: String; var kind: String; var project: String?; var title: String?; var model: String?
     var status: String?; var display_status: String?; var tokens: [Double]?
     var usage: Usage?; var resources: Resources?; var orca_terminal: Terminal?
     var location: Location?; var control_key: String?; var input_verified: Bool?
@@ -168,6 +168,25 @@ final class DashboardModel: ObservableObject {
         }.resume()
     }
     func stop() { task?.cancel(); session.invalidateAndCancel() }
+    func addAccount(_ kind: String) {
+        guard fresh, !busy, let token = snapshot?.action_token else { return }
+        busy = true
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/accounts/login"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")), forHTTPHeaderField: "Origin")
+        request.setValue(token, forHTTPHeaderField: "X-Monitor-Token")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["kind":kind])
+        request.timeoutInterval = 20
+        session.dataTask(with: request) { [weak self] data, response, _ in
+            let value = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String:Any] }
+            DispatchQueue.main.async {
+                guard let self else { return }; self.busy = false
+                self.messageIsError = (response as? HTTPURLResponse)?.statusCode != 200
+                self.message = value?["message"] as? String ?? "로그인 창을 확인하지 못했습니다. 다시 시도하기 전에 터미널을 확인해 주세요."
+            }
+        }.resume()
+    }
 }
 
 struct AccountQuota: Decodable, Identifiable {

@@ -12,7 +12,9 @@ const pct=n=>n==null?'—':n.toFixed(1)+'%';
 const time=t=>new Date(t*1000).toLocaleTimeString('ko-KR',{hour12:false,hour:'2-digit',minute:'2-digit'});
 const ago=t=>{if(!t)return '보고 없음';const n=Math.max(0,Date.now()/1000-t);return n<5?'방금':n<60?Math.floor(n)+'초 전':n<3600?Math.floor(n/60)+'분 전':n<86400?Math.floor(n/3600)+'시간 전':Math.floor(n/86400)+'일 전';};
 const model=m=>(m||'모델 미확인').replace(/\[1m\]/gi,'').replace(/^claude-/,'').replace(/^gpt-/,'GPT-');
-const kindName=k=>k==='Antigravity'?'Agy CLI':k;
+const kindName=k=>k==='Claude'?'Claude Code':k==='Antigravity'?'Agy CLI':k;
+const hostApp=s=>s.orca_terminal?'Orca':s.location?.app||'실행 앱 미확인';
+const runtimeLabel=s=>s.kind==='Aside'?'앱 내부 세션':s.kind==='Claude'||s.kind==='GLM'?'Claude Code':kindName(s.kind);
 const display=s=>s.display_status||s.status;
 const dot=k=>`<i class="dot" style="background:${colors[k]}"></i>`;
 const status=s=>`<span class="status ${esc(display(s))}"><i class="dot"></i>${s.loading?'기록 읽는 중':labels[display(s)]||'미확인'}</span>`;
@@ -42,7 +44,13 @@ function renderPeriods(){
 function render(){
  if(!data?.ready)return;
  const scoped=data.sessions.filter(s=>provider==='all'||s.kind===provider),known=scoped.filter(s=>s.tokens!==null);
- $('providers').innerHTML=[...new Set([...kinds,...data.sessions.map(s=>s.kind)])].map(k=>`<button class="provider-nav ${provider===k?'active':''}" data-provider="${k}" aria-pressed="${provider===k}">${dot(k)}<span>${kindName(k)}</span><small>${data.sessions.filter(s=>s.kind===k).length}</small></button>`).join('');
+ const toolKinds=[...new Set(data.sessions.map(s=>s.kind))].filter(k=>k!=='Aside');
+ $('providers').innerHTML=toolKinds.map(k=>`<button class="provider-nav ${provider===k?'active':''}" data-provider="${esc(k)}" aria-pressed="${provider===k}">${dot(k)}<span>${esc(kindName(k))}</span><small>${data.sessions.filter(s=>s.kind===k).length}</small></button>`).join('');
+ const apps=[...new Set(data.sessions.map(hostApp))].sort();
+ $('hostApps').innerHTML=apps.map(app=>`<button class="provider-nav" data-app-filter="${esc(app)}"><i class="dot" style="background:#8b939f"></i><span>${esc(app)}</span><small>${data.sessions.filter(s=>hostApp(s)===app).length}</small></button>`).join('');
+ const selectedModel=$('modelFilter').value;
+ $('modelFilter').innerHTML='<option value="all">모든 모델</option>'+[...new Set(data.sessions.map(s=>s.model||''))].sort().map(m=>`<option value="${esc(m)}">${esc(m||'모델 미확인')}</option>`).join('');
+ $('modelFilter').value=[...$('modelFilter').options].some(o=>o.value===selectedModel)?selectedModel:'all';
  const work=scoped.filter(s=>display(s)==='working').length,paused=scoped.filter(s=>display(s)==='paused').length,rate=scoped.reduce((n,s)=>n+(s.usage?.rate||0),0);
  $('summary').innerHTML=`<div class="summary-item"><span class="label">열린 세션 / CLI</span><b>${scoped.length}<small>개</small></b></div><div class="summary-item"><span class="label">작업 중 · 일시정지</span><b class="accent">${work}<small>작업 · ${paused} 정지</small></b></div><div class="summary-item"><span class="label">현재 연결된 세션 누적</span><b>${known.length?fmt(known.reduce((n,s)=>n+total(s.tokens),0)):'—'}<small>tokens</small></b></div><div class="summary-item"><span class="label">최근 60초 평균 소비</span><b class="accent">${known.length?fmt(rate):'—'}<small>tokens/s</small></b></div><div class="summary-note">${known.length}/${scoped.length}개 토큰 확인<br>Orca 탭 ${data.orca_terminals??'—'}개 · CLI ${Object.values(data.process_counts).reduce((a,b)=>a+b,0)}개</div>`;
  $('tableSubtitle').textContent=`${scoped.filter(s=>s.orca_terminal).length}개 터미널 이름 연결 · ${scoped.length-known.length}개 토큰 미확인`;
@@ -61,15 +69,15 @@ function renderHost(){
  $('hostCards').innerHTML=card('전체 CPU',h.cpu==null?'—':h.cpu.toFixed(1),'%',`${h.cores}개 논리 코어 · load ${h.load[0].toFixed(2)}`,h.cpu,h.cpu>90)+card('메모리',bytes(h.memory.used),'',`${bytes(h.memory.total)} 중 ${h.memory.percent}% · swap ${bytes(h.swap.used)}`,h.memory.percent,h.memory.percent>90)+card('네트워크 · '+(h.network.interfaces.join(' + ')||'미확인'),bytes(h.network.rx),'/s ↓',`업로드 ${bytes(h.network.tx)}/s ↑ · 물리 인터페이스`,0)+card('디스크 여유',bytes(h.disk.free),'',`${h.disk.percent}% 사용 · 읽기 ${bytes(h.disk.read)}/s · 쓰기 ${bytes(h.disk.write)}/s`,h.disk.percent,h.disk.percent>95);
 }
 function renderTable(){
- if(!data?.ready)return;const query=$('search').value.toLocaleLowerCase(),state=$('stateFilter').value;
- let rows=data.sessions.filter(s=>(provider==='all'||s.kind===provider)&&(state==='all'||display(s)===state)&&[s.project,s.title,s.kind,s.model,s.orca_terminal?.title,s.location?.app,s.location?.terminal,s.id].join(' ').toLocaleLowerCase().includes(query));
+ if(!data?.ready)return;const query=$('search').value.toLocaleLowerCase(),state=$('stateFilter').value,modelFilter=$('modelFilter').value;
+ let rows=data.sessions.filter(s=>(provider==='all'||s.kind===provider)&&(state==='all'||display(s)===state)&&(modelFilter==='all'||(s.model||'')===modelFilter)&&[s.project,s.title,s.kind,s.model,s.orca_terminal?.title,hostApp(s),s.location?.terminal,s.id].join(' ').toLocaleLowerCase().includes(query));
  const order={working:0,waiting:1,resuming:2,paused:3,interrupted:4,unknown:5,idle:6},sort=$('sort').value;
  const numeric=s=>sort==='period'?total(s.usage?.windows?.[selectedPeriod]):sort==='rate'?s.usage?.rate:sort==='total'?total(s.tokens):s.resources?.[sort];
  rows.sort((a,b)=>sort==='status'?(order[display(a)]-order[display(b)]||b.last_usage-a.last_usage):sort==='terminal'?(a.orca_terminal?.title||'').localeCompare(b.orca_terminal?.title||''):(numeric(b)??-1)-(numeric(a)??-1));
  $('tableCount').textContent=rows.length;$('tableEmpty').hidden=rows.length>0;
  const active=document.activeElement?.closest('[data-action]'),focus=active?{a:active.dataset.action,id:active.dataset.target}:null;
  const html=rows.map(s=>{const r=s.resources,u=s.usage||{},term=s.orca_terminal?.title||s.location?.terminal||s.location?.app,pv=u.windows?.[selectedPeriod],period=periodMeta();
- return `<tr tabindex="0" data-session="${esc(s.id)}" aria-label="${esc(s.project)} ${s.kind} ${esc(term||'터미널 미확인')} ${labels[display(s)]}, 상세 보기"><td><span class="cell-primary ${term?'':'unknown-value'}" title="${esc(s.terminal_note)}">${esc(term||'실행 위치 미확인')}</span><span class="cell-task" title="${esc(s.title)}">${esc(s.title||s.project)}</span><span class="cell-sub" title="${esc(s.cwd)}">${esc(s.project)} · ${s.pids.length===1?'PID '+s.pids[0]:'PID 연결 미확인'}</span></td><td><span class="provider-cell">${dot(s.kind)}${kindName(s.kind)}</span><span class="cell-sub">${esc(model(s.model))}</span></td><td>${status(s)}</td><td class="num period-value" title="${pv?exact(total(pv))+' tokens':'사용량 미확인'}"><strong>${fmt(total(pv))}</strong><span class="cell-sub">${pv?'출력 '+fmt(pv[3]):'미확인'}${period?.partial?' · 일부 기록':''}</span></td><td class="num ${s.tokens?'':'unknown-value'}" title="${s.tokens?exact(total(s.tokens))+' tokens':'유효한 사용량 보고 없음'}">${fmt(total(s.tokens))}<span class="cell-sub">${s.tokens?'출력 '+fmt(s.tokens[3]):'토큰 미확인'}</span></td><td class="num"><span class="rate-value ${u.rate?'':'zero'}">${fmt(u.rate)}</span><span class="cell-sub">${s.last_usage?ago(s.last_usage):'보고 없음'}</span></td><td class="num">${pct(r?.cpu)}<span class="cell-sub">${r?r.count+'개 프로세스':'미귀속'}</span></td><td class="num">${bytes(r?.rss)}</td><td>${actions(s)}</td></tr>`;}).join('');
+ return `<tr tabindex="0" data-session="${esc(s.id)}" aria-label="${esc(s.project)} ${s.kind} ${esc(term||'터미널 미확인')} ${labels[display(s)]}, 상세 보기"><td><span class="cell-primary ${term?'':'unknown-value'}" title="${esc(s.terminal_note)}">${esc(term||'실행 위치 미확인')}</span><span class="cell-task" title="${esc(s.title)}">${esc(s.title||s.project)}</span><span class="cell-sub" title="${esc(s.cwd)}">${esc(s.project)} · ${s.pids.length===1?'PID '+s.pids[0]:'PID 연결 미확인'}</span></td><td><span class="provider-cell">${s.kind==='Aside'?esc(model(s.model)):dot(s.kind)+esc(runtimeLabel(s))}</span><span class="cell-sub">${s.kind==='Aside'?'앱 내부 세션':esc(model(s.model))}</span></td><td>${status(s)}</td><td class="num period-value" title="${pv?exact(total(pv))+' tokens':'사용량 미확인'}"><strong>${fmt(total(pv))}</strong><span class="cell-sub">${pv?'출력 '+fmt(pv[3]):'미확인'}${period?.partial?' · 일부 기록':''}</span></td><td class="num ${s.tokens?'':'unknown-value'}" title="${s.tokens?exact(total(s.tokens))+' tokens':'유효한 사용량 보고 없음'}">${fmt(total(s.tokens))}<span class="cell-sub">${s.tokens?'출력 '+fmt(s.tokens[3]):'토큰 미확인'}</span></td><td class="num"><span class="rate-value ${u.rate?'':'zero'}">${fmt(u.rate)}</span><span class="cell-sub">${s.last_usage?ago(s.last_usage):'보고 없음'}</span></td><td class="num">${pct(r?.cpu)}<span class="cell-sub">${r?r.count+'개 프로세스':'미귀속'}</span></td><td class="num">${bytes(r?.rss)}</td><td>${actions(s)}</td></tr>`;}).join('');
  if($('sessionsBody').innerHTML!==html)$('sessionsBody').innerHTML=html;
  if(focus)document.querySelector(`#sessionsBody [data-target="${CSS.escape(focus.id)}"][data-action="${focus.a}"]`)?.focus({preventScroll:true});
 }
@@ -77,7 +85,7 @@ function renderQuotas(){
  const accountRows=data.account_quotas||[],verifiedKinds=new Set(accountRows.map(q=>q.kind));
  const rows=[...accountRows,...data.quotas.filter(q=>!verifiedKinds.has(q.kind)).map(q=>({...q,account_label:'계정 연결 미확인',stale:true}))];
  const window=(w,k)=>`<div class="quota-window"><div class="quota-label"><span>${esc(w.label)}</span><b>${w.pct==null?'미확인':Number(w.pct.toFixed(1))+'% 사용'}</b></div><div class="track"><i style="background:${colors[k]||'#8d9ba8'};width:${Math.min(100,Math.max(0,w.pct||0))}%"></i></div><div class="quota-note">${w.reset?new Date(w.reset*1000).toLocaleString('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화':'초기화 시각 미보고'}</div></div>`;
- $('quotas').innerHTML=rows.map(q=>`<article class="quota"><h3>${dot(q.kind)}${kindName(q.kind)} <small>${esc(q.plan||'')}</small></h3><p class="quota-account">${esc(q.account_label)}${q.id?' · '+esc(q.id.slice(-6)):''}</p>${(q.windows.length?q.windows:[{label:'5H',pct:null},{label:'주간',pct:null}]).map(w=>window(w,q.kind)).join('')}<div class="quota-note ${q.stale?'quota-stale':''}">${esc(q.note)}<br>${q.updated?'마지막 확인 '+ago(q.updated):'확인 불가 · 0%를 뜻하지 않음'}</div></article>`).join('');
+ $('quotas').innerHTML=rows.map(q=>`<article class="quota"><h3>${dot(q.kind)}${kindName(q.kind)} <small>${esc(q.plan||'')}</small></h3><p class="quota-account">${esc(q.account_label)}${q.id?' · '+esc(q.id.slice(-6)):''}</p><div class="quota-window-pair">${(q.windows.length?q.windows:[{label:'5H',pct:null},{label:'주간',pct:null}]).map(w=>window(w,q.kind)).join('')}</div><div class="quota-note ${q.stale?'quota-stale':''}">${esc(q.note)}<br>${q.updated?'마지막 확인 '+ago(q.updated):'확인 불가 · 0%를 뜻하지 않음'}</div></article>`).join('');
 }
 function renderSystem(){
  const sys=data.system;if(!sys)return;const h=sys.host;
@@ -95,10 +103,10 @@ function renderBenchmark(){
 }
 function canvasBase(id){const canvas=$(id);if(!canvas||canvas.closest('[hidden]'))return null;const r=canvas.getBoundingClientRect();if(!r.width||!r.height)return null;const dpr=devicePixelRatio||1;canvas.width=Math.round(r.width*dpr);canvas.height=Math.round(r.height*dpr);const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);return {ctx,w:r.width,h:r.height,l:58,t:10,b:30,r:9};}
 function axes(c,max,unit=''){const {ctx,w,h,l,t,b,r}=c;ctx.font='13px -apple-system,sans-serif';for(let i=0;i<4;i++){const y=t+(h-t-b)*i/3;ctx.strokeStyle='#272a30';ctx.beginPath();ctx.moveTo(l,y+.5);ctx.lineTo(w-r,y+.5);ctx.stroke();ctx.fillStyle='#9198a5';ctx.textAlign='left';ctx.fillText(fmt(max*(1-i/3))+unit,0,y+3);}}
-function tokenChart(id,events,minutes){const c=canvasBase(id);if(!c)return;const end=Math.floor(Date.now()/60000)*60+60,start=end-minutes*60,step=minutes>300?900:minutes>60?300:60,n=(end-start)/step,bins=Array.from({length:n},()=>Object.fromEntries(kinds.map(k=>[k,0])));for(const e of events){const i=Math.floor((e.t-start)/step);if(i>=0&&i<n)bins[i][e.kind]+=e.n??(e.fresh+e.cached+e.written+e.output);}const max=Math.max(1,...bins.map(b=>Object.values(b).reduce((a,v)=>a+v,0)));axes(c,max);const {ctx,w,h,l,t,b,r}=c,bw=(w-l-r)/n;bins.forEach((v,i)=>{let y=h-b;for(const k of kinds){const bh=v[k]/max*(h-t-b);ctx.fillStyle=colors[k];ctx.globalAlpha=.86;ctx.fillRect(l+i*bw+1,y-bh,Math.max(1,bw-2),bh);y-=bh;}ctx.globalAlpha=1;});ctx.fillStyle='#9198a5';for(let i=0;i<4;i++){ctx.textAlign=i===0?'left':i===3?'right':'center';ctx.fillText(time(start+(end-start)*i/3),l+(w-l-r)*i/3,h-5);}}
+function tokenChart(id,events,minutes){const c=canvasBase(id);if(!c)return;const end=Math.floor(Date.now()/60000)*60+60,start=end-minutes*60,step=minutes>300?900:minutes>60?300:60,n=(end-start)/step,series=[...new Set(events.map(e=>e.kind))],bins=Array.from({length:n},()=>Object.fromEntries(series.map(k=>[k,0])));for(const e of events){const i=Math.floor((e.t-start)/step);if(i>=0&&i<n)bins[i][e.kind]+=e.n??(e.fresh+e.cached+e.written+e.output);}const max=Math.max(1,...bins.map(b=>Object.values(b).reduce((a,v)=>a+v,0)));axes(c,max);const {ctx,w,h,l,t,b,r}=c,bw=(w-l-r)/n;bins.forEach((v,i)=>{let y=h-b;for(const k of series){const bh=v[k]/max*(h-t-b);ctx.fillStyle=colors[k]||'#8b939f';ctx.globalAlpha=.86;ctx.fillRect(l+i*bw+1,y-bh,Math.max(1,bw-2),bh);y-=bh;}ctx.globalAlpha=1;});ctx.fillStyle='#9198a5';for(let i=0;i<4;i++){ctx.textAlign=i===0?'left':i===3?'right':'center';ctx.fillText(time(start+(end-start)*i/3),l+(w-l-r)*i/3,h-5);}}
 function drawCharts(){
  if(!data?.ready)return;
- tokenChart('tokenChart',data.events.filter(e=>provider==='all'||e.kind===provider),Number($('range').value));$('chartLegend').innerHTML=kinds.map(k=>`<span>${dot(k)}${kindName(k)}</span>`).join('');
+ tokenChart('tokenChart',data.events.filter(e=>provider==='all'||e.kind===provider),Number($('range').value));$('chartLegend').innerHTML=[...new Set(data.events.map(e=>e.kind))].map(k=>`<span>${dot(k)}${k==='Aside'?'앱 내부 세션':esc(kindName(k))}</span>`).join('');
  const c=canvasBase('systemChart'),hist=data.system?.history||[];
  if(c){axes(c,100,'%');const {ctx,w,h,l,t,b,r}=c,start=hist[0]?.t||0,end=hist.at(-1)?.t||start+1;for(const [key,color] of [['cpu','#398f77'],['memory','#7d88bc']]){ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.beginPath();let started=false;for(const v of hist){if(v[key]==null){started=false;continue;}const x=l+(v.t-start)/Math.max(1,end-start)*(w-l-r),y=h-b-v[key]/100*(h-t-b);if(started)ctx.lineTo(x,y);else ctx.moveTo(x,y);started=true;}ctx.stroke();}ctx.fillStyle='#9198a5';ctx.textAlign='left';ctx.fillText(time(start),l,h-5);ctx.textAlign='right';ctx.fillText(time(end),w-r,h-5);}
  if(selectedId&&$('detailDialog').open){const s=data.sessions.find(s=>s.id===selectedId);if(s)tokenChart('detailChart',(s.usage?.history||[]).map(([t,n])=>({t,n,kind:s.kind})),60);}
@@ -132,6 +140,8 @@ async function refresh(){
 }
 $('views').onclick=e=>{const b=e.target.closest('[data-view]');if(b)selectView(b.dataset.view);};
 $('providers').onclick=e=>{const b=e.target.closest('[data-provider]');if(!b)return;provider=provider===b.dataset.provider?'all':b.dataset.provider;selectView('sessions');render();};
+$('hostApps').onclick=e=>{const b=e.target.closest('[data-app-filter]');if(!b)return;provider='all';selectView('sessions');$('search').value=b.dataset.appFilter;render();};
+$('modelFilter').onchange=renderTable;
 $('clearFilter').onclick=()=>{provider='all';render();};$('search').oninput=renderTable;$('stateFilter').onchange=renderTable;$('sort').onchange=renderTable;$('range').onchange=()=>{const w=data?.period_usage?.windows.find(w=>w.seconds===Number($('range').value)*60);if(w)selectPeriod(w.key);};
 $('periodCards').onclick=e=>{const b=e.target.closest('[data-period]');if(b)selectPeriod(b.dataset.period);};
 function openDetail(e){if(e.target.closest('button'))return;const r=e.target.closest('[data-session]');if(!r)return;selectedId=r.dataset.session;renderDetail(selectedId);if(!$('detailDialog').open)$('detailDialog').show();document.body.classList.add('inspecting');drawCharts();}
@@ -160,3 +170,19 @@ function renderSkills(){
  $('skillRows').innerHTML=rows.map(s=>`<tr><td><strong>${esc(s.name)}</strong><small class="skill-path">${esc(s.path)}</small></td><td>${esc(s.providers.join(' · '))}</td><td>${esc(s.scope)}</td><td><span class="status">설치 확인</span><small>세션 활성화 미확인</small></td></tr>`).join('')||'<tr><td colspan="4" class="empty">조건에 맞는 설치 파일이 없습니다.</td></tr>';
 }
 $('skillSearch').oninput=renderSkills;
+
+$('addAccount').onclick=()=>$('accountDialog').showModal();
+$('closeAccounts').onclick=()=>$('accountDialog').close();
+let accountLoginBusy=false;
+$('accountDialog').addEventListener('click',async e=>{
+ const b=e.target.closest('[data-account-login]');if(!b||accountLoginBusy)return;
+ accountLoginBusy=true;const buttons=[...document.querySelectorAll('[data-account-login]')];buttons.forEach(x=>x.disabled=true);
+ $('accountLoginStatus').textContent='공식 로그인 창을 여는 중…';
+ try{
+  if(!data?.action_token||!data.ready||Date.now()/1000-data.updated>20)throw Error('수집기 연결을 확인한 뒤 다시 시도해 주세요.');
+  const r=await fetch('/api/accounts/login',{method:'POST',headers:{'Content-Type':'application/json','X-Monitor-Token':data.action_token},body:JSON.stringify({kind:b.dataset.accountLogin}),signal:AbortSignal.timeout(20000)});
+  const result=await r.json();if(!r.ok)throw Error(result.message||'로그인 창을 열지 못했습니다.');
+  $('accountLoginStatus').textContent=result.message;
+ }catch(error){$('accountLoginStatus').textContent=error.name==='TimeoutError'?'로그인 창 응답을 확인하지 못했습니다. 터미널을 먼저 확인해 주세요.':error.message;}
+ finally{accountLoginBusy=false;buttons.forEach(x=>x.disabled=false);}
+});

@@ -2,7 +2,7 @@ import json,tempfile,time,unittest
 from pathlib import Path
 from unittest.mock import Mock
 from onetop.bridge import CloudLink,export_snapshot,save_private
-from onetop.discovery import cli_kind,context
+from onetop.discovery import cli_kind,context,applications,app_from
 
 class BoundaryTests(unittest.TestCase):
  def test_operational_export_omits_goal_prompts_skill_paths_and_raw_events(self):
@@ -29,6 +29,11 @@ class BoundaryTests(unittest.TestCase):
  def test_parent_app_attribution(self):
   rows={2:{'ppid':1,'app':('',''),'tty':'/dev/ttys000'},1:{'ppid':0,'app':('Cursor','/Applications/Cursor.app')}}
   self.assertEqual(context(2,rows)['app'],'Cursor')
+ def test_arbitrary_host_application_does_not_need_a_name_allowlist(self):
+  app=app_from('/Applications/Future Workspace.app/Contents/MacOS/workspace')
+  rows={2:{'pid':2,'ppid':1,'app':('',''),'tty':''},1:{'pid':1,'ppid':0,'app':app}}
+  self.assertEqual(context(2,rows)['app'],'Future Workspace')
+  self.assertEqual(applications(rows)[0]['name'],'Future Workspace')
  def test_export_omits_prompt_paths_keys_and_unknown_stays_unknown(self):
   state={'ready':True,'updated':time.time(),'sessions':[{'id':'id','kind':'Gemini','control_key':'key','project':'demo','cwd':'/private/secret','title':'PRIVATE PROMPT','env':{'KEY':'SECRET'},'path':'/private/log','location':{'app':'Cursor','app_path':'/Applications/Cursor.app'},'tokens':None}]}
   data=export_snapshot(state);raw=json.dumps(data)

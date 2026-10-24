@@ -9,3 +9,11 @@
 .goal-objective summary{font-size:15px;color:var(--ink);line-height:1.7;margin:8px 0 10px;font-weight:550;overflow-wrap:anywhere}.goal-objective[open] summary{color:var(--muted)}.goal-objective p{white-space:pre-wrap;line-height:1.8;font-size:14px;margin-bottom:15px}.host-card .label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
 
 .quota-account{font-size:14px;color:var(--text);overflow-wrap:anywhere;margin:0 0 16px}.quota h3 small{font-size:12px;color:var(--muted);font-weight:500;margin-left:auto}.quota-stale{color:#d2a36b}
+
+/* Retain both AI and app navigation on smaller windows. */
+.rail{overflow-y:auto}.rail>*{flex-shrink:0}.provider-nav>span{overflow:hidden;text-overflow:ellipsis}.rail nav{margin-bottom:10px}.rail-bottom{margin-top:12px}
+@media(max-width:760px){#hostApps{display:flex;flex-direction:row;overflow-x:auto;margin:8px 0;gap:3px}#hostApps .provider-nav{padding:7px 10px;font-size:12px}}
+
+/* Compact subscription overview, with separate 5H and weekly columns. */
+.quotas{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}.quota{padding:16px!important}.quota h3{font-size:15px}.quota-account{margin:5px 0 10px!important;font-size:12px}.quota-window-pair{display:grid;grid-template-columns:1fr 1fr;gap:18px}.quota-window{margin:0!important}.quota-label{font-size:12px}.quota-window .quota-note{font-size:10px}.quota>.quota-note{font-size:11px;margin-top:10px}.quota>.quota-note br{display:none}.quota>.quota-note br:after{content:' · '}.account-connect-copy{font-size:14px;color:var(--muted);line-height:1.8;margin:18px 0}.account-connect-options{display:grid;gap:10px}.account-connect-options button{display:flex;justify-content:space-between;padding:14px 18px;text-align:left}.account-connect-options span{color:var(--muted);font-size:12px}#accountDialog{max-width:480px}
+@media(max-width:650px){.quotas{grid-template-columns:1fr}}

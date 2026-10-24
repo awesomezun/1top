@@ -23,6 +23,8 @@ def main():
         print('1top is already running.',file=sys.stderr);return
     server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
     collector=Collector();server.collector=collector;server.action_token=secrets.token_urlsafe(32)
+    from .account_login import AccountLogin
+    server.account_login=AccountLogin()
     server.controller=Controller(collector,Collector,state_file=DATA/'controls-v5.json')
     threading.Thread(target=collector.loop,daemon=True).start()
     threading.Thread(target=server.serve_forever,daemon=True).start()

@@ -11,12 +11,15 @@ import ssl
 import subprocess
 import threading
 import time
+import unicodedata
+import getpass
 import urllib.request
 from datetime import datetime
 from pathlib import Path
 
 import certifi
 import psutil
+from .account_login import managed_profiles_dir
 
 
 def read_json(path):
@@ -136,6 +139,9 @@ def codex_rpc(root,executable=None):
 
 def profile_roots(home=Path.home()):
     roots={('Claude',str(home/'.claude')),('Codex',str(home/'.codex'))}
+    for kind in ('Claude','Codex'):
+        for path in (managed_profiles_dir(home)/kind.lower()).glob('*'):
+            if path.is_dir() and not path.is_symlink():roots.add((kind,str(path)))
     for kind,key in [('Claude','CLAUDE_CONFIG_DIR'),('Codex','CODEX_HOME')]:
         if os.environ.get(key):roots.add((kind,os.environ[key]))
     for process in psutil.process_iter(['name']):
@@ -146,7 +152,23 @@ def profile_roots(home=Path.home()):
             for kind,key in [('Claude','CLAUDE_CONFIG_DIR'),('Codex','CODEX_HOME')]:
                 if env.get(key):roots.add((kind,env[key]))
         except (psutil.Error,OSError):pass
-    return [(kind,Path(root).expanduser()) for kind,root in sorted(roots)[:12]]
+    return [(kind,Path(root).expanduser()) for kind,root in sorted(roots)[:64]]
+
+
+def claude_credentials(root):
+    credentials=read_json(root/'.credentials.json')
+    if credentials.get('claudeAiOauth'):return credentials['claudeAiOauth']
+    # Claude Code 2.1.310 scopes its macOS Keychain service by the normalized
+    # config path (SHA-256, first eight hex characters). Never enumerate Keychain.
+    if os.uname().sysname!='Darwin':return {}
+    suffix='' if root==Path.home()/'.claude' else '-'+hashlib.sha256(unicodedata.normalize('NFC',str(root)).encode()).hexdigest()[:8]
+    try:
+        result=subprocess.run(['/usr/bin/security','find-generic-password','-a',getpass.getuser(),'-w',
+                               '-s','Claude Code-credentials'+suffix],capture_output=True,text=True,timeout=3)
+        if result.returncode or len(result.stdout)>128*1024:return {}
+        value=json.loads(result.stdout)
+        return value.get('claudeAiOauth') or {} if isinstance(value,dict) else {}
+    except (ValueError,OSError,subprocess.SubprocessError):return {}
 
 
 class AccountQuotaSampler:
@@ -174,7 +196,7 @@ class AccountQuotaSampler:
         account_id=account.get('accountUuid')
         if not account_id:return None
         key=identity('Claude',account_id,account.get('organizationUuid',''))
-        credentials=(read_json(root/'.credentials.json').get('claudeAiOauth') or {})
+        credentials=claude_credentials(root)
         row={'id':key,'kind':'Claude','account_label':account.get('emailAddress') or account.get('displayName') or 'Claude 계정 '+key[-6:],
              'plan':credentials.get('subscriptionType') or account.get('seatTier') or '',
              'windows':claude_windows({},now),'updated':0,'stale':True,'note':'계정 한도를 확인하지 못했습니다.'}

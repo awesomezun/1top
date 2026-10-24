@@ -25,10 +25,10 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         NSApp.setActivationPolicy(.accessory); NSApp.appearance = NSAppearance(named: .darkAqua)
         if !testing { try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]) }
         makeMainMenu()
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
-            button.title = " 1top"; button.image = NSImage(systemSymbolName: "waveform.path", accessibilityDescription: "1top")
-            button.image?.isTemplate = true; button.imagePosition = .imageLeading
+            button.title = ""; button.image = NSImage(systemSymbolName: "waveform.path", accessibilityDescription: "1top")
+            button.image?.isTemplate = true; button.imagePosition = .imageOnly
             button.target = self; button.action = #selector(togglePopover); button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.setAccessibilityLabel("1top 간략 대시보드")
         }
@@ -74,7 +74,7 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         let item = menu.addItem(withTitle: title, action: action, keyEquivalent: key); item.target = target ?? self
     }
     func updateStatusTitle() {
-        statusItem.button?.title = model.fresh ? " 1top \(model.working)" : " 1top ·"
+        statusItem.button?.title = ""
         statusItem.button?.toolTip = "\(model.connectionLabel) · 작업 중 \(model.working) / 전체 \(model.sessions.count)"
     }
     func updated() {
