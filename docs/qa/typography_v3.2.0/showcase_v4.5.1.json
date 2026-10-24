@@ -1,0 +1,62 @@
+{
+  "version": "4.5.1",
+  "data": "Synthetic only; 12 sessions; no live account or machine data",
+  "base_shares_percent": [
+    38,
+    22,
+    13,
+    8,
+    6,
+    4,
+    3,
+    2,
+    1.5,
+    1.2,
+    0.8,
+    0.5
+  ],
+  "menu_display": "Top 7 plus exact aggregate of remaining sessions",
+  "font": "Bundled IBM Plex Sans / IBM Plex Sans KR",
+  "wordmark": "Natural 1top with no additional gap",
+  "scripts": "scripts/showcase_v4.5.1",
+  "capture_fps": {
+    "menu": 7.11,
+    "accounts": 7.92,
+    "desktop": 6.19,
+    "maps": 5.91
+  },
+  "files": {
+    "accounts.jpg": {
+      "bytes": 55327,
+      "sha256": "858a0f53fbee1bffedd66bf9586276ba9c2e4c4bf50b827234fc6376167e3e84"
+    },
+    "accounts.mp4": {
+      "bytes": 80561,
+      "sha256": "b8c6ccf74a6020aa3864fd721690709d13781fa327e89dcff400f1be40a37bef"
+    },
+    "desktop.jpg": {
+      "bytes": 191761,
+      "sha256": "101543fc1a55a9b9e0cef19765fc01d81515e96c8767295da51e259cfdbddf95"
+    },
+    "desktop.mp4": {
+      "bytes": 410277,
+      "sha256": "8243670d013d2c227e491b778a31c6946fc9a04054775f1804b19c6c6ecbe6ac"
+    },
+    "maps.jpg": {
+      "bytes": 205808,
+      "sha256": "e6d9e41abf35bb507f699329499898ece7949f2f5341046628f6691fc1c54bbe"
+    },
+    "maps.mp4": {
+      "bytes": 374872,
+      "sha256": "304f3f5a416f5c472ece51bb065591ab44233124a44d58457d5b884d601cb7f7"
+    },
+    "menu.jpg": {
+      "bytes": 51262,
+      "sha256": "f1f302966b15f11d172d89e87a3f666f4e6b3f80c0087ab96a2db1d976f3add9"
+    },
+    "menu.mp4": {
+      "bytes": 92561,
+      "sha256": "c632d645217933a203244d598d0ff2136241bd251da6cdae4a719ff7ab596c7b"
+    }
+  }
+}
