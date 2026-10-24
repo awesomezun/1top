@@ -10,11 +10,16 @@ CREATE TABLE IF NOT EXISTS pairings (
  allow_control INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS tickets (
- hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, auth_expires INTEGER NOT NULL
+ hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, auth_expires INTEGER NOT NULL, mobile_hash TEXT
 );
 CREATE TABLE IF NOT EXISTS request_limits (
  key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS mobile_sessions (
+ token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, platform TEXT NOT NULL,
+ created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS mobile_user ON mobile_sessions(user_id);
 CREATE TABLE IF NOT EXISTS hosted_access (
  user_id TEXT PRIMARY KEY,
  kind TEXT NOT NULL CHECK(kind IN ('operator','subscription','trial')),

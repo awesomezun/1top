@@ -1,0 +1,208 @@
+{
+  "version": "1.0.0",
+  "review_date": "2026-10-24",
+  "upstream": {
+    "repository": "pingdotgg/t3code",
+    "commit": "d53873b6a4799e87afd63c8d288ef0089f5a3748"
+  },
+  "scope": "Bounded static source inspection and public store listing inspection. No native app execution, login, network trace, or end-to-end connection test. No upstream implementation files are vendored.",
+  "files": [
+    {
+      "path": "apps/mobile/README.md",
+      "sha256": "7838640d293a7cfa77c23529b6dbd60766337fbe000186726fd0c8296a8a3ca2",
+      "lines": 156,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/README.md"
+    },
+    {
+      "path": "apps/mobile/app.config.ts",
+      "sha256": "deec1d11bf3535f9043cfc12ef2f773929984bb215cb9d90760c043f031f6f10",
+      "lines": 500,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/app.config.ts"
+    },
+    {
+      "path": "apps/mobile/eas.json",
+      "sha256": "ce5589c701c0b498f7ddc89402cd537a1e7fa80e89e578d835ac6e879e234165",
+      "lines": 85,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/eas.json"
+    },
+    {
+      "path": "apps/mobile/package.json",
+      "sha256": "73e9fe075b5493a49126a40c0683135c4929defde732238ddf9efb3bb597d8f9",
+      "lines": 194,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/package.json"
+    },
+    {
+      "path": "apps/mobile/src/App.tsx",
+      "sha256": "814523c5fe6ba5f35ded876178145c2939a622cabda1dd8ffff1dbf087a7cd96",
+      "lines": 126,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/App.tsx"
+    },
+    {
+      "path": "apps/mobile/src/connection/app-state-wakeups.ts",
+      "sha256": "f8584242557e845ec16278806a97c9764983a0716fc294552757afe5905731b0",
+      "lines": 18,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/connection/app-state-wakeups.ts"
+    },
+    {
+      "path": "apps/mobile/src/connection/catalog-store.ts",
+      "sha256": "7f5662f0ef964f210e2a05b61a22d177c958409a7ee33020e5bec66f83e23104",
+      "lines": 121,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/connection/catalog-store.ts"
+    },
+    {
+      "path": "apps/mobile/src/connection/onboarding.ts",
+      "sha256": "a14eaa2584c74fa7a82119c42717123af0b694c334e540b897b05812ab388b1c",
+      "lines": 47,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/connection/onboarding.ts"
+    },
+    {
+      "path": "apps/mobile/src/connection/platform.ts",
+      "sha256": "26b8fa4d76abb87f00c3365697f8010a7de90d2025e54cc1d0cb950a78907db8",
+      "lines": 301,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/connection/platform.ts"
+    },
+    {
+      "path": "apps/mobile/src/connection/runtime.ts",
+      "sha256": "c921d289fcbe0dc7688726f665714d3a9f2fad4b33fc144d5c8b14c92cdd7d6e",
+      "lines": 62,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/connection/runtime.ts"
+    },
+    {
+      "path": "apps/mobile/src/connection/storage.ts",
+      "sha256": "c6e1f0b5c72b1436f1a2994afc16e7404ddb76fb437adc39dc237057ce07ad3e",
+      "lines": 160,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/connection/storage.ts"
+    },
+    {
+      "path": "apps/mobile/src/features/cloud/CloudAuthProvider.tsx",
+      "sha256": "5e1d88b3f0e253956f64672db5dd4f5dd988941561c8427a76a8613e2f39a3b9",
+      "lines": 212,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/cloud/CloudAuthProvider.tsx"
+    },
+    {
+      "path": "apps/mobile/src/features/cloud/ConnectOnboardingRouteScreen.tsx",
+      "sha256": "b1eb02fa149974d66f05f11d238032e666ebf22b0c22c1eedf7b5f446dfc693a",
+      "lines": 141,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/cloud/ConnectOnboardingRouteScreen.tsx"
+    },
+    {
+      "path": "apps/mobile/src/features/cloud/connectOnboarding.ts",
+      "sha256": "a14bdfcb9f15e6635448fa7979edc1f59d383dbbda10ffcda712c3ab4345be29",
+      "lines": 18,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/cloud/connectOnboarding.ts"
+    },
+    {
+      "path": "apps/mobile/src/features/cloud/linkEnvironment.ts",
+      "sha256": "ab72837f755e3fe90936641f3e1198cf3b165968af86a36c0fa1d90247ce58df",
+      "lines": 239,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/cloud/linkEnvironment.ts"
+    },
+    {
+      "path": "apps/mobile/src/features/connection/ConnectionsNewRouteScreen.tsx",
+      "sha256": "b2a4ce7757e87595200dfd8f8ddfdc42094ad1c78bfccc3547038b775768e171",
+      "lines": 424,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/connection/ConnectionsNewRouteScreen.tsx"
+    },
+    {
+      "path": "apps/mobile/src/features/connection/ConnectionsRouteScreen.tsx",
+      "sha256": "8b542df44f9a70b6a7b9dc548bd530bc2d0647d7686e0e99e02ee7d3da42fe32",
+      "lines": 76,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/connection/ConnectionsRouteScreen.tsx"
+    },
+    {
+      "path": "apps/mobile/src/features/connection/EnvironmentConnectionNotice.tsx",
+      "sha256": "56ac8601cde71a0b6a2620e09592f62d8cfc430829acccd0b690866da91aaf38",
+      "lines": 98,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/connection/EnvironmentConnectionNotice.tsx"
+    },
+    {
+      "path": "apps/mobile/src/features/connection/environmentStatusText.ts",
+      "sha256": "e93b7349f5d0611e4844c46d24799cfe8c6feeba54a8a50c68d5775ebad5aaaa",
+      "lines": 10,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/connection/environmentStatusText.ts"
+    },
+    {
+      "path": "apps/mobile/src/features/connection/pairing.ts",
+      "sha256": "6c5cd1183158d63551665856bb3d6093119aab3f6dc893ac5fa42db9b7d175b2",
+      "lines": 90,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/connection/pairing.ts"
+    },
+    {
+      "path": "apps/mobile/src/features/connection/useConnectionController.ts",
+      "sha256": "63384e0a92a481d986a14c7f79a95fa0857f56e7ab2449c842d602b94bc11e33",
+      "lines": 135,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/connection/useConnectionController.ts"
+    },
+    {
+      "path": "apps/mobile/src/features/layout/AdaptiveWorkspaceLayout.tsx",
+      "sha256": "7a0b9b7199cbf69191e687caabb78f69117e2a5c511d5b65ddaf380c68dcac86",
+      "lines": 928,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/layout/AdaptiveWorkspaceLayout.tsx"
+    },
+    {
+      "path": "apps/mobile/src/features/settings/SettingsAuthRouteScreen.tsx",
+      "sha256": "8bd0d97624935d9c6ee355c857f9ba3af21adfdd1b0bc00eb36caed027bb9792",
+      "lines": 65,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/settings/SettingsAuthRouteScreen.tsx"
+    },
+    {
+      "path": "apps/mobile/src/features/workspace/WorkspaceRootScreen.tsx",
+      "sha256": "501b70301d81785f7c45f338869745838cf18ecb4e1d73ea5abf32ac9481ecd7",
+      "lines": 237,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/workspace/WorkspaceRootScreen.tsx"
+    },
+    {
+      "path": "apps/mobile/src/features/workspace/navigation-tab-order.ts",
+      "sha256": "8dab1037c04a7ffb8b32e212406bca601d8ce55b03b6c73cba56169fd9cc7aa8",
+      "lines": 87,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/workspace/navigation-tab-order.ts"
+    },
+    {
+      "path": "apps/mobile/src/features/workspace/navigation-tabs.ts",
+      "sha256": "c213879f254dc6635e66e8e62e3c3f241486f67cb5d9134ef14531974cf91741",
+      "lines": 51,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/features/workspace/navigation-tabs.ts"
+    },
+    {
+      "path": "apps/mobile/src/lib/adaptive-navigation.ts",
+      "sha256": "3d9a6646d71fa60bce51ef5b5a4860f29ad92996df89edccaca461476b84c32a",
+      "lines": 59,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/lib/adaptive-navigation.ts"
+    },
+    {
+      "path": "apps/mobile/src/persistence/mobile-database.ts",
+      "sha256": "3446e7878cc7c87c3fedbe153b33e57154a0eaafaaf77d95d2ff79f6cc2736b5",
+      "lines": 478,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/persistence/mobile-database.ts"
+    },
+    {
+      "path": "apps/mobile/src/persistence/mobile-secure-storage.ts",
+      "sha256": "a67a084853b232a80318f9a68d153a4cf74b43cf0d0aa04fa538b5047d1c1759",
+      "lines": 52,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/persistence/mobile-secure-storage.ts"
+    },
+    {
+      "path": "apps/mobile/src/persistence/mobile-storage.ts",
+      "sha256": "7d34b3f4f6f791d1bfb4b4f67805b936e72c8df090e7d2bdab3a1e27dc20203f",
+      "lines": 266,
+      "url": "https://github.com/pingdotgg/t3code/blob/d53873b6a4799e87afd63c8d288ef0089f5a3748/apps/mobile/src/persistence/mobile-storage.ts"
+    }
+  ],
+  "store_listings": [
+    {
+      "platform": "iOS",
+      "url": "https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824",
+      "observed": "Public listing available; description includes manual pairing and managed T3 Connect."
+    },
+    {
+      "platform": "Android",
+      "url": "https://play.google.com/store/apps/details?id=com.t3tools.t3code",
+      "observed": "Public listing available; updated date shown as October 15, 2026."
+    }
+  ],
+  "visual_source": {
+    "url": "https://play-lh.googleusercontent.com/PtrtgjdnbnR86ezBCH4lgyT0AuneB3NiWtvtlH9ch17j-jMZbLYgQ9Hr4A5iaIlNFTog8GIeT5STTUfMels3=w1080",
+    "source": "Google Play screenshot 1",
+    "observed": "Native list screen with project identity, readable title, branch/machine metadata, working/approval states, search/settings and new-thread button. Store screenshot version may differ from pinned source. Image is not copied into repository."
+  }
+}
