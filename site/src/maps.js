@@ -82,8 +82,10 @@
   element.onpointerover=e=>show(e.target.closest('[data-map-id]'),e);
   element.onpointermove=e=>show(e.target.closest('[data-map-id]'),e);
   element.onpointerleave=hide;
-  element.onfocusin=e=>show(e.target.closest('[data-map-id]'));
-  element.onfocusout=hide;
+  element._mapFocusEvents?.abort();
+  element._mapFocusEvents=new AbortController();
+  element.addEventListener('focusin',e=>show(e.target.closest('[data-map-id]')),{signal:element._mapFocusEvents.signal});
+  element.addEventListener('focusout',hide,{signal:element._mapFocusEvents.signal});
   element.onkeydown=e=>{if(e.key==='Escape')hide();};
   element.onclick=e=>{const tile=e.target.closest('[data-map-id]'),id=tile?.dataset.mapId;if(id){show(tile,e);activate?.(items.find(x=>x.id===id));}};
  }
