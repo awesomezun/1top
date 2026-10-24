@@ -6,6 +6,7 @@ the synthetic loopback fixture, never starts a collector, and disables controls.
 from pathlib import Path
 import subprocess
 import shutil
+import os
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'build/showcase_v4.5.1'
@@ -78,5 +79,5 @@ extension OneTopApp {
 (OUT / 'CaptureApp.swift').write_text(s)
 subprocess.run(['xcrun', 'swiftc', '-O', '-framework', 'AppKit', '-framework', 'SwiftUI', '-framework', 'WebKit',
     str(OUT/'CaptureApp.swift'), str(ROOT/'desktop/DashboardModel.swift'), str(ROOT/'desktop/QuickDashboard.swift'), str(ROOT/'desktop/Typography.swift'), str(ROOT/'desktop/CompactTokenMap.swift'), '-framework', 'CoreText',
-    '-o', str(OUT/'capture-app')], check=True)
+    '-o', str(OUT/'capture-app')], check=True, env={**os.environ, 'DEVELOPER_DIR': os.environ.get('DEVELOPER_DIR', '/Applications/Xcode.app/Contents/Developer')})
 print(OUT/'capture-app')
