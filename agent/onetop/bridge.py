@@ -54,7 +54,13 @@ def export_snapshot(state):
             'rate':u.get('rate'),'windows':u.get('windows',{}),'cpu':r.get('cpu'),'rss':r.get('rss'),
             'capabilities':capabilities})
     host=state.get('system',{}).get('host',{});memory=host.get('memory',{})
+    ops=state.get('operations',{})
+    operations={'updated':ops.get('updated'), 'installed_skills':len(ops.get('skills',[])) if ops else None,
+        'observed_events':len(ops.get('events',[])) if ops else None,
+        'goals':[{k:g.get(k) for k in ('thread_id','runtime','status','tokens_used','time_used_seconds','session_connected','evidence')}
+                 for g in ops.get('goals',[])], 'loop_state':'not_verified','skill_runtime':'partial'}
     return {'version':__version__,'updated':state.get('updated',0),'recording_started':state.get('started',0),
+        'operations':operations,
         'sessions':sessions,'applications':[{'name':a['name'],'evidence':a['evidence']} for a in state.get('applications',[])],'host':{'cpu':host.get('cpu'),'used_memory':memory.get('used',0),
         'total_memory':memory.get('total',0),'cores':host.get('cores',0)},
         'periods':[{k:w[k] for k in ('key','label','tokens','partial','observed_seconds')} for w in state.get('period_usage',{}).get('windows',[])]}

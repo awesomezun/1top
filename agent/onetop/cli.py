@@ -27,27 +27,34 @@ def main():
     threading.Thread(target=collector.loop,daemon=True).start()
     threading.Thread(target=server.serve_forever,daemon=True).start()
     bridge=CloudLink(collector,server.controller,DATA)
+    bridge.status='Local monitoring'
+    status_detail='Free local monitoring. No account or cloud connection is required.'
     def write_status():
         while not bridge.stop.is_set():
-            save_private(DATA/'status.json',{'updated':time.time(),'status':bridge.status,'detail':'Connected computers are visible only to your Google account. Keep 1top running to report usage.'})
+            save_private(DATA/'status.json',{'updated':time.time(),'status':bridge.status,'detail':status_detail})
             bridge.stop.wait(1)
     threading.Thread(target=write_status,daemon=True).start()
     def stop_signal(signum,frame):raise KeyboardInterrupt
     signal.signal(signal.SIGTERM,stop_signal)
     try:
-        if args.command=='local':
-            if not args.headless:open_url('http://127.0.0.1:'+str(args.port))
-        else:
-            if (args.command=='connect' or not bridge.config) and not args.headless:bridge.pair()
-            if bridge.config:
-                threading.Thread(target=bridge.run,daemon=True).start()
-                if not args.headless:open_url('https://1top.si/app')
+        paired=False
+        if args.command=='connect' and not args.headless:
+            try:
+                bridge.pair();paired=True
+            except Exception:
+                bridge.status='Local monitoring'
+                status_detail='Remote connection is unavailable. Local monitoring is ready and your AI sessions are unaffected.'
+        # A saved connection is prior opt-in. Fresh installs never pair implicitly.
+        if args.command!='local' and bridge.config:
+            status_detail='Local monitoring is ready. Your previously connected remote workspace is also enabled.'
+            threading.Thread(target=bridge.run,daemon=True).start()
+        if not args.headless:open_url('https://1top.si/app' if paired else 'http://127.0.0.1:'+str(args.port))
         while True:time.sleep(1)
     except KeyboardInterrupt:pass
     except Exception:
         bridge.status='Connection failed. Reopen 1top to try again.'
         save_private(DATA/'status.json',{'updated':time.time(),'status':bridge.status,'detail':'Your AI sessions are unaffected.'})
         raise
-    finally:bridge.stop.set();server.shutdown()
+    finally:bridge.stop.set();server.shutdown();server.server_close();lock.close()
 
 if __name__=='__main__':main()

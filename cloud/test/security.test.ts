@@ -22,6 +22,15 @@ function nextMessage(ws:WebSocket){return new Promise<any>((resolve,reject)=>{ws
 async function socket(hub:any,role:string,id:string){const r=await hub.fetch('https://hub/ws?'+new URLSearchParams({role,id,control:'1',expires:String(Date.now()+60000)}),{headers:{Upgrade:'websocket'}});expect(r.status).toBe(101);const ws=r.webSocket!;ws.accept();return ws;}
 
 describe('account and device boundaries',()=>{
+ it('returns server-derived admin entitlement without claiming a payment',async()=>{
+  const response=await fetch('/api/devices',undefined,'a'.repeat(30));
+  expect((await response.json() as any).account).toMatchObject({role:'admin',plan:'pro',grant:'operator'});
+ });
+ it('allowlists operational summaries without goals or skill file contents',()=>{
+  const result=snapshot({...sample(),operations:{installed_skills:12,observed_events:2,goals:[{thread_id:'s',runtime:'Codex',status:'active',objective:'PRIVATE',path:'/private',tokens_used:500}],events:['PRIVATE'],skills:['PRIVATE']}});
+  expect(JSON.stringify(result)).not.toContain('PRIVATE');expect(JSON.stringify(result)).not.toContain('/private');
+  expect(result.operations.goals[0].tokens_used).toBe(500);
+ });
  it('rejects hostile web origins before authentication',async()=>{expect((await fetch('/api/devices',undefined,'a'.repeat(30),'https://evil.example')).status).toBe(403);});
  it('does not return devices to anonymous callers',async()=>{expect((await fetch('/api/devices')).status).not.toBe(200);});
  it('never exposes another account device',async()=>{

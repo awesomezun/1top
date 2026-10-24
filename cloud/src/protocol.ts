@@ -11,6 +11,9 @@ export interface DeviceSnapshot {
   host: { cpu: number | null; used_memory: number; total_memory: number; cores: number };
   periods: Array<{key: string; label: string; tokens: number[]; partial: boolean; observed_seconds: number}>;
   version: string;
+  operations: { updated: number | null; installed_skills: number | null; observed_events: number | null;
+    goals: Array<{thread_id:string;runtime:string;status:string;tokens_used:number|null;time_used_seconds:number|null;session_connected:boolean;evidence:string}>;
+    loop_state: 'not_verified'; skill_runtime: 'partial' };
 }
 export const text = (v: unknown, max = 180): string => typeof v === 'string' ? v.slice(0, max) : '';
 const number = (v: unknown, max = Number.MAX_SAFE_INTEGER): number | null =>
@@ -36,6 +39,11 @@ export function snapshot(value: any): DeviceSnapshot {
   return {
     updated:number(value.updated)||0,recording_started:number(value.recording_started)||0,
     sessions,version:text(value.version,30),
+    operations:{updated:number(value.operations?.updated),installed_skills:number(value.operations?.installed_skills,10000),
+      observed_events:number(value.operations?.observed_events,10000),loop_state:'not_verified',skill_runtime:'partial',
+      goals:Array.isArray(value.operations?.goals)?value.operations.goals.slice(0,100).map((g:any)=>({
+        thread_id:text(g.thread_id,200),runtime:text(g.runtime,30),status:text(g.status,30),tokens_used:number(g.tokens_used),
+        time_used_seconds:number(g.time_used_seconds),session_connected:g.session_connected===true,evidence:text(g.evidence,30)})):[]},
     applications:Array.isArray(value.applications)?value.applications.slice(0,60).map((a:any)=>({name:text(a.name,80),evidence:'application_process'})):[],
     host:{cpu:number(value.host?.cpu,100),used_memory:number(value.host?.used_memory)||0,
       total_memory:number(value.host?.total_memory)||0,cores:number(value.host?.cores,4096)||0},

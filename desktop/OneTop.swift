@@ -22,9 +22,10 @@ final class OneTopApp: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "1top — Your AI workspace", action: #selector(showWindow), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "Open dashboard", action: #selector(dashboard), keyEquivalent: "o")
-        menu.addItem(withTitle: "Connection status", action: #selector(showWindow), keyEquivalent: "")
-        menu.addItem(withTitle: "Connect / reconnect with Google", action: #selector(reconnect), keyEquivalent: "")
-        menu.addItem(withTitle: "Open local dashboard", action: #selector(localDashboard), keyEquivalent: "")
+        menu.addItem(withTitle: "Monitoring status", action: #selector(showWindow), keyEquivalent: "")
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(withTitle: "Remote workspace (optional)", action: #selector(remoteDashboard), keyEquivalent: "")
+        menu.addItem(withTitle: "Connect remote access…", action: #selector(reconnect), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
         startItem = menu.addItem(withTitle: "Open at login", action: #selector(toggleLogin), keyEquivalent: "")
         startItem.state = FileManager.default.fileExists(atPath: loginAgent.path) ? .on : .off
@@ -32,7 +33,7 @@ final class OneTopApp: NSObject, NSApplicationDelegate {
         for item in menu.items { item.target = self }
         statusItem.menu = menu
         makeWindow()
-        if !testing { launch(pair: !FileManager.default.fileExists(atPath: dataDir.appendingPathComponent("device.json").path)) }
+        if !testing { launch(pair: false) }
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refresh() }
         if testing || !FileManager.default.fileExists(atPath: dataDir.appendingPathComponent("device.json").path) { showWindow() }
     }
@@ -40,12 +41,13 @@ final class OneTopApp: NSObject, NSApplicationDelegate {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 340), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "1top"; window.isReleasedWhenClosed = false; window.center()
         let content = NSStackView(); content.orientation = .vertical; content.alignment = .leading; content.spacing = 18; content.translatesAutoresizingMaskIntoConstraints = false
-        let title = NSTextField(labelWithString: "Your AI agents, together."); title.font = .systemFont(ofSize: 27, weight: .semibold)
-        statusLabel = NSTextField(wrappingLabelWithString: testing ? "Preview — no computer connected" : "Starting your connection…"); statusLabel.font = .systemFont(ofSize: 18, weight: .medium)
-        detailLabel = NSTextField(wrappingLabelWithString: "Sign in once in your browser. Then view this computer from 1top.si on any device."); detailLabel.font = .systemFont(ofSize: 15); detailLabel.textColor = .secondaryLabelColor
+        window.appearance = NSAppearance(named: .darkAqua)
+        let title = NSTextField(labelWithString: "Your agents. This computer."); title.font = .systemFont(ofSize: 27, weight: .semibold)
+        statusLabel = NSTextField(wrappingLabelWithString: testing ? "Free local monitoring" : "Starting local monitoring…"); statusLabel.font = .systemFont(ofSize: 18, weight: .medium)
+        detailLabel = NSTextField(wrappingLabelWithString: "Open your dashboard to see sessions, token usage, and resources. No login is required. Remote access is optional."); detailLabel.font = .systemFont(ofSize: 15); detailLabel.textColor = .secondaryLabelColor
         let buttons = NSStackView(); buttons.orientation = .horizontal; buttons.spacing = 12
         let open = NSButton(title: "Open dashboard", target: self, action: #selector(dashboard)); open.bezelStyle = .rounded
-        let connect = NSButton(title: "Connect with Google", target: self, action: #selector(reconnect)); connect.bezelStyle = .rounded
+        let connect = NSButton(title: "Remote options", target: self, action: #selector(remoteDashboard)); connect.bezelStyle = .rounded
         buttons.addArrangedSubview(open); buttons.addArrangedSubview(connect)
         let note = NSTextField(wrappingLabelWithString: "Keep 1top running in the menu bar. Quitting 1top stops monitoring; your AI sessions keep running."); note.font = .systemFont(ofSize: 13); note.textColor = .secondaryLabelColor
         [title, statusLabel, detailLabel, buttons, note].forEach { content.addArrangedSubview($0) }
@@ -62,7 +64,7 @@ final class OneTopApp: NSObject, NSApplicationDelegate {
         if let size = try? FileManager.default.attributesOfItem(atPath: log.path)[.size] as? Int, size > 1_000_000 { try? FileManager.default.removeItem(at: log) }
         if !FileManager.default.fileExists(atPath: log.path) { FileManager.default.createFile(atPath: log.path, contents: nil, attributes: [.posixPermissions: 0o600]) }
         if let handle = try? FileHandle(forWritingTo: log) { try? handle.seekToEnd(); p.standardOutput = handle; p.standardError = handle }
-        do { try p.run(); process = p; statusLabel.stringValue = pair ? "Opening Google sign-in…" : "Connecting…" }
+        do { try p.run(); process = p; statusLabel.stringValue = pair ? "Opening optional remote connection…" : "Starting local monitoring…" }
         catch { statusLabel.stringValue = "Could not start the companion."; detailLabel.stringValue = "Please reopen 1top or check the latest verified release." }
     }
     func refresh() {
@@ -70,11 +72,12 @@ final class OneTopApp: NSObject, NSApplicationDelegate {
         if let bytes = try? Data(contentsOf: dataDir.appendingPathComponent("status.json")), let value = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] {
             let fresh = Date().timeIntervalSince1970 - (value["updated"] as? Double ?? 0) < 10
             if fresh { statusLabel.stringValue = value["status"] as? String ?? "Connecting…"; detailLabel.stringValue = value["detail"] as? String ?? "" }
-            else if process?.isRunning != true { statusLabel.stringValue = "Companion stopped"; detailLabel.stringValue = "Use Connect with Google to start again. Your AI sessions are unaffected." }
+            else if process?.isRunning != true { statusLabel.stringValue = "Companion stopped"; detailLabel.stringValue = "Reopen 1top to start local monitoring. Your AI sessions are unaffected." }
         }
     }
     @objc func showWindow() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
-    @objc func dashboard() { NSWorkspace.shared.open(URL(string: "https://1top.si/app")!) }
+    @objc func dashboard() { localDashboard() }
+    @objc func remoteDashboard() { NSWorkspace.shared.open(URL(string: "https://1top.si/app")!) }
     @objc func localDashboard() { NSWorkspace.shared.open(URL(string: "http://127.0.0.1:18766")!) }
     @objc func reconnect() { showWindow(); launch(pair: true) }
     @objc func toggleLogin() {

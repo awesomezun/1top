@@ -5,6 +5,12 @@ from onetop.bridge import CloudLink,export_snapshot,save_private
 from onetop.discovery import cli_kind,context
 
 class BoundaryTests(unittest.TestCase):
+ def test_operational_export_omits_goal_prompts_skill_paths_and_raw_events(self):
+  state={'operations':{'goals':[{'objective':'PRIVATE GOAL','thread_id':'s','runtime':'Codex','status':'active','tokens_used':5}], 'skills':[{'path':'/private/skill','name':'PRIVATE SKILL'}], 'events':[{'text':'PRIVATE EVENT'}]}}
+  value=export_snapshot(state);raw=json.dumps(value)
+  self.assertNotIn('PRIVATE',raw);self.assertNotIn('/private',raw)
+  self.assertEqual(value['operations']['installed_skills'],1)
+  self.assertEqual(value['operations']['goals'][0]['tokens_used'],5)
  def test_orca_current_installation_wins_over_stale_system_launcher(self):
   from unittest.mock import patch
   from onetop.discovery import orca_executable

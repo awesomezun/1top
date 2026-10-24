@@ -200,6 +200,8 @@ class Ledger:
 
 class Collector:
     def __init__(self):
+        from .operations import OperationalMonitor
+        self.operations = OperationalMonitor()
         self.lock = threading.Lock()
         self.snapshot = {'ready': False, 'updated': 0, 'sessions': [], 'error': None}
         self.agy_quota = {'kind': 'Antigravity', 'windows': [], 'note': '한도 확인 중', 'updated': 0}
@@ -555,7 +557,8 @@ class Collector:
         result={'ready':True,'version':__version__,'updated':now,'started':self.started,'sessions':sessions,
                 'events':events,'recent':recent,'period_usage':periods,'quotas':quotas,'process_counts':self.process_counts,
                 'orca_terminals':self.terminal_count,'error':None,'poll_seconds':3,
-                'applications':getattr(self,'apps',[]),'system':system,'collection_ms':round((time.monotonic()-collect_started)*1000,1)}
+                'applications':getattr(self,'apps',[]),'system':system,'operations':self.operations.sample(sessions),
+                'collection_ms':round((time.monotonic()-collect_started)*1000,1)}
         with self.lock:self.snapshot=result
 
     def loop(self):

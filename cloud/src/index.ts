@@ -32,7 +32,7 @@ async function device(req:Request,env:Env){
 }
 async function handle(req:Request,env:Env):Promise<Response>{
  const url=new URL(req.url),path=url.pathname;
- if(path==='/health')return json({ok:true,service:'1top relay',version:'1.1.0',access:'approved-accounts',pairing_enabled:env.PAIRING_ENABLED==='true'});
+ if(path==='/health')return json({ok:true,service:'1top relay',version:'1.2.0',access:'approved-accounts',pairing_enabled:env.PAIRING_ENABLED==='true'});
  // Stop all public pairing work before touching D1 while enrollment is closed.
  if(path.startsWith('/api/pair/')&&env.PAIRING_ENABLED!=='true')return json({error:'New managed connections are paused while remote-access plans are prepared. Existing approved connections remain available.',code:'managed_pairing_paused'},403);
  if(path==='/api/pair/start'&&req.method==='POST'){
@@ -95,7 +95,7 @@ async function handle(req:Request,env:Env):Promise<Response>{
    return hub(env,t.user_id).fetch(new Request(target,{headers:{Upgrade:'websocket'}}));
  }
  if(path==='/api/devices'&&req.method==='GET'){
-   const u=await approvedUser(req,env);const r=await env.DB.prepare('SELECT id,name,platform,created_at,allow_control FROM devices WHERE user_id=? AND revoked_at IS NULL ORDER BY created_at').bind(u.id).all();return json({devices:r.results});
+   const u=await approvedUser(req,env);const r=await env.DB.prepare('SELECT id,name,platform,created_at,allow_control FROM devices WHERE user_id=? AND revoked_at IS NULL ORDER BY created_at').bind(u.id).all();return json({devices:r.results,account:{role:u.access.kind==='operator'?'admin':'member',plan:u.access.kind==='trial'?'trial':'pro',grant:u.access.kind,max_devices:u.access.max_devices,expires_at:u.access.expires_at}});
  }
  if(path==='/api/devices/revoke'&&req.method==='POST'){
    const u=await user(req,env),data=await body(req);
