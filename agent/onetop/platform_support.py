@@ -6,10 +6,12 @@ from pathlib import Path
 
 
 def data_directory(home=None):
-    home = home or Path.home()
     override = os.environ.get('ONETOP_DATA') or os.environ.get('AGENT_MONITOR_DATA')
     if override:
         return Path(override)
+    if platform.system() == 'Windows' and os.environ.get('LOCALAPPDATA'):
+        return Path(os.environ['LOCALAPPDATA'])/'1top'
+    home = home or Path.home()
     if platform.system() == 'Windows':
         return Path(os.environ.get('LOCALAPPDATA', str(home/'AppData/Local')))/'1top'
     if platform.system() == 'Darwin':
@@ -20,11 +22,10 @@ def data_directory(home=None):
 def lock_instance(handle):
     if os.name == 'nt':
         import msvcrt
-        handle.seek(0)
-        if not handle.read(1):
-            handle.write('0'); handle.flush()
-        handle.seek(0)
         try:
+            if os.fstat(handle.fileno()).st_size == 0:
+                handle.write('0'); handle.flush()
+            handle.seek(0)
             msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
         except OSError as error:
             raise BlockingIOError('Already running') from error
