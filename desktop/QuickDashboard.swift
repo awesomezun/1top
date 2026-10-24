@@ -18,7 +18,7 @@ struct QuickDashboard: View {
             if model.accounts { accountView } else { summary; sessionList }
             if let message = model.message {
                 HStack(alignment: .top) {
-                    Text(message).font(.system(size: 12)).foregroundStyle(model.messageIsError ? Color.orange : panelAccent)
+                    Text(message).font(.plex(size: 12)).foregroundStyle(model.messageIsError ? Color.orange : panelAccent)
                     Spacer(minLength: 4)
                     Button { model.message = nil } label: { Image(systemName: "xmark") }
                         .buttonStyle(.plain).accessibilityLabel("알림 닫기")
@@ -28,18 +28,18 @@ struct QuickDashboard: View {
             HStack(spacing: 12) {
                 Button(action: openDashboard) {
                     HStack { Image(systemName: "rectangle.inset.filled"); Text("전체 대시보드"); Spacer(); Text("⌘O").foregroundStyle(.secondary) }
-                        .font(.system(size: 14, weight: .semibold)).padding(.horizontal, 14).padding(.vertical, 11)
+                        .font(.plex(size: 14, weight: .semibold)).padding(.horizontal, 14).padding(.vertical, 11)
                         .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
                 }.buttonStyle(.plain).accessibilityLabel("전체 대시보드 열기")
-                Button(action: openBrowser) { Image(systemName: "safari").font(.system(size: 19)) }
+                Button(action: openBrowser) { Image(systemName: "safari").font(.plex(size: 19)) }
                     .buttonStyle(.plain).help("브라우저에서 열기").accessibilityLabel("브라우저에서 열기")
             }.padding(16)
-        }.frame(width: 450, height: 720).background(panelBackground).preferredColorScheme(.dark)
+        }.frame(width: 450, height: 720).background(panelBackground).preferredColorScheme(.dark).font(.plex(size: 13))
     }
     private var summary: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .firstTextBaseline) {
-                Text("사용량").font(.system(size: 15, weight: .semibold)); Spacer()
+                Text("사용량").font(.plex(size: 15, weight: .semibold)); Spacer()
                 Picker("최근 누적 기간", selection: $model.selectedPeriod) {
                     ForEach([("10m", "10분"), ("30m", "30분"), ("1h", "1시간"), ("5h", "5시간"), ("12h", "12시간"), ("24h", "24시간")], id: \.0) { Text("최근 \($0.1)").tag($0.0) }
                 }.labelsHidden().frame(width: 130).accessibilityLabel("최근 누적 기간")
@@ -56,22 +56,22 @@ struct QuickDashboard: View {
                 resource("메모리", value: model.snapshot?.system?.host?.memory?.percent)
             }
             Text("캐시 포함 · 요금 아님 · \(model.knownCount)/\(model.sessions.count)개 세션 토큰 확인")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
+                .font(.plex(size: 12)).foregroundStyle(.secondary)
         }.padding(20)
     }
     private var sessionList: some View {
         VStack(spacing: 0) {
             Divider()
             HStack {
-                Text("세션").font(.system(size: 15, weight: .semibold))
+                Text("세션").font(.plex(size: 15, weight: .semibold))
                 Text("\(model.sessions.count)").foregroundStyle(.secondary); Spacer()
-                Text("작업 중인 순서").font(.system(size: 12)).foregroundStyle(.secondary)
+                Text("작업 중인 순서").font(.plex(size: 12)).foregroundStyle(.secondary)
             }.padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 8)
             if model.sessions.isEmpty {
                 VStack(spacing: 8) {
-                    Image(systemName: "terminal").font(.system(size: 25)).foregroundStyle(.secondary)
-                    Text(model.snapshot?.ready == true ? "감지된 AI 세션이 없습니다" : "로컬 세션을 확인하고 있습니다").font(.system(size: 14))
-                    Text("실행 중인 AI 세션이 여기에 표시됩니다.").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Image(systemName: "terminal").font(.plex(size: 25)).foregroundStyle(.secondary)
+                    Text(model.snapshot?.ready == true ? "감지된 AI 세션이 없습니다" : "로컬 세션을 확인하고 있습니다").font(.plex(size: 14))
+                    Text("실행 중인 AI 세션이 여기에 표시됩니다.").font(.plex(size: 12)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).frame(height: 155)
             } else {
                 ScrollView {
@@ -87,12 +87,12 @@ struct QuickDashboard: View {
     private var accountView: some View {
         VStack(spacing: 10) {
             HStack {
-                Text("구독 계정 \(model.snapshot?.account_quotas?.count ?? 0)").font(.system(size: 14, weight: .semibold))
+                Text("구독 계정 \(model.snapshot?.account_quotas?.count ?? 0)").font(.plex(size: 14, weight: .semibold))
                 Spacer()
                 Menu {
                     Button("Claude Code 계정 로그인…") { model.addAccount("Claude") }
                     Button("Codex 계정 로그인…") { model.addAccount("Codex") }
-                } label: { Label("계정 추가", systemImage: "plus").font(.system(size: 12, weight: .medium)) }
+                } label: { Label("계정 추가", systemImage: "plus").font(.plex(size: 12, weight: .medium)) }
                     .menuStyle(.borderlessButton).fixedSize().disabled(!model.fresh || model.busy)
                     .accessibilityLabel("구독 계정 추가 로그인")
             }.padding(.horizontal, 18).padding(.top, 14)
@@ -103,12 +103,12 @@ struct QuickDashboard: View {
                         VStack(spacing: 8) {
                             Text("로그인한 구독 계정을 확인하고 있습니다.")
                             Text("계정 추가로 다른 계정도 연결할 수 있습니다.").foregroundStyle(.secondary)
-                        }.font(.system(size: 13)).padding(.vertical, 35)
+                        }.font(.plex(size: 13)).padding(.vertical, 35)
                     }
                 }.padding(.horizontal, 16).padding(.bottom, 12)
             }
             Text("제공자 보고 사용률 · 토큰 합계와 별개 · 2분마다 확인")
-                .font(.system(size: 11)).foregroundStyle(.secondary).padding(.bottom, 12)
+                .font(.plex(size: 11)).foregroundStyle(.secondary).padding(.bottom, 12)
         }.frame(maxHeight: .infinity)
     }
     private func compactQuota(_ quota: AccountQuota) -> some View {
@@ -116,14 +116,14 @@ struct QuickDashboard: View {
         return VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 7) {
                 RoundedRectangle(cornerRadius: 2).fill(tint).frame(width: 5, height: 13)
-                Text(quota.kind == "Claude" ? "Claude Code" : quota.kind).font(.system(size: 13, weight: .semibold))
-                Text(quota.plan ?? "").font(.system(size: 10, weight: .medium)).foregroundStyle(tint)
+                Text(quota.kind == "Claude" ? "Claude Code" : quota.kind).font(.plex(size: 13, weight: .semibold))
+                Text(quota.plan ?? "").font(.plex(size: 10, weight: .medium)).foregroundStyle(tint)
                 Spacer()
                 Circle().fill(quota.stale ? Color.orange : panelAccent).frame(width: 5, height: 5)
                 Text(quota.updated > 0 ? (quota.stale ? "마지막 보고" : "확인됨") : "미확인")
-                    .font(.system(size: 10)).foregroundStyle(quota.stale ? Color.orange : Color.secondary)
+                    .font(.plex(size: 10)).foregroundStyle(quota.stale ? Color.orange : Color.secondary)
             }
-            Text(quota.account_label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            Text(quota.account_label).font(.plex(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 .help(quota.account_label + " · " + quota.id.suffix(6))
             HStack(alignment: .top, spacing: 18) {
                 ForEach(quota.windows) { window in
@@ -131,7 +131,7 @@ struct QuickDashboard: View {
                         HStack {
                             Text(window.label).foregroundStyle(.secondary); Spacer()
                             Text(window.pct.map { DesktopFormat.percent($0) } ?? "미확인").monospacedDigit()
-                        }.font(.system(size: 12, weight: .medium))
+                        }.font(.plex(size: 12, weight: .medium))
                         GeometryReader { geo in
                             Capsule().fill(Color.white.opacity(0.08)).overlay(alignment: .leading) {
                                 if let pct = window.pct {
@@ -139,7 +139,7 @@ struct QuickDashboard: View {
                                 }
                             }
                         }.frame(height: 3).accessibilityLabel(window.pct == nil ? "사용률 미확인" : "사용률 \(Int(window.pct ?? 0))퍼센트")
-                        Text(resetLabel(window.reset)).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                        Text(resetLabel(window.reset)).font(.plex(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                     }.frame(maxWidth: .infinity)
                 }
             }.padding(.top, 2)
@@ -157,10 +157,10 @@ struct QuickDashboard: View {
     }
     private var header: some View {
         HStack(spacing: 10) {
-            Image(systemName: "waveform.path").font(.system(size: 20, weight: .semibold)).foregroundStyle(panelAccent)
-            Text("1top").font(.system(size: 22, weight: .semibold)); Spacer()
+            Image(systemName: "waveform.path").font(.plex(size: 20, weight: .semibold)).foregroundStyle(panelAccent)
+            HStack(alignment: .firstTextBaseline, spacing: 2) { Text("1"); Text("top") }.font(.plex(size: 22, weight: .semibold)).accessibilityElement(children: .ignore).accessibilityLabel("1top"); Spacer()
             Circle().fill(model.fresh ? panelAccent : Color.orange).frame(width: 6, height: 6)
-            Text(model.connectionLabel).font(.system(size: 12)).foregroundStyle(.secondary)
+            Text(model.connectionLabel).font(.plex(size: 12)).foregroundStyle(.secondary)
             Menu {
                 Button("브라우저에서 열기", action: openBrowser)
                 Button("지금 새로고침") { model.refresh() }
@@ -171,20 +171,20 @@ struct QuickDashboard: View {
                 Divider()
                 Button("로컬 수집기 다시 시작", action: restart)
                 Button("1top 종료", action: quit)
-            } label: { Image(systemName: "ellipsis.circle").font(.system(size: 18)) }
+            } label: { Image(systemName: "ellipsis.circle").font(.plex(size: 18)) }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 24).accessibilityLabel("1top 옵션")
         }.padding(20)
     }
     private func metric(_ value: String, _ label: String, note: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(value).font(.system(size: 28, weight: .semibold, design: .rounded)).monospacedDigit()
-            Text(label).font(.system(size: 13, weight: .medium))
-            Text(note).font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(value).font(.plex(size: 28, weight: .semibold, design: .rounded)).monospacedDigit()
+            Text(label).font(.plex(size: 13, weight: .medium))
+            Text(note).font(.plex(size: 11)).foregroundStyle(.secondary)
         }
     }
     private func resource(_ label: String, value: Double?) -> some View {
         VStack(spacing: 7) {
-            HStack { Text(label); Spacer(); Text(DesktopFormat.percent(value)).monospacedDigit() }.font(.system(size: 12)).foregroundStyle(.secondary)
+            HStack { Text(label); Spacer(); Text(DesktopFormat.percent(value)).monospacedDigit() }.font(.plex(size: 12)).foregroundStyle(.secondary)
             GeometryReader { geo in
                 Capsule().fill(Color.white.opacity(0.08)).overlay(alignment: .leading) {
                     Capsule().fill((value ?? 0) > 90 ? Color.orange : panelAccent.opacity(0.7))
@@ -198,18 +198,18 @@ struct QuickDashboard: View {
             RoundedRectangle(cornerRadius: 2).fill(s.state == "working" ? panelAccent : Color.gray.opacity(0.4)).frame(width: 3, height: 38)
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 7) {
-                    Text(s.project ?? s.kind).font(.system(size: 14, weight: .semibold)).lineLimit(1)
-                    Text(s.kind == "Aside" ? (s.model?.isEmpty == false ? s.model! : "모델 미확인") : (s.kind == "Claude" ? "Claude Code" : s.kind)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    Text(s.project ?? s.kind).font(.plex(size: 14, weight: .semibold)).lineLimit(1)
+                    Text(s.kind == "Aside" ? (s.model?.isEmpty == false ? s.model! : "모델 미확인") : (s.kind == "Claude" ? "Claude Code" : s.kind)).font(.plex(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 }
-                Text(s.locationLabel).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1).help(s.title ?? s.locationLabel)
-                Text(s.stateLabel).font(.system(size: 11)).foregroundStyle(s.state == "working" ? panelAccent : .secondary)
+                Text(s.locationLabel).font(.plex(size: 12)).foregroundStyle(.secondary).lineLimit(1).help(s.title ?? s.locationLabel)
+                Text(s.stateLabel).font(.plex(size: 11)).foregroundStyle(s.state == "working" ? panelAccent : .secondary)
             }.frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .trailing, spacing: 5) {
                 Text(DesktopFormat.number(DesktopFormat.total(s.tokens == nil ? nil : (s.usage?.windows?[model.selectedPeriod] ?? nil))))
-                    .font(.system(size: 14, weight: .medium)).monospacedDigit()
-                Text("\(DesktopFormat.number(s.tokens == nil ? nil : s.usage?.rate)) tok/s").font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
+                    .font(.plex(size: 14, weight: .medium)).monospacedDigit()
+                Text("\(DesktopFormat.number(s.tokens == nil ? nil : s.usage?.rate)) tok/s").font(.plex(size: 11)).foregroundStyle(.secondary).monospacedDigit()
             }.help("선택한 기간 누적 토큰 · 최근 60초 평균 소비")
-            Button { control("focus", s) } label: { Image(systemName: "arrow.up.right").font(.system(size: 14)) }
+            Button { control("focus", s) } label: { Image(systemName: "arrow.up.right").font(.plex(size: 14)) }
                 .buttonStyle(.plain).disabled(!model.fresh || model.busy || !s.allows("focus"))
                 .accessibilityLabel("\(s.project ?? s.kind) · \(s.terminalName) 바로가기")
             Menu {
@@ -218,7 +218,7 @@ struct QuickDashboard: View {
                 Button("새 요청으로 재개…") { control("resume", s) }.disabled(!s.allows("resume"))
                 Divider()
                 Button("CLI 종료…", role: .destructive) { control("terminate", s) }.disabled(!s.allows("terminate"))
-            } label: { Image(systemName: "ellipsis").font(.system(size: 14)) }
+            } label: { Image(systemName: "ellipsis").font(.plex(size: 14)) }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 18)
                 .disabled(!model.fresh || model.busy).accessibilityLabel("\(s.project ?? s.kind) 세션 제어")
         }.padding(.horizontal, 20).padding(.vertical, 12)

@@ -714,10 +714,15 @@ class Handler(BaseHTTPRequestHandler):
             snapshot=self.server.controller.decorate(snapshot)
             data=json.dumps({**snapshot,'action_token':self.server.action_token},ensure_ascii=False).encode()
             mime='application/json; charset=utf-8'
-        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/maps.css','/benchmark.json'):
+        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/maps.css','/typography.css','/benchmark.json'):
             name='index.html' if route=='/' else route[1:]
             data=(BASE/'dist'/name).read_bytes()
             mime={'html':'text/html','js':'application/javascript','css':'text/css','json':'application/json'}[name.rsplit('.',1)[1]]+'; charset=utf-8'
+        elif route in {f'/fonts/ibm-plex/v1.0.0/{name}.woff2' for name in (
+            'IBMPlexSans', 'IBMPlexSansKR-Regular', 'IBMPlexSansKR-Medium',
+            'IBMPlexSansKR-SemiBold', 'IBMPlexSansKR-Bold') }:
+            data=(BASE/'dist'/route[1:]).read_bytes()
+            mime='font/woff2'
         elif route=='/health':
             data=b'{"ok":true,"version":"1.0.0"}';mime='application/json'
         else:self.send_error(404);return
