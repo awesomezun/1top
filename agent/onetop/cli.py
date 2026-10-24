@@ -1,6 +1,7 @@
-import argparse,json,os,platform,sys,threading,time,fcntl,signal
+import argparse,json,os,platform,sys,threading,time,signal
 from pathlib import Path
 from . import __version__
+from .platform_support import lock_instance
 
 def main():
     parser=argparse.ArgumentParser(prog='1top',description='Your AI agents, across apps and computers.')
@@ -9,16 +10,16 @@ def main():
     parser.add_argument('--headless',action='store_true')
     args=parser.parse_args()
     if args.command=='version':print(__version__);return
-    if platform.system()!='Darwin':
-        print('This release supports macOS. Windows and Linux builds are not available yet.',file=sys.stderr);sys.exit(2)
+    if platform.system() not in ('Darwin','Windows'):
+        print('This release supports macOS and Windows.',file=sys.stderr);sys.exit(2)
     from .server import Collector,Handler,DATA
     from .controls import Controller
     from .bridge import CloudLink,save_private,open_url
     from http.server import ThreadingHTTPServer
     import secrets
     DATA.mkdir(parents=True,exist_ok=True,mode=0o700)
-    lock=(DATA/'agent.lock').open('a')
-    try:fcntl.flock(lock.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
+    lock=(DATA/'agent.lock').open('a+')
+    try:lock_instance(lock)
     except BlockingIOError:
         print('1top is already running.',file=sys.stderr);return
     server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)

@@ -3,6 +3,8 @@ import base64
 import copy
 import hashlib
 import json
+import queue
+from .platform_support import cli_command
 import math
 import os
 import selectors
@@ -99,8 +101,18 @@ def codex_rpc(root,executable=None):
     # The owned subprocess handles its own auth. These are read-only RPCs, not turns.
     env={**os.environ,'CODEX_HOME':str(root)}
     env['PATH']=str(Path(executable).parent)+os.pathsep+env.get('PATH','')
-    p=subprocess.Popen([executable,'app-server'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,env=env)
-    selector=selectors.DefaultSelector();selector.register(p.stdout,selectors.EVENT_READ)
+    p=subprocess.Popen(cli_command(executable,'app-server'),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,env=env)
+    selector=None;chunks=queue.Queue()
+    if os.name=='nt':
+        def read_pipe():
+            try:
+                while True:
+                    chunk=p.stdout.read1(65536);chunks.put(chunk)
+                    if not chunk:break
+            except (OSError,ValueError):chunks.put(b'')
+        threading.Thread(target=read_pipe,daemon=True).start()
+    else:
+        selector=selectors.DefaultSelector();selector.register(p.stdout,selectors.EVENT_READ)
     buffer=b'';results={};deadline=time.monotonic()+18
     def send(rid,method,params):
         message={'method':method,'params':params}
@@ -109,8 +121,12 @@ def codex_rpc(root,executable=None):
     try:
         send(1,'initialize',{'clientInfo':{'name':'onetop_usage','version':'2.1.0'}})
         while time.monotonic()<deadline:
-            if not selector.select(.2):continue
-            chunk=os.read(p.stdout.fileno(),65536)
+            if selector:
+                if not selector.select(.2):continue
+                chunk=os.read(p.stdout.fileno(),65536)
+            else:
+                try:chunk=chunks.get(timeout=.2)
+                except queue.Empty:continue
             if not chunk:break
             buffer+=chunk
             if len(buffer)>1024*1024:raise ValueError('Oversized RPC')
@@ -130,7 +146,7 @@ def codex_rpc(root,executable=None):
                     if len(results)==2:return results[2].get('account') or {},results[3]
         raise TimeoutError('Usage unavailable')
     finally:
-        selector.close()
+        if selector:selector.close()
         if p.poll() is None:p.terminate()
         try:p.wait(timeout=3)
         except subprocess.TimeoutExpired:p.kill();p.wait()
@@ -145,7 +161,7 @@ def profile_roots(home=Path.home()):
     for kind,key in [('Claude','CLAUDE_CONFIG_DIR'),('Codex','CODEX_HOME')]:
         if os.environ.get(key):roots.add((kind,os.environ[key]))
     for process in psutil.process_iter(['name']):
-        name=(process.info.get('name') or '').lower()
+        name=(process.info.get('name') or '').lower().removesuffix('.exe')
         if name not in ('claude','codex'):continue
         try:
             env=process.environ()
@@ -160,7 +176,7 @@ def claude_credentials(root):
     if credentials.get('claudeAiOauth'):return credentials['claudeAiOauth']
     # Claude Code 2.1.310 scopes its macOS Keychain service by the normalized
     # config path (SHA-256, first eight hex characters). Never enumerate Keychain.
-    if os.uname().sysname!='Darwin':return {}
+    if os.name=='nt' or os.uname().sysname!='Darwin':return {}
     suffix='' if root==Path.home()/'.claude' else '-'+hashlib.sha256(unicodedata.normalize('NFC',str(root)).encode()).hexdigest()[:8]
     try:
         result=subprocess.run(['/usr/bin/security','find-generic-password','-a',getpass.getuser(),'-w',
