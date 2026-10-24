@@ -188,7 +188,7 @@ $('accountDialog').addEventListener('click',async e=>{
  finally{accountLoginBusy=false;buttons.forEach(x=>x.disabled=false);}
 });
 
-let contextSessionId='';
+let contextSessionId='',usageMapSelectionId='';
 function renderMaps(){
  if(!data?.ready||view!=='maps')return;
  const sessions=data.sessions.filter(s=>provider==='all'||s.kind===provider);
@@ -196,11 +196,13 @@ function renderMaps(){
  const result=OneTopMaps.usage(sessions,selectedPeriod,$('mapGroup').value);
  $('mapTotal').innerHTML=fmt(result.total)+' <small>tokens · 최근 '+(periodMeta()?.label||selectedPeriod)+'</small>';
  $('mapCoverage').textContent=result.known+'/'+sessions.length+'개 확인 · 미보고 '+result.unknown+'개 · 0 사용량 '+result.zero+'개'+(periodMeta()?.partial?' · 일부 기간만 기록':'');
- OneTopMaps.draw($('usageMap'),result.items,{activate:item=>{if(!item)return;$('mapSelection').textContent=item.label+' · '+exact(item.value)+' tokens · '+item.share.toFixed(1)+'%';if(item.session){contextSessionId=item.session;renderContext(sessions);}}});
+ const selection=item=>$('mapSelection').textContent=item?item.label+' · '+exact(item.value)+' tokens · '+item.share.toFixed(1)+'%':'세션 블록을 선택하면 오른쪽 컨텍스트가 바뀝니다.';
+ selection(result.items.find(x=>x.id===usageMapSelectionId));
+ OneTopMaps.draw($('usageMap'),result.items,{activate:item=>{if(!item)return;usageMapSelectionId=item.id;selection(item);if(item.session){contextSessionId=item.session;renderContext(sessions);}}});
  $('usageLegend').innerHTML=OneTopMaps.legend(result.items);
  renderContext(sessions);
 }
-function renderContext(sessions=data.sessions){
+function renderContext(sessions=data.sessions.filter(s=>provider==='all'||s.kind===provider)){
  if(!sessions.some(s=>s.id===contextSessionId))contextSessionId=(sessions.find(s=>OneTopMaps.context(s).validCapacity)||sessions.find(s=>OneTopMaps.context(s).available)||sessions[0])?.id||'';
  const select=$('contextSession'),options=sessions.map(s=>`<option value="${esc(s.id)}">${esc(s.project||s.title||s.id)} · ${esc(hostApp(s))} · ${esc(s.model||runtimeLabel(s))}</option>`).join('');
  if(select.innerHTML!==options)select.innerHTML=options;select.value=contextSessionId;

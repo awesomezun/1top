@@ -16,7 +16,7 @@ Remote access is optional. Managed access currently requires a server-issued gra
 
 A browser login cannot inspect or control arbitrary local processes. The companion provides that local connection. Nothing is installed on a phone just to view the dashboard.
 
-**v2.4.0:** proportional token maps by session, host app, execution tool or model, plus a context map of the last reported request input. Existing session and AI views remain available. The public landing page is v4.2.0, with four native UI recordings and the actual menu-bar symbol. See [release notes](docs/release-notes_v2.4.0.md).
+**v2.4.1:** proportional token maps by session, host app, execution tool or model, plus a context map of the last reported request input. Existing session and AI views remain available. The public landing page is v4.2.1, with four native UI recordings and the actual menu-bar symbol. See [release notes](docs/release-notes_v2.4.1.md).
 
 ## What you can see
 
@@ -86,7 +86,7 @@ Build the Apple Silicon desktop app:
 scripts/build-macos.sh
 ```
 
-The resulting `build/1top_v2.4.0/1top.app` has a **local ad-hoc signature**, not a public distribution signature. Do not present it as notarized or instruct users to disable Gatekeeper. Keep the public `release.json` unavailable until the actual released artifact passes signing and notarization checks.
+The resulting `build/1top_v2.4.1/1top.app` has a **local ad-hoc signature**, not a public distribution signature. Do not present it as notarized or instruct users to disable Gatekeeper. Keep the public `release.json` unavailable until the actual released artifact passes signing and notarization checks.
 
 Web development:
 
