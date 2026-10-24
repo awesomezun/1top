@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { AccountHub, type Env } from './hub';
 import { action, text } from './protocol';
+import { AccessDenied, accessDeadline, requireHostedAccess } from './access';
 export { AccountHub };
 const KEYS=createRemoteJWKSet(new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'));
 const now=()=>Math.floor(Date.now()/1000);
@@ -15,6 +16,10 @@ async function user(req:Request,env:Env){
  if(!payload.sub || payload.sub.length>128 || payload.email_verified!==true || (payload.firebase as any)?.sign_in_provider!=='google.com')throw new Error('Google sign-in required');
  return {id:payload.sub,expires:payload.exp!*1000};
 }
+async function approvedUser(req:Request,env:Env){
+ const u=await user(req,env),access=await requireHostedAccess(env.DB,u.id);
+ return {...u,access,expires:accessDeadline(access,u.expires)};
+}
 async function limit(db:D1Database,key:string,max:number,seconds=60){
  const bucket=Math.floor(now()/seconds),id=key+':'+bucket;
  const row=await db.prepare('INSERT INTO request_limits(key,count,expires_at) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1 RETURNING count').bind(id,now()+seconds*2).first<{count:number}>();
@@ -27,7 +32,9 @@ async function device(req:Request,env:Env){
 }
 async function handle(req:Request,env:Env):Promise<Response>{
  const url=new URL(req.url),path=url.pathname;
- if(path==='/health')return json({ok:true,service:'1top relay',version:'1.0.0'});
+ if(path==='/health')return json({ok:true,service:'1top relay',version:'1.1.0',access:'approved-accounts',pairing_enabled:env.PAIRING_ENABLED==='true'});
+ // Stop all public pairing work before touching D1 while enrollment is closed.
+ if(path.startsWith('/api/pair/')&&env.PAIRING_ENABLED!=='true')return json({error:'New managed connections are paused while remote-access plans are prepared. Existing approved connections remain available.',code:'managed_pairing_paused'},403);
  if(path==='/api/pair/start'&&req.method==='POST'){
    const ip=await hash(req.headers.get('CF-Connecting-IP')||'local');
    if(!await limit(env.DB,'pair:'+ip,12,600))return json({error:'Too many connection attempts. Try again later.'},429);
@@ -43,10 +50,10 @@ async function handle(req:Request,env:Env):Promise<Response>{
    return r?json(r):json({error:'This connection request expired.'},410);
  }
  if(path==='/api/pair/approve'&&req.method==='POST'){
-   const u=await user(req,env),data=await body(req);
+   const u=await approvedUser(req,env),data=await body(req);
    if(!/^[A-F0-9]{10}$/.test(data.code||''))return json({error:'Invalid connection code'},400);
    const count=await env.DB.prepare('SELECT COUNT(*) n FROM devices WHERE user_id=? AND revoked_at IS NULL').bind(u.id).first<{n:number}>();
-   if((count?.n||0)>=25)return json({error:'This account has reached its 25-device limit.'},409);
+   if((count?.n||0)>=u.access.max_devices)return json({error:'This account has reached its device allowance.'},409);
    const r=await env.DB.prepare('UPDATE pairings SET user_id=?,allow_control=? WHERE code=? AND expires_at>? AND user_id IS NULL RETURNING name').bind(u.id,data.allow_control===false?0:1,data.code,now()).first();
    return r?json({ok:true}):json({error:'Request expired or already connected.'},409);
  }
@@ -57,20 +64,22 @@ async function handle(req:Request,env:Env):Promise<Response>{
    const pending=await env.DB.prepare('SELECT expires_at,user_id FROM pairings WHERE secret_hash=?').bind(key).first<{expires_at:number;user_id:string|null}>();
    if(!pending||pending.expires_at<now())return json({error:'expired'},410);
    if(!pending.user_id)return json({status:'pending'},202);
+   const access=await requireHostedAccess(env.DB,pending.user_id);
    const p=await env.DB.prepare('DELETE FROM pairings WHERE secret_hash=? AND user_id IS NOT NULL AND expires_at>? RETURNING user_id,name,platform,allow_control').bind(key,now()).first<{user_id:string;name:string;platform:string;allow_control:number}>();
    if(!p)return json({error:'Already claimed. Connect this computer again.'},409);
    const token=random(),id=crypto.randomUUID();
-   const inserted=await env.DB.prepare('INSERT INTO devices(id,user_id,name,platform,token_hash,created_at,allow_control) SELECT ?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM devices WHERE user_id=? AND revoked_at IS NULL)<25 RETURNING id').bind(id,p.user_id,p.name,p.platform,await hash(token),now(),p.allow_control,p.user_id).first();
+   const inserted=await env.DB.prepare('INSERT INTO devices(id,user_id,name,platform,token_hash,created_at,allow_control) SELECT ?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM devices WHERE user_id=? AND revoked_at IS NULL)<? RETURNING id').bind(id,p.user_id,p.name,p.platform,await hash(token),now(),p.allow_control,p.user_id,access.max_devices).first();
    if(!inserted)return json({error:'Device limit reached. Remove a computer before connecting another.'},409);
    return json({device_id:id,device_token:token,relay_url:url.origin.replace(/^http/,'ws')+'/api/device/socket'});
  }
  if(path==='/api/device/socket'){
    const d=await device(req,env);if(!d)return json({error:'Device authentication required'},401);
-   const target=new URL('https://hub/ws');for(const [k,v] of Object.entries({role:'device',id:d.id,name:d.name,platform:d.platform,control:String(d.allow_control),expires:String(Date.now()+86400000)}))target.searchParams.set(k,v);
+   const access=await requireHostedAccess(env.DB,d.user_id);
+   const target=new URL('https://hub/ws');for(const [k,v] of Object.entries({role:'device',id:d.id,name:d.name,platform:d.platform,control:String(d.allow_control),expires:String(accessDeadline(access,Date.now()+86400000))}))target.searchParams.set(k,v);
    return hub(env,d.user_id).fetch(new Request(target,{headers:{Upgrade:'websocket'}}));
  }
  if(path==='/api/live-ticket'&&req.method==='POST'){
-   const u=await user(req,env);if(!await limit(env.DB,'ticket:'+u.id,30))return json({error:'Reconnect limit reached'},429);
+   const u=await approvedUser(req,env);if(!await limit(env.DB,'ticket:'+u.id,30))return json({error:'Reconnect limit reached'},429);
    const ticket=random();await env.DB.prepare('INSERT INTO tickets VALUES(?,?,?,?)').bind(await hash(ticket),u.id,Math.min(now()+30,Math.floor(u.expires/1000)),u.expires).run();
    return json({ticket,socket_url:url.origin.replace(/^http/,'ws')+'/api/live',expires_at:u.expires});
  }
@@ -81,11 +90,12 @@ async function handle(req:Request,env:Env):Promise<Response>{
    if(!protocols.includes('1top')||!token)return json({error:'Connection ticket required'},401);
    const t=await env.DB.prepare('DELETE FROM tickets WHERE hash=? AND expires_at>? RETURNING user_id,auth_expires').bind(await hash(token),now()).first<{user_id:string;auth_expires:number}>();
    if(!t)return json({error:'Connection ticket expired'},401);
-   const target=new URL('https://hub/ws');target.searchParams.set('role','browser');target.searchParams.set('id',crypto.randomUUID());target.searchParams.set('expires',String(Math.min(Date.now()+30*60000,t.auth_expires)));
+   const access=await requireHostedAccess(env.DB,t.user_id);
+   const target=new URL('https://hub/ws');target.searchParams.set('role','browser');target.searchParams.set('id',crypto.randomUUID());target.searchParams.set('expires',String(accessDeadline(access,Math.min(Date.now()+30*60000,t.auth_expires))));
    return hub(env,t.user_id).fetch(new Request(target,{headers:{Upgrade:'websocket'}}));
  }
  if(path==='/api/devices'&&req.method==='GET'){
-   const u=await user(req,env);const r=await env.DB.prepare('SELECT id,name,platform,created_at,allow_control FROM devices WHERE user_id=? AND revoked_at IS NULL ORDER BY created_at').bind(u.id).all();return json({devices:r.results});
+   const u=await approvedUser(req,env);const r=await env.DB.prepare('SELECT id,name,platform,created_at,allow_control FROM devices WHERE user_id=? AND revoked_at IS NULL ORDER BY created_at').bind(u.id).all();return json({devices:r.results});
  }
  if(path==='/api/devices/revoke'&&req.method==='POST'){
    const u=await user(req,env),data=await body(req);
@@ -94,7 +104,7 @@ async function handle(req:Request,env:Env):Promise<Response>{
    return hub(env,u.id).fetch(new Request('https://hub/revoke',{method:'POST',body:JSON.stringify({id:data.device_id})}));
  }
  if(path==='/api/action'&&req.method==='POST'){
-   const u=await user(req,env),cmd=action(await body(req));
+   const u=await approvedUser(req,env),cmd=action(await body(req));
    if(!await limit(env.DB,'action:'+u.id,30))return json({error:'Action limit reached. Check your devices before retrying.'},429);
    const d=await env.DB.prepare('SELECT id FROM devices WHERE id=? AND user_id=? AND revoked_at IS NULL AND allow_control=1').bind(cmd.device_id,u.id).first();
    if(!d)return json({error:'Device not found or control is disabled'},404);
@@ -108,7 +118,7 @@ export default {
    if(origin&&!allowed)return json({error:'Origin not allowed'},403);
    if(req.method==='OPTIONS')return new Response(null,{status:204,headers:{'Access-Control-Allow-Origin':origin||env.WEB_URL,'Access-Control-Allow-Methods':'GET, POST, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Max-Age':'600','Vary':'Origin'}});
    let response:Response;
-   try{response=await handle(req,env);}catch(e){response=json({error:e instanceof SyntaxError?'Invalid JSON':'Request rejected. Sign in again or refresh the page.'},400);}
+   try{response=await handle(req,env);}catch(e){response=e instanceof AccessDenied?json({error:e.message,code:e.code},e.status):json({error:e instanceof SyntaxError?'Invalid JSON':'Request rejected. Sign in again or refresh the page.'},400);}
    if(response.status===101)return response;
    const headers=new Headers(response.headers);if(allowed){headers.set('Access-Control-Allow-Origin',origin!);headers.set('Vary','Origin');}headers.set('Cache-Control','no-store');
    return new Response(response.body,{status:response.status,headers});

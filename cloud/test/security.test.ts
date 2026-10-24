@@ -1,17 +1,22 @@
 import {env,runInDurableObject} from 'cloudflare:test';
 import {beforeAll,describe,expect,it,vi} from 'vitest';
 vi.mock('jose',()=>({createRemoteJWKSet:()=>null,jwtVerify:async(token:string)=>{
- if(!['a'.repeat(30),'b'.repeat(30)].includes(token))throw Error('Invalid test identity');
+ if(!'abcdefgh'.split('').some(c=>token===c.repeat(30)))throw Error('Invalid test identity');
  return {payload:{sub:token[0],exp:Math.floor(Date.now()/1000)+3600,email_verified:true,firebase:{sign_in_provider:'google.com'}}};
 }}));
 import worker,{hash} from '../src/index';
 import {snapshot} from '../src/protocol';
 import schema from '../schema.sql?raw';
-const e:any=env;
+// Most fixtures exercise enrollment in an explicitly enabled environment.
+// Production defaults and the closed paths are covered separately below.
+const e:any={...env,PAIRING_ENABLED:'true'};
 const uid='a';
 const req=(path:string,data?:unknown,token?:string,origin='https://1top.si')=>new Request('https://relay.test'+path,{method:data===undefined?'GET':'POST',headers:{Origin:origin,'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(data===undefined?{}:{body:JSON.stringify(data)})});
 const fetch=(path:string,data?:unknown,token?:string,origin?:string)=>worker.fetch(req(path,data,token,origin),e);
-beforeAll(async()=>{for(const sql of schema.split(';').map(s=>s.trim()).filter(Boolean))await e.DB.prepare(sql).run();});
+beforeAll(async()=>{
+ for(const sql of schema.split(';').map(s=>s.trim()).filter(Boolean))await e.DB.prepare(sql).run();
+ for(const id of ['a','b'])await e.DB.prepare('INSERT INTO hosted_access(user_id,kind,max_devices,created_at) VALUES(?,?,?,?)').bind(id,'operator',25,1).run();
+});
 function sample(){return {updated:Date.now()/1000,recording_started:0,version:'test',sessions:[{id:'session',control_key:'key',kind:'Claude',app:'Cursor',terminal:'test',project:'demo',title:'test',model:'test',status:'idle',tokens:[1,2,3,4],windows:{'1h':[1,2,3,4]},cpu:1,rss:100,capabilities:['terminate']}],host:{cpu:1,used_memory:10,total_memory:100,cores:2},periods:[]};}
 function nextMessage(ws:WebSocket){return new Promise<any>((resolve,reject)=>{ws.addEventListener('message',e=>resolve(JSON.parse(e.data as string)),{once:true});setTimeout(()=>reject(Error('No socket message')),2500);});}
 async function socket(hub:any,role:string,id:string){const r=await hub.fetch('https://hub/ws?'+new URLSearchParams({role,id,control:'1',expires:String(Date.now()+60000)}),{headers:{Upgrade:'websocket'}});expect(r.status).toBe(101);const ws=r.webSocket!;ws.accept();return ws;}
@@ -83,5 +88,66 @@ describe('stale sessions, revocation, and concurrent clicks',()=>{
   const id=crypto.randomUUID(),secret='c'.repeat(64);await e.DB.prepare('INSERT INTO devices VALUES(?,?,?,?,?,?,?,?)').bind(id,'a','Revocation fixture','Darwin',await hash(secret),1,null,1).run();
   expect((await fetch('/api/devices/revoke',{device_id:id},'a'.repeat(30))).status).toBe(200);
   expect((await worker.fetch(new Request('https://relay.test/api/device/socket',{headers:{Authorization:'Bearer '+secret,Upgrade:'websocket'}}),e)).status).toBe(401);
+ });
+});
+
+describe('managed access and cost admission',()=>{
+ const grant=async(id:string,kind='trial',expires:number|null=Math.floor(Date.now()/1000)+3600,max=1,revoked:number|null=null)=>{
+  await e.DB.prepare('INSERT INTO hosted_access VALUES(?,?,?,?,?,?)').bind(id,kind,expires,max,1,revoked).run();
+ };
+ it('rejects closed or unconfigured public enrollment without creating database work',async()=>{
+  const blocked={...e,DB:{prepare(){throw Error('Closed enrollment must not access D1');}}};
+  for(const mode of [undefined,'false','TRUE'])for(const path of ['/api/pair/start','/api/pair/info','/api/pair/approve','/api/pair/poll']){
+   const r=await worker.fetch(req(path,{name:'Fixture',platform:'Darwin'}),{...blocked,PAIRING_ENABLED:mode});
+   expect(r.status).toBe(403);expect((await r.json() as any).code).toBe('managed_pairing_paused');
+  }
+ });
+ it('a Google account and client-supplied paid plan cannot create hosted access',async()=>{
+  for(const [path,body] of [['/api/devices',undefined],['/api/live-ticket',{plan:'subscription'}],['/api/pair/approve',{code:'1234567890'}],['/api/action',{}]] as const){
+   const r=await fetch(path,body,'c'.repeat(30));expect(r.status).toBe(403);expect((await r.json() as any).code).toBe('hosted_access_required');
+  }
+  expect(await e.DB.prepare('SELECT user_id FROM hosted_access WHERE user_id=?').bind('c').first()).toBeNull();
+  expect(await e.DB.prepare('SELECT user_id FROM tickets WHERE user_id=?').bind('c').first()).toBeNull();
+ });
+ it('rejects expired and revoked access',async()=>{
+  await grant('d','trial',Math.floor(Date.now()/1000)-1);
+  await grant('e','subscription',Math.floor(Date.now()/1000)+60,1,1);
+  for(const id of ['d','e'])expect((await fetch('/api/live-ticket',{},id.repeat(30))).status).toBe(403);
+ });
+ it('checks access again when a previously minted browser ticket is redeemed',async()=>{
+  await grant('f');
+  const issued:any=await(await fetch('/api/live-ticket',{},'f'.repeat(30))).json();expect(issued.ticket).toHaveLength(64);
+  await e.DB.prepare('UPDATE hosted_access SET revoked_at=1 WHERE user_id=?').bind('f').run();
+  const r=await worker.fetch(new Request('https://relay.test/api/live',{headers:{Origin:'https://1top.si',Upgrade:'websocket','Sec-WebSocket-Protocol':'1top, ticket.'+issued.ticket}}),e);
+  expect(r.status).toBe(403);
+ });
+ it('a valid device token without hosted access cannot stream, but its owner can still revoke it',async()=>{
+  const id=crypto.randomUUID(),secret=crypto.randomUUID().replaceAll('-','').repeat(2);
+  await e.DB.prepare('INSERT INTO devices VALUES(?,?,?,?,?,?,?,?)').bind(id,'c','Denied fixture','Darwin',await hash(secret),1,null,1).run();
+  const r=await worker.fetch(new Request('https://relay.test/api/device/socket',{headers:{Authorization:'Bearer '+secret,Upgrade:'websocket'}}),e);
+  expect(r.status).toBe(403);
+  expect((await fetch('/api/devices/revoke',{device_id:id},'c'.repeat(30))).status).toBe(200);
+ });
+ it('bounds an active device connection by grant expiry and rejects expired streaming',async()=>{
+  const expires=Math.floor(Date.now()/1000)+300;await grant('g','subscription',expires);
+  const id=crypto.randomUUID(),secret=crypto.randomUUID().replaceAll('-','').repeat(2);
+  await e.DB.prepare('INSERT INTO devices VALUES(?,?,?,?,?,?,?,?)').bind(id,'g','Expiry fixture','Darwin',await hash(secret),1,null,1).run();
+  const r=await worker.fetch(new Request('https://relay.test/api/device/socket',{headers:{Authorization:'Bearer '+secret,Upgrade:'websocket'}}),e);
+  expect(r.status).toBe(101);const ws=r.webSocket!;ws.accept();const hub=e.HUBS.get(e.HUBS.idFromName('g'));
+  await runInDurableObject(hub,async(_i:any,state:any)=>{
+   const target=state.getWebSockets('device:'+id)[0],a=target.deserializeAttachment();expect(a.expires).toBe(expires*1000);
+   target.serializeAttachment({...a,expires:Date.now()-1});
+  });
+  const closed=new Promise<number>((resolve,reject)=>{ws.addEventListener('close',event=>resolve(event.code),{once:true});setTimeout(()=>reject(Error('Expired socket did not close')),2500);});
+  ws.send(JSON.stringify({type:'snapshot',data:sample()}));expect(await closed).toBe(4003);
+  await runInDurableObject(hub,async(_i:any,state:any)=>expect(await state.storage.get('snapshot:'+id)).toBeUndefined());
+ });
+ it('enforces the granted device allowance when two pairings are claimed concurrently',async()=>{
+  await grant('h','trial',Math.floor(Date.now()/1000)+300,1);
+  const secrets=Array.from({length:2},()=>crypto.randomUUID().replaceAll('-','').repeat(2));
+  for(const secret of secrets)await e.DB.prepare('INSERT INTO pairings VALUES(?,?,?,?,?,?,?)').bind(secret.slice(0,10).toUpperCase(),await hash(secret),'Limit fixture','Darwin',Math.floor(Date.now()/1000)+60,'h',1).run();
+  const results=await Promise.all(secrets.map(device_code=>fetch('/api/pair/poll',{device_code})));
+  expect(results.map(r=>r.status).sort()).toEqual([200,409]);
+  const count:any=await e.DB.prepare('SELECT COUNT(*) n FROM devices WHERE user_id=? AND revoked_at IS NULL').bind('h').first();expect(count.n).toBe(1);
  });
 });

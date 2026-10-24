@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { snapshot, action, text, type DeviceSnapshot } from './protocol';
-export interface Env { DB:D1Database; HUBS:DurableObjectNamespace<AccountHub>; FIREBASE_PROJECT_ID:string; WEB_ORIGINS:string; WEB_URL:string; }
+export interface Env { DB:D1Database; HUBS:DurableObjectNamespace<AccountHub>; FIREBASE_PROJECT_ID:string; WEB_ORIGINS:string; WEB_URL:string; PAIRING_ENABLED?:string; }
 type Attachment = {role:'device'|'browser';id:string;expires:number;name?:string;platform?:string;allow_control?:boolean};
 type StoredDevice = {id:string;name:string;platform:string;received:number;snapshot:DeviceSnapshot};
 type Receipt = {request:ReturnType<typeof action>;created:number;status:string;message?:string};
