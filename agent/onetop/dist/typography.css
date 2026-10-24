@@ -7,7 +7,7 @@
 
 :root{--font-ui:"IBM Plex Sans","IBM Plex Sans KR",sans-serif;font-family:var(--font-ui)}
 body,button,input,select,textarea{font-family:var(--font-ui)}
-.brand-wordmark{display:inline-flex;align-items:baseline;gap:.09em;font-family:"IBM Plex Sans",sans-serif;font-weight:650;letter-spacing:-.055em;line-height:1.1}
+.brand-wordmark{display:inline;font-family:"IBM Plex Sans",sans-serif;font-weight:650;letter-spacing:normal;line-height:1.1}
 .brand-wordmark .brand-one{letter-spacing:0;font-variant-numeric:lining-nums}
 .brand-wordmark .brand-top{letter-spacing:-.055em}
 .brand .brand-wordmark,.brand .brand-wordmark span,body:not(.in-app) .brand .brand-wordmark span{font-size:inherit;color:inherit;margin:0}

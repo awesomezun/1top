@@ -15,7 +15,7 @@ struct QuickDashboard: View {
             Picker("보기", selection: $model.accounts) { Text("세션 요약").tag(false); Text("계정 한도 · 5H / 주간").tag(true) }
                 .pickerStyle(.segmented).padding(.horizontal, 20).padding(.bottom, 16)
             Divider()
-            if model.accounts { accountView } else { summary; sessionList }
+            if model.accounts { accountView } else { summary; CompactTokenMap(model: model); sessionList }
             if let message = model.message {
                 HStack(alignment: .top) {
                     Text(message).font(.plex(size: 12)).foregroundStyle(model.messageIsError ? Color.orange : panelAccent)
@@ -37,7 +37,7 @@ struct QuickDashboard: View {
         }.frame(width: 450, height: 720).background(panelBackground).preferredColorScheme(.dark).font(.plex(size: 13))
     }
     private var summary: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .firstTextBaseline) {
                 Text("사용량").font(.plex(size: 15, weight: .semibold)); Spacer()
                 Picker("최근 누적 기간", selection: $model.selectedPeriod) {
@@ -158,7 +158,7 @@ struct QuickDashboard: View {
     private var header: some View {
         HStack(spacing: 10) {
             Image(systemName: "waveform.path").font(.plex(size: 20, weight: .semibold)).foregroundStyle(panelAccent)
-            HStack(alignment: .firstTextBaseline, spacing: 2) { Text("1"); Text("top") }.font(.plex(size: 22, weight: .semibold)).accessibilityElement(children: .ignore).accessibilityLabel("1top"); Spacer()
+            Text("1top").font(.plex(size: 22, weight: .semibold)).accessibilityLabel("1top"); Spacer()
             Circle().fill(model.fresh ? panelAccent : Color.orange).frame(width: 6, height: 6)
             Text(model.connectionLabel).font(.plex(size: 12)).foregroundStyle(.secondary)
             Menu {

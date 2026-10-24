@@ -6,7 +6,7 @@ import {useWorkspace} from './workspace';
 import {context,format,fresh,layout,tool,total,usage} from './metrics';
 import type {SessionRow,Tile} from './types';
 export const colors={bg:'#0b0e12',panel:'#14191f',line:'#29323e',text:'#f1f3f6',muted:'#a0adbd',mint:'#81d4b7'};
-function Wordmark(){return <View accessible accessibilityLabel="1top" style={{flexDirection:"row",alignItems:"baseline",gap:2.2}}><Text style={[s.logo,{fontWeight:"600"}]}>1</Text><Text style={[s.logo,{fontWeight:"600",letterSpacing:-.7}]}>top</Text></View>;}
+function Wordmark(){return <Text accessibilityLabel="1top" style={[s.logo,{fontWeight:"600",letterSpacing:0}]}>1top</Text>;}
 export function Button({label,onPress,disabled=false,danger=false}:{label:string;onPress:()=>void;disabled?:boolean;danger?:boolean}){return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({pressed})=>[s.button,disabled&&{opacity:.4},pressed&&{backgroundColor:'#2b3946'}]}><Text style={[s.buttonText,danger&&{color:'#f1a4aa'}]}>{label}</Text></Pressable>;}
 function Caption({children}:{children:React.ReactNode}){return <Text style={s.caption}>{children}</Text>;}
 function Empty({title,body}:{title:string;body:string}){return <View style={s.card}><Text style={s.title}>{title}</Text><Caption>{body}</Caption></View>;}
