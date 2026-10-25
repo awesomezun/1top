@@ -8,7 +8,9 @@ def main():
     parser.add_argument('command',nargs='?',choices=['run','connect','local','version'],default='run')
     parser.add_argument('--port',type=int,default=18766)
     parser.add_argument('--headless',action='store_true')
+    parser.add_argument('--relay',help='Explicit HTTPS origin of your own relay (connect only)')
     args=parser.parse_args()
+    if args.relay and args.command!='connect':parser.error('--relay requires connect')
     if args.command=='version':print(__version__);return
     if platform.system() not in ('Darwin','Windows'):
         print('This release supports macOS and Windows.',file=sys.stderr);sys.exit(2)
@@ -29,7 +31,10 @@ def main():
     server.controller=Controller(collector,Collector,state_file=DATA/'controls-v5.json')
     threading.Thread(target=collector.loop,daemon=True).start()
     threading.Thread(target=server.serve_forever,daemon=True).start()
-    bridge=CloudLink(collector,server.controller,DATA)
+    bridge=CloudLink(collector,server.controller,DATA,relay=args.relay)
+    from .updates import UpdateMonitor
+    server.updates=UpdateMonitor()
+    threading.Thread(target=server.updates.run,args=(bridge.stop,),daemon=True).start()
     bridge.status='Local monitoring'
     status_detail='Free local monitoring. No account or cloud connection is required.'
     def write_status():

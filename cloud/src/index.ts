@@ -2,6 +2,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { AccountHub, type Env } from './hub';
 import { action, text } from './protocol';
 import { AccessDenied, accessDeadline, requireHostedAccess } from './access';
+import {billingReady,billingStatus,portal,webhook} from './billing';
 import { MOBILE_TOKEN, mobileIdentity, authorizeMobile } from './mobile';
 export { AccountHub };
 const KEYS=createRemoteJWKSet(new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'));
@@ -15,10 +16,16 @@ async function user(req:Request,env:Env,googleOnly=false):Promise<{id:string;exp
  const token=bearer(req);if(!token)throw new Error('Authentication required');
  if(MOBILE_TOKEN.test(token)){
   if(googleOnly)throw new Error('Fresh Google sign-in required');
-  return mobileIdentity(env.DB,await hash(token),now());
+  const mobile=await mobileIdentity(env.DB,await hash(token),now());
+  if(env.DEPLOYMENT_MODE==='self_hosted'&&mobile.id!==env.OWNER_USER_ID)throw new AccessDenied();
+  return mobile;
  }
  const {payload}=await jwtVerify(token,KEYS,{issuer:'https://securetoken.google.com/'+env.FIREBASE_PROJECT_ID,audience:env.FIREBASE_PROJECT_ID,algorithms:['RS256']});
  if(!payload.sub || payload.sub.length>128 || payload.email_verified!==true || (payload.firebase as any)?.sign_in_provider!=='google.com')throw new Error('Google sign-in required');
+ if(env.DEPLOYMENT_MODE==='self_hosted'){
+  if(!env.OWNER_USER_ID||payload.sub!==env.OWNER_USER_ID)throw new AccessDenied();
+  await env.DB.prepare("INSERT INTO hosted_access(user_id,kind,max_devices,created_at) VALUES(?,'operator',25,?) ON CONFLICT(user_id) DO NOTHING").bind(payload.sub,now()).run();
+ }
  return {id:payload.sub,expires:payload.exp!*1000};
 }
 async function approvedUser(req:Request,env:Env){
@@ -37,7 +44,18 @@ async function device(req:Request,env:Env){
 }
 async function handle(req:Request,env:Env):Promise<Response>{
  const url=new URL(req.url),path=url.pathname;
- if(path==='/health')return json({ok:true,service:'1top relay',version:'1.5.0',access:'approved-accounts',pairing_enabled:env.PAIRING_ENABLED==='true'});
+ if(path==='/api/billing/webhook'&&req.method==='POST')return webhook(req,env);
+ if(path==='/api/billing'&&req.method==='GET'){
+   const u=await user(req,env);
+   if(!await limit(env.DB,'billing-status:'+u.id,12))return json({error:'Please wait before refreshing billing.'},429);
+   return json(await billingStatus(env,u.id));
+ }
+ if(['/api/billing/checkout','/api/billing/portal'].includes(path)&&req.method==='POST'){
+   const u=await user(req,env,true);
+   if(!await limit(env.DB,'billing:'+u.id,6,600))return json({error:'Too many billing requests. Try again later.'},429);
+   return path.endsWith('/checkout')?hub(env,u.id).fetch(new Request('https://hub/billing/checkout',{method:'POST',body:JSON.stringify({uid:u.id})})):portal(env,u.id);
+ }
+ if(path==='/health')return json({ok:true,service:'1top relay',version:'1.6.0',access:'approved-accounts',billing_enabled:billingReady(env),mode:env.DEPLOYMENT_MODE==='self_hosted'?'self_hosted':'managed',pairing_enabled:env.PAIRING_ENABLED==='true'});
  if(path==='/api/mobile/authorize'&&req.method==='POST'){
    const u=await user(req,env,true),access=await requireHostedAccess(env.DB,u.id);
    if(!await limit(env.DB,'mobile:'+u.id,10,600))return json({error:'Too many mobile sign-ins. Try again later.'},429);
@@ -58,7 +76,7 @@ async function handle(req:Request,env:Env):Promise<Response>{
    if(!name||!platform)return json({error:'Computer name and platform are required.'},400);
    const secret=random(),code=random().slice(0,10).toUpperCase();
    await env.DB.prepare('INSERT INTO pairings(code,secret_hash,name,platform,expires_at) VALUES(?,?,?,?,?)').bind(code,await hash(secret),name,platform,now()+600).run();
-   return json({device_code:secret,user_code:code,expires_in:600,interval:3,verification_uri_complete:env.WEB_URL+'/connect#'+code});
+   return json({device_code:secret,user_code:code,expires_in:600,interval:3,verification_uri_complete:env.WEB_URL+'/connect'+(env.DEPLOYMENT_MODE==='self_hosted'?'?relay='+encodeURIComponent(url.origin):'')+'#'+code});
  }
  if(path==='/api/pair/info'&&req.method==='POST'){
    const {code}=await body(req);if(!/^[A-F0-9]{10}$/.test(code||''))return json({error:'Invalid connection code'},400);

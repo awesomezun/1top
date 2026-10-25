@@ -714,6 +714,8 @@ class Handler(BaseHTTPRequestHandler):
             snapshot=self.server.controller.decorate(snapshot)
             data=json.dumps({**snapshot,'action_token':self.server.action_token},ensure_ascii=False).encode()
             mime='application/json; charset=utf-8'
+        elif route=='/api/updates':
+            self.json_response(200,getattr(self.server,'updates',None).value if getattr(self.server,'updates',None) else {});return
         elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/maps.css','/typography.css','/benchmark.json'):
             name='index.html' if route=='/' else route[1:]
             data=(BASE/'dist'/name).read_bytes()

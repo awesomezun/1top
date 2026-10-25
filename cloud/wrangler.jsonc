@@ -24,7 +24,9 @@
     "PAIRING_ENABLED": "false",
     "FIREBASE_PROJECT_ID": "onetop-si",
     "WEB_ORIGINS": "https://1top.si,https://onetop-si.awsmzun.chatgpt.site",
-    "WEB_URL": "https://1top.si"
+    "WEB_URL": "https://1top.si",
+    "BILLING_ENABLED": "false",
+    "PLAN_MAX_DEVICES": "3"
   },
   "observability": {
     "enabled": true,

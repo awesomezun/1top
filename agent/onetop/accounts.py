@@ -182,19 +182,21 @@ def profile_roots(home=Path.home()):
 
 
 def claude_credentials(root):
-    credentials=read_json(root/'.credentials.json')
-    if credentials.get('claudeAiOauth'):return credentials['claudeAiOauth']
-    # Claude Code 2.1.310 scopes its macOS Keychain service by the normalized
-    # config path (SHA-256, first eight hex characters). Never enumerate Keychain.
-    if os.name=='nt' or os.uname().sysname!='Darwin':return {}
+    fallback=read_json(root/'.credentials.json').get('claudeAiOauth') or {}
+    if not isinstance(fallback,dict):fallback={}
+    if os.name=='nt' or os.uname().sysname!='Darwin':return fallback
+    # Claude Code stores its current macOS login in Keychain. A migrated
+    # .credentials.json may remain on disk long after that token has expired.
     suffix='' if root==Path.home()/'.claude' else '-'+hashlib.sha256(unicodedata.normalize('NFC',str(root)).encode()).hexdigest()[:8]
     try:
         result=subprocess.run(['/usr/bin/security','find-generic-password','-a',getpass.getuser(),'-w',
                                '-s','Claude Code-credentials'+suffix],capture_output=True,text=True,timeout=3)
-        if result.returncode or len(result.stdout)>128*1024:return {}
+        if result.returncode or len(result.stdout)>128*1024:return fallback
         value=json.loads(result.stdout)
-        return value.get('claudeAiOauth') or {} if isinstance(value,dict) else {}
-    except (ValueError,OSError,subprocess.SubprocessError):return {}
+        current=value.get('claudeAiOauth') if isinstance(value,dict) else None
+        if isinstance(current,dict) and current.get('accessToken'):return current
+    except (ValueError,OSError,subprocess.SubprocessError):pass
+    return fallback
 
 
 class AccountQuotaSampler:

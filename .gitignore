@@ -2,7 +2,7 @@
 __pycache__/
 *.py[cod]
 .venv/
-node_modules/
+node_modules
 .wrangler/
 .env*
 !.env.example
@@ -22,3 +22,5 @@ site/.git/
 
 *.egg-info/
 site/dist/
+
+cloud/.selfhost/

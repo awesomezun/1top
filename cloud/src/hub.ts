@@ -1,13 +1,38 @@
 import { DurableObject } from 'cloudflare:workers';
+import {reconcileSubscription,checkout} from './billing';
 import { snapshot, action, text, type DeviceSnapshot } from './protocol';
-export interface Env { DB:D1Database; HUBS:DurableObjectNamespace<AccountHub>; FIREBASE_PROJECT_ID:string; WEB_ORIGINS:string; WEB_URL:string; PAIRING_ENABLED?:string; }
+export interface Env { DB:D1Database; HUBS:DurableObjectNamespace<AccountHub>; FIREBASE_PROJECT_ID:string; WEB_ORIGINS:string; WEB_URL:string; PAIRING_ENABLED?:string; BILLING_ENABLED?:string; STRIPE_SECRET_KEY?:string; STRIPE_WEBHOOK_SECRET?:string; STRIPE_PRICE_ID?:string; PLAN_MAX_DEVICES?:string; DEPLOYMENT_MODE?:string; OWNER_USER_ID?:string; }
 type Attachment = {role:'device'|'browser';id:string;expires:number;name?:string;platform?:string;allow_control?:boolean};
 type StoredDevice = {id:string;name:string;platform:string;received:number;snapshot:DeviceSnapshot};
 type Receipt = {request:ReturnType<typeof action>;created:number;status:string;message?:string};
 const json=(value:unknown,status=200)=>Response.json(value,{status});
 export class AccountHub extends DurableObject<Env> {
+  constructor(ctx:DurableObjectState,env:Env){super(ctx,env);ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping','pong'));}
+  reportPolicy(){
+    const watching=this.ctx.getWebSockets('browser').some(ws=>ws.readyState===1&&(ws.deserializeAttachment() as Attachment).expires>Date.now());
+    for(const ws of this.ctx.getWebSockets('device'))if(ws.readyState===1)ws.send(JSON.stringify({type:'report_policy',interval:watching?3:60}));
+  }
   async fetch(request:Request):Promise<Response> {
     const u=new URL(request.url),path=u.pathname;
+    if(path==='/billing/checkout'&&request.method==='POST'){
+      const {uid}=await request.json() as {uid:string};
+      if(typeof uid!=='string'||!uid||uid.length>128)return json({error:'Invalid account'},400);
+      return this.ctx.blockConcurrencyWhile(async()=>{
+        try{return await checkout(this.env,uid,this.ctx.storage);}
+        catch{return json({error:'Checkout is temporarily unavailable. No access was granted.'},503);}
+      });
+    }
+    if(path==='/billing/sync'&&request.method==='POST') {
+      const {uid,customer}=await request.json() as {uid:string;customer:string};
+      if(typeof uid!=='string'||!/^cus_[A-Za-z0-9]+$/.test(customer))return json({error:'Invalid customer'},400);
+      return this.ctx.blockConcurrencyWhile(async()=>{
+        try{
+          const state=await reconcileSubscription(this.env,uid,customer);
+          if(state.changed)for(const ws of this.ctx.getWebSockets())ws.close(4003,'Subscription updated; reconnect');
+          return json({received:true});
+        }catch{return json({error:'Billing reconciliation unavailable'},503);}
+      });
+    }
     if(path==='/ws') {
       const role=u.searchParams.get('role') as Attachment['role'];
       if(!['device','browser'].includes(role)||request.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'Invalid upgrade'},400);
@@ -22,6 +47,7 @@ export class AccountHub extends DurableObject<Env> {
         const records=await this.ctx.storage.list<StoredDevice>({prefix:'snapshot:'});
         server.send(JSON.stringify({type:'state',devices:[...records.values()].filter(v=>Date.now()-v.received<86400000).map(v=>({...v,online:this.isOnline(v.id)&&Date.now()-v.received<30000}))}));
       }
+      this.reportPolicy();
       await this.ctx.storage.setAlarm(Date.now()+60000);
       return new Response(null,{status:101,webSocket:client,headers:role==='browser'?{'Sec-WebSocket-Protocol':'1top'}:{}});
     }
@@ -81,7 +107,7 @@ export class AccountHub extends DurableObject<Env> {
       }else throw Error('Unsupported message');
     }catch{ws.close(1008,'Invalid device message');}
   }
-  async webSocketClose(ws:WebSocket){const a=ws.deserializeAttachment() as Attachment;if(a.role==='device'&&!this.isOnline(a.id))this.broadcast({type:'offline',device_id:a.id});}
+  async webSocketClose(ws:WebSocket){this.reportPolicy();const a=ws.deserializeAttachment() as Attachment;if(a.role==='device'&&!this.isOnline(a.id))this.broadcast({type:'offline',device_id:a.id});}
   async webSocketError(ws:WebSocket){ws.close(1011,'Connection error');}
   async alarm(){
     const now=Date.now();for(const ws of this.ctx.getWebSockets()){const a=ws.deserializeAttachment() as Attachment;if(a.expires<now)ws.close(4003,'Session expired');}

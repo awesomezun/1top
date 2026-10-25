@@ -12,7 +12,7 @@ export class AccessDenied extends Error {
   }
 }
 
-/** Grants are provisioned by the operator or a future verified billing handler.
+/** Grants are provisioned by the operator or the verified billing handler.
  * A Google sign-in or a client-supplied plan never creates a grant.
  */
 export async function hostedAccess(db: D1Database, userId: string): Promise<HostedAccess | null> {

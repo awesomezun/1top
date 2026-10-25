@@ -1,13 +1,25 @@
 import json,sqlite3,tempfile,time,unittest
 from pathlib import Path
 from unittest.mock import patch
-from onetop.accounts import claude_windows,codex_windows,AccountQuotaSampler,identity
+from onetop.accounts import claude_windows,codex_windows,AccountQuotaSampler,identity,claude_credentials
 from onetop.aside import discover
 from onetop.server import Ledger
 from onetop.bridge import export_snapshot
 from onetop.controls import Controller,ActionError
 
 class AccountTests(unittest.TestCase):
+    def test_current_keychain_login_wins_over_expired_migration_file(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/'.credentials.json').write_text(json.dumps({'claudeAiOauth':{'accessToken':'expired-file','expiresAt':1}}))
+            reply=SimpleNamespace(returncode=0,stdout=json.dumps({'claudeAiOauth':{'accessToken':'current-keychain','expiresAt':9999999999999}}))
+            with patch('onetop.accounts.os.name','posix'),patch('onetop.accounts.os.uname',return_value=SimpleNamespace(sysname='Darwin')),patch('onetop.accounts.subprocess.run',return_value=reply):
+                self.assertEqual(claude_credentials(root)['accessToken'],'current-keychain')
+    def test_keychain_unavailable_preserves_file_fallback(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/'.credentials.json').write_text(json.dumps({'claudeAiOauth':{'accessToken':'file-login'}}))
+            with patch('onetop.accounts.subprocess.run',side_effect=OSError):
+                self.assertEqual(claude_credentials(root)['accessToken'],'file-login')
     def test_primary_does_not_imply_five_hours(self):
         rows,plan=codex_windows({'rateLimits':{'planType':'pro','primary':{'windowDurationMins':10080,'usedPercent':95,'resetsAt':900}}},100)
         self.assertEqual(rows,[{'label':'주간','pct':95,'reset':900}])

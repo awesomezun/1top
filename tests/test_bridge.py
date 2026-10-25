@@ -58,7 +58,20 @@ class ConnectionTests(unittest.TestCase):
   from unittest.mock import patch
   from onetop.bridge import request
   error=urllib.error.HTTPError('https://example.invalid',403,'denied',{},io.BytesIO(b'plain gateway error'))
-  with patch('urllib.request.urlopen',side_effect=error) as send:
+  with patch('urllib.request.OpenerDirector.open',side_effect=error) as send:
    status,result=request('/test',{})
    self.assertEqual(status,403);self.assertIn('HTTP 403',result['error'])
    self.assertTrue(send.call_args.args[0].headers['User-agent'].startswith('1top/'))
+
+ def test_custom_relay_never_reuses_a_managed_credential(self):
+  from onetop.bridge import relay_origin,RELAY
+  for value in ['http://relay.example','https://u:p@relay.example','https://relay.example/path','https://relay.example?x=1']:
+   with self.assertRaises(ValueError):relay_origin(value)
+  with tempfile.TemporaryDirectory() as folder:
+   path=Path(folder);save_private(path/'device.json',{'device_token':'PRIVATE','device_id':'test'})
+   managed=CloudLink(Mock(),Mock(),path);self.assertEqual(managed.relay,RELAY)
+   own=CloudLink(Mock(),Mock(),path,relay='https://own.workers.dev');self.assertIsNone(own.config)
+   self.assertEqual(json.loads((path/'device.json').read_text())['device_token'],'PRIVATE')
+ def test_redirects_are_rejected(self):
+  from onetop.bridge import NoRedirect
+  with self.assertRaises(ValueError):NoRedirect().redirect_request(None,None,None,None,None,None)

@@ -1,5 +1,7 @@
 """Read-only, local operational evidence. Never interpret prompt text as state."""
 import json
+import re
+import shlex
 import sqlite3
 import time
 from pathlib import Path
@@ -78,7 +80,7 @@ class OperationalMonitor:
 
     def scan(self, s):
         path = s.get('path')
-        if not path or s.get('kind') not in ('Claude', 'GLM'): return
+        if not path or s.get('kind') not in ('Claude', 'GLM', 'Codex'): return
         try:
             p = Path(path); stat = p.stat()
             old = self.offsets.get(path)
@@ -97,6 +99,9 @@ class OperationalMonitor:
             pass
 
     def event(self, value, session):
+        if session.get('kind') == 'Codex':
+            self.codex_event(value, session)
+            return
         base = dict(session_id=session['id'], location=location(session), provider=session['kind'], runtime='Claude Code',
                     observed_at=value.get('timestamp'), source='session tool log')
         attachment = value.get('attachment')
@@ -136,6 +141,71 @@ class OperationalMonitor:
                     self.events[key]['state'] = 'tool_error' if item.get('is_error') else 'tool_returned'
                     # A returned tool call is not evidence that a whole skill/loop worked.
 
+    def codex_event(self, value, session):
+        if value.get('type') != 'response_item': return
+        payload = value.get('payload') or {}
+        kind = payload.get('type'); call = str(payload.get('call_id') or '')
+        if not call: return
+        key = session['id'] + ':' + call
+        if kind in ('function_call_output', 'custom_tool_call_output'):
+            if key in self.events: self.events[key]['state'] = 'tool_returned'
+            return
+        if kind not in ('function_call', 'custom_tool_call'): return
+        name = str(payload.get('name') or '')
+        raw = payload.get('arguments') or payload.get('input') or ''
+        paths = []
+        if name.endswith(('exec_command', 'shell_command')):
+            try:
+                args = json.loads(raw) if isinstance(raw, str) else raw
+                command = args.get('cmd') or args.get('command') or ''
+                parts = shlex.split(command)
+                if parts and parts[0] in ('cat', 'sed', 'head', 'tail'):
+                    paths = [part for part in parts[1:] if part.endswith('/SKILL.md')]
+            except (ValueError, TypeError, AttributeError): return
+        elif name.endswith(('read_file', 'read_text')):
+            try:
+                args = json.loads(raw) if isinstance(raw, str) else raw
+                path = args.get('path') or args.get('file_path') or ''
+                if path.endswith('/SKILL.md'): paths = [path]
+            except (ValueError, TypeError, AttributeError): return
+        elif 'skills' in name and name.endswith(('read', 'read_skill')):
+            try:
+                args = json.loads(raw) if isinstance(raw, str) else raw
+                paths = [str(args.get('resource') or args.get('uri') or args.get('name') or 'Skill')]
+            except (ValueError, TypeError, AttributeError): return
+        if not paths: return
+        self.events[key] = dict(session_id=session['id'], location=location(session), provider='Codex', runtime='Codex',
+            observed_at=value.get('timestamp'), source='session tool log', category='skill',
+            name=', '.join(Path(p).parent.name if p.endswith('/SKILL.md') else p for p in paths)[:160],
+            state='read_requested', result='not_verified', next_run=None)
+
+    def schedules(self, sessions):
+        # Persistent jobs are a subset. Session-only /loop jobs are not in this file.
+        roots = {self.home / '.claude'}
+        for session in sessions:
+            if session.get('kind') not in ('Claude', 'GLM'): continue
+            path = Path(session.get('path') or '')
+            for parent in path.parents:
+                if parent.name == 'projects': roots.add(parent.parent); break
+        result = []
+        for root in sorted(roots):
+            path = root / 'scheduled_tasks.json'
+            try:
+                if path.stat().st_size > 1_048_576: continue
+                content = json.loads(path.read_text())
+                tasks = content.get('tasks', [])
+                if not isinstance(tasks, list): continue
+                for task in tasks[:300]:
+                    if not isinstance(task, dict) or not isinstance(task.get('id'), str) or not isinstance(task.get('cron'), str): continue
+                    session = next((s for s in sessions if s['id'] == task.get('createdBySessionId')), None)
+                    result.append(dict(job_id=task['id'][:100], schedule=task['cron'][:100],
+                        name='Claude Code scheduled task', state='stored', source='persistent schedule file',
+                        recurring=task.get('recurring') is True, last_fired_at=task.get('lastFiredAt'),
+                        session_connected=session is not None, location=location(session) if session else '세션 연결 미확인',
+                        next_run=None, result='not_verified'))
+            except (OSError, ValueError, TypeError): continue
+        return result[:300]
+
     def sample(self, sessions):
         if self.cached is not None and time.monotonic() - self.last < 10: return self.cached
         goals, goal_status = self.goals(sessions)
@@ -146,9 +216,9 @@ class OperationalMonitor:
         self.events = dict(list(self.events.items())[-300:])
         self.cached = dict(updated=time.time(), goals=goals, goal_source_status=goal_status,
                            skills=self.skills(sessions), events=list(reversed(list(self.events.values()))),
-                           loop_state='not_verified', skill_runtime='partial',
+                           schedules=self.schedules(sessions), loop_state='persistent_subset', skill_runtime='partial',
                            claude_goal_source_status='partial_log',
-                           history_scope='Recent observed Claude/GLM log tail; not complete history')
+                           history_scope='Recent observed tool logs and persistent schedules; not complete history')
         self.last = time.monotonic()
         return self.cached
 

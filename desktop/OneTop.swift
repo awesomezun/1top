@@ -39,7 +39,7 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         popover.contentViewController = NSHostingController(rootView: QuickDashboard(
             model: model, openDashboard: { [weak self] in self?.showDashboard() },
             openBrowser: { [weak self] in self?.openBrowser() }, remoteOptions: { [weak self] in self?.remoteDashboard() },
-            connectRemote: { [weak self] in self?.launch(pair: true) }, toggleLogin: { [weak self] in self?.toggleLogin() },
+            connectRemote: { [weak self] in self?.connectDialog() }, toggleLogin: { [weak self] in self?.toggleLogin() },
             restart: { [weak self] in self?.launch(pair: false) }, quit: { NSApp.terminate(nil) },
             control: { [weak self] action, session in self?.control(action, session: session) }))
         model.onUpdate = { [weak self] in self?.updated() }
@@ -59,6 +59,7 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         let appMenu = NSMenu(title: "1top"); appItem.submenu = appMenu
         add("전체 대시보드", #selector(showDashboard), "o", appMenu)
         add("간략 대시보드", #selector(togglePopover), "1", appMenu); appMenu.addItem(.separator())
+        add("업데이트 확인…", #selector(checkUpdate), "", appMenu)
         add("1top 가리기", #selector(NSApplication.hide(_:)), "h", appMenu, NSApp)
         add("1top 종료", #selector(NSApplication.terminate(_:)), "q", appMenu, NSApp)
         let editItem = NSMenuItem(); main.addItem(editItem); let edit = NSMenu(title: "편집"); editItem.submenu = edit
@@ -73,6 +74,18 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
     }
     func add(_ title: String, _ action: Selector, _ key: String, _ menu: NSMenu, _ target: AnyObject? = nil) {
         let item = menu.addItem(withTitle: title, action: action, keyEquivalent: key); item.target = target ?? self
+    }
+    @objc func checkUpdate() {
+        URLSession.shared.dataTask(with: URL(string: "http://127.0.0.1:18766/api/updates")!) { data, _, _ in
+            let value = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            DispatchQueue.main.async {
+                let alert = NSAlert(); let version = value?["version"] as? String
+                alert.messageText = value?["available"] as? Bool == true ? "새 버전 \(version ?? "")" : "1top 업데이트"
+                alert.informativeText = version == nil ? "업데이트 정보를 확인할 수 없습니다." : "설치 버전: \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "") · 배포 버전: \(version!). 미리보기 설치본은 자동 교체하지 않습니다."
+                alert.addButton(withTitle: "배포 페이지 열기"); alert.addButton(withTitle: "닫기")
+                if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(URL(string: "https://github.com/awesomezun/1top/releases")!) }
+            }
+        }.resume()
     }
     func updateStatusTitle() {
         statusItem.button?.title = ""
@@ -184,16 +197,26 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertSecondButtonReturn { model.perform(action, session: session) }; showPopover()
     }
-    func launch(pair: Bool) {
+    func connectDialog() {
+        popover.performClose(nil)
+        let alert=NSAlert();alert.messageText="원격 기기 연결"
+        alert.informativeText="1top 관리형 서버 또는 본인의 Cloudflare 서버 주소를 입력하세요. 선택한 서버에 로그인 식별정보와 기기 요약을 전달합니다."
+        let input=NSTextField(string:"https://onetop-relay.gitreels.workers.dev");input.frame=NSRect(x:0,y:0,width:430,height:28);alert.accessoryView=input
+        alert.addButton(withTitle:"연결");alert.addButton(withTitle:"취소")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard let url=URL(string:input.stringValue),url.scheme=="https",url.host?.contains(".")==true,url.user==nil,url.password==nil,url.query==nil,url.fragment==nil,["","/"].contains(url.path),url.port==nil else { model.message="HTTPS 서버 주소만 입력하세요.";model.messageIsError=true;return }
+        launch(pair:true,relay:input.stringValue)
+    }
+    func launch(pair: Bool, relay: String? = nil) {
         guard !testing, !stopping else { return }
-        guard let running = process, running.isRunning else { startCollector(pair: pair); return }
+        guard let running = process, running.isRunning else { startCollector(pair: pair, relay: relay); return }
         stopping = true
-        running.terminationHandler = { [weak self] _ in DispatchQueue.main.async { guard let self else { return }; self.stopping = false; self.startCollector(pair: pair) } }
+        running.terminationHandler = { [weak self] _ in DispatchQueue.main.async { guard let self else { return }; self.stopping = false; self.startCollector(pair: pair, relay: relay) } }
         running.terminate()
     }
-    func startCollector(pair: Bool) {
+    func startCollector(pair: Bool, relay: String? = nil) {
         guard !testing else { return }; let p = Process()
-        p.executableURL = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/agent/onetop-agent"); p.arguments = pair ? ["connect"] : ["run", "--headless"]
+        p.executableURL = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/agent/onetop-agent"); p.arguments = pair ? ["connect"] + (relay.map { ["--relay", $0] } ?? []) : ["run", "--headless"]
         var env = ProcessInfo.processInfo.environment; env["ONETOP_DATA"] = dataDir.path
         env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (env["PATH"] ?? ""); p.environment = env
         let log = dataDir.appendingPathComponent("companion.log")
