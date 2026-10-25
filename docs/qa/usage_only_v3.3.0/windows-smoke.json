@@ -1,0 +1,10 @@
+{
+  "title": "1top \u00b7 Local workspace",
+  "ready": true,
+  "maps": true,
+  "installer": true,
+  "collector_version": "3.3.0",
+  "exact_fixture_usage": true,
+  "context": 310,
+  "host_resources": true
+}
