@@ -1,10 +1,11 @@
-export const ACTIONS = ['focus', 'pause', 'resume', 'terminate', 'prompt'] as const;
+export const ACTIONS = ['focus', 'pause', 'resume', 'terminate', 'prompt', 'message'] as const;
+export const CAPABILITIES = [...ACTIONS, 'mailbox'] as const;
 export type Action = typeof ACTIONS[number];
 export interface AgentSession {
   id: string; control_key?: string; kind: string; app: string; terminal: string;
   project: string; title: string; model: string; status: string;
   tokens: number[] | null; rate: number | null; windows: Record<string, number[] | null>;
-  cpu: number | null; rss: number | null; capabilities: Action[];
+  cpu: number | null; rss: number | null; capabilities: (typeof CAPABILITIES[number])[];
   context_usage?: {basis:'last_request_input';input_tokens:number;capacity:number|null;parts:number[]|null;observed_at:number;model:string}|null;
 }
 export interface AccountQuota {
@@ -39,7 +40,7 @@ export function snapshot(value: any): DeviceSnapshot {
       rate:number(s.rate), windows:Object.fromEntries(KEYS.map(k=>[k,vector(s.windows?.[k])])),
       cpu:number(s.cpu,100000),rss:number(s.rss),
       context_usage:contextUsage(s.context_usage),
-      capabilities:Array.isArray(s.capabilities)?ACTIONS.filter(a=>s.capabilities.includes(a)):[]
+      capabilities:Array.isArray(s.capabilities)?CAPABILITIES.filter(a=>s.capabilities.includes(a)):[]
     };
   });
   if (new Set(sessions.map(s=>s.id)).size!==sessions.length) throw new Error('Duplicate session identity');
@@ -71,8 +72,18 @@ function contextUsage(c:any):AgentSession['context_usage'] {
 export function action(value: any) {
   if (!value || !ACTIONS.includes(value.action) || !/^[a-f0-9-]{36}$/.test(value.request_id||'') ||
       !text(value.session_id,200) || !text(value.control_key,200) || !/^[a-f0-9-]{36}$/.test(value.device_id||'')) throw new Error('Invalid action');
-  if(value.action==='prompt'&&(typeof value.prompt!=='string'||!value.prompt.trim()||value.prompt.length>4000||/[\x00-\x08\x0b-\x1f\x7f]/.test(value.prompt)))throw new Error('Invalid instruction');
+  if(['prompt','message'].includes(value.action)&&(typeof value.prompt!=='string'||!value.prompt.trim()||value.prompt.length>4000||/[\x00-\x08\x0b-\x1f\x7f]/.test(value.prompt)))throw new Error('Invalid instruction');
   return {action:value.action as Action,request_id:value.request_id as string,device_id:value.device_id as string,
     session_id:text(value.session_id,200),control_key:text(value.control_key,200),
-    ...(value.action==='prompt'?{prompt:value.prompt as string}:{})};
+    ...(['prompt','message'].includes(value.action)?{prompt:value.prompt as string}:{})};
+}
+
+export function mailboxRows(value:any) {
+  if(!Array.isArray(value)||value.length>10)throw Error('Invalid mailbox');
+  const statuses=['sending','queued','awaiting_reply','replied','delivery_unconfirmed','source_changed','not_delivered'];
+  return value.map(row=>{
+    if(!/^[a-f0-9-]{36}$/.test(row?.id||'')||!statuses.includes(row.status))throw Error('Invalid message');
+    return {id:row.id,text:text(row.text,4000),created:number(row.created)||0,status:row.status,
+      reply:text(row.reply,8000),reply_at:number(row.reply_at),truncated:row.truncated===true};
+  });
 }

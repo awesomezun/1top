@@ -27,6 +27,12 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
  async function changeRelay(value:string){if(token)throw Error(t('Sign out before changing servers.','서버 변경 전에 로그아웃하세요.'));setRelay(await selectRelay(value));setMessage(t('Server saved. Sign in to connect.','서버를 저장했습니다. 로그인하여 연결하세요.'));}
  async function login(){setBusy(true);setMessage('');try{setToken(await signIn());setDemo(false);}catch(e:any){setMessage(e.message);}finally{setBusy(false);}}
  async function logout(){setBusy(true);try{if(!demo)await signOut(token);setToken(null);setDemo(false);}catch(e:any){setMessage(e.message);}finally{setBusy(false);}}
+ async function sendMessage(row:SessionRow,text:string,id:string){
+  if(!row||!fresh(row.device,20000)||!row.capabilities.includes('message')||(!demo&&connection.state!=='live'))throw Error(t('This session cannot receive messages right now.','현재 이 세션에 메시지를 보낼 수 없습니다.'));
+  if(!text.trim()||text.length>4000)throw Error(t('Enter up to 4,000 characters.','4,000자 이내로 입력하세요.'));
+  if(demo)return;
+  await api('/api/action',token!,{action:'message',request_id:id,device_id:row.device.id,session_id:row.id,control_key:row.control_key,prompt:text});
+ }
  function control(row:SessionRow,action:string,instruction?:string){
   if(!row||!fresh(row.device,20000)||!row.capabilities.includes(action)||pending[row.key])return;
   if(action==='prompt'&&(!instruction?.trim()||instruction.length>4000)){setMessage(t('Enter an instruction up to 4,000 characters.','4,000자 이내의 지시를 입력하세요.'));return;}
@@ -42,5 +48,5 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
    setTimeout(()=>setPending(old=>{if(old[row.key]!==id)return old;const next={...old};delete next[row.key];report(t('Result unconfirmed. Check the computer before retrying.','결과 미확인. 다시 요청하기 전에 컴퓨터를 확인하세요.'),true);return next;}),25000);
   }}]);
  }
- return <Context.Provider value={{relay,changeRelay,token,loading,demo,setDemo,ko,setKo,t,selected,setSelected,period,setPeriod,busy,message,setMessage,pending,controlMessages,clock,devices,visible,rows,connection,login,logout,control}}>{children}</Context.Provider>;
+ return <Context.Provider value={{relay,changeRelay,token,loading,demo,setDemo,ko,setKo,t,selected,setSelected,period,setPeriod,busy,message,setMessage,pending,controlMessages,clock,devices,visible,rows,connection,login,logout,control,sendMessage}}>{children}</Context.Provider>;
 }

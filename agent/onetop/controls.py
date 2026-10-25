@@ -10,6 +10,7 @@ import threading
 import time
 from pathlib import Path
 from .discovery import orca_executable
+from .mailbox import Mailbox, readable as mailbox_readable
 
 
 class ActionError(Exception):
@@ -65,6 +66,14 @@ def accepts_instruction(spec):
                 spec.get('display_status')!='resuming')
 
 
+def accepts_message(spec):
+    if not mailbox_readable(spec):return False
+    if accepts_instruction(spec):return True
+    return bool(spec.get('control_key') and spec.get('orca_terminal') and
+                spec.get('input_verified') is True and spec['kind'] in ('Claude','GLM','Codex') and
+                spec.get('status')=='working' and spec.get('display_status')!='resuming')
+
+
 class Controller:
     def __init__(self,collector,factory,state_file=None):
         self.collector=collector
@@ -74,6 +83,7 @@ class Controller:
         self.interrupted={}
         self.state_lock=threading.Lock()
         self.state_file=state_file
+        self.mailbox=Mailbox(Path(state_file).with_name('session-mailbox.json') if state_file else None)
         self.paused={};self.audit=[]
         if state_file:
             try:
@@ -122,6 +132,32 @@ class Controller:
         if len(spec['pids'])!=1:raise ActionError('개별 CLI 프로세스를 확인할 수 없습니다.')
         return spec
 
+    def flush_mailbox(self):
+        if self.lock.locked():return
+        with self.collector.lock:snapshot=self.collector.snapshot
+        if time.time()-snapshot.get('updated',0)>20:return
+        for row in self.mailbox.queued()[:5]:
+            spec=next((s for s in snapshot.get('sessions',[]) if s['id']==row['session_id']),None)
+            if time.time()-row['created']>900 or spec and spec.get('control_key')!=row['control_key']:
+                self.mailbox.delivery(row['id'],'not_delivered');continue
+            if not spec or not accepts_instruction(spec):continue
+            with self.state_lock:mark=self.paused.get(row['session_id'])
+            if mark and mark['phase']=='resuming':continue
+            try:
+                self.execute({'action':'message','session_id':row['session_id'],'control_key':row['control_key'],
+                              'request_id':row['id'],'prompt':row['text'],'_dispatch_queued':True})
+                break
+            except Exception:
+                self.mailbox.delivery(row['id'],'delivery_unconfirmed')
+
+    def read_mailbox(self,sid,key):
+        with self.collector.lock:
+            snapshot=self.collector.snapshot
+            if time.time()-snapshot.get('updated',0)>20:raise ActionError('Computer report is stale.')
+            spec=next((s for s in snapshot.get('sessions',[]) if s['id']==sid and s.get('control_key')==key),None)
+        if not spec or not key or not mailbox_readable(spec):raise ActionError('Session reply source is unavailable.')
+        return self.mailbox.read(spec)
+
     def status(self,spec):
         if spec['kind']!='Codex':return spec.get('status','unknown')
         with self.collector.lock:
@@ -165,26 +201,34 @@ class Controller:
 
     def execute(self,payload):
         action=payload.get('action');sid=payload.get('session_id');key=payload.get('control_key');rid=payload.get('request_id')
-        if action not in ('focus','interrupt','pause','resume','terminate','prompt') or not all(isinstance(x,str) and x for x in (sid,key,rid)):
+        if action not in ('focus','interrupt','pause','resume','terminate','prompt','message') or not all(isinstance(x,str) and x for x in (sid,key,rid)):
             raise ActionError('잘못된 동작 요청입니다.',400)
-        prompt=instruction_text(payload.get('prompt')) if action=='prompt' else None
+        prompt=instruction_text(payload.get('prompt')) if action in ('prompt','message') else None
         if not self.lock.acquire(blocking=False):raise ActionError('이전 동작을 처리 중입니다. 잠시 후 다시 시도하세요.')
         try:
             request=(action,sid,key,hashlib.sha256(prompt.encode()).hexdigest() if prompt is not None else None)
             if rid in self.receipts:
                 previous,result=self.receipts[rid]
                 if previous!=request:raise ActionError('요청 ID가 이미 사용되었습니다.')
-                return result
+                if not (payload.get('_dispatch_queued') is True and result.get('queued')):return result
             spec=self.resolve(sid,key);terminal=spec.get('orca_terminal')
-            if action=='prompt':
+            if action in ('prompt','message'):
                 current={**spec,'status':self.status(spec)}
                 with self.state_lock:mark=self.paused.get(sid)
                 if mark and mark['key']==key and mark['phase']=='resuming':
                     raise ActionError('이미 지시 전송을 요청했습니다. 세션에서 결과를 확인하세요.')
+                if action=='message' and current['kind']!='Aside' and current['status']=='working' and accepts_message(current):
+                    if not payload.get('_dispatch_queued'):self.mailbox.enqueue(spec,rid,prompt)
+                    result={'message':'작업을 중단하지 않고 세션이 대기 상태가 되면 메시지를 전달합니다.','queued':True}
+                    self.receipts[rid]=(request,result)
+                    return result
                 if not accepts_instruction(current):
                     raise ActionError('이 세션의 입력 가능한 대기 상태를 확인할 수 없습니다. 실행 중이면 작업을 중단한 뒤 다시 확인하세요.')
                 # Save an uncertain receipt before input, so transport errors never replay it.
                 self.receipts[rid]=(request,{'message':'이 지시의 전달 결과가 미확인입니다. 세션에서 확인한 뒤 새 요청을 보내세요.','started':False})
+                if action=='message':
+                    try:prompt=self.mailbox.begin(spec,rid,prompt)
+                    except (OSError,ValueError):raise ActionError('이 세션의 답신 연결을 확인하지 못했습니다. 메시지를 전송하지 않았습니다.')
                 if spec['kind']=='Aside':
                     from .aside import cli_path
                     mode='queue' if current['status']=='working' else 'resume'
@@ -198,6 +242,7 @@ class Controller:
                     receipt=self.orca('send','--terminal',terminal['handle'],'--text',prompt,'--enter','--wait-submit','2')
                     started='turn_started' in (receipt.get('send',{}).get('prompt',{}).get('stages') or [])
                     result={'message':'AI 지시를 보냈고 새 작업 시작을 확인했습니다.' if started else 'AI 지시를 보냈습니다. 새 작업 시작은 아직 미확인입니다.','started':started}
+                if action=='message':self.mailbox.delivery(rid,'awaiting_reply')
             elif spec['kind']=='Aside' and action!='focus':
                 if action not in ('pause','interrupt'):raise ActionError('Aside에서는 작업 중단만 지원합니다. CLI 종료 대상이 아닙니다.')
                 if spec['status'] not in ('working','waiting'):raise ActionError('현재 Aside 작업 중 상태를 확인하지 못했습니다.')
