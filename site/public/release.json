@@ -1,18 +1,18 @@
 {
-  "version": "3.4.1",
+  "version": "3.4.2",
   "status": "preview",
   "signed": false,
   "notarized": false,
-  "releases": "https://github.com/awesomezun/1top/releases/tag/v3.4.1",
+  "releases": "https://github.com/awesomezun/1top/releases/tag/v3.4.2",
   "platforms": {
     "macos": {
       "architecture": "arm64",
-      "url": "https://github.com/awesomezun/1top/releases/download/v3.4.1/1top-3.4.1-macos-arm64.dmg",
+      "url": "https://github.com/awesomezun/1top/releases/download/v3.4.2/1top-3.4.2-macos-arm64.dmg",
       "sha256": "72ac00d783cb5a0dae25d819546ded3f7b127332bed7744284783e5c11fb6e5c"
     },
     "windows": {
       "architecture": "x64",
-      "url": "https://github.com/awesomezun/1top/releases/download/v3.4.1/1top-3.4.1-windows-x64-setup.exe",
+      "url": "https://github.com/awesomezun/1top/releases/download/v3.4.2/1top-3.4.2-windows-x64-setup.exe",
       "sha256": "6e2512ffd14cdd9f6781723705ffdd494535ef5777901a7ba738f19dcbfc829c"
     },
     "android": {

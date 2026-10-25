@@ -24,7 +24,7 @@ Remote access is optional. Managed access currently requires a server-issued gra
 
 A browser login cannot inspect or control arbitrary local processes. The companion provides that local connection. Nothing is installed on a phone just to view the dashboard.
 
-**v3.4.1:** usage-share maps now fill the dashboard width. The context-map view has been removed from desktop, web, and mobile. Session, AI, app, model, and control views remain available. See [release notes](docs/release-notes_v3.4.1.md).
+**v3.4.2:** usage-share maps now fill the dashboard width. The context-map view has been removed from desktop, web, and mobile. Session, AI, app, model, and control views remain available. See [release notes](docs/release-notes_v3.4.2.md).
 
 ## What you can see
 
@@ -94,7 +94,7 @@ Build the Apple Silicon desktop app:
 scripts/build-macos.sh
 ```
 
-The resulting `build/1top_v3.4.1/1top.app` has a **local ad-hoc signature**, not a public distribution signature. Do not present it as notarized or instruct users to disable Gatekeeper. Public downloads are labeled as previews; production signing and notarization remain pending.
+The resulting `build/1top_v3.4.2/1top.app` has a **local ad-hoc signature**, not a public distribution signature. Do not present it as notarized or instruct users to disable Gatekeeper. Public downloads are labeled as previews; production signing and notarization remain pending.
 
 Web development:
 
@@ -126,4 +126,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for adding tool adapters. Report vulnerab
 MIT license.
 
 
-Connection setup and managed billing configuration: [relay guide](cloud/README.md). Release validation and remaining signing gates: [v3.4.1 notes](docs/release-notes_v3.4.1.md).
+Connection setup and managed billing configuration: [relay guide](cloud/README.md). Release validation and remaining signing gates: [v3.4.2 notes](docs/release-notes_v3.4.2.md).

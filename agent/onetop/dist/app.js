@@ -43,6 +43,8 @@ function renderPeriods(){
 }
 function render(){
  if(!data?.ready)return;
+ $('localVersion').textContent='LOCAL · v'+data.version;
+ $('footerVersion').textContent='1top '+data.version+' · 이 컴퓨터의 로컬 데이터';
  const scoped=data.sessions.filter(s=>provider==='all'||s.kind===provider),known=scoped.filter(s=>s.tokens!==null);
  const toolKinds=[...new Set(data.sessions.map(s=>s.kind))].filter(k=>k!=='Aside');
  $('providers').innerHTML=toolKinds.map(k=>`<button class="provider-nav ${provider===k?'active':''}" data-provider="${esc(k)}" aria-pressed="${provider===k}">${dot(k)}<span>${esc(kindName(k))}</span><small>${data.sessions.filter(s=>s.kind===k).length}</small></button>`).join('');

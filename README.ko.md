@@ -4,7 +4,7 @@ AI 세션·터미널·토큰 사용량·컴퓨터 자원을 한곳에서 확인�
 
 [웹사이트](https://1top.si) · [설치 없이 체험](https://1top.si/app?demo=1) · [English](README.md)
 
-**v3.4.1 · 초기 프리뷰**
+**v3.4.2 · 초기 프리뷰**
 
 기본 흐름은 **1top 실행 → 독립 데스크톱 대시보드**입니다. 로컬 모니터링은 무료이고 로그인이나 중앙 중계 서버가 필요하지 않습니다. [다운로드 페이지](https://1top.si/#download)에서 Mac Apple Silicon DMG, Windows x64 설치 파일, Android APK를 제공합니다. Mac은 로컬 서명이며 공증 전, Windows는 배포자 서명 전인 프리뷰입니다. Android APK는 서명되어 있으며, iOS 스토어 배포는 준비 중입니다.
 
@@ -22,7 +22,7 @@ AI 세션·터미널·토큰 사용량·컴퓨터 자원을 한곳에서 확인�
 
 미보고 토큰은 0이 아닙니다. Claude Code Goal은 마지막으로 관측한 기록이며, Loop의 현재 예약 상태·다음 실행 시각과 skill의 전체 작업 성공 여부는 확인하지 않습니다. Aside는 읽기 전용 로컬 기록으로 최근 24시간 및 작업 중 세션을 감지합니다. 세션별 CPU·메모리는 추정하지 않으며, 앱 바로가기와 지원되는 세션 중단을 제공합니다. 공유 앱 전체를 종료하지 않습니다.
 
-자세한 설치·빌드·제한은 [README](README.md), [변경 사항](docs/release-notes_v3.4.1.md), [운영 정책](docs/service-policy_v1.0.0.md)을 확인하세요. 이전 안내는 [보존본](docs/archive/README.ko_v1.1.1.md)에 있습니다.
+자세한 설치·빌드·제한은 [README](README.md), [변경 사항](docs/release-notes_v3.4.2.md), [운영 정책](docs/service-policy_v1.0.0.md)을 확인하세요. 이전 안내는 [보존본](docs/archive/README.ko_v1.1.1.md)에 있습니다.
 
 
-Connection setup and managed billing configuration: [relay guide](cloud/README.md). Release validation and remaining signing gates: [v3.4.1 notes](docs/release-notes_v3.4.1.md).
+Connection setup and managed billing configuration: [relay guide](cloud/README.md). Release validation and remaining signing gates: [v3.4.2 notes](docs/release-notes_v3.4.2.md).
