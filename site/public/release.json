@@ -17,9 +17,9 @@
     },
     "android": {
       "status": "preview",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "signed": true,
-      "url": "https://github.com/awesomezun/1top/releases/download/mobile-v1.3.0/1top-1.3.0-android.apk",
+      "url": "https://github.com/awesomezun/1top/releases/download/mobile-v1.3.1/1top-1.3.1-android.apk",
       "sha256": "f93911216d2731659ffaa694c4a757666adffd7e0c0d3478d6e4ccd51b239d1e"
     },
     "ios": {

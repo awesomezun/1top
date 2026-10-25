@@ -4,6 +4,7 @@ import * as Crypto from 'expo-crypto';
 import {API,selectRelay,api,loadToken,signIn,signOut,useConnection} from './connection';
 import {demoDevices} from './demo';
 import {fresh} from './metrics';
+import {sortSessions} from './session-order';
 import type {Device,SessionRow,WindowKey} from './types';
 const Context=createContext<any>(null);
 export const useWorkspace=()=>useContext(Context);
@@ -21,7 +22,7 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
  useEffect(()=>{const result=connection.receipt;if(!result)return;setPending(old=>Object.fromEntries(Object.entries(old).filter(([,id])=>id!==result.request.request_id)));setMessage(result.status+': '+(result.message||''));},[connection.receipt]);
  const devices:Device[]=demo?demoDevices():connection.devices;
  const visible=devices.filter(d=>selected==='all'||d.id===selected);
- const rows:SessionRow[]=visible.flatMap(d=>d.snapshot.sessions.map(s=>({...s,device:d,key:d.id+':'+s.id})));
+ const rows:SessionRow[]=sortSessions(visible.flatMap(d=>d.snapshot.sessions.map(s=>({...s,device:d,key:d.id+':'+s.id}))),clock);
  async function changeRelay(value:string){if(token)throw Error(t('Sign out before changing servers.','서버 변경 전에 로그아웃하세요.'));setRelay(await selectRelay(value));setMessage(t('Server saved. Sign in to connect.','서버를 저장했습니다. 로그인하여 연결하세요.'));}
  async function login(){setBusy(true);setMessage('');try{setToken(await signIn());setDemo(false);}catch(e:any){setMessage(e.message);}finally{setBusy(false);}}
  async function logout(){setBusy(true);try{if(!demo)await signOut(token);setToken(null);setDemo(false);}catch(e:any){setMessage(e.message);}finally{setBusy(false);}}
