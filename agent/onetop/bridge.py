@@ -5,6 +5,7 @@ from pathlib import Path
 import certifi
 import websocket
 from . import __version__
+from .controls import accepts_instruction
 
 RELAY='https://onetop-relay.gitreels.workers.dev'
 SSL=ssl.create_default_context(cafile=certifi.where())
@@ -60,6 +61,7 @@ def export_snapshot(state):
         can_pause=identified and term and s.get('input_verified') is not False and s['kind'] in ('Claude','GLM','Codex')
         if (can_pause or identified and s['kind']=='Aside') and status in ('working','waiting'):capabilities.append('pause')
         if can_pause and s.get('display_status')=='paused' and status in ('idle','interrupted'):capabilities.append('resume')
+        if accepts_instruction(s):capabilities.append('prompt')
         if s['kind']!='Aside' and identified and (not term or status in ('idle','interrupted') or can_pause and status in ('working','waiting')):capabilities.append('terminate')
         sessions.append({'id':s['id'],'control_key':s.get('control_key',''),'kind':s['kind'],
             'app':'Orca' if term else loc.get('app') or 'Unknown',
@@ -140,8 +142,8 @@ class CloudLink:
             # Mark before executing: never replay an uncertain action after a crash/reconnect.
             self.receipts[rid]={'type':'result','request_id':rid,'ok':False,'message':'Previous execution is unconfirmed. Check the session before requesting another action.'}
             save_private(self.receipt_file,self.receipts)
-            if data.get('action') not in ('focus','pause','resume','terminate'):raise ValueError('Unsupported action')
-            result=self.controller.execute({k:data.get(k) for k in ('action','session_id','control_key','request_id')})
+            if data.get('action') not in ('focus','pause','resume','terminate','prompt'):raise ValueError('Unsupported action')
+            result=self.controller.execute({k:data.get(k) for k in ('action','session_id','control_key','request_id','prompt')})
             self.result(rid,True,result.get('message','Completed'))
         except Exception as e:
             from .controls import ActionError

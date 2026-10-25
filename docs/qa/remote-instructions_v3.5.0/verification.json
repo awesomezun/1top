@@ -1,0 +1,16 @@
+{
+  "code_commit": "ed76a3d3f1716d82ae1b3aa6aed201c7388f808a",
+  "agent_tests": 114,
+  "relay_tests": 54,
+  "optional_benchmark_skipped": 1,
+  "mobile_typecheck": "passed",
+  "mobile_lint": "passed",
+  "windows_build_and_smoke_run": 40229465080,
+  "checks_run": 40230408664,
+  "android": "Signed APK/AAB v1.4.0, version code 7; installed on API 36.1 emulator; working-first, instruction entry, target confirmation, and demo acknowledgement verified.",
+  "ios": "v1.4.0 development archive/export; installed and launched on physical iPhone. No physical Google sign-in or remote AI execution tested.",
+  "desktop": "macOS v3.5.0 installed and collecting. macOS ad-hoc signed; Windows publisher-unsigned preview.",
+  "relay": "1.7.0 deployed; approved accounts only; billing and new managed pairing disabled.",
+  "remote_execution_limit": "Transport and adapter behavior tested with fixtures. No real AI task was submitted to an existing user session during QA.",
+  "android_sha256": "6ba478290f916f84351b8178745747eb25d7385940f79c444915077afb7bdbfc"
+}

@@ -1,4 +1,4 @@
-export const ACTIONS = ['focus', 'pause', 'resume', 'terminate'] as const;
+export const ACTIONS = ['focus', 'pause', 'resume', 'terminate', 'prompt'] as const;
 export type Action = typeof ACTIONS[number];
 export interface AgentSession {
   id: string; control_key?: string; kind: string; app: string; terminal: string;
@@ -71,6 +71,8 @@ function contextUsage(c:any):AgentSession['context_usage'] {
 export function action(value: any) {
   if (!value || !ACTIONS.includes(value.action) || !/^[a-f0-9-]{36}$/.test(value.request_id||'') ||
       !text(value.session_id,200) || !text(value.control_key,200) || !/^[a-f0-9-]{36}$/.test(value.device_id||'')) throw new Error('Invalid action');
+  if(value.action==='prompt'&&(typeof value.prompt!=='string'||!value.prompt.trim()||value.prompt.length>4000||/[\x00-\x08\x0b-\x1f\x7f]/.test(value.prompt)))throw new Error('Invalid instruction');
   return {action:value.action as Action,request_id:value.request_id as string,device_id:value.device_id as string,
-    session_id:text(value.session_id,200),control_key:text(value.control_key,200)};
+    session_id:text(value.session_id,200),control_key:text(value.control_key,200),
+    ...(value.action==='prompt'?{prompt:value.prompt as string}:{})};
 }
