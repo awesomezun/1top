@@ -49,3 +49,11 @@ class MailboxTests(unittest.TestCase):
   ctl.mailbox.enqueue(self.spec,self.rid,'Status?');self.spec['control_key']='changed';self.spec['status']='idle'
   with patch.object(ctl,'orca') as send:ctl.flush_mailbox();send.assert_not_called()
   self.assertEqual(ctl.mailbox.read(self.spec)[0]['status'],'not_delivered')
+
+ def test_undelivered_queue_can_still_be_read(self):
+  self.box.enqueue(self.spec,self.rid,'Status?');self.box.delivery(self.rid,'delivery_unconfirmed')
+  self.assertEqual(self.box.read(self.spec)[0]['status'],'delivery_unconfirmed')
+ def test_fast_reply_releases_resuming_marker(self):
+  ctl=Controller(Mock(),Mock());ctl.remember(self.spec,'resuming')
+  state={'sessions':[{**self.spec,'status':'idle','status_at':time.time()+1}]}
+  result=ctl.decorate(state);self.assertEqual(result['sessions'][0]['display_status'],'idle');self.assertNotIn('fixture',ctl.paused)

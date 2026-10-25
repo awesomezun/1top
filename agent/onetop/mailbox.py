@@ -114,7 +114,7 @@ class Mailbox:
             rows = [r for r in self.records if r['session_id'] == spec['id']][-10:]
             changed = False
             for row in rows:
-                if row['status'] in ('replied', 'queued', 'not_delivered'):
+                if row['status'] in ('replied', 'queued', 'not_delivered') or not row.get('path'):
                     continue
                 try:
                     path = Path(row['path']); stat = path.stat()

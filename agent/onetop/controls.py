@@ -109,7 +109,7 @@ class Controller:
                 s=dict(src);mark=self.paused.get(s['id']);s['display_status']=s.get('status','unknown')
                 if mark and mark['key']!=s.get('control_key'):
                     self.paused.pop(s['id'],None);mark=None;changed=True
-                if mark and s.get('status')=='working' and s.get('status_at',0)>mark['at']:
+                if mark and s.get('status_at',0)>mark['at'] and (s.get('status')=='working' or mark['phase']=='resuming' and s.get('status') in ('idle','interrupted')):
                     self.paused.pop(s['id'],None);mark=None;changed=True
                 if mark:
                     s['pause_state']=dict(mark)
