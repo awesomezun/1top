@@ -175,3 +175,44 @@ it('exports only context counters and rejects invalid component totals',()=>{
  input.sessions[0].context_usage.parts=[100,80,0];expect(snapshot(input).sessions[0].context_usage?.parts).toBeNull();
  input.sessions[0].context_usage.input_tokens=-1;expect(snapshot(input).sessions[0].context_usage).toBeNull();
 });
+
+describe('native mobile authentication',()=>{
+ const google='b'.repeat(30),mobile='1tm_'+'a'.repeat(64);
+ it('requires Google authentication and an approved account before storing a mobile credential',async()=>{
+  const challenge=await hash(mobile);
+  for(const token of [undefined,'c'.repeat(30)])expect((await fetch('/api/mobile/authorize',{challenge,platform:'iOS'},token)).status).not.toBe(200);
+  expect(await e.DB.prepare('SELECT * FROM mobile_sessions WHERE token_hash=?').bind(challenge).first()).toBeNull();
+  expect((await fetch('/api/mobile/authorize',{challenge,platform:'iOS'},google)).status).toBe(200);
+  const row=await e.DB.prepare('SELECT * FROM mobile_sessions WHERE token_hash=?').bind(challenge).first();
+  expect(row.user_id).toBe('b');expect(JSON.stringify(row)).not.toContain(mobile);
+  expect((await fetch('/api/devices',undefined,mobile)).status).toBe(200);
+ });
+ it('prevents replay, account rebinding, and chaining mobile credentials',async()=>{
+  const challenge=await hash(mobile);
+  expect((await fetch('/api/mobile/authorize',{challenge,platform:'Android'},'a'.repeat(30))).status).toBe(409);
+  expect((await e.DB.prepare('SELECT user_id FROM mobile_sessions WHERE token_hash=?').bind(challenge).first()).user_id).toBe('b');
+  expect((await fetch('/api/mobile/authorize',{challenge:await hash('another'),platform:'Android'},mobile)).status).not.toBe(200);
+ });
+ it('keeps mobile access scoped to its owner',async()=>{
+  const id=crypto.randomUUID();await e.DB.prepare('INSERT INTO devices VALUES(?,?,?,?,?,?,?,?)').bind(id,'a','Private fixture','Darwin',await hash(id),1,null,1).run();
+  const data:any=await(await fetch('/api/devices',undefined,mobile)).json();expect(data.devices.some((d:any)=>d.id===id)).toBe(false);
+  expect((await fetch('/api/action',{device_id:id,session_id:'session',control_key:'key',action:'terminate',request_id:crypto.randomUUID()},mobile)).status).toBe(404);
+ });
+ it('revokes outstanding tickets and active sockets on sign out',async()=>{
+  const issued:any=await(await fetch('/api/live-ticket',{},mobile)).json();
+  const opened=await worker.fetch(new Request('https://relay.test/api/live',{headers:{Origin:'https://1top.si',Upgrade:'websocket','Sec-WebSocket-Protocol':'1top, ticket.'+issued.ticket}}),e);
+  expect(opened.status).toBe(101);opened.webSocket!.accept();
+  const closed=new Promise<number>(resolve=>opened.webSocket!.addEventListener('close',event=>resolve(event.code),{once:true}));
+  const spare:any=await(await fetch('/api/live-ticket',{},mobile)).json();
+  expect((await fetch('/api/mobile/logout',{},mobile)).status).toBe(200);expect(await closed).toBe(4003);
+  expect(await e.DB.prepare('SELECT * FROM tickets WHERE hash=?').bind(await hash(spare.ticket)).first()).toBeNull();
+  expect((await fetch('/api/devices',undefined,mobile)).status).not.toBe(200);
+ });
+ it('expires credentials and caps an account at five mobile authorizations',async()=>{
+  const now=Math.floor(Date.now()/1000),expired='1tm_'+'e'.repeat(64);
+  await e.DB.prepare('INSERT INTO mobile_sessions VALUES(?,?,?,?,?)').bind(await hash(expired),'b','iOS',now-20,now-1).run();
+  expect((await fetch('/api/devices',undefined,expired)).status).not.toBe(200);
+  for(let i=1;i<=5;i++)expect((await fetch('/api/mobile/authorize',{challenge:String(i).repeat(64),platform:'Android'},google)).status).toBe(200);
+  expect((await fetch('/api/mobile/authorize',{challenge:'6'.repeat(64),platform:'Android'},google)).status).toBe(409);
+ });
+});

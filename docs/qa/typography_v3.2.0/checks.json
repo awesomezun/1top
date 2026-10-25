@@ -1,0 +1,25 @@
+{
+  "desktop_version": "3.2.0",
+  "site_version": "4.5.1",
+  "mobile_version": "1.1.1",
+  "checks": {
+    "swift_model": "pass: exact totals, grouping, area conservation, unknown/zero",
+    "web_maps": "pass",
+    "site_build": "pass",
+    "web_fonts": "loaded IBM Plex; wordmark letterSpacing normal",
+    "demo": "12 positive sessions plus 1 unknown; 1h total 1000000; all period/device sums match",
+    "small_tile_hover": "icon-library 5000 tokens 0.5%; full tool/app/model visible",
+    "videos": "all four readyState 4 without media errors",
+    "windows_ci_run": 40128969981,
+    "windows_installer_smoke": "pass",
+    "installed_macos_api": "version3.2.0; 38 sessions detected",
+    "android": "signed v2/v3; exact 1.1.1 APK installed and demo inspected",
+    "ios": "archive and registered-device development IPA export succeeded"
+  },
+  "limits": [
+    "Native installed menu automation could not read accessibility windows despite granted permissions; fixture rendered using actual SwiftUI views was visually inspected.",
+    "iOS public App Store/TestFlight distribution still requires Apple distribution permission. Physical iPhone execution not verified.",
+    "Static local dashboard footer still displays v3.0.1 although collector version is3.2.0.",
+    "OG is a generated raster following the font reference, not embedded-font typesetting."
+  ]
+}

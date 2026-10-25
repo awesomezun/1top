@@ -77,13 +77,13 @@ class ResourceSampler:
             if delta>0:host_cpu=round(max(0,min(100,100*(1-(idle-self.cpu_previous[1])/delta))),1)
         self.cpu_previous=(total,idle)
         memory=psutil.virtual_memory();swap=psutil.swap_memory()
-        disk_path='/System/Volumes/Data' if Path('/System/Volumes/Data').exists() else '/'
+        disk_path='/System/Volumes/Data' if Path('/System/Volumes/Data').exists() else Path.home().anchor
         disk=psutil.disk_usage(disk_path);diskio=psutil.disk_io_counters()
         interfaces=psutil.net_io_counters(pernic=True);stats=psutil.net_if_stats()
         net={}
         # en* is physical Ethernet/Wi-Fi on this Mac; omit VPN/bridge/loopback double counting.
         for name,value in interfaces.items():
-            if name.startswith('en') and stats.get(name) and stats[name].isup:
+            if (name.startswith('en') if platform.system()=='Darwin' else not any(x in name.lower() for x in ('loopback','vethernet','vpn','tunnel'))) and stats.get(name) and stats[name].isup:
                 prev=self.io_previous.get(name)
                 net[name]={'rx':counter_rate(value.bytes_recv,prev[0] if prev else None,dt),
                            'tx':counter_rate(value.bytes_sent,prev[1] if prev else None,dt)}
@@ -95,13 +95,13 @@ class ResourceSampler:
         network={'interfaces':list(net),'rx':sum(v['rx'] or 0 for v in net.values()) if dt and net else None,
                  'tx':sum(v['tx'] or 0 for v in net.values()) if dt and net else None}
         battery=psutil.sensors_battery()
-        host={'cpu':host_cpu,'cores':self.cores,'load':list(os.getloadavg()),
+        host={'cpu':host_cpu,'cores':self.cores,'load':list(os.getloadavg()) if hasattr(os,'getloadavg') else [],
               'memory':{'total':memory.total,'available':memory.available,'used':memory.total-memory.available,'percent':memory.percent},
               'swap':{'used':swap.used,'total':swap.total},
               'disk':{'path':disk_path,'total':disk.total,'free':disk.free,'percent':disk.percent,**io},
               'network':network,'battery':{'percent':battery.percent,'plugged':battery.power_plugged} if battery else None,
               'uptime':now-psutil.boot_time(),'process_count':len(rows),'unreadable_processes':denied,
-              'platform':platform.machine(),'gpu':None,'gpu_note':'이 Mac에서 GPU·온도 센서는 수집하지 않습니다.'}
+              'platform':platform.machine(),'os':platform.system(),'gpu':None,'gpu_note':'GPU·온도 센서는 수집하지 않습니다.'}
         self.history.append({'t':now,'cpu':host_cpu,'memory':memory.percent,'rx':network['rx'],'tx':network['tx']})
         top=sorted(rows.values(),key=lambda r:(r['cpu'] or 0,r['rss']),reverse=True)[:15]
         monitor=rows.get(os.getpid(),{})

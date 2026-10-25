@@ -15,7 +15,8 @@ export class AccountHub extends DurableObject<Env> {
       const id=u.searchParams.get('id')!;
       if(role==='device')for(const old of this.ctx.getWebSockets('device:'+id))old.close(4001,'New device connection');
       const pair=new WebSocketPair(),[client,server]=Object.values(pair);
-      this.ctx.acceptWebSocket(server,[role,role+':'+id]);
+      const mobile=u.searchParams.get('mobile');
+      this.ctx.acceptWebSocket(server,[role,role+':'+id,...(role==='browser'&&mobile?['mobile:'+mobile]:[])]);
       server.serializeAttachment({role,id,expires:Number(u.searchParams.get('expires')),name:u.searchParams.get('name')||'',platform:u.searchParams.get('platform')||'',allow_control:u.searchParams.get('control')==='1'} satisfies Attachment);
       if(role==='browser') {
         const records=await this.ctx.storage.list<StoredDevice>({prefix:'snapshot:'});
@@ -40,6 +41,12 @@ export class AccountHub extends DurableObject<Env> {
       try{sockets[0].send(JSON.stringify({type:'action',...cmd,expires_at:Date.now()+15000}));}
       catch{record.status='unconfirmed';await this.ctx.storage.put(key,record);return json(record,202);}
       return json(record,202);
+    }
+    if(path==='/mobile/revoke'&&request.method==='POST') {
+      const {hash}=await request.json() as {hash:string};
+      if(!/^[a-f0-9]{64}$/.test(hash))return json({error:'Invalid session'},400);
+      for(const ws of this.ctx.getWebSockets('mobile:'+hash))ws.close(4003,'Mobile session signed out');
+      return json({ok:true});
     }
     if(path==='/revoke'&&request.method==='POST') {
       const {id}=await request.json() as {id:string};

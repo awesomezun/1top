@@ -1,0 +1,22 @@
+{
+  "version": "1.2.2",
+  "asset": "cover.png",
+  "purpose": "1top.si Open Graph and social sharing image",
+  "generator": "OpenAI image generation edit",
+  "predecessor": "site/public/og/v1.2.1/cover.png",
+  "width": 1730,
+  "height": 909,
+  "bytes": 1452636,
+  "sha256": "924a34eba1126673c610bd89bfe807b690a900510132232f792457cb2556ce3d",
+  "change": {
+    "before": "Sessions · Tokens · Context",
+    "after": "Sessions · Tokens · Computers"
+  },
+  "visual_review": [
+    "Bottom secondary line reads Sessions · Tokens · Computers on a single line.",
+    "Large mint connected waveform and natural white 1top wordmark retain their placement.",
+    "Headline, URL, dark grid and right-side treemap composition retained."
+  ],
+  "fidelity_limit": "Generative raster edit; unchanged regions are visually retained but not claimed pixel-identical.",
+  "privacy": "No private session data or numerical usage claims."
+}

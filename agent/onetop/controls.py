@@ -1,5 +1,7 @@
 """Explicit, same-origin controls for individually verified CLI processes."""
 import hashlib
+import platform
+import psutil
 import json
 import os
 import signal
@@ -24,6 +26,9 @@ def target_key(spec):
 
 
 def process_start(pid):
+    if platform.system()=='Windows':
+        try:return time.strftime('%a %b %d %H:%M:%S %Y',time.localtime(psutil.Process(pid).create_time()))
+        except psutil.Error:return None
     try:
         raw=subprocess.check_output(['ps','-p',str(pid),'-o','lstart='],text=True,
                                     stderr=subprocess.DEVNULL,timeout=3)
@@ -172,7 +177,10 @@ class Controller:
                     result={'message':f"{terminal['title']} 터미널로 이동했습니다."}
                 elif spec.get('location',{}).get('app_path'):
                     app=spec['location']['app_path']
-                    subprocess.run(['/usr/bin/open','-a',app],check=True,timeout=5,capture_output=True)
+                    if platform.system()=='Windows':
+                        from .windows_discovery import focus_process
+                        if not focus_process(spec['pids'][0]):raise ActionError('Windows could not bring the host window forward. Open it from the taskbar.')
+                    else:subprocess.run(['/usr/bin/open','-a',app],check=True,timeout=5,capture_output=True)
                     result={'message':'Sent a request to bring the host application forward on that computer.'}
                 else:raise ActionError('The host application cannot be focused automatically.')
             else:

@@ -4,6 +4,7 @@ Only a user-initiated, CSRF-guarded local request can launch this flow. Scripts
 contain no credentials. A separate profile leaves existing CLI sessions alone.
 """
 import os
+import base64
 import re
 import shlex
 import shutil
@@ -12,11 +13,12 @@ import threading
 import time
 import uuid
 from pathlib import Path
+from .platform_support import data_directory, cli_command
 
 
 def managed_profiles_dir(home=None):
     home = home or Path.home()
-    data = os.environ.get('ONETOP_DATA', os.environ.get('AGENT_MONITOR_DATA', str(home/'Library/Application Support/1top')))
+    data = data_directory(home)
     return Path(data)/'accounts'
 
 
@@ -56,7 +58,7 @@ class AccountLogin:
             raise ActionError(('Claude Code' if kind == 'Claude' else 'Codex')+' CLI를 먼저 설치해 주세요.', 409)
         if kind == 'Claude':
             try:
-                result = subprocess.run([cli,'--version'],capture_output=True,text=True,timeout=5)
+                result = subprocess.run(cli_command(cli,'--version'),capture_output=True,text=True,timeout=5)
                 match = re.search(r'(\d+)\.(\d+)\.(\d+)',result.stdout)
                 if not match or tuple(map(int,match.groups())) < (2,1,310):
                     raise ValueError()
@@ -71,11 +73,20 @@ class AccountLogin:
                 raise ActionError('저장된 프로필이 많습니다. 계정 프로필 폴더를 확인해 주세요.',409)
             profile = parent/str(uuid.uuid4())
             profile.mkdir(mode=0o700)
-            script = profile/'Sign in to 1top.command'
-            script.write_text(login_script(kind,cli,profile));script.chmod(0o700)
             try:
-                subprocess.run(['/usr/bin/open','-a','Terminal',str(script)],check=True,timeout=8,
-                               stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                if os.name=='nt':
+                    quote=lambda x:"'"+str(x).replace("'","''")+"'"
+                    key='CLAUDE_CONFIG_DIR' if kind=='Claude' else 'CODEX_HOME'
+                    args=['auth','login','--claudeai'] if kind=='Claude' else ['-c','cli_auth_credentials_store="file"','login']
+                    command=cli_command(cli,*args)
+                    script='; '.join(["Remove-Item Env:ANTHROPIC_API_KEY,Env:ANTHROPIC_AUTH_TOKEN,Env:ANTHROPIC_BASE_URL,Env:OPENAI_API_KEY -ErrorAction SilentlyContinue",'$env:'+key+'='+quote(profile),'Set-Location '+quote(profile),'& '+' '.join(quote(x) for x in command)])
+                    encoded=base64.b64encode(script.encode('utf-16le')).decode()
+                    subprocess.Popen(['powershell.exe','-NoLogo','-NoProfile','-NoExit','-EncodedCommand',encoded],creationflags=subprocess.CREATE_NEW_CONSOLE)
+                else:
+                    script = profile/'Sign in to 1top.command'
+                    script.write_text(login_script(kind,cli,profile));script.chmod(0o700)
+                    subprocess.run(['/usr/bin/open','-a','Terminal',str(script)],check=True,timeout=8,
+                                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
             except (OSError,subprocess.SubprocessError):
                 raise ActionError('로그인 터미널을 열지 못했습니다. 다시 시도해 주세요.',500)
             self.last = time.monotonic()

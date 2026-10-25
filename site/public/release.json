@@ -1,1 +1,27 @@
-{"version":"2.4.1","signed":false,"notarized":false,"url":null,"status":"preparing"}
+{
+  "version": "3.3.0",
+  "status": "preview",
+  "signed": false,
+  "notarized": false,
+  "releases": "https://github.com/awesomezun/1top/releases/tag/v3.3.0",
+  "platforms": {
+    "macos": {
+      "architecture": "arm64",
+      "url": "https://github.com/awesomezun/1top/releases/download/v3.3.0/1top-3.3.0-macos-arm64.dmg"
+    },
+    "windows": {
+      "architecture": "x64",
+      "url": "https://github.com/awesomezun/1top/releases/download/v3.3.0/1top-3.3.0-windows-x64-setup.exe"
+    },
+    "android": {
+      "status": "preview",
+      "version": "1.2.0",
+      "signed": true,
+      "url": "https://github.com/awesomezun/1top/releases/download/mobile-v1.2.0/1top-1.2.0-android.apk",
+      "sha256": "0d1af57f3aee70b9d8277b44a2b4a3240e2ded9bd67466ae4af5a88cfcd9e483"
+    },
+    "ios": {
+      "status": "native-build-ready-store-distribution-pending"
+    }
+  }
+}

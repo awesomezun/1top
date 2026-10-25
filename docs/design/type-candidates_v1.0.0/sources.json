@@ -1,0 +1,13 @@
+{
+  "Manrope.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/Manrope%5Bwght%5D.ttf",
+  "Geist.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/geist/Geist%5Bwght%5D.ttf",
+  "IBMPlexSans.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsans/IBMPlexSans%5Bwdth%2Cwght%5D.ttf",
+  "IBMPlexSansKR-Regular.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsanskr/IBMPlexSansKR-Regular.ttf",
+  "IBMPlexSansKR-SemiBold.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsanskr/IBMPlexSansKR-SemiBold.ttf",
+  "PretendardVariable.woff2": "https://raw.githubusercontent.com/orioncactus/pretendard/main/packages/pretendard/dist/web/variable/woff2/PretendardVariable.woff2",
+  "Geist-OFL.txt": "https://raw.githubusercontent.com/google/fonts/main/ofl/geist/OFL.txt",
+  "Manrope-OFL.txt": "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/OFL.txt",
+  "IBMPlexSans-OFL.txt": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsans/OFL.txt",
+  "IBMPlexSansKR-OFL.txt": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsanskr/OFL.txt",
+  "Pretendard-OFL.txt": "https://raw.githubusercontent.com/orioncactus/pretendard/main/LICENSE"
+}

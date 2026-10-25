@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "1top",
+    "slug": "onetop",
+    "version": "1.2.0",
+    "scheme": "onetop",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "si.onetop.mobile",
+      "buildNumber": "4",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "appleTeamId": "2DY8KQ6H5F"
+    },
+    "android": {
+      "package": "si.onetop.mobile",
+      "versionCode": 4,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0d1218"
+      },
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-router",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/IBMPlexSansKR-Regular.ttf",
+            "./assets/fonts/IBMPlexSansKR-Medium.ttf",
+            "./assets/fonts/IBMPlexSansKR-SemiBold.ttf",
+            "./assets/fonts/IBMPlexSansKR-Bold.ttf"
+          ]
+        }
+      ]
+    ],
+    "extra": {
+      "website": "https://1top.si"
+    }
+  }
+}

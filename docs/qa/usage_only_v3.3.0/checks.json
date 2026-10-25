@@ -1,0 +1,41 @@
+{
+  "desktop_version": "3.3.0",
+  "site_version": "4.6.0",
+  "mobile_version": "1.2.0",
+  "local_live": {
+    "version": "3.3.0",
+    "host_cards_parent": "systemView",
+    "context_panels": 0
+  },
+  "web_demo": {
+    "context_panels": 0,
+    "session_tiles": 12,
+    "app_tiles": 5,
+    "usage_grouping": "passed",
+    "responsive_no_document_overflow": "390px and 1440px emulator viewport checked"
+  },
+  "android": {
+    "release_install": "passed",
+    "signature_v2_v3": true,
+    "usage_period_10m_24h": "passed",
+    "group_app_session": "passed",
+    "tile_details": "310000 tokens and 55.36 percent",
+    "session_controls_retained": true,
+    "context_panels_removed": true,
+    "codex_pro_demo_windows": [
+      "Weekly"
+    ]
+  },
+  "ios": {
+    "archive": "passed",
+    "development_export": "passed",
+    "physical_phone_runtime": "not verified",
+    "store_distribution": "pending"
+  },
+  "ci": {
+    "checks_run": 40220931147,
+    "windows_run": 40220931150,
+    "conclusion": "success"
+  },
+  "test_scope": "Source and UI changes only; no real AI session controls executed."
+}

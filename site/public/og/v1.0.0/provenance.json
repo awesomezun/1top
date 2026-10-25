@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "asset": "cover.png",
+  "purpose": "Open Graph and social sharing image for 1top.si",
+  "generator": "OpenAI image generation tool",
+  "width": 1730,
+  "height": 909,
+  "aspect_ratio": 1.90319,
+  "sha256": "fef8f0f94eadedf5809d87059540f027083a898adbafdb2235958786c693c526",
+  "bytes": 1289023,
+  "headline": "Your AI work. In view.",
+  "secondary": "Sessions · Tokens · Context",
+  "privacy": "Original generated graphic. No private session data or numerical usage claims.",
+  "visual_review": "Wordmark, headline, secondary line, site URL, treemap motif and safe margins checked in generated output.",
+  "design": "Near-black navy, fine grid, mint/slate-blue/amber; flat abstract token treemap."
+}

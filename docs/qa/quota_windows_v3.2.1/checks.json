@@ -1,0 +1,38 @@
+{
+  "version": "3.2.1",
+  "account_tests": 16,
+  "native_model_checks": "passed",
+  "macos_live": {
+    "version": "3.2.1",
+    "codex_pro_windows": [
+      "주간"
+    ],
+    "codex_team_windows": [
+      "5H",
+      "주간"
+    ],
+    "pro_card_spans_full_width": true
+  },
+  "remote_export": "weekly-only list preserved",
+  "web_demo": {
+    "Codex Pro": [
+      "Weekly"
+    ],
+    "Claude Max": [
+      "5H",
+      "Weekly"
+    ]
+  },
+  "windows_ci": {
+    "run": 40218709448,
+    "status": "success"
+  },
+  "checks_ci": {
+    "run": 40218709440,
+    "status": "success"
+  },
+  "site_version": "4.5.2",
+  "recording": "Synthetic account fixture with actual SwiftUI renderer; live credentials not captured",
+  "official_reference": "https://help.openai.com/en/articles/20001516-managing-usage-with-gpt-6-astra-in-work-and-codex",
+  "policy": "Render recognized provider-reported windows, not a hardcoded Pro exemption. Preserve unknown duration, expired percentages and cached query failures."
+}
