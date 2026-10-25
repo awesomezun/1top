@@ -11,6 +11,7 @@ import threading
 import time
 import secrets
 import psutil
+import platform
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,10 +22,11 @@ from .usage import session_usage, window_usage, WINDOWS
 from .discovery import inventory, context, applications, orca_executable
 from . import __version__
 from .context_usage import request_context, stored_context
+from .platform_support import data_directory
 
 BASE = Path(__file__).resolve().parent
 HOME = Path.home()
-DATA = Path(os.environ.get('ONETOP_DATA',os.environ.get('AGENT_MONITOR_DATA',str(HOME/'Library/Application Support/1top'))))
+DATA = data_directory()
 KINDS = ['Claude', 'Codex', 'GLM', 'Antigravity', 'Aside']
 ZERO = [0, 0, 0, 0]  # fresh input, cache read, cache write, output
 
@@ -300,6 +302,9 @@ class Collector:
         return self.process_cache[pid]
 
     def discover(self):
+        if platform.system()=='Windows':
+            from .windows_discovery import discover
+            return discover(self)
         processes = self.processes()
         self.process_cache = {k:v for k,v in self.process_cache.items() if k in processes}
         specs, counts = [], collections.Counter()
@@ -709,10 +714,17 @@ class Handler(BaseHTTPRequestHandler):
             snapshot=self.server.controller.decorate(snapshot)
             data=json.dumps({**snapshot,'action_token':self.server.action_token},ensure_ascii=False).encode()
             mime='application/json; charset=utf-8'
-        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/maps.css','/benchmark.json'):
+        elif route=='/api/updates':
+            self.json_response(200,getattr(self.server,'updates',None).value if getattr(self.server,'updates',None) else {});return
+        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/maps.css','/typography.css','/benchmark.json'):
             name='index.html' if route=='/' else route[1:]
             data=(BASE/'dist'/name).read_bytes()
             mime={'html':'text/html','js':'application/javascript','css':'text/css','json':'application/json'}[name.rsplit('.',1)[1]]+'; charset=utf-8'
+        elif route in {f'/fonts/ibm-plex/v1.0.0/{name}.woff2' for name in (
+            'IBMPlexSans', 'IBMPlexSansKR-Regular', 'IBMPlexSansKR-Medium',
+            'IBMPlexSansKR-SemiBold', 'IBMPlexSansKR-Bold') }:
+            data=(BASE/'dist'/route[1:]).read_bytes()
+            mime='font/woff2'
         elif route=='/health':
             data=b'{"ok":true,"version":"1.0.0"}';mime='application/json'
         else:self.send_error(404);return

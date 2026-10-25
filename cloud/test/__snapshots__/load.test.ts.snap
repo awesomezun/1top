@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`measures isolated hubs with concurrent live viewers 1`] = `
+{
+  "account_isolation": true,
+  "accounts": 25,
+  "devices": 50,
+  "environment": "local workerd; not production capacity or invoice",
+  "max_ms": 38,
+  "mean_input_bytes": 4283.962,
+  "mean_ms": 16.662,
+  "p95_ms": 29,
+  "sessions_per_device": 30,
+  "snapshots": 500,
+  "viewers": 25,
+}
+`;

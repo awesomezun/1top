@@ -1,5 +1,6 @@
 """Outbound-only cloud connection. No inbound ports exposed to the network."""
 import json,os,platform,secrets,socket,threading,time,urllib.request,urllib.error,ssl,webbrowser,subprocess
+from urllib.parse import urlsplit
 from pathlib import Path
 import certifi
 import websocket
@@ -16,11 +17,25 @@ def open_url(url):
     else:webbrowser.open(url)
 
 
-def request(path,payload):
+def relay_origin(value):
+    parsed=urlsplit(value)
+    if (parsed.scheme!='https' or not parsed.hostname or '.' not in parsed.hostname or
+        parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in ('','/') or
+        parsed.port not in (None,443)):
+        raise ValueError('Use the HTTPS origin of your relay, without a path or credentials.')
+    return 'https://'+parsed.hostname.lower()
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self,*args,**kwargs):
+        raise ValueError('Relay redirects are not allowed.')
+
+
+def request(path,payload,relay=RELAY):
     raw=json.dumps(payload).encode()
-    req=urllib.request.Request(RELAY+path,data=raw,headers={'Content-Type':'application/json','User-Agent':'1top/'+__version__},method='POST')
+    req=urllib.request.Request(relay_origin(relay)+path,data=raw,headers={'Content-Type':'application/json','User-Agent':'1top/'+__version__},method='POST')
     try:
-        with urllib.request.urlopen(req,timeout=15,context=SSL) as r:return r.status,json.load(r)
+        with urllib.request.build_opener(NoRedirect(),urllib.request.HTTPSHandler(context=SSL)).open(req,timeout=15) as r:return r.status,json.load(r)
     except urllib.error.HTTPError as e:
         try:return e.code,json.load(e)
         except (ValueError,UnicodeDecodeError):return e.code,{'error':'Connection service returned HTTP '+str(e.code)+'. Please try again later.'}
@@ -71,28 +86,34 @@ def export_snapshot(state):
 
 
 class CloudLink:
-    def __init__(self,collector,controller,data_dir):
+    def __init__(self,collector,controller,data_dir,relay=None):
         self.collector=collector;self.controller=controller;self.data_dir=data_dir
         self.config_file=data_dir/'device.json';self.receipt_file=data_dir/'remote-receipts.json'
         self.stop=threading.Event();self.action_lock=threading.Lock();self.ws=None
         self.status='Not connected'
         try:self.config=json.loads(self.config_file.read_text())
         except (OSError,ValueError):self.config=None
+        saved=(self.config or {}).get('relay',RELAY)
+        self.relay=relay_origin(relay or saved)
+        if self.config and self.relay!=saved:self.config=None
         try:self.receipts=json.loads(self.receipt_file.read_text())
         except (OSError,ValueError):self.receipts={}
 
     def pair(self,open_browser=True):
-        code,result=request('/api/pair/start',{'name':socket.gethostname().removesuffix('.local'),'platform':platform.system()})
+        code,result=request('/api/pair/start',{'name':socket.gethostname().removesuffix('.local'),'platform':platform.system()},self.relay)
         if code!=200:raise RuntimeError(result.get('error','Could not start connection'))
-        url=result['verification_uri_complete'];self.status='Waiting for Google sign-in'
+        url=result['verification_uri_complete']
+        verify=urlsplit(url)
+        if verify.scheme!='https' or verify.netloc!='1top.si' or verify.path!='/connect':raise RuntimeError('Unexpected sign-in address')
+        self.status='Waiting for Google sign-in'
         if open_browser:open_url(url)
         deadline=time.monotonic()+result['expires_in']
         while not self.stop.wait(result['interval']) and time.monotonic()<deadline:
-            status,data=request('/api/pair/poll',{'device_code':result['device_code']})
+            status,data=request('/api/pair/poll',{'device_code':result['device_code']},self.relay)
             if status==202:continue
             if status==200:
                 # The relay origin is pinned; never accept a credential destination supplied in a response.
-                self.config={'device_id':data['device_id'],'device_token':data['device_token']}
+                self.config={'device_id':data['device_id'],'device_token':data['device_token'],'relay':self.relay}
                 save_private(self.config_file,self.config);return
             if status==429:continue
             raise RuntimeError(data.get('error','Connection expired'))
@@ -131,12 +152,12 @@ class CloudLink:
         delay=1
         while not self.stop.is_set() and self.config:
             try:
-                self.ws=websocket.create_connection(RELAY.replace('https://','wss://')+'/api/device/socket',
+                self.ws=websocket.create_connection(self.relay.replace('https://','wss://')+'/api/device/socket',
                     header={'Authorization':'Bearer '+self.config['device_token'],'User-Agent':'1top/'+__version__},timeout=3,
-                    suppress_origin=True,sslopt={'ca_certs':certifi.where()})
-                self.status='Connected';delay=1;last=0
+                    suppress_origin=True,redirect_limit=0,sslopt={'ca_certs':certifi.where()})
+                self.status='Connected';delay=1;last=0;interval=60
                 while not self.stop.is_set():
-                    if time.monotonic()-last>=3:
+                    if time.monotonic()-last>=interval:
                         with self.collector.lock:state=self.collector.snapshot
                         if state.get('ready'):
                             payload=export_snapshot(self.controller.decorate(state))
@@ -147,6 +168,9 @@ class CloudLink:
                         if not raw:break
                         if raw=='pong':continue
                         message=json.loads(raw)
+                        if message.get('type')=='report_policy':
+                            interval=3 if message.get('interval')==3 else 60
+                            if interval==3:last=0
                         if message.get('type')=='action':threading.Thread(target=self.command,args=(message,),daemon=True).start()
                     except websocket.WebSocketTimeoutException:continue
             except websocket.WebSocketBadStatusException as e:

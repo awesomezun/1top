@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 @main struct ModelChecks {
     static func main() throws {
         let data = """
@@ -16,6 +17,24 @@ import Foundation
         model.connected=false;precondition(!model.fresh)
         model.perform("pause",session:aside);precondition(model.messageIsError && !model.busy)
         precondition(DesktopFormat.number(nil)=="—" && DesktopFormat.number(0)=="0")
+        let map = DesktopUsageMap(sessions:model.sessions, period:"1h")
+        precondition(map.total == 4 && map.reported == 1 && map.unknown == 1 && map.zero == 0)
+        precondition(DesktopUsageMap(sessions:model.sessions, period:"10m").unknown == 2)
+        var samples: [DesktopSession] = []
+        for i in 0..<12 {
+            var row = aside; row.id = "row-\(i)"
+            row.usage = DesktopSession.Usage(rate:0,windows:["1h":[Double(i),0,0,0]])
+            samples.append(row)
+        }
+        let grouped = DesktopUsageMap(sessions:samples,period:"1h")
+        precondition(grouped.tiles.count == 8 && grouped.total == 66 && grouped.zero == 1)
+        precondition(grouped.tiles.reduce(0) { $0 + $1.value } == 66)
+        let placed = grouped.layout(in:CGRect(x:0,y:0,width:410,height:100))
+        precondition(abs(placed.reduce(0) { $0 + $1.rect.width * $1.rect.height } - 41000) < 0.001)
+        for tile in placed {
+            precondition(abs(tile.rect.width * tile.rect.height / 41000 - tile.tile.value / 66) < 0.000001)
+        }
+        precondition(grouped.layout(in:.zero).isEmpty)
         print("Desktop model checks passed: nullable usage, freshness, accounts, safe capabilities, no offline actions.")
     }
 }

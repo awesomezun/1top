@@ -27,7 +27,7 @@ function actions(s){
  const list=[['focus','↗',identified&&!!(s.orca_terminal||s.location?.app_path),'실행 앱·터미널 바로가기'],paused?['resume','재개',identified&&!!s.orca_terminal&&s.input_verified!==false&&stopped,'이어서 작업하는 새 요청 보내기']:['pause','일시정지',canPause&&!resuming,'현재 작업 중단 후 세션 보존'],['terminate','정지',s.kind!=='Aside'&&identified&&(stopped||canPause)&&!resuming,'해당 CLI 프로세스 종료']];
  return `<div class="session-actions">${list.map(([a,label,enabled,hint])=>`<button class="action-button ${a}" data-action="${a}" data-target="${esc(s.id)}" ${!enabled||!fresh||actionBusy?'disabled':''} title="${esc(enabled?hint:'세션 연결 또는 작업 상태 확인 필요')}" aria-label="${esc((s.orca_terminal?.title||s.project)+' · '+hint)}">${label}</button>`).join('')}</div>`;
 }
-function selectView(next){view=next;$('pageTitle').textContent=({sessions:'세션',maps:'사용량 · 컨텍스트 맵',operations:'활동',system:'컴퓨터 리소스',benchmark:'측정 정보'})[next];for(const v of ['sessions','maps','operations','system','benchmark'])$(v+'View').hidden=v!==view;document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));requestAnimationFrame(()=>{drawCharts();renderMaps();});}
+function selectView(next){view=next;$('pageTitle').textContent=({sessions:'세션',maps:'사용량 비율 맵',operations:'활동',system:'컴퓨터 리소스',benchmark:'측정 정보'})[next];for(const v of ['sessions','maps','operations','system','benchmark'])$(v+'View').hidden=v!==view;document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));requestAnimationFrame(()=>{drawCharts();renderMaps();});}
 function periodMeta(){return data?.period_usage?.windows.find(w=>w.key===selectedPeriod);}
 function periodVector(w){const p=data.period_usage;return provider==='all'?(p.known_kinds.length?w.tokens:null):p.known_kinds.includes(provider)?(w.by_kind[provider]||[0,0,0,0]):null;}
 function recordedDuration(seconds){const m=Math.floor(seconds/60);return m<1?'1분 미만':m<60?m+'분':Math.floor(m/60)+'시간'+(m%60?' '+m%60+'분':'');}
@@ -43,6 +43,8 @@ function renderPeriods(){
 }
 function render(){
  if(!data?.ready)return;
+ $('localVersion').textContent='LOCAL · v'+data.version;
+ $('footerVersion').textContent='1top '+data.version+' · 이 컴퓨터의 로컬 데이터';
  const scoped=data.sessions.filter(s=>provider==='all'||s.kind===provider),known=scoped.filter(s=>s.tokens!==null);
  const toolKinds=[...new Set(data.sessions.map(s=>s.kind))].filter(k=>k!=='Aside');
  $('providers').innerHTML=toolKinds.map(k=>`<button class="provider-nav ${provider===k?'active':''}" data-provider="${esc(k)}" aria-pressed="${provider===k}">${dot(k)}<span>${esc(kindName(k))}</span><small>${data.sessions.filter(s=>s.kind===k).length}</small></button>`).join('');
@@ -102,7 +104,7 @@ function renderBenchmark(){
  if(benchmark)$('benchmarkNumbers').innerHTML=`<table><thead><tr><th>버전</th><th>평균 CPU</th><th>평균 RSS</th><th>API 평균 응답</th><th>응답 크기</th></tr></thead><tbody>${benchmark.map(b=>`<tr><td>v${esc(b.version)}</td><td>${pct(b.cpu_one_core_mean)}</td><td>${bytes(b.rss_mean_bytes)}</td><td>${b.api_ms_mean.toFixed(1)} ms</td><td>${bytes(b.api_bytes_mean)}</td></tr>`).join('')}</tbody></table>`;
 }
 function canvasBase(id){const canvas=$(id);if(!canvas||canvas.closest('[hidden]'))return null;const r=canvas.getBoundingClientRect();if(!r.width||!r.height)return null;const dpr=devicePixelRatio||1;canvas.width=Math.round(r.width*dpr);canvas.height=Math.round(r.height*dpr);const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);return {ctx,w:r.width,h:r.height,l:58,t:10,b:30,r:9};}
-function axes(c,max,unit=''){const {ctx,w,h,l,t,b,r}=c;ctx.font='13px -apple-system,sans-serif';for(let i=0;i<4;i++){const y=t+(h-t-b)*i/3;ctx.strokeStyle='#272a30';ctx.beginPath();ctx.moveTo(l,y+.5);ctx.lineTo(w-r,y+.5);ctx.stroke();ctx.fillStyle='#9198a5';ctx.textAlign='left';ctx.fillText(fmt(max*(1-i/3))+unit,0,y+3);}}
+function axes(c,max,unit=''){const {ctx,w,h,l,t,b,r}=c;ctx.font='13px "IBM Plex Sans", "IBM Plex Sans KR", sans-serif';for(let i=0;i<4;i++){const y=t+(h-t-b)*i/3;ctx.strokeStyle='#272a30';ctx.beginPath();ctx.moveTo(l,y+.5);ctx.lineTo(w-r,y+.5);ctx.stroke();ctx.fillStyle='#9198a5';ctx.textAlign='left';ctx.fillText(fmt(max*(1-i/3))+unit,0,y+3);}}
 function tokenChart(id,events,minutes){const c=canvasBase(id);if(!c)return;const end=Math.floor(Date.now()/60000)*60+60,start=end-minutes*60,step=minutes>300?900:minutes>60?300:60,n=(end-start)/step,series=[...new Set(events.map(e=>e.kind))],bins=Array.from({length:n},()=>Object.fromEntries(series.map(k=>[k,0])));for(const e of events){const i=Math.floor((e.t-start)/step);if(i>=0&&i<n)bins[i][e.kind]+=e.n??(e.fresh+e.cached+e.written+e.output);}const max=Math.max(1,...bins.map(b=>Object.values(b).reduce((a,v)=>a+v,0)));axes(c,max);const {ctx,w,h,l,t,b,r}=c,bw=(w-l-r)/n;bins.forEach((v,i)=>{let y=h-b;for(const k of series){const bh=v[k]/max*(h-t-b);ctx.fillStyle=colors[k]||'#8b939f';ctx.globalAlpha=.86;ctx.fillRect(l+i*bw+1,y-bh,Math.max(1,bw-2),bh);y-=bh;}ctx.globalAlpha=1;});ctx.fillStyle='#9198a5';for(let i=0;i<4;i++){ctx.textAlign=i===0?'left':i===3?'right':'center';ctx.fillText(time(start+(end-start)*i/3),l+(w-l-r)*i/3,h-5);}}
 function drawCharts(){
  if(!data?.ready)return;
@@ -115,8 +117,7 @@ function detailPeriods(s){const p=data.period_usage;if(!p)return '';return `<sec
 function renderDetail(id){
  const s=data.sessions.find(s=>s.id===id);if(!s){$('detailContent').innerHTML='<h2>세션 연결이 종료되었습니다.</h2>';return;}const t=s.tokens,r=s.resources,u=s.usage||{};
  const entry=(a,b)=>`<div><dt>${a}</dt><dd>${esc(b??'확인 불가')}</dd></div>`;
- $('detailContent').innerHTML=`${status(s)}<h2 id="detailTitle">${esc(s.orca_terminal?.title||s.location?.app||'실행 위치 미확인')}</h2><p class="detail-project">${esc(s.title)}<br>${esc(s.cwd)}</p><div class="detail-actions">${actions(s)}</div><section class="detail-context"><h3>컨텍스트 맵 · 마지막 요청 입력</h3><div class="context-summary">${OneTopMaps.contextMarkup(OneTopMaps.context(s))}</div><div id="detailContextMap" class="map-surface"></div><p class="map-foot">입력 기준 구성 · 파일/시스템별 내역 미보고 · 출력·예약 영역 제외</p></section>${detailPeriods(s)}<div class="detail-metrics">${['새 입력','캐시 읽기','캐시 쓰기','출력'].map((label,i)=>`<div class="detail-metric"><span>${label} tokens</span><b title="${exact(t?.[i])}">${fmt(t?.[i])}</b></div>`).join('')}</div><h3 class="detail-chart-title">최근 1시간 토큰 흐름</h3><div class="chart-wrap"><canvas id="detailChart" role="img" aria-label="이 세션의 최근 1시간 토큰 보고량"></canvas></div><dl class="detail-list">${entry('세션 누적',t?exact(total(t))+' tokens':null)}${entry('최근 60초',u.last_minute?exact(total(u.last_minute))+' tokens · '+fmt(u.rate)+' tokens/s':null)}${entry('최근 5분',u.last_five_minutes?exact(total(u.last_five_minutes))+' tokens':null)}${entry('최근 출력 속도',u.output_rate!=null?fmt(u.output_rate)+' output tokens/s · 60초 평균':null)}${entry('CLI 자원',r?pct(r.cpu)+' CPU · '+bytes(r.rss)+' RSS · '+r.count+'개 프로세스':null)}${entry('모델',s.model||null)}${entry('터미널 연결',s.terminal_note)}${entry('세션 ID',s.id)}${entry('CLI PID',s.pids.length===1?s.pids[0]:'개별 프로세스 미확인')}${entry('최근 사용량 보고',s.last_usage?new Date(s.last_usage*1000).toLocaleString('ko-KR'):null)}${entry('최근 요청 입력',s.request_input!=null?exact(s.request_input)+' tokens':null)}${s.context_size?entry('컨텍스트 크기',exact(s.context_size)+' tokens'):''}${entry('사용량 출처',s.path||'해당 세션 기록 미확인')}</dl>${s.note?`<p class="detail-note">${esc(s.note)}</p>`:''}<p class="detail-note">누적값과 최근 소비 속도에는 반복 입력과 캐시가 포함됩니다. 실제 청구액이나 모델의 순간 생성 속도를 뜻하지 않습니다.</p>`;
- OneTopMaps.draw($('detailContextMap'),OneTopMaps.context(s).items,{empty:'이 세션의 입력 사용량을 확인하지 못했습니다.'});
+ $('detailContent').innerHTML=`${status(s)}<h2 id="detailTitle">${esc(s.orca_terminal?.title||s.location?.app||'실행 위치 미확인')}</h2><p class="detail-project">${esc(s.title)}<br>${esc(s.cwd)}</p><div class="detail-actions">${actions(s)}</div>${detailPeriods(s)}<div class="detail-metrics">${['새 입력','캐시 읽기','캐시 쓰기','출력'].map((label,i)=>`<div class="detail-metric"><span>${label} tokens</span><b title="${exact(t?.[i])}">${fmt(t?.[i])}</b></div>`).join('')}</div><h3 class="detail-chart-title">최근 1시간 토큰 흐름</h3><div class="chart-wrap"><canvas id="detailChart" role="img" aria-label="이 세션의 최근 1시간 토큰 보고량"></canvas></div><dl class="detail-list">${entry('세션 누적',t?exact(total(t))+' tokens':null)}${entry('최근 60초',u.last_minute?exact(total(u.last_minute))+' tokens · '+fmt(u.rate)+' tokens/s':null)}${entry('최근 5분',u.last_five_minutes?exact(total(u.last_five_minutes))+' tokens':null)}${entry('최근 출력 속도',u.output_rate!=null?fmt(u.output_rate)+' output tokens/s · 60초 평균':null)}${entry('CLI 자원',r?pct(r.cpu)+' CPU · '+bytes(r.rss)+' RSS · '+r.count+'개 프로세스':null)}${entry('모델',s.model||null)}${entry('터미널 연결',s.terminal_note)}${entry('세션 ID',s.id)}${entry('CLI PID',s.pids.length===1?s.pids[0]:'개별 프로세스 미확인')}${entry('최근 사용량 보고',s.last_usage?new Date(s.last_usage*1000).toLocaleString('ko-KR'):null)}${entry('최근 요청 입력',s.request_input!=null?exact(s.request_input)+' tokens':null)}${s.context_size?entry('컨텍스트 크기',exact(s.context_size)+' tokens'):''}${entry('사용량 출처',s.path||'해당 세션 기록 미확인')}</dl>${s.note?`<p class="detail-note">${esc(s.note)}</p>`:''}<p class="detail-note">누적값과 최근 소비 속도에는 반복 입력과 캐시가 포함됩니다. 실제 청구액이나 모델의 순간 생성 속도를 뜻하지 않습니다.</p>`;
 }
 function prepareAction(action,id){
  const s=data?.sessions.find(s=>s.id===id);if(!s||actionBusy)return;
@@ -156,12 +157,13 @@ fetch('/benchmark.json').then(r=>r.ok?r.json():null).then(x=>{benchmark=x;if(dat
 function renderOperations(){
  const o=data?.operations;if(!o)return;
  const active=o.goals.filter(g=>g.status==='active').length;
- $('operationSummary').innerHTML=[['저장된 활성 Goal',o.goal_source_status==='reported'?active:'—','현재 세션 연결 여부는 아래에서 별도 표시'],['설치 확인 Skills',o.skills.length,'활성화·작업 성공 여부는 별도'],['관측된 호출 / 실행',o.events.length,'최근 로그 일부 · 전체 이력 아님'],['Loop 다음 실행','미확인','예약 엔진의 현재 상태를 추정하지 않음']].map(([a,b,c])=>`<article class="fact"><span>${a}</span><b>${b}</b><small>${c}</small></article>`).join('');
+ $('operationSummary').innerHTML=[['저장된 활성 Goal',o.goal_source_status==='reported'?active:'—','현재 세션 연결 여부는 아래에서 별도 표시'],['설치 확인 Skills',o.skills.length,'활성화·작업 성공 여부는 별도'],['관측된 호출 / 실행',o.events.length,'최근 로그 일부 · 전체 이력 아님'],['저장된 예약',(o.schedules||[]).length,'Claude Code · 세션 전용 예약은 별도']].map(([a,b,c])=>`<article class="fact"><span>${a}</span><b>${b}</b><small>${c}</small></article>`).join('');
  const expandedGoals=new Set([...document.querySelectorAll('[data-goal][open]')].map(e=>e.dataset.goal));
  const goalLabels={active:'활성',complete:'완료',paused:'일시정지',blocked:'차단됨',cleared:'해제됨',failed:'달성 불가',budget_limit:'예산 한도',usage_limit:'사용 한도'};
  $('goalRows').innerHTML=o.goals.length?o.goals.map(g=>`<article class="goal-row"><div><span class="status ${g.status==='active'?'working':''}">${esc(goalLabels[g.status]||g.status)}</span><details class="goal-objective" data-goal="${esc(g.goal_id)}" ${expandedGoals.has(g.goal_id)?'open':''}><summary>${esc(g.objective.length>180?g.objective.slice(0,180)+'…':g.objective)}</summary><p>${esc(g.objective)}</p></details><p>${esc(g.runtime)} · ${esc(g.location)} · ${g.evidence==='last_observed'?'마지막 관측 상태 · ':''}${g.session_connected?'현재 세션 연결됨':'저장된 상태 · 현재 실행 연결 미확인'}</p></div><div class="goal-metrics"><strong>${fmt(g.tokens_used)}<small> tokens</small></strong><span>예산 ${g.token_budget==null?'미설정':fmt(g.token_budget)}</span><span>사용 시간 ${g.time_used_seconds==null?'미보고':recordedDuration(g.time_used_seconds)}</span></div></article>`).join(''):`<div class="empty">${o.goal_source_status==='reported'?'확인된 Goal 기록이 없습니다. Claude Code는 최근 로그 범위만 관측합니다.':'Goal 저장소를 읽을 수 없습니다.'}</div>`;
- const labels={invoked:'호출 관측',tool_returned:'도구 응답 확인',tool_error:'도구 오류',fire_observed:'예약 실행 관측'};
- $('operationEvents').innerHTML=o.events.length?o.events.slice(0,30).map(e=>`<div class="event-row"><span class="event-type">${e.category==='skill'?'SKILL':'LOOP'}</span><div><strong>${esc(e.name)}</strong><small>${esc(e.location)}${e.schedule?' · '+esc(e.schedule):''}</small></div><span>${esc(labels[e.state]||e.state)}</span><time>${e.observed_at?new Date(e.observed_at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'시각 미보고'}</time></div>`).join(''):'<div class="empty">최근 로그 범위에서 확인된 호출이 없습니다. 실행하지 않았다는 뜻은 아닙니다.</div>';
+ const labels={read_requested:'Skill 읽기 요청',stored:'예약 파일에 저장됨',invoked:'호출 관측',tool_returned:'도구 응답 확인',tool_error:'도구 오류',fire_observed:'예약 실행 관측'};
+ const activity=[...(o.schedules||[]).map(x=>({...x,category:'loop'})),...o.events];
+ $('operationEvents').innerHTML=activity.length?activity.slice(0,50).map(e=>`<div class="event-row"><span class="event-type">${e.category==='skill'?'SKILL':'LOOP'}</span><div><strong>${esc(e.name)}</strong><small>${esc(e.runtime||'Claude Code')} · ${esc(e.location)}${e.schedule?' · '+esc(e.schedule):''}</small></div><span>${esc(labels[e.state]||e.state)}</span><time>${e.observed_at?new Date(e.observed_at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'시각 미보고'}</time></div>`).join(''):'<div class="empty">최근 로그 범위에서 확인된 호출이 없습니다. 실행하지 않았다는 뜻은 아닙니다.</div>';
  renderSkills();
 }
 function renderSkills(){
@@ -188,7 +190,7 @@ $('accountDialog').addEventListener('click',async e=>{
  finally{accountLoginBusy=false;buttons.forEach(x=>x.disabled=false);}
 });
 
-let contextSessionId='',usageMapSelectionId='';
+let usageMapSelectionId='';
 function renderMaps(){
  if(!data?.ready||view!=='maps')return;
  const sessions=data.sessions.filter(s=>provider==='all'||s.kind===provider);
@@ -196,22 +198,14 @@ function renderMaps(){
  const result=OneTopMaps.usage(sessions,selectedPeriod,$('mapGroup').value);
  $('mapTotal').innerHTML=fmt(result.total)+' <small>tokens · 최근 '+(periodMeta()?.label||selectedPeriod)+'</small>';
  $('mapCoverage').textContent=result.known+'/'+sessions.length+'개 확인 · 미보고 '+result.unknown+'개 · 0 사용량 '+result.zero+'개'+(periodMeta()?.partial?' · 일부 기간만 기록':'');
- const selection=item=>$('mapSelection').textContent=item?item.label+' · '+exact(item.value)+' tokens · '+item.share.toFixed(1)+'%':'세션 블록을 선택하면 오른쪽 컨텍스트가 바뀝니다.';
+ const selection=item=>$('mapSelection').textContent=item?item.label+' · '+exact(item.value)+' tokens · '+item.share.toFixed(1)+'%':'영역을 선택하면 세션 이름과 사용량을 확인할 수 있습니다.';
  selection(result.items.find(x=>x.id===usageMapSelectionId));
- OneTopMaps.draw($('usageMap'),result.items,{activate:item=>{if(!item)return;usageMapSelectionId=item.id;selection(item);if(item.session){contextSessionId=item.session;renderContext(sessions);}}});
+ OneTopMaps.draw($('usageMap'),result.items,{activate:item=>{if(!item)return;usageMapSelectionId=item.id;selection(item);}});
  $('usageLegend').innerHTML=OneTopMaps.legend(result.items);
- renderContext(sessions);
-}
-function renderContext(sessions=data.sessions.filter(s=>provider==='all'||s.kind===provider)){
- if(!sessions.some(s=>s.id===contextSessionId))contextSessionId=(sessions.find(s=>OneTopMaps.context(s).validCapacity)||sessions.find(s=>OneTopMaps.context(s).available)||sessions[0])?.id||'';
- const select=$('contextSession'),options=sessions.map(s=>`<option value="${esc(s.id)}">${esc(s.project||s.title||s.id)} · ${esc(hostApp(s))} · ${esc(s.model||runtimeLabel(s))}</option>`).join('');
- if(select.innerHTML!==options)select.innerHTML=options;select.value=contextSessionId;
- const c=OneTopMaps.context(sessions.find(s=>s.id===contextSessionId));
- $('contextSummary').innerHTML=OneTopMaps.contextMarkup(c);
- OneTopMaps.draw($('contextMap'),c.items,{empty:c.available?'이 요청의 보고된 입력은 0입니다.':'컨텍스트 사용량 미보고 · 0%를 뜻하지 않습니다.'});
- $('contextLegend').innerHTML=OneTopMaps.legend(c.items);
 }
 $('mapPeriod').onchange=e=>{selectedPeriod=e.target.value;render();};
 $('mapGroup').onchange=renderMaps;
-$('contextSession').onchange=e=>{contextSessionId=e.target.value;renderContext();};
 window.addEventListener('resize',renderMaps);
+
+function checkUpdates(){fetch('/api/updates').then(r=>r.json()).then(u=>{let b=$('updateNotice');if(!b){b=document.createElement('a');b.id='updateNotice';b.className='update-notice';b.target='_blank';b.rel='noopener';document.querySelector('.rail-bottom')?.append(b);}if(b){b.hidden=!u.available;b.textContent='새 버전 '+u.version+' · '+(u.status==='preview'?'미리보기 다운로드':'업데이트');b.href=u.release_url||'https://github.com/awesomezun/1top/releases';}}).catch(()=>{});}
+checkUpdates();setInterval(checkUpdates,3600000);

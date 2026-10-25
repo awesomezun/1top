@@ -18,7 +18,7 @@ beforeAll(async()=>{
  for(const id of ['a','b'])await e.DB.prepare('INSERT INTO hosted_access(user_id,kind,max_devices,created_at) VALUES(?,?,?,?)').bind(id,'operator',25,1).run();
 });
 function sample(){return {updated:Date.now()/1000,recording_started:0,version:'test',sessions:[{id:'session',control_key:'key',kind:'Claude',app:'Cursor',terminal:'test',project:'demo',title:'test',model:'test',status:'idle',tokens:[1,2,3,4],windows:{'1h':[1,2,3,4]},cpu:1,rss:100,capabilities:['terminate']}],host:{cpu:1,used_memory:10,total_memory:100,cores:2},periods:[]};}
-function nextMessage(ws:WebSocket){return new Promise<any>((resolve,reject)=>{ws.addEventListener('message',e=>resolve(JSON.parse(e.data as string)),{once:true});setTimeout(()=>reject(Error('No socket message')),2500);});}
+function nextMessage(ws:WebSocket){return new Promise<any>((resolve,reject)=>{ws.addEventListener('message',e=>{const value=JSON.parse(e.data as string);if(value.type!=='report_policy')resolve(value);});setTimeout(()=>reject(Error('No socket message')),2500);});}
 async function socket(hub:any,role:string,id:string){const r=await hub.fetch('https://hub/ws?'+new URLSearchParams({role,id,control:'1',expires:String(Date.now()+60000)}),{headers:{Upgrade:'websocket'}});expect(r.status).toBe(101);const ws=r.webSocket!;ws.accept();return ws;}
 
 describe('account and device boundaries',()=>{
@@ -59,7 +59,7 @@ describe('relay and command safety',()=>{
  it('does not queue actions for an offline computer',async()=>{const hub=e.HUBS.get(e.HUBS.idFromName('offline'));const r=await hub.fetch('https://hub/action',{method:'POST',body:JSON.stringify({action:'terminate',device_id:crypto.randomUUID(),session_id:'session',control_key:'key',request_id:crypto.randomUUID()})});expect(r.status).toBe(409);});
  it('sends an action only once and only to its selected device',async()=>{
   const account='command-'+crypto.randomUUID(),hub=e.HUBS.get(e.HUBS.idFromName(account)),id=crypto.randomUUID(),other=crypto.randomUUID();
-  const target=await socket(hub,'device',id),otherSocket=await socket(hub,'device',other);let otherMessages=0;otherSocket.addEventListener('message',()=>otherMessages++);
+  const target=await socket(hub,'device',id),otherSocket=await socket(hub,'device',other);let otherMessages=0;otherSocket.addEventListener('message',e=>{if(JSON.parse(e.data as string).type==='action')otherMessages++;});
   await runInDurableObject(hub,async(_instance:any,state:any)=>{await state.storage.put('snapshot:'+id,{id,name:'Mac',platform:'Darwin',received:Date.now(),snapshot:snapshot(sample())});});
   const command={action:'terminate',device_id:id,session_id:'session',control_key:'key',request_id:crypto.randomUUID()},receive=nextMessage(target);
   expect((await hub.fetch('https://hub/action',{method:'POST',body:JSON.stringify(command)})).status).toBe(202);
@@ -87,7 +87,7 @@ describe('stale sessions, revocation, and concurrent clicks',()=>{
   expect((await hub.fetch('https://hub/action',{method:'POST',body:JSON.stringify({device_id:id,session_id:'session',control_key:'key',action:'terminate',request_id:crypto.randomUUID()})})).status).toBe(409);ws.close();
  });
  it('deduplicates concurrent identical action submissions',async()=>{
-  const hub=e.HUBS.get(e.HUBS.idFromName('concurrent-'+crypto.randomUUID())),id=crypto.randomUUID(),ws=await socket(hub,'device',id);let sent=0;ws.addEventListener('message',()=>sent++);
+  const hub=e.HUBS.get(e.HUBS.idFromName('concurrent-'+crypto.randomUUID())),id=crypto.randomUUID(),ws=await socket(hub,'device',id);let sent=0;ws.addEventListener('message',e=>{if(JSON.parse(e.data as string).type==='action')sent++;});
   await runInDurableObject(hub,async(_i:any,s:any)=>s.storage.put('snapshot:'+id,{id,received:Date.now(),snapshot:snapshot(sample())}));
   const cmd={device_id:id,session_id:'session',control_key:'key',action:'terminate',request_id:crypto.randomUUID()};
   await Promise.all(Array.from({length:8},()=>hub.fetch('https://hub/action',{method:'POST',body:JSON.stringify(cmd)})));
@@ -174,4 +174,53 @@ it('exports only context counters and rejects invalid component totals',()=>{
  expect(c?.input_tokens).toBe(100);expect(c?.parts).toEqual([20,80,0]);expect(JSON.stringify(c)).not.toContain('PRIVATE');
  input.sessions[0].context_usage.parts=[100,80,0];expect(snapshot(input).sessions[0].context_usage?.parts).toBeNull();
  input.sessions[0].context_usage.input_tokens=-1;expect(snapshot(input).sessions[0].context_usage).toBeNull();
+});
+
+describe('native mobile authentication',()=>{
+ const google='b'.repeat(30),mobile='1tm_'+'a'.repeat(64);
+ it('requires Google authentication and an approved account before storing a mobile credential',async()=>{
+  const challenge=await hash(mobile);
+  for(const token of [undefined,'c'.repeat(30)])expect((await fetch('/api/mobile/authorize',{challenge,platform:'iOS'},token)).status).not.toBe(200);
+  expect(await e.DB.prepare('SELECT * FROM mobile_sessions WHERE token_hash=?').bind(challenge).first()).toBeNull();
+  expect((await fetch('/api/mobile/authorize',{challenge,platform:'iOS'},google)).status).toBe(200);
+  const row=await e.DB.prepare('SELECT * FROM mobile_sessions WHERE token_hash=?').bind(challenge).first();
+  expect(row.user_id).toBe('b');expect(JSON.stringify(row)).not.toContain(mobile);
+  expect((await fetch('/api/devices',undefined,mobile)).status).toBe(200);
+ });
+ it('prevents replay, account rebinding, and chaining mobile credentials',async()=>{
+  const challenge=await hash(mobile);
+  expect((await fetch('/api/mobile/authorize',{challenge,platform:'Android'},'a'.repeat(30))).status).toBe(409);
+  expect((await e.DB.prepare('SELECT user_id FROM mobile_sessions WHERE token_hash=?').bind(challenge).first()).user_id).toBe('b');
+  expect((await fetch('/api/mobile/authorize',{challenge:await hash('another'),platform:'Android'},mobile)).status).not.toBe(200);
+ });
+ it('keeps mobile access scoped to its owner',async()=>{
+  const id=crypto.randomUUID();await e.DB.prepare('INSERT INTO devices VALUES(?,?,?,?,?,?,?,?)').bind(id,'a','Private fixture','Darwin',await hash(id),1,null,1).run();
+  const data:any=await(await fetch('/api/devices',undefined,mobile)).json();expect(data.devices.some((d:any)=>d.id===id)).toBe(false);
+  expect((await fetch('/api/action',{device_id:id,session_id:'session',control_key:'key',action:'terminate',request_id:crypto.randomUUID()},mobile)).status).toBe(404);
+ });
+ it('revokes outstanding tickets and active sockets on sign out',async()=>{
+  const issued:any=await(await fetch('/api/live-ticket',{},mobile)).json();
+  const opened=await worker.fetch(new Request('https://relay.test/api/live',{headers:{Origin:'https://1top.si',Upgrade:'websocket','Sec-WebSocket-Protocol':'1top, ticket.'+issued.ticket}}),e);
+  expect(opened.status).toBe(101);opened.webSocket!.accept();
+  const closed=new Promise<number>(resolve=>opened.webSocket!.addEventListener('close',event=>resolve(event.code),{once:true}));
+  const spare:any=await(await fetch('/api/live-ticket',{},mobile)).json();
+  expect((await fetch('/api/mobile/logout',{},mobile)).status).toBe(200);expect(await closed).toBe(4003);
+  expect(await e.DB.prepare('SELECT * FROM tickets WHERE hash=?').bind(await hash(spare.ticket)).first()).toBeNull();
+  expect((await fetch('/api/devices',undefined,mobile)).status).not.toBe(200);
+ });
+ it('expires credentials and caps an account at five mobile authorizations',async()=>{
+  const now=Math.floor(Date.now()/1000),expired='1tm_'+'e'.repeat(64);
+  await e.DB.prepare('INSERT INTO mobile_sessions VALUES(?,?,?,?,?)').bind(await hash(expired),'b','iOS',now-20,now-1).run();
+  expect((await fetch('/api/devices',undefined,expired)).status).not.toBe(200);
+  for(let i=1;i<=5;i++)expect((await fetch('/api/mobile/authorize',{challenge:String(i).repeat(64),platform:'Android'},google)).status).toBe(200);
+  expect((await fetch('/api/mobile/authorize',{challenge:'6'.repeat(64),platform:'Android'},google)).status).toBe(409);
+ });
+});
+
+it('self-hosting admits only the explicitly configured owner',async()=>{
+ const own={...e,DEPLOYMENT_MODE:'self_hosted',OWNER_USER_ID:'c'};
+ expect((await worker.fetch(req('/api/devices',undefined,'a'.repeat(30)),own)).status).toBe(403);
+ expect((await worker.fetch(req('/api/devices',undefined,'c'.repeat(30)),own)).status).toBe(200);
+ const grant=await e.DB.prepare('SELECT kind FROM hosted_access WHERE user_id=?').bind('c').first();expect(grant.kind).toBe('operator');
+ expect((await worker.fetch(req('/api/devices',undefined,'c'.repeat(30)),{...own,OWNER_USER_ID:undefined})).status).toBe(403);
 });

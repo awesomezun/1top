@@ -1,0 +1,15 @@
+{
+  "version": "1.1.1",
+  "asset": "cover.png",
+  "purpose": "Open Graph and social sharing image for 1top.si",
+  "generator": "OpenAI image generation edit",
+  "predecessor": "site/public/og/v1.1.0/cover.png",
+  "canonical_reference": "site/public/brand/v1.1.0/mark.png",
+  "width": 1730,
+  "height": 909,
+  "sha256": "6cebedaab24d687c413ae73cdd50152bdc5ad1ce31940da3bdb90f3f6fe8b551",
+  "bytes": 1491868,
+  "change": "Enlarged the complete upper-left mint waveform and white 1top wordmark. Other headline, treemap and background layout retained.",
+  "visual_review": "Larger lockup remains inside left/top margins and clear of the headline. Canonical connected waveform identity remains recognizable. Generative output is not claimed pixel-identical to the native source.",
+  "privacy": "No private session data or numerical usage claims."
+}

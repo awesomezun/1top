@@ -77,3 +77,24 @@ class OperationsTests(unittest.TestCase):
             monitor.scan(session);self.assertEqual(monitor.events,{})
             with p.open('a') as f:f.write('\n')
             monitor.scan(session);monitor.scan(session);self.assertEqual(len(monitor.events),1)
+
+    def test_codex_skill_read_and_return_do_not_claim_workflow_success(self):
+        m=OperationalMonitor();session={'id':'c','kind':'Codex'}
+        m.event({'type':'response_item','payload':{'type':'function_call','call_id':'one','name':'exec_command','arguments':json.dumps({'cmd':'cat /skills/research/SKILL.md'})}},session)
+        self.assertEqual(m.events['c:one']['state'],'read_requested')
+        m.event({'type':'response_item','payload':{'type':'function_call_output','call_id':'one','output':'private instructions'}},session)
+        self.assertEqual(m.events['c:one']['state'],'tool_returned')
+        self.assertEqual(m.events['c:one']['result'],'not_verified')
+        self.assertNotIn('private',json.dumps(m.events))
+        m.event({'type':'response_item','payload':{'type':'function_call','call_id':'echo','name':'exec_command','arguments':json.dumps({'cmd':'echo /skills/research/SKILL.md'})}},session)
+        self.assertNotIn('c:echo',m.events)
+
+    def test_persistent_jobs_are_read_only_and_never_predict_next_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'.claude/scheduled_tasks.json';path.parent.mkdir()
+            path.write_text(json.dumps({'tasks':[{'id':'job','cron':'*/5 * * * *','prompt':'PRIVATE','createdBySessionId':'s','recurring':True,'lastFiredAt':1200}]}))
+            before=path.read_bytes();m=OperationalMonitor(tmp)
+            rows=m.schedules([{'id':'s','kind':'Claude','project':'fixture'}])
+            self.assertEqual(len(rows),1);self.assertTrue(rows[0]['session_connected']);self.assertIsNone(rows[0]['next_run'])
+            self.assertNotIn('PRIVATE',json.dumps(rows));self.assertEqual(path.read_bytes(),before)
+            path.write_text('{broken');self.assertEqual(m.schedules([]),[])

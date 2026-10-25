@@ -1,0 +1,27 @@
+{
+  "◫ 세션": {
+    "hostVisible": false,
+    "contextPanels": 0,
+    "activeTitle": "세션"
+  },
+  "▦ 사용량 비율 맵": {
+    "hostVisible": false,
+    "contextPanels": 0,
+    "activeTitle": "사용량 비율 맵"
+  },
+  "↻ Goals · Loops · Skills": {
+    "hostVisible": false,
+    "contextPanels": 0,
+    "activeTitle": "활동"
+  },
+  "⌘ 컴퓨터 리소스": {
+    "hostVisible": true,
+    "contextPanels": 0,
+    "activeTitle": "컴퓨터 리소스"
+  },
+  "≋ 측정 정보": {
+    "hostVisible": false,
+    "contextPanels": 0,
+    "activeTitle": "측정 정보"
+  }
+}

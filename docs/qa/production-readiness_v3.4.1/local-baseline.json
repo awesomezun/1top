@@ -1,0 +1,1 @@
+{"version": "3.3.0", "samples": 20, "sessions": 34, "cpu_one_core_mean": 16.16, "rss_mean_bytes": 93770547.2, "api_ms_mean": 11.585583258420229, "api_ms_p95": 30.949790962040424, "api_bytes_mean": 236602.1, "scope": "20 local samples at 1 second intervals; this Mac and workload only"}

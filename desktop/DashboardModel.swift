@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CoreGraphics
 
 struct DesktopSnapshot: Decodable {
     var ready: Bool
@@ -71,6 +72,74 @@ enum DesktopFormat {
     }
     static func percent(_ value: Double?) -> String { value.map { String(format: "%.0f%%", $0) } ?? "—" }
     static func total(_ tokens: [Double]?) -> Double? { tokens?.reduce(0, +) }
+}
+
+struct DesktopUsageMap {
+    struct Tile: Identifiable {
+        var id: String; var title: String; var detail: String; var value: Double
+    }
+    struct Placement: Identifiable {
+        var tile: Tile; var rect: CGRect; var colorIndex: Int
+        var id: String { tile.id }
+    }
+    var tiles: [Tile]
+    var total: Double
+    var reported: Int
+    var unknown: Int
+    var zero: Int
+
+    init(sessions: [DesktopSession], period: String) {
+        var positive: [Tile] = []; var known = 0; var zeros = 0
+        for session in sessions {
+            guard session.tokens != nil, let tokens = session.usage?.windows?[period] ?? nil,
+                  !tokens.isEmpty, tokens.allSatisfy({ $0.isFinite && $0 >= 0 }) else { continue }
+            let value = tokens.reduce(0, +)
+            guard value.isFinite else { continue }
+            known += 1
+            if value == 0 { zeros += 1; continue }
+            let title = session.project ?? session.title ?? session.kind
+            let tool = session.kind == "Claude" ? "Claude Code" : session.kind
+            positive.append(Tile(id: session.id, title: title,
+                detail: [session.locationLabel, tool, session.model].compactMap { $0 }.joined(separator: " · "), value: value))
+        }
+        positive.sort { $0.value == $1.value ? $0.id < $1.id : $0.value > $1.value }
+        total = positive.reduce(0) { $0 + $1.value }; reported = known
+        unknown = sessions.count - known; zero = zeros
+        if !total.isFinite { tiles = []; total = 0; reported = 0; unknown = sessions.count; zero = 0; return }
+        // Keep the compact panel usable while preserving the exact combined area.
+        if positive.count > 8 {
+            let rest = Array(positive.dropFirst(7))
+            tiles = Array(positive.prefix(7)) + [Tile(id: "__other__", title: "기타 \(rest.count)개 세션",
+                detail: rest.map { "\($0.title) · \($0.value.formatted(.number.precision(.fractionLength(0)))) tokens\n\($0.detail)" }.joined(separator: "\n"),
+                value: rest.reduce(0) { $0 + $1.value })]
+        } else { tiles = positive }
+    }
+
+    func layout(in rect: CGRect) -> [Placement] {
+        guard total > 0, rect.width > 0, rect.height > 0 else { return [] }
+        func split(_ values: [(Int, Tile)], _ box: CGRect) -> [Placement] {
+            guard values.count > 1 else {
+                return values.map { Placement(tile: $0.1, rect: box, colorIndex: $0.0) }
+            }
+            let sum = values.reduce(0) { $0 + $1.1.value }
+            var prefix = 0.0; var best = 1; var distance = Double.infinity
+            for index in 1..<values.count {
+                prefix += values[index - 1].1.value
+                if abs(prefix - sum / 2) < distance { best = index; distance = abs(prefix - sum / 2) }
+            }
+            let left = Array(values.prefix(best)), right = Array(values.dropFirst(best))
+            let fraction = left.reduce(0) { $0 + $1.1.value } / sum
+            if box.width >= box.height {
+                let width = box.width * fraction
+                return split(left, CGRect(x: box.minX, y: box.minY, width: width, height: box.height)) +
+                    split(right, CGRect(x: box.minX + width, y: box.minY, width: box.width - width, height: box.height))
+            }
+            let height = box.height * fraction
+            return split(left, CGRect(x: box.minX, y: box.minY, width: box.width, height: height)) +
+                split(right, CGRect(x: box.minX, y: box.minY + height, width: box.width, height: box.height - height))
+        }
+        return split(Array(tiles.enumerated()), rect)
+    }
 }
 // No credentials, snapshots, or actions are written to disk by this UI.
 final class DashboardModel: ObservableObject {

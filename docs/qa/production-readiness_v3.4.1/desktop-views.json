@@ -1,0 +1,32 @@
+[
+  {
+    "contextMapCount": 0,
+    "heading": "\uc138\uc158",
+    "resourcesVisible": false,
+    "view": "sessions"
+  },
+  {
+    "contextMapCount": 0,
+    "heading": "\uc0ac\uc6a9\ub7c9 \ube44\uc728 \ub9f5",
+    "resourcesVisible": false,
+    "view": "maps"
+  },
+  {
+    "contextMapCount": 0,
+    "heading": "\ud65c\ub3d9",
+    "resourcesVisible": false,
+    "view": "operations"
+  },
+  {
+    "contextMapCount": 0,
+    "heading": "\ucef4\ud4e8\ud130 \ub9ac\uc18c\uc2a4",
+    "resourcesVisible": true,
+    "view": "system"
+  },
+  {
+    "contextMapCount": 0,
+    "heading": "\uce21\uc815 \uc815\ubcf4",
+    "resourcesVisible": false,
+    "view": "benchmark"
+  }
+]

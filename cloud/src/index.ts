@@ -2,6 +2,8 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { AccountHub, type Env } from './hub';
 import { action, text } from './protocol';
 import { AccessDenied, accessDeadline, requireHostedAccess } from './access';
+import {billingReady,billingStatus,portal,webhook} from './billing';
+import { MOBILE_TOKEN, mobileIdentity, authorizeMobile } from './mobile';
 export { AccountHub };
 const KEYS=createRemoteJWKSet(new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'));
 const now=()=>Math.floor(Date.now()/1000);
@@ -10,10 +12,20 @@ export async function hash(value:string){return [...new Uint8Array(await crypto.
 const json=(body:unknown,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const bearer=(req:Request)=>req.headers.get('Authorization')?.match(/^Bearer ([A-Za-z0-9._-]{20,8000})$/)?.[1];
 async function body(req:Request){const raw=await req.text();if(raw.length>8192)throw new Error('Body too large');return JSON.parse(raw);}
-async function user(req:Request,env:Env){
+async function user(req:Request,env:Env,googleOnly=false):Promise<{id:string;expires:number;mobileHash?:string}>{
  const token=bearer(req);if(!token)throw new Error('Authentication required');
+ if(MOBILE_TOKEN.test(token)){
+  if(googleOnly)throw new Error('Fresh Google sign-in required');
+  const mobile=await mobileIdentity(env.DB,await hash(token),now());
+  if(env.DEPLOYMENT_MODE==='self_hosted'&&mobile.id!==env.OWNER_USER_ID)throw new AccessDenied();
+  return mobile;
+ }
  const {payload}=await jwtVerify(token,KEYS,{issuer:'https://securetoken.google.com/'+env.FIREBASE_PROJECT_ID,audience:env.FIREBASE_PROJECT_ID,algorithms:['RS256']});
  if(!payload.sub || payload.sub.length>128 || payload.email_verified!==true || (payload.firebase as any)?.sign_in_provider!=='google.com')throw new Error('Google sign-in required');
+ if(env.DEPLOYMENT_MODE==='self_hosted'){
+  if(!env.OWNER_USER_ID||payload.sub!==env.OWNER_USER_ID)throw new AccessDenied();
+  await env.DB.prepare("INSERT INTO hosted_access(user_id,kind,max_devices,created_at) VALUES(?,'operator',25,?) ON CONFLICT(user_id) DO NOTHING").bind(payload.sub,now()).run();
+ }
  return {id:payload.sub,expires:payload.exp!*1000};
 }
 async function approvedUser(req:Request,env:Env){
@@ -32,7 +44,29 @@ async function device(req:Request,env:Env){
 }
 async function handle(req:Request,env:Env):Promise<Response>{
  const url=new URL(req.url),path=url.pathname;
- if(path==='/health')return json({ok:true,service:'1top relay',version:'1.3.0',access:'approved-accounts',pairing_enabled:env.PAIRING_ENABLED==='true'});
+ if(path==='/api/billing/webhook'&&req.method==='POST')return webhook(req,env);
+ if(path==='/api/billing'&&req.method==='GET'){
+   const u=await user(req,env);
+   if(!await limit(env.DB,'billing-status:'+u.id,12))return json({error:'Please wait before refreshing billing.'},429);
+   return json(await billingStatus(env,u.id));
+ }
+ if(['/api/billing/checkout','/api/billing/portal'].includes(path)&&req.method==='POST'){
+   const u=await user(req,env,true);
+   if(!await limit(env.DB,'billing:'+u.id,6,600))return json({error:'Too many billing requests. Try again later.'},429);
+   return path.endsWith('/checkout')?hub(env,u.id).fetch(new Request('https://hub/billing/checkout',{method:'POST',body:JSON.stringify({uid:u.id})})):portal(env,u.id);
+ }
+ if(path==='/health')return json({ok:true,service:'1top relay',version:'1.6.0',access:'approved-accounts',billing_enabled:billingReady(env),mode:env.DEPLOYMENT_MODE==='self_hosted'?'self_hosted':'managed',pairing_enabled:env.PAIRING_ENABLED==='true'});
+ if(path==='/api/mobile/authorize'&&req.method==='POST'){
+   const u=await user(req,env,true),access=await requireHostedAccess(env.DB,u.id);
+   if(!await limit(env.DB,'mobile:'+u.id,10,600))return json({error:'Too many mobile sign-ins. Try again later.'},429);
+   const data=await body(req),result=await authorizeMobile(env.DB,u.id,data.challenge,data.platform,now(),access.expires_at);
+   return result?json(result):json({error:'This request was already used or the account has five mobile sign-ins.'},409);
+ }
+ if(path==='/api/mobile/logout'&&req.method==='POST'){
+   const u=await user(req,env);if(!u.mobileHash)return json({error:'Mobile session required'},400);
+   await env.DB.batch([env.DB.prepare('DELETE FROM mobile_sessions WHERE token_hash=? AND user_id=?').bind(u.mobileHash,u.id),env.DB.prepare('DELETE FROM tickets WHERE mobile_hash=?').bind(u.mobileHash)]);
+   return hub(env,u.id).fetch(new Request('https://hub/mobile/revoke',{method:'POST',body:JSON.stringify({hash:u.mobileHash})}));
+ }
  // Stop all public pairing work before touching D1 while enrollment is closed.
  if(path.startsWith('/api/pair/')&&env.PAIRING_ENABLED!=='true')return json({error:'New managed connections are paused while remote-access plans are prepared. Existing approved connections remain available.',code:'managed_pairing_paused'},403);
  if(path==='/api/pair/start'&&req.method==='POST'){
@@ -42,7 +76,7 @@ async function handle(req:Request,env:Env):Promise<Response>{
    if(!name||!platform)return json({error:'Computer name and platform are required.'},400);
    const secret=random(),code=random().slice(0,10).toUpperCase();
    await env.DB.prepare('INSERT INTO pairings(code,secret_hash,name,platform,expires_at) VALUES(?,?,?,?,?)').bind(code,await hash(secret),name,platform,now()+600).run();
-   return json({device_code:secret,user_code:code,expires_in:600,interval:3,verification_uri_complete:env.WEB_URL+'/connect#'+code});
+   return json({device_code:secret,user_code:code,expires_in:600,interval:3,verification_uri_complete:env.WEB_URL+'/connect'+(env.DEPLOYMENT_MODE==='self_hosted'?'?relay='+encodeURIComponent(url.origin):'')+'#'+code});
  }
  if(path==='/api/pair/info'&&req.method==='POST'){
    const {code}=await body(req);if(!/^[A-F0-9]{10}$/.test(code||''))return json({error:'Invalid connection code'},400);
@@ -80,7 +114,7 @@ async function handle(req:Request,env:Env):Promise<Response>{
  }
  if(path==='/api/live-ticket'&&req.method==='POST'){
    const u=await approvedUser(req,env);if(!await limit(env.DB,'ticket:'+u.id,30))return json({error:'Reconnect limit reached'},429);
-   const ticket=random();await env.DB.prepare('INSERT INTO tickets VALUES(?,?,?,?)').bind(await hash(ticket),u.id,Math.min(now()+30,Math.floor(u.expires/1000)),u.expires).run();
+   const ticket=random();await env.DB.prepare('INSERT INTO tickets(hash,user_id,expires_at,auth_expires,mobile_hash) VALUES(?,?,?,?,?)').bind(await hash(ticket),u.id,Math.min(now()+30,Math.floor(u.expires/1000)),u.expires,u.mobileHash||null).run();
    return json({ticket,socket_url:url.origin.replace(/^http/,'ws')+'/api/live',expires_at:u.expires});
  }
  if(path==='/api/live'){
@@ -88,10 +122,12 @@ async function handle(req:Request,env:Env):Promise<Response>{
    const protocols=(req.headers.get('Sec-WebSocket-Protocol')||'').split(',').map(x=>x.trim());
    const token=protocols.find(x=>x.startsWith('ticket.'))?.slice(7);
    if(!protocols.includes('1top')||!token)return json({error:'Connection ticket required'},401);
-   const t=await env.DB.prepare('DELETE FROM tickets WHERE hash=? AND expires_at>? RETURNING user_id,auth_expires').bind(await hash(token),now()).first<{user_id:string;auth_expires:number}>();
+   const t=await env.DB.prepare('DELETE FROM tickets WHERE hash=? AND expires_at>? RETURNING user_id,auth_expires,mobile_hash').bind(await hash(token),now()).first<{user_id:string;auth_expires:number;mobile_hash:string|null}>();
    if(!t)return json({error:'Connection ticket expired'},401);
+   if(t.mobile_hash)await mobileIdentity(env.DB,t.mobile_hash,now());
    const access=await requireHostedAccess(env.DB,t.user_id);
    const target=new URL('https://hub/ws');target.searchParams.set('role','browser');target.searchParams.set('id',crypto.randomUUID());target.searchParams.set('expires',String(accessDeadline(access,Math.min(Date.now()+30*60000,t.auth_expires))));
+   if(t.mobile_hash)target.searchParams.set('mobile',t.mobile_hash);
    return hub(env,t.user_id).fetch(new Request(target,{headers:{Upgrade:'websocket'}}));
  }
  if(path==='/api/devices'&&req.method==='GET'){
@@ -123,5 +159,5 @@ export default {
    const headers=new Headers(response.headers);if(allowed){headers.set('Access-Control-Allow-Origin',origin!);headers.set('Vary','Origin');}headers.set('Cache-Control','no-store');
    return new Response(response.body,{status:response.status,headers});
  },
- async scheduled(_event:ScheduledEvent,env:Env){await env.DB.batch([env.DB.prepare('DELETE FROM pairings WHERE expires_at<?').bind(now()),env.DB.prepare('DELETE FROM tickets WHERE expires_at<?').bind(now()),env.DB.prepare('DELETE FROM request_limits WHERE expires_at<?').bind(now())]);}
+ async scheduled(_event:ScheduledEvent,env:Env){await env.DB.batch([env.DB.prepare('DELETE FROM pairings WHERE expires_at<?').bind(now()),env.DB.prepare('DELETE FROM tickets WHERE expires_at<?').bind(now()),env.DB.prepare('DELETE FROM request_limits WHERE expires_at<?').bind(now()),env.DB.prepare('DELETE FROM mobile_sessions WHERE expires_at<?').bind(now())]);}
 };

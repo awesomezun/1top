@@ -3,6 +3,8 @@ import base64
 import copy
 import hashlib
 import json
+import queue
+from .platform_support import cli_command
 import math
 import os
 import selectors
@@ -58,12 +60,22 @@ def codex_windows(result,now):
     snapshots=result.get('rateLimitsByLimitId') or {}
     snap=snapshots.get('codex') or result.get('rateLimits') or {}
     # Never replace the main allowance with a model-specific limit.
-    if snap.get('limitId') not in (None,'codex'):snap={}
-    found={}
+    if not isinstance(snap,dict) or snap.get('limitId') not in (None,'codex'):snap={}
+    found={};unrecognized=False
     for key in ('primary','secondary'):
-        w=snap.get(key) or {};minutes=w.get('windowDurationMins')
+        w=snap.get(key)
+        if w is None:continue
+        if not isinstance(w,dict):unrecognized=True;continue
+        minutes=w.get('windowDurationMins')
         label={300:'5H',10080:'주간'}.get(minutes)
         if label:found[label]=window(label,w.get('usedPercent'),w.get('resetsAt'),now)
+        else:unrecognized=True
+    # A recognized main allowance snapshot defines its applicable windows.
+    # Weekly-only plans must not acquire a fabricated, unknown five-hour limit.
+    # Keep reported zero/expired counters, and preserve uncertainty for absent
+    # responses or windows whose duration we cannot interpret.
+    if found and not unrecognized:
+        return [found[label] for label in ('5H','주간') if label in found],snap.get('planType')
     # Positions alone do not establish window duration (some plans use monthly limits).
     return [found.get(label,window(label,None,0,now)) for label in ('5H','주간')],snap.get('planType')
 
@@ -99,8 +111,18 @@ def codex_rpc(root,executable=None):
     # The owned subprocess handles its own auth. These are read-only RPCs, not turns.
     env={**os.environ,'CODEX_HOME':str(root)}
     env['PATH']=str(Path(executable).parent)+os.pathsep+env.get('PATH','')
-    p=subprocess.Popen([executable,'app-server'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,env=env)
-    selector=selectors.DefaultSelector();selector.register(p.stdout,selectors.EVENT_READ)
+    p=subprocess.Popen(cli_command(executable,'app-server'),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,env=env)
+    selector=None;chunks=queue.Queue()
+    if os.name=='nt':
+        def read_pipe():
+            try:
+                while True:
+                    chunk=p.stdout.read1(65536);chunks.put(chunk)
+                    if not chunk:break
+            except (OSError,ValueError):chunks.put(b'')
+        threading.Thread(target=read_pipe,daemon=True).start()
+    else:
+        selector=selectors.DefaultSelector();selector.register(p.stdout,selectors.EVENT_READ)
     buffer=b'';results={};deadline=time.monotonic()+18
     def send(rid,method,params):
         message={'method':method,'params':params}
@@ -109,8 +131,12 @@ def codex_rpc(root,executable=None):
     try:
         send(1,'initialize',{'clientInfo':{'name':'onetop_usage','version':'2.1.0'}})
         while time.monotonic()<deadline:
-            if not selector.select(.2):continue
-            chunk=os.read(p.stdout.fileno(),65536)
+            if selector:
+                if not selector.select(.2):continue
+                chunk=os.read(p.stdout.fileno(),65536)
+            else:
+                try:chunk=chunks.get(timeout=.2)
+                except queue.Empty:continue
             if not chunk:break
             buffer+=chunk
             if len(buffer)>1024*1024:raise ValueError('Oversized RPC')
@@ -130,7 +156,7 @@ def codex_rpc(root,executable=None):
                     if len(results)==2:return results[2].get('account') or {},results[3]
         raise TimeoutError('Usage unavailable')
     finally:
-        selector.close()
+        if selector:selector.close()
         if p.poll() is None:p.terminate()
         try:p.wait(timeout=3)
         except subprocess.TimeoutExpired:p.kill();p.wait()
@@ -145,7 +171,7 @@ def profile_roots(home=Path.home()):
     for kind,key in [('Claude','CLAUDE_CONFIG_DIR'),('Codex','CODEX_HOME')]:
         if os.environ.get(key):roots.add((kind,os.environ[key]))
     for process in psutil.process_iter(['name']):
-        name=(process.info.get('name') or '').lower()
+        name=(process.info.get('name') or '').lower().removesuffix('.exe')
         if name not in ('claude','codex'):continue
         try:
             env=process.environ()
@@ -156,19 +182,21 @@ def profile_roots(home=Path.home()):
 
 
 def claude_credentials(root):
-    credentials=read_json(root/'.credentials.json')
-    if credentials.get('claudeAiOauth'):return credentials['claudeAiOauth']
-    # Claude Code 2.1.310 scopes its macOS Keychain service by the normalized
-    # config path (SHA-256, first eight hex characters). Never enumerate Keychain.
-    if os.uname().sysname!='Darwin':return {}
+    fallback=read_json(root/'.credentials.json').get('claudeAiOauth') or {}
+    if not isinstance(fallback,dict):fallback={}
+    if os.name=='nt' or os.uname().sysname!='Darwin':return fallback
+    # Claude Code stores its current macOS login in Keychain. A migrated
+    # .credentials.json may remain on disk long after that token has expired.
     suffix='' if root==Path.home()/'.claude' else '-'+hashlib.sha256(unicodedata.normalize('NFC',str(root)).encode()).hexdigest()[:8]
     try:
         result=subprocess.run(['/usr/bin/security','find-generic-password','-a',getpass.getuser(),'-w',
                                '-s','Claude Code-credentials'+suffix],capture_output=True,text=True,timeout=3)
-        if result.returncode or len(result.stdout)>128*1024:return {}
+        if result.returncode or len(result.stdout)>128*1024:return fallback
         value=json.loads(result.stdout)
-        return value.get('claudeAiOauth') or {} if isinstance(value,dict) else {}
-    except (ValueError,OSError,subprocess.SubprocessError):return {}
+        current=value.get('claudeAiOauth') if isinstance(value,dict) else None
+        if isinstance(current,dict) and current.get('accessToken'):return current
+    except (ValueError,OSError,subprocess.SubprocessError):pass
+    return fallback
 
 
 class AccountQuotaSampler:

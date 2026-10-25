@@ -6,6 +6,7 @@ An open IDE alone is an application observation, not evidence of an active AI tu
 from pathlib import Path
 import os,re,shutil,subprocess
 import psutil
+from .platform_support import owned_process, process_terminal
 
 CLI_NAMES={'claude':'Claude','codex':'Codex','gemini':'Gemini','opencode':'OpenCode',
            'aider':'Aider','goose':'Goose','agy':'Antigravity','qwen':'Qwen Code',
@@ -14,7 +15,7 @@ PACKAGES={'@anthropic-ai/claude-code':'Claude','@openai/codex':'Codex',
           '@google/gemini-cli':'Gemini','@github/copilot':'GitHub Copilot',
           '@qwen-code/qwen-code':'Qwen Code','opencode-ai':'OpenCode'}
 APP_NAMES={'Cursor','Visual Studio Code','Code','Code - Insiders','Windsurf','Zed',
-           'Antigravity','Terminal','iTerm','iTerm2','Warp','Ghostty','Alacritty',
+           'WindowsTerminal','Windows Terminal','powershell','pwsh','cmd','conhost','OpenConsole','Antigravity','Terminal','iTerm','iTerm2','Warp','Ghostty','Alacritty',
            'WezTerm','IntelliJ IDEA','PyCharm','WebStorm','Orca','ChatGPT','Claude'}
 
 def cli_kind(name,args):
@@ -22,7 +23,7 @@ def cli_kind(name,args):
     if executable in CLI_NAMES:return CLI_NAMES[executable]
     if executable in ('node','nodejs','python','python3','python3.11','python3.12','python3.13'):
         # The entrypoint only; never classify based on a prompt in later arguments.
-        entry=str(args[1]) if len(args)>1 else ''
+        entry=str(args[1]).replace('\\','/') if len(args)>1 else ''
         for package,kind in PACKAGES.items():
             if '/node_modules/'+package+'/' in entry:return kind
         if executable.startswith('python') and len(args)>2 and args[1]=='-m' and args[2]=='aider':return 'Aider'
@@ -32,17 +33,17 @@ def app_from(path,name=''):
     match=re.search(r'([^/]+)\.app(?:/|$)',path or '')
     if match:return match.group(1),str(path).split('.app',1)[0]+'.app'
     base=Path(name).stem
-    return (base,'') if base in APP_NAMES else ('','')
+    return (base,path or '') if base in APP_NAMES else ('','')
 
 def inventory():
     rows={}
     for p in psutil.process_iter(['pid','ppid','name','exe','cmdline','cwd','create_time']):
         try:
             d=p.info
-            if p.uids().real!=os.getuid():continue
+            if not owned_process(p):continue
             rows[p.pid]={'pid':p.pid,'ppid':d['ppid'],'name':d['name'] or '',
                 'app':app_from(d['exe'],d['name']),'kind':cli_kind(d['name'] or '',d['cmdline'] or []),
-                'cwd':d['cwd'] or '', 'birth':d['create_time'], 'tty':p.terminal() or ''}
+                'cwd':d['cwd'] or '', 'birth':d['create_time'], 'tty':process_terminal(p)}
         except (psutil.Error,AttributeError):continue
     return rows
 

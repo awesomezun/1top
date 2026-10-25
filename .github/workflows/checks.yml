@@ -21,8 +21,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node tests/maps.mjs
+      - run: node tests/maps.mjs && node tests/relay-settings.mjs
       - run: npm ci --legacy-peer-deps && npm test && npm run check
         working-directory: cloud
       - run: npm ci && npm run build
         working-directory: site
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci && npm run check && npm run lint
+        working-directory: mobile

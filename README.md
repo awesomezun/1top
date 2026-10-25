@@ -14,7 +14,7 @@
 
 See which computer, application, and terminal owns a session; inspect reported token usage and CPU/RAM; send supported controls to the selected session.
 
-**Status: early preview.** The browser demo is available without installation. The macOS companion builds locally; the public desktop download is withheld until Developer ID signing, notarization, and first-run verification are complete. Windows and Linux companions are not yet available. Broad process detection does not imply every tool exposes tokens or supports pause/resume.
+**Status: early preview.** The browser demo is available without installation. Download the macOS Apple Silicon DMG, Windows x64 installer, or Android APK from the [download page](https://1top.si/#download). The Mac app is locally signed but not notarized; the Windows installer is unsigned. Android is distributed as a signed preview APK. iOS store distribution and clean-machine installer acceptance remain pending. Broad process detection does not imply every tool exposes tokens or supports pause/resume.
 
 ## Using 1top
 
@@ -24,15 +24,15 @@ Remote access is optional. Managed access currently requires a server-issued gra
 
 A browser login cannot inspect or control arbitrary local processes. The companion provides that local connection. Nothing is installed on a phone just to view the dashboard.
 
-**v2.4.1:** proportional token maps by session, host app, execution tool or model, plus a context map of the last reported request input. Existing session and AI views remain available. The public landing page is v4.2.1, with four native UI recordings and the actual menu-bar symbol. See [release notes](docs/release-notes_v2.4.1.md).
+**v3.4.2:** usage-share maps now fill the dashboard width. The context-map view has been removed from desktop, web, and mobile. Session, AI, app, model, and control views remain available. See [release notes](docs/release-notes_v3.4.2.md).
 
 ## What you can see
 
 - Computers, host applications, terminal or conversation locations, AI tools, models, and session identities. Existing AI filters remain alongside app navigation and a model selector.
 - Rolling usage for **24h, 12h, 5h, 1h, 30m, and 10m**. The current rate is an average over up to the latest 60 seconds.
-- Usage-share treemaps for the selected time window. Context maps show reported fresh/cached input and remaining input-based capacity when known; they do not infer file-level contents or a model's capacity.
+- Usage-share treemaps by session, app, execution tool, or model for the selected time window. Hover or select small areas for exact values.
 - Input, cached input, cache writes, and output from reported usage. Unknown values stay unknown; partial collection history is marked.
-- Claude Code and Codex account quota reports: 5-hour and weekly windows when reported, reset times, identity, and last update. Missing windows stay unknown; cached reports are marked.
+- Claude Code and Codex account quota reports: 5-hour and weekly windows when reported, reset times, identity, and last update. Only applicable reported windows are shown; an unavailable account report stays unknown, and cached reports are marked.
 - Computer CPU/memory and attributable session process resources.
 - Codex Goal database state and Claude Code Goal transcript observations. Claude Code `/loop` / scheduled-task invocations and fires where observed.
 - Skill files in supported user/project/plugin paths, deduplicated by resolved path. Installed, invoked, tool-returned, and successful workflow are separate claims; enablement and whole-workflow success are not currently verified.
@@ -94,7 +94,7 @@ Build the Apple Silicon desktop app:
 scripts/build-macos.sh
 ```
 
-The resulting `build/1top_v2.4.1/1top.app` has a **local ad-hoc signature**, not a public distribution signature. Do not present it as notarized or instruct users to disable Gatekeeper. Keep the public `release.json` unavailable until the actual released artifact passes signing and notarization checks.
+The resulting `build/1top_v3.4.2/1top.app` has a **local ad-hoc signature**, not a public distribution signature. Do not present it as notarized or instruct users to disable Gatekeeper. Public downloads are labeled as previews; production signing and notarization remain pending.
 
 Web development:
 
@@ -124,3 +124,6 @@ Each approved account has a server-side device allowance (at most 25 registered 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for adding tool adapters. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md). Never attach credentials, real conversation logs, or private screenshots to public issues.
 
 MIT license.
+
+
+Connection setup and managed billing configuration: [relay guide](cloud/README.md). Release validation and remaining signing gates: [v3.4.2 notes](docs/release-notes_v3.4.2.md).

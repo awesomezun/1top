@@ -57,10 +57,37 @@
   const width=Math.max(1,element.clientWidth||600),height=Math.max(1,element.clientHeight||280);
   const html=layout(items,width,height).map(v=>{
    const detail=[v.label,format(v.value)+' tokens',v.share.toFixed(1)+'%',v.detail].filter(Boolean).join(' · ');
-   return `<button type="button" class="map-tile ${v.free?'map-free':''} ${v.w<95||v.h<60?'map-tiny':''}" data-map-id="${esc(v.id)}" style="left:${v.x/width*100}%;top:${v.y/height*100}%;width:${v.w/width*100}%;height:${v.h/height*100}%;--tile-color:${v.color}" aria-label="${esc(detail)}" title="${esc(detail)}"><span class="map-tile-label">${esc(v.label)}</span><span class="map-tile-value">${format(v.value)}<small> · ${v.share.toFixed(1)}%</small></span><span class="map-tile-detail">${esc(v.detail|| (v.count>1?v.count+text(lang,' sessions','개 세션'):''))}</span></button>`;
+   return `<button type="button" class="map-tile ${v.free?'map-free':''} ${v.w<120||v.h<72?'map-tiny':v.w<210||v.h<135?'map-compact':''}" data-map-id="${esc(v.id)}" style="left:${v.x/width*100}%;top:${v.y/height*100}%;width:${v.w/width*100}%;height:${v.h/height*100}%;--tile-color:${v.color}" aria-label="${esc(detail)}"><span class="map-tile-label">${esc(v.label)}</span><span class="map-tile-value">${format(v.value)}<small> · ${v.share.toFixed(1)}%</small></span><span class="map-tile-detail">${esc(v.detail|| (v.count>1?v.count+text(lang,' sessions','개 세션'):''))}</span></button>`;
   }).join('')||`<div class="map-empty">${esc(empty||text(lang,'No reported usage in this window.','이 기간에 보고된 사용량이 없습니다.'))}</div>`;
   if(element.innerHTML!==html){const focused=element.contains(document.activeElement)?document.activeElement?.dataset.mapId:null;element.innerHTML=html;if(focused)element.querySelector(`[data-map-id="${CSS.escape(focused)}"]`)?.focus({preventScroll:true});}
-  element.onclick=e=>{const id=e.target.closest('[data-map-id]')?.dataset.mapId;if(id)activate?.(items.find(x=>x.id===id));};
+  // Hide a whole text layer if it cannot fit; never leave clipped fragments.
+  element.querySelectorAll('.map-tile:not(.map-tiny)').forEach(tile=>{
+   const children=[...tile.children].filter(c=>getComputedStyle(c).display!=='none');
+   const style=getComputedStyle(tile),available=tile.clientHeight-parseFloat(style.paddingTop)-parseFloat(style.paddingBottom);
+   const needed=children.reduce((n,c)=>n+c.scrollHeight,0)+Math.max(0,children.length-1)*parseFloat(style.gap||0);
+   if(needed>available||children.some(c=>c.scrollWidth>c.clientWidth+1))tile.classList.add('map-tiny');
+  });
+  const hide=()=>{const tip=document.getElementById('onetop-map-tooltip');if(tip)tip.hidden=true;};
+  const show=(tile,event)=>{
+   const item=items.find(x=>x.id===tile?.dataset.mapId);if(!item)return;
+   let tip=document.getElementById('onetop-map-tooltip');
+   if(!tip){tip=document.createElement('div');tip.id='onetop-map-tooltip';tip.className='map-tooltip';tip.setAttribute('role','tooltip');document.body.append(tip);}
+   tip.replaceChildren();
+   for(const [tag,content] of [['strong',item.label],['span',Math.round(item.value).toLocaleString()+' tokens · '+item.share.toFixed(1)+'%'],['small',item.detail||'']]){const node=document.createElement(tag);node.textContent=content;tip.append(node);}
+   tile.setAttribute('aria-describedby',tip.id);tip.hidden=false;
+   const rect=tile.getBoundingClientRect(),x=event?.clientX??rect.left+rect.width/2,y=event?.clientY??rect.top;
+   tip.style.left=Math.max(10,Math.min(innerWidth-tip.offsetWidth-10,x+14))+'px';
+   tip.style.top=Math.max(10,y+tip.offsetHeight+24>innerHeight?y-tip.offsetHeight-12:y+16)+'px';
+  };
+  element.onpointerover=e=>show(e.target.closest('[data-map-id]'),e);
+  element.onpointermove=e=>show(e.target.closest('[data-map-id]'),e);
+  element.onpointerleave=hide;
+  element._mapFocusEvents?.abort();
+  element._mapFocusEvents=new AbortController();
+  element.addEventListener('focusin',e=>show(e.target.closest('[data-map-id]')),{signal:element._mapFocusEvents.signal});
+  element.addEventListener('focusout',hide,{signal:element._mapFocusEvents.signal});
+  element.onkeydown=e=>{if(e.key==='Escape')hide();};
+  element.onclick=e=>{const tile=e.target.closest('[data-map-id]'),id=tile?.dataset.mapId;if(id){show(tile,e);activate?.(items.find(x=>x.id===id));}};
  }
  function legend(items,lang='ko'){
   return items.map(v=>`<span class="map-legend-item" title="${esc(v.detail)}"><i style="background:${v.color}"></i><span>${esc(v.label)}</span><b>${v.share.toFixed(1)}%</b></span>`).join('');

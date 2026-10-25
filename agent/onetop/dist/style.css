@@ -17,3 +17,8 @@
 /* Compact subscription overview, with separate 5H and weekly columns. */
 .quotas{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}.quota{padding:16px!important}.quota h3{font-size:15px}.quota-account{margin:5px 0 10px!important;font-size:12px}.quota-window-pair{display:grid;grid-template-columns:1fr 1fr;gap:18px}.quota-window{margin:0!important}.quota-label{font-size:12px}.quota-window .quota-note{font-size:10px}.quota>.quota-note{font-size:11px;margin-top:10px}.quota>.quota-note br{display:none}.quota>.quota-note br:after{content:' · '}.account-connect-copy{font-size:14px;color:var(--muted);line-height:1.8;margin:18px 0}.account-connect-options{display:grid;gap:10px}.account-connect-options button{display:flex;justify-content:space-between;padding:14px 18px;text-align:left}.account-connect-options span{color:var(--muted);font-size:12px}#accountDialog{max-width:480px}
 @media(max-width:650px){.quotas{grid-template-columns:1fr}}
+
+/* A single reported allowance uses the full account-card width. */
+.quota-window-pair > .quota-window:only-child{grid-column:1/-1}
+
+.update-notice{display:block;margin:12px 18px;padding:12px;border:1px solid #456e60;border-radius:8px;color:#8ad4b6;font-size:13px}.update-notice[hidden]{display:none}
