@@ -60,12 +60,22 @@ def codex_windows(result,now):
     snapshots=result.get('rateLimitsByLimitId') or {}
     snap=snapshots.get('codex') or result.get('rateLimits') or {}
     # Never replace the main allowance with a model-specific limit.
-    if snap.get('limitId') not in (None,'codex'):snap={}
-    found={}
+    if not isinstance(snap,dict) or snap.get('limitId') not in (None,'codex'):snap={}
+    found={};unrecognized=False
     for key in ('primary','secondary'):
-        w=snap.get(key) or {};minutes=w.get('windowDurationMins')
+        w=snap.get(key)
+        if w is None:continue
+        if not isinstance(w,dict):unrecognized=True;continue
+        minutes=w.get('windowDurationMins')
         label={300:'5H',10080:'주간'}.get(minutes)
         if label:found[label]=window(label,w.get('usedPercent'),w.get('resetsAt'),now)
+        else:unrecognized=True
+    # A recognized main allowance snapshot defines its applicable windows.
+    # Weekly-only plans must not acquire a fabricated, unknown five-hour limit.
+    # Keep reported zero/expired counters, and preserve uncertainty for absent
+    # responses or windows whose duration we cannot interpret.
+    if found and not unrecognized:
+        return [found[label] for label in ('5H','주간') if label in found],snap.get('planType')
     # Positions alone do not establish window duration (some plans use monthly limits).
     return [found.get(label,window(label,None,0,now)) for label in ('5H','주간')],snap.get('planType')
 
