@@ -6,3 +6,5 @@
 
 .brand{display:inline-flex;align-items:center;gap:10px}.brand-mark{width:34px;height:34px;object-fit:contain;flex-shrink:0}footer .brand-mark{width:28px;height:28px}
 .account-settings{max-width:850px;text-align:left;display:block;padding-top:140px}.account-settings h1{font-size:clamp(32px,5vw,52px)}.account-settings .panel{padding:28px;margin:24px 0}.account-settings label{display:grid;gap:10px}.account-settings input{width:100%;box-sizing:border-box;background:#10151c;border:1px solid #354151;border-radius:8px;padding:13px;color:#eef3f7;font:inherit}.account-settings details{margin-top:24px}.account-settings summary{cursor:pointer}.account-settings pre{overflow:auto;padding:18px;background:#0c1016;border:1px solid #293440;border-radius:8px;font-size:14px}.account-settings .fine{font-size:14px;line-height:1.7}
+
+#instructionField{display:grid;gap:10px;margin:18px 0}#instructionField[hidden]{display:none}#instructionText{box-sizing:border-box;width:100%;min-height:140px;padding:12px;border:1px solid var(--line,#35404b);border-radius:8px;background:#0b0e12;color:#f1f3f6;font:inherit;resize:vertical}

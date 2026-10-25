@@ -4,7 +4,7 @@ import { snapshot, action, text, type DeviceSnapshot } from './protocol';
 export interface Env { DB:D1Database; HUBS:DurableObjectNamespace<AccountHub>; FIREBASE_PROJECT_ID:string; WEB_ORIGINS:string; WEB_URL:string; PAIRING_ENABLED?:string; BILLING_ENABLED?:string; STRIPE_SECRET_KEY?:string; STRIPE_WEBHOOK_SECRET?:string; STRIPE_PRICE_ID?:string; PLAN_MAX_DEVICES?:string; DEPLOYMENT_MODE?:string; OWNER_USER_ID?:string; }
 type Attachment = {role:'device'|'browser';id:string;expires:number;name?:string;platform?:string;allow_control?:boolean};
 type StoredDevice = {id:string;name:string;platform:string;received:number;snapshot:DeviceSnapshot};
-type Receipt = {request:ReturnType<typeof action>;created:number;status:string;message?:string};
+type Receipt = {request:Omit<ReturnType<typeof action>,'prompt'>;fingerprint?:string;created:number;status:string;message?:string};
 const json=(value:unknown,status=200)=>Response.json(value,{status});
 export class AccountHub extends DurableObject<Env> {
   constructor(ctx:DurableObjectState,env:Env){super(ctx,env);ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping','pong'));}
@@ -53,8 +53,9 @@ export class AccountHub extends DurableObject<Env> {
     }
     if(path==='/action'&&request.method==='POST') {
       const cmd=action(await request.json()),key='receipt:'+cmd.request_id;
+      const fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(cmd))))).map(x=>x.toString(16).padStart(2,'0')).join('');
       const previous=await this.ctx.storage.get<Receipt>(key);
-      if(previous)return JSON.stringify(previous.request)===JSON.stringify(cmd)?json(previous):json({error:'Request ID already used'},409);
+      if(previous)return (previous.fingerprint?previous.fingerprint===fingerprint:JSON.stringify(previous.request)===JSON.stringify(cmd))?json(previous):json({error:'Request ID already used'},409);
       const sockets=this.ctx.getWebSockets('device:'+cmd.device_id).filter(ws=>ws.readyState===1);
       const device=await this.ctx.storage.get<StoredDevice>('snapshot:'+cmd.device_id);
       const s=device?.snapshot.sessions.find(s=>s.id===cmd.session_id);
@@ -62,7 +63,8 @@ export class AccountHub extends DurableObject<Env> {
       const attached=sockets[0].deserializeAttachment() as Attachment;
       if(!attached.allow_control || !s || s.control_key!==cmd.control_key || !s.capabilities.includes(cmd.action))return json({error:'Action is not available for this session.'},409);
       // Save first; an ambiguous delivery is never automatically replayed.
-      const record:Receipt={request:cmd,created:Date.now(),status:'sent'};
+      const {prompt:instruction,...metadata}=cmd;
+      const record:Receipt={request:metadata,fingerprint,created:Date.now(),status:'sent'};
       await this.ctx.storage.put(key,record);
       try{sockets[0].send(JSON.stringify({type:'action',...cmd,expires_at:Date.now()+15000}));}
       catch{record.status='unconfirmed';await this.ctx.storage.put(key,record);return json(record,202);}

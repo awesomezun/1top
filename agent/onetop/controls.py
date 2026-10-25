@@ -50,6 +50,20 @@ def terminate_pid(pid,started):
 
 RESUME_PROMPT='이전에 중단된 작업을 이어서 진행해 주세요. 먼저 현재 진행 상태와 이미 완료한 변경을 확인하고, 중복 실행을 피해서 계속해 주세요.'
 
+def instruction_text(value):
+    if not isinstance(value,str) or not value.strip() or len(value)>4000 or any(ord(c)<32 and c not in '\n\t' or ord(c)==127 for c in value):
+        raise ActionError('지시는 1–4,000자 텍스트로 입력하세요. 제어 문자는 사용할 수 없습니다.',400)
+    return value
+
+
+def accepts_instruction(spec):
+    if not spec.get('control_key'):return False
+    state=spec.get('status','unknown')
+    if spec['kind']=='Aside':return state in ('working','idle','interrupted')
+    return bool(spec.get('orca_terminal') and spec.get('input_verified') is True and
+                spec['kind'] in ('Claude','GLM','Codex') and state in ('idle','interrupted') and
+                spec.get('display_status')!='resuming')
+
 
 class Controller:
     def __init__(self,collector,factory,state_file=None):
@@ -151,17 +165,40 @@ class Controller:
 
     def execute(self,payload):
         action=payload.get('action');sid=payload.get('session_id');key=payload.get('control_key');rid=payload.get('request_id')
-        if action not in ('focus','interrupt','pause','resume','terminate') or not all(isinstance(x,str) and x for x in (sid,key,rid)):
+        if action not in ('focus','interrupt','pause','resume','terminate','prompt') or not all(isinstance(x,str) and x for x in (sid,key,rid)):
             raise ActionError('잘못된 동작 요청입니다.',400)
+        prompt=instruction_text(payload.get('prompt')) if action=='prompt' else None
         if not self.lock.acquire(blocking=False):raise ActionError('이전 동작을 처리 중입니다. 잠시 후 다시 시도하세요.')
         try:
-            request=(action,sid,key)
+            request=(action,sid,key,hashlib.sha256(prompt.encode()).hexdigest() if prompt is not None else None)
             if rid in self.receipts:
                 previous,result=self.receipts[rid]
                 if previous!=request:raise ActionError('요청 ID가 이미 사용되었습니다.')
                 return result
             spec=self.resolve(sid,key);terminal=spec.get('orca_terminal')
-            if spec['kind']=='Aside' and action!='focus':
+            if action=='prompt':
+                current={**spec,'status':self.status(spec)}
+                with self.state_lock:mark=self.paused.get(sid)
+                if mark and mark['key']==key and mark['phase']=='resuming':
+                    raise ActionError('이미 지시 전송을 요청했습니다. 세션에서 결과를 확인하세요.')
+                if not accepts_instruction(current):
+                    raise ActionError('이 세션의 입력 가능한 대기 상태를 확인할 수 없습니다. 실행 중이면 작업을 중단한 뒤 다시 확인하세요.')
+                # Save an uncertain receipt before input, so transport errors never replay it.
+                self.receipts[rid]=(request,{'message':'이 지시의 전달 결과가 미확인입니다. 세션에서 확인한 뒤 새 요청을 보내세요.','started':False})
+                if spec['kind']=='Aside':
+                    from .aside import cli_path
+                    mode='queue' if current['status']=='working' else 'resume'
+                    try:
+                        sent=subprocess.run([str(cli_path()),'session',mode,'--account',spec['aside_account'],'--',spec['aside_session'],prompt],capture_output=True,text=True,timeout=12)
+                        if sent.returncode:raise ActionError('Aside에서 지시 접수 여부를 확인하지 못했습니다. 세션을 확인하세요.')
+                    except (OSError,subprocess.TimeoutExpired):raise ActionError('지시 전달 결과가 미확인입니다. 자동으로 다시 보내지 않습니다.')
+                    result={'message':'다음 단계에 실행할 지시를 접수했습니다.' if mode=='queue' else 'AI 세션에 지시를 전달했습니다. 작업 시작은 상태 갱신으로 확인합니다.','started':False}
+                else:
+                    self.remember(spec,'resuming')
+                    receipt=self.orca('send','--terminal',terminal['handle'],'--text',prompt,'--enter','--wait-submit','2')
+                    started='turn_started' in (receipt.get('send',{}).get('prompt',{}).get('stages') or [])
+                    result={'message':'AI 지시를 보냈고 새 작업 시작을 확인했습니다.' if started else 'AI 지시를 보냈습니다. 새 작업 시작은 아직 미확인입니다.','started':started}
+            elif spec['kind']=='Aside' and action!='focus':
                 if action not in ('pause','interrupt'):raise ActionError('Aside에서는 작업 중단만 지원합니다. CLI 종료 대상이 아닙니다.')
                 if spec['status'] not in ('working','waiting'):raise ActionError('현재 Aside 작업 중 상태를 확인하지 못했습니다.')
                 from .aside import cli_path

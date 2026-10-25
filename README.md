@@ -24,7 +24,7 @@ Remote access is optional. Managed access currently requires a server-issued gra
 
 A browser login cannot inspect or control arbitrary local processes. The companion provides that local connection. Nothing is installed on a phone just to view the dashboard.
 
-**v3.4.2:** usage-share maps now fill the dashboard width. The context-map view has been removed from desktop, web, and mobile. Session, AI, app, model, and control views remain available. See [release notes](docs/release-notes_v3.4.2.md).
+**v3.5.0:** usage-share maps now fill the dashboard width. The context-map view has been removed from desktop, web, and mobile. Session, AI, app, model, and control views remain available. See [release notes](docs/release-notes_v3.5.0.md).
 
 ## What you can see
 
@@ -73,7 +73,7 @@ Commands require a fresh report, an allowed capability, an exact session control
 
 ## Privacy
 
-The cloud payload contains allowlisted device/app/session labels, model names, usage totals, resource measurements, control outcomes, and bounded activity summaries. It excludes raw conversations, full file paths, provider API keys, environment variables, command-line arguments, Goal text, skill paths, raw activity events, and account email addresses. Remote quota cards use a hashed account identifier; provider credentials remain local. Names can still reveal information: choose project and device names accordingly.
+Monitoring snapshots contain allowlisted device/app/session labels, model names, usage totals, resource measurements, control outcomes, and bounded activity summaries. It excludes raw conversations, full file paths, provider API keys, environment variables, command-line arguments, Goal text, skill paths, raw activity events, and account email addresses. Instructions explicitly sent by the user are relayed to the chosen AI session. The relay retains delivery metadata and a fingerprint, not the instruction body; the receiving tool may retain the instruction in its conversation. Remote quota cards use a hashed account identifier; provider credentials remain local. Names can still reveal information: choose project and device names accordingly.
 
 Local history and a device credential are stored under `~/Library/Application Support/1top`; the credential file uses owner-only permissions. The relay stores a hash of that credential. Latest cloud snapshots and command receipts expire after 24 hours without replacement. Disconnecting a device revokes access and removes its latest snapshot; a revocation record may remain in the authentication database.
 
@@ -94,7 +94,7 @@ Build the Apple Silicon desktop app:
 scripts/build-macos.sh
 ```
 
-The resulting `build/1top_v3.4.2/1top.app` has a **local ad-hoc signature**, not a public distribution signature. Do not present it as notarized or instruct users to disable Gatekeeper. Public downloads are labeled as previews; production signing and notarization remain pending.
+The resulting `build/1top_v3.5.0/1top.app` has a **local ad-hoc signature**, not a public distribution signature. Do not present it as notarized or instruct users to disable Gatekeeper. Public downloads are labeled as previews; production signing and notarization remain pending.
 
 Web development:
 
@@ -126,4 +126,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for adding tool adapters. Report vulnerab
 MIT license.
 
 
-Connection setup and managed billing configuration: [relay guide](cloud/README.md). Release validation and remaining signing gates: [v3.4.2 notes](docs/release-notes_v3.4.2.md).
+Connection setup and managed billing configuration: [relay guide](cloud/README.md). Release validation and remaining signing gates: [v3.5.0 notes](docs/release-notes_v3.5.0.md).
+
+Remote AI instructions: mobile and web provide a text composer. Input-capable idle terminal sessions accept a new prompt; running Aside sessions queue it after the current step. Unsupported, stale or ambiguous inputs stay disabled. This does not expose a general shell execution endpoint.
