@@ -127,6 +127,10 @@ class Mailbox:
                         data = f.read(4 * 1024 * 1024)
                     complete = data.rfind(b'\n') + 1
                     if not complete:
+                        # Skip a bounded chunk of an oversized JSONL record (for example an image).
+                        # Its remainder will fail JSON parsing; later complete records remain readable.
+                        if len(data)==4*1024*1024:
+                            row['offset']+=len(data);changed=True
                         continue
                     for line in data[:complete].splitlines():
                         try:

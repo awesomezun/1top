@@ -57,3 +57,10 @@ class MailboxTests(unittest.TestCase):
   ctl=Controller(Mock(),Mock());ctl.remember(self.spec,'resuming')
   state={'sessions':[{**self.spec,'status':'idle','status_at':time.time()+1}]}
   result=ctl.decorate(state);self.assertEqual(result['sessions'][0]['display_status'],'idle');self.assertNotIn('fixture',ctl.paused)
+
+ def test_large_unrelated_record_does_not_block_future_reply(self):
+  self.box.begin(self.spec,self.rid,'Status?')
+  with self.path.open('a') as f:f.write('x'*(4*1024*1024+20)+'\n')
+  self.append(self.reply('Still readable'))
+  self.box.read(self.spec)
+  self.assertEqual(self.box.read(self.spec)[0]['reply'],'Still readable')
