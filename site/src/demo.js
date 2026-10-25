@@ -29,7 +29,7 @@ export function demoDevices(){
     // An unreported counter stays unknown and has no invented map area.
     if(deviceIndex===1)sessions.push({id:'demo-unreported',kind:'Gemini',app:'Terminal',terminal:'Prototype',project:'prototype',title:'Example unreported session',model:'',status:'unknown',tokens:null,rate:null,cpu:.6,rss:120*2**20,windows:{},capabilities:['focus'],control_key:'demo'});
     return {id:'demo-'+deviceIndex,name,platform:'Darwin',online:true,received:Date.now(),snapshot:{
-      account_quotas:[{id:'demo-account-'+deviceIndex,kind:deviceIndex?'Codex':'Claude',account_label:(deviceIndex?'Codex':'Claude')+' · demo0'+deviceIndex,plan:deviceIndex?'Pro':'Max',updated:now,stale:false,windows:[{label:'5H',pct:deviceIndex?38:24,reset:now+8040},{label:'Weekly',pct:deviceIndex?72:61,reset:now+172800}]}],
+      account_quotas:[{id:'demo-account-'+deviceIndex,kind:deviceIndex?'Codex':'Claude',account_label:(deviceIndex?'Codex':'Claude')+' · demo0'+deviceIndex,plan:deviceIndex?'Pro':'Max',updated:now,stale:false,windows:[...(!deviceIndex?[{label:'5H',pct:24,reset:now+8040}]:[]),{label:'Weekly',pct:deviceIndex?72:61,reset:now+172800}]}],
       version:'demo',updated:now,recording_started:now-172800,
       host:{cpu:18+deviceIndex*12,used_memory:(14+deviceIndex*8)*2**30,total_memory:32*2**30,cores:12},
       applications:[...new Set(sessions.map(s=>s.app))].map(name=>({name})),

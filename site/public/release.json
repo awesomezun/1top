@@ -1,17 +1,17 @@
 {
-  "version": "3.2.0",
+  "version": "3.2.1",
   "status": "preview",
   "signed": false,
   "notarized": false,
-  "releases": "https://github.com/awesomezun/1top/releases/tag/v3.2.0",
+  "releases": "https://github.com/awesomezun/1top/releases/tag/v3.2.1",
   "platforms": {
     "macos": {
       "architecture": "arm64",
-      "url": "https://github.com/awesomezun/1top/releases/download/v3.2.0/1top-3.2.0-macos-arm64.dmg"
+      "url": "https://github.com/awesomezun/1top/releases/download/v3.2.1/1top-3.2.1-macos-arm64.dmg"
     },
     "windows": {
       "architecture": "x64",
-      "url": "https://github.com/awesomezun/1top/releases/download/v3.2.0/1top-3.2.0-windows-x64-setup.exe"
+      "url": "https://github.com/awesomezun/1top/releases/download/v3.2.1/1top-3.2.1-windows-x64-setup.exe"
     },
     "android": {
       "status": "preview",
