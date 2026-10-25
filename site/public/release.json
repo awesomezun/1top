@@ -1,26 +1,26 @@
 {
-  "version": "3.5.0",
+  "version": "3.6.0",
   "status": "preview",
   "signed": false,
   "notarized": false,
-  "releases": "https://github.com/awesomezun/1top/releases/tag/v3.5.0",
+  "releases": "https://github.com/awesomezun/1top/releases/tag/v3.6.0",
   "platforms": {
     "macos": {
       "architecture": "arm64",
-      "url": "https://github.com/awesomezun/1top/releases/download/v3.5.0/1top-3.5.0-macos-arm64.dmg",
-      "sha256": "9c7c2c0f0fc7849a61d3e99f719649d71457923fb5446b41e6fbb3a968f87d6a"
+      "url": "https://github.com/awesomezun/1top/releases/download/v3.6.0/1top-3.6.0-macos-arm64.dmg",
+      "sha256": "48a2cd8bdd05c010a51a36e0385d14fac730cc2eb514b82e32528b5779c7c2c2"
     },
     "windows": {
       "architecture": "x64",
-      "url": "https://github.com/awesomezun/1top/releases/download/v3.5.0/1top-3.5.0-windows-x64-setup.exe",
-      "sha256": "caf2d096ffa2de494a51f56080bb1931a564f9b881c39cef2e7c1ee01a068334"
+      "url": "https://github.com/awesomezun/1top/releases/download/v3.6.0/1top-3.6.0-windows-x64-setup.exe",
+      "sha256": "d8a1623d664fb3ab6f9aff1ac9dd17dd0f71b9c90fbefebc1acf2e19c6946e7f"
     },
     "android": {
       "status": "preview",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "signed": true,
-      "url": "https://github.com/awesomezun/1top/releases/download/mobile-v1.4.0/1top-1.4.0-android.apk",
-      "sha256": "6ba478290f916f84351b8178745747eb25d7385940f79c444915077afb7bdbfc"
+      "url": "https://github.com/awesomezun/1top/releases/download/mobile-v1.5.0/1top-1.5.0-android.apk",
+      "sha256": "db4ba91ac0bb91bd0e1686b54432db14388993a092d35215f18cba6790d777c9"
     },
     "ios": {
       "status": "native-build-ready-store-distribution-pending"

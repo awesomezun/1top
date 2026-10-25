@@ -1,8 +1,9 @@
 import { DurableObject } from 'cloudflare:workers';
 import {reconcileSubscription,checkout} from './billing';
-import { snapshot, action, text, type DeviceSnapshot } from './protocol';
+import { snapshot, action, text, mailboxRows, type DeviceSnapshot } from './protocol';
 export interface Env { DB:D1Database; HUBS:DurableObjectNamespace<AccountHub>; FIREBASE_PROJECT_ID:string; WEB_ORIGINS:string; WEB_URL:string; PAIRING_ENABLED?:string; BILLING_ENABLED?:string; STRIPE_SECRET_KEY?:string; STRIPE_WEBHOOK_SECRET?:string; STRIPE_PRICE_ID?:string; PLAN_MAX_DEVICES?:string; DEPLOYMENT_MODE?:string; OWNER_USER_ID?:string; }
-type Attachment = {role:'device'|'browser';id:string;expires:number;name?:string;platform?:string;allow_control?:boolean};
+type Attachment = {role:'device'|'browser';id:string;expires:number;name?:string;platform?:string;allow_control?:boolean;
+  mailbox_at?:number;mailbox?:{request_id:string;device_id:string;session_id:string;expires:number}};
 type StoredDevice = {id:string;name:string;platform:string;received:number;snapshot:DeviceSnapshot};
 type Receipt = {request:Omit<ReturnType<typeof action>,'prompt'>;fingerprint?:string;created:number;status:string;message?:string};
 const json=(value:unknown,status=200)=>Response.json(value,{status});
@@ -91,9 +92,21 @@ export class AccountHub extends DurableObject<Env> {
     if(a.expires<Date.now()){ws.close(4003,'Session expired');return;}
     if(typeof message!=='string'||message.length>256000){ws.close(1009,'Message too large');return;}
     if(message==='ping'){ws.send('pong');return;}
-    if(a.role!=='device'){ws.close(1008,'Unsupported message');return;}
     try {
       const value=JSON.parse(message);
+      if(a.role==='browser') {
+        if(value.type!=='mailbox_request'||!/^[a-f0-9-]{36}$/.test(value.request_id||'')||!/^[a-f0-9-]{36}$/.test(value.device_id||''))throw Error('Invalid mailbox request');
+        const fail=(error:string)=>ws.send(JSON.stringify({type:'mailbox',request_id:value.request_id,device_id:value.device_id,session_id:text(value.session_id,200),error}));
+        if(Date.now()-(a.mailbox_at||0)<2000){fail('Please wait before refreshing this mailbox.');return;}
+        a.mailbox_at=Date.now();a.mailbox=undefined;ws.serializeAttachment(a);
+        const device=await this.ctx.storage.get<StoredDevice>('snapshot:'+value.device_id);
+        const session=device?.snapshot.sessions.find(s=>s.id===value.session_id&&s.control_key===value.control_key);
+        const sockets=this.ctx.getWebSockets('device:'+value.device_id).filter(s=>s.readyState===1);
+        if(!device||Date.now()-device.received>20000||sockets.length!==1||!session?.capabilities.includes('mailbox')||!(sockets[0].deserializeAttachment() as Attachment).allow_control){fail('This session mailbox is unavailable.');return;}
+        a.mailbox={request_id:value.request_id,device_id:value.device_id,session_id:session.id,expires:Date.now()+15000};ws.serializeAttachment(a);
+        sockets[0].send(JSON.stringify({type:'mailbox_request',request_id:value.request_id,device_id:value.device_id,session_id:session.id,control_key:session.control_key,expires_at:a.mailbox.expires}));
+        return;
+      }
       if(value.type==='snapshot'){
         const clean=snapshot(value.data);
         if(Math.abs(Date.now()/1000-clean.updated)>120)throw Error('Clock differs');
@@ -101,6 +114,15 @@ export class AccountHub extends DurableObject<Env> {
         if(old&&Date.now()-old.received<2000)return; // bound each device's update rate
         const device:StoredDevice={id:a.id,name:a.name||'Computer',platform:a.platform||'',received:Date.now(),snapshot:clean};
         await this.ctx.storage.put('snapshot:'+a.id,device);this.broadcast({type:'snapshot',device:{...device,online:true}});
+      } else if(value.type==='mailbox') {
+        // Reply content is forwarded only to its requesting socket; never put in storage.
+        for(const browser of this.ctx.getWebSockets('browser')) {
+          const attached=browser.deserializeAttachment() as Attachment,pending=attached.mailbox;
+          if(browser.readyState!==1||attached.expires<Date.now()||!pending||pending.expires<Date.now()||pending.request_id!==value.request_id||pending.device_id!==a.id||pending.session_id!==value.session_id)continue;
+          const result=value.error?{error:text(value.error,200)}:{messages:mailboxRows(value.messages)};
+          browser.send(JSON.stringify({type:'mailbox',request_id:pending.request_id,device_id:a.id,session_id:pending.session_id,...result}));
+          attached.mailbox=undefined;browser.serializeAttachment(attached);
+        }
       } else if(value.type==='result') {
         const id=text(value.request_id,36),key='receipt:'+id,record=await this.ctx.storage.get<Receipt>(key);
         if(!record||record.request.device_id!==a.id||!['sent','unconfirmed'].includes(record.status))return;

@@ -24,7 +24,7 @@ export function demoDevices(){
       status:index<5?'working':'idle',tokens:vector(share*180000),rate:index<5?Math.round(share*9):0,
       cpu:index<5?7.4+index:.3,rss:(180+index*20)*2**20,
       windows:Object.fromEntries(windows.map(([key,,seconds])=>[key,vector(share*10000*seconds/3600)])),
-      capabilities:['focus','pause','terminate',...(app==='Orca'&&index>=5?['prompt']:[])],control_key:'demo',
+      capabilities:['focus','pause','terminate',...(app==='Orca'&&index>=5?['prompt','message','mailbox']:[])],control_key:'demo',
     }]);
     // An unreported counter stays unknown and has no invented map area.
     if(deviceIndex===1)sessions.push({id:'demo-unreported',kind:'Gemini',app:'Terminal',terminal:'Prototype',project:'prototype',title:'Example unreported session',model:'',status:'unknown',tokens:null,rate:null,cpu:.6,rss:120*2**20,windows:{},capabilities:['focus'],control_key:'demo'});

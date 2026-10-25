@@ -5,7 +5,8 @@ from pathlib import Path
 import certifi
 import websocket
 from . import __version__
-from .controls import accepts_instruction
+from .controls import accepts_instruction, accepts_message
+from .mailbox import readable as mailbox_readable
 
 RELAY='https://onetop-relay.gitreels.workers.dev'
 SSL=ssl.create_default_context(cafile=certifi.where())
@@ -62,6 +63,9 @@ def export_snapshot(state):
         if (can_pause or identified and s['kind']=='Aside') and status in ('working','waiting'):capabilities.append('pause')
         if can_pause and s.get('display_status')=='paused' and status in ('idle','interrupted'):capabilities.append('resume')
         if accepts_instruction(s):capabilities.append('prompt')
+        if identified and mailbox_readable(s):
+            capabilities.append('mailbox')
+            if accepts_message(s):capabilities.append('message')
         if s['kind']!='Aside' and identified and (not term or status in ('idle','interrupted') or can_pause and status in ('working','waiting')):capabilities.append('terminate')
         sessions.append({'id':s['id'],'control_key':s.get('control_key',''),'kind':s['kind'],
             'app':'Orca' if term else loc.get('app') or 'Unknown',
@@ -142,12 +146,30 @@ class CloudLink:
             # Mark before executing: never replay an uncertain action after a crash/reconnect.
             self.receipts[rid]={'type':'result','request_id':rid,'ok':False,'message':'Previous execution is unconfirmed. Check the session before requesting another action.'}
             save_private(self.receipt_file,self.receipts)
-            if data.get('action') not in ('focus','pause','resume','terminate','prompt'):raise ValueError('Unsupported action')
+            if data.get('action') not in ('focus','pause','resume','terminate','prompt','message'):raise ValueError('Unsupported action')
             result=self.controller.execute({k:data.get(k) for k in ('action','session_id','control_key','request_id','prompt')})
             self.result(rid,True,result.get('message','Completed'))
         except Exception as e:
+            if data.get('action')=='message':self.controller.mailbox.delivery(rid,'delivery_unconfirmed')
             from .controls import ActionError
             self.result(rid,False,str(e) if isinstance(e,ActionError) else 'The action could not be confirmed. Check this computer.')
+        finally:self.action_lock.release()
+
+    def read_mailbox(self,data):
+        rid=data.get('request_id','')
+        if not isinstance(rid,str) or len(rid)!=36 or data.get('device_id')!=self.config['device_id']:return
+        if data.get('expires_at',0)<time.time()*1000:return
+        try:
+            rows=self.controller.read_mailbox(data.get('session_id'),data.get('control_key'))
+            reply={'type':'mailbox','request_id':rid,'session_id':data.get('session_id'),'messages':rows}
+        except Exception:
+            reply={'type':'mailbox','request_id':rid,'session_id':data.get('session_id'),'error':'This session mailbox is unavailable.'}
+        try:self.ws.send(json.dumps(reply,ensure_ascii=False))
+        except Exception:pass
+
+    def flush_mailbox(self):
+        if not self.action_lock.acquire(blocking=False):return
+        try:self.controller.flush_mailbox()
         finally:self.action_lock.release()
 
     def run(self):
@@ -157,8 +179,10 @@ class CloudLink:
                 self.ws=websocket.create_connection(self.relay.replace('https://','wss://')+'/api/device/socket',
                     header={'Authorization':'Bearer '+self.config['device_token'],'User-Agent':'1top/'+__version__},timeout=3,
                     suppress_origin=True,redirect_limit=0,sslopt={'ca_certs':certifi.where()})
-                self.status='Connected';delay=1;last=0;interval=60
+                self.status='Connected';delay=1;last=0;interval=60;mailbox_tick=0
                 while not self.stop.is_set():
+                    if time.monotonic()-mailbox_tick>=3:
+                        mailbox_tick=time.monotonic();threading.Thread(target=self.flush_mailbox,daemon=True).start()
                     if time.monotonic()-last>=interval:
                         with self.collector.lock:state=self.collector.snapshot
                         if state.get('ready'):
@@ -173,6 +197,7 @@ class CloudLink:
                         if message.get('type')=='report_policy':
                             interval=3 if message.get('interval')==3 else 60
                             if interval==3:last=0
+                        if message.get('type')=='mailbox_request':threading.Thread(target=self.read_mailbox,args=(message,),daemon=True).start()
                         if message.get('type')=='action':threading.Thread(target=self.command,args=(message,),daemon=True).start()
                     except websocket.WebSocketTimeoutException:continue
             except websocket.WebSocketBadStatusException as e:

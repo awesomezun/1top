@@ -1,0 +1,17 @@
+{
+  "code_commit": "f516ce63ce779d9a6dd9418b0ce3a97ea1b527ba",
+  "agent_tests": 123,
+  "relay_tests": 57,
+  "optional_benchmark_skipped": 1,
+  "mobile_typecheck": "passed",
+  "mobile_lint": "passed",
+  "web_build": "passed",
+  "windows_build_and_smoke_run": 40232205058,
+  "android": "Signed v1.5.0 APK installed on API 36.1 emulator. Working-first ordering, session Messages tab, outgoing/incoming bubbles and retained Controls/instructions verified with the explicit demo.",
+  "web": "Message composer and demo reply rendered with no horizontal dialog overflow.",
+  "macos": "v3.6.0 installed; collector reports ready. Previous installed v3.5.0 archived and verified. Ad-hoc signature, not notarized.",
+  "ios": "v1.5.0 development archive completed. Public store distribution is pending.",
+  "privacy": "Fixture tests exclude unrelated messages, reasoning, tool output and pre-delivery log entries; the relay forwards inbox content only to the requesting authenticated socket and stores no message bodies.",
+  "queue": "Working verified terminal waits for idle; replaced identity and expired waits are not delivered. Failed queue remains readable. Fast completed turns release the resuming marker.",
+  "limits": "Correspondence asks the same session to mark its reply. It is a separate inbox presentation, not an independent model context or parallel AI turn. No new task was sent to an existing real user AI session during QA."
+}

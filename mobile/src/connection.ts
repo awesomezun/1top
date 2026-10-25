@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useState,useRef} from 'react';
 import {AppState,Platform} from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import * as Crypto from 'expo-crypto';
@@ -39,11 +39,13 @@ export async function signOut(token:string|null){
 }
 export function useConnection(token:string|null){
  const [owner,setOwner]=useState(token);
+ const socket=useRef<WebSocket|null>(null);
+ const [mailbox,setMailbox]=useState<any>(null);
  const [devices,setDevices]=useState<Device[]>([]),[state,setState]=useState('offline'),[error,setError]=useState(''),[account,setAccount]=useState<any>(null),[retryKey,setRetryKey]=useState(0),[active,setActive]=useState(AppState.currentState==='active'),[network,setNetwork]=useState(true),[receipt,setReceipt]=useState<any>(null);
  useEffect(()=>{const sub=AppState.addEventListener('change',v=>setActive(v==='active'));const off=NetInfo.addEventListener(v=>setNetwork(v.isConnected!==false));return()=>{sub.remove();off();};},[]);
  // Clear account-scoped external connection state before a new subscription is created.
  // eslint-disable-next-line react-hooks/set-state-in-effect
- useEffect(()=>{setOwner(token);setDevices([]);setAccount(null);setError('');setReceipt(null);},[token]);
+ useEffect(()=>{setOwner(token);setDevices([]);setAccount(null);setError('');setReceipt(null);setMailbox(null);},[token]);
  useEffect(()=>{
   if(!token||!active||!network)return;
   let alive=true,ws:WebSocket|null=null,timer:ReturnType<typeof setTimeout>|undefined,attempt=0;
@@ -53,13 +55,14 @@ export function useConnection(token:string|null){
     const ticket=await api('/api/live-ticket',token!,{});if(!alive)return;
     if(new URL(ticket.socket_url).origin!==API.replace('https:','wss:')||new URL(ticket.socket_url).pathname!=='/api/live')throw Error('Unexpected relay socket address.');
     ws=new (WebSocket as any)(ticket.socket_url,['1top','ticket.'+ticket.ticket],{headers:{Origin:'https://1top.si'}} as any);
+    socket.current=ws;
     ws!.onopen=()=>{if(alive){attempt=0;setState('live');setError('');}};
-    ws!.onmessage=(e:MessageEvent)=>{if(!alive)return;try{const m=JSON.parse(e.data);if(m.type==='state')setDevices(m.devices);if(m.type==='snapshot')setDevices(old=>[...old.filter(d=>d.id!==m.device.id),m.device]);if(m.type==='offline')setDevices(old=>old.map(d=>d.id===m.device_id?{...d,online:false}:d));if(m.type==='removed')setDevices(old=>old.filter(d=>d.id!==m.device_id));if(m.type==='result')setReceipt(m);}catch{setError('Invalid device report. Reconnect to try again.');}};
+    ws!.onmessage=(e:MessageEvent)=>{if(!alive)return;try{const m=JSON.parse(e.data);if(m.type==='state')setDevices(m.devices);if(m.type==='snapshot')setDevices(old=>[...old.filter(d=>d.id!==m.device.id),m.device]);if(m.type==='offline')setDevices(old=>old.map(d=>d.id===m.device_id?{...d,online:false}:d));if(m.type==='removed')setDevices(old=>old.filter(d=>d.id!==m.device_id));if(m.type==='result')setReceipt(m);if(m.type==='mailbox')setMailbox(m);}catch{setError('Invalid device report. Reconnect to try again.');}};
     ws!.onerror=()=>{if(alive)setState('offline');};
     ws!.onclose=()=>{if(!alive)return;setState('offline');timer=setTimeout(connect,Math.min(30000,1000*2**attempt++));};
    }catch(e:any){if(!alive)return;setState(e.status===403?'restricted':'offline');setError(e.message);if(e.status!==400&&e.status!==401&&e.status!==403)timer=setTimeout(connect,Math.min(30000,1000*2**attempt++));}
   }
-  connect();return()=>{alive=false;clearTimeout(timer);if(ws){ws.onclose=null;ws.close();}};
+  connect();return()=>{alive=false;clearTimeout(timer);socket.current=null;if(ws){ws.onclose=null;ws.close();}};
  },[token,active,network,retryKey]);
- return {devices:owner===token?devices:[],state:token&&active&&network?state:'offline',error,account:owner===token?account:null,receipt:owner===token?receipt:null,retry:()=>setRetryKey(v=>v+1)};
+ return {mailbox:owner===token?mailbox:null,readMailbox:(row:any)=>{if(!token||!active||!network||socket.current?.readyState!==1)return false;socket.current.send(JSON.stringify({type:'mailbox_request',request_id:Crypto.randomUUID(),device_id:row.device.id,session_id:row.id,control_key:row.control_key}));return true;},devices:owner===token?devices:[],state:token&&active&&network?state:'offline',error,account:owner===token?account:null,receipt:owner===token?receipt:null,retry:()=>setRetryKey(v=>v+1)};
 }
