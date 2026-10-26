@@ -99,14 +99,30 @@
 .hm-host .term{position:absolute;left:0;right:0;bottom:0;height:120px;border-top:1px solid #1d2227;background:#0b0d10;padding:16px 20px;font:500 15px/1.7 ui-monospace,"SF Mono",Menlo,monospace;color:#9aa1a8}
 .hm-host .term b{color:#ec9a6d;font-weight:600}.hm-host .term em{font-style:normal;color:#82edc6}
 
-.hm-mb{height:36px;background:#15181ccc;border-bottom:1px solid #ffffff10;backdrop-filter:blur(10px);font-size:15px;color:#d4d8dc}
-.hm-mb b,.hm-mb span,.hm-mb time{position:absolute;top:9px;white-space:nowrap}
-.hm-mb b{font-weight:700}
-.hm-mb .press{position:absolute;top:4px;width:44px;height:28px;margin-left:-22px;border-radius:7px;background:#ffffff1c}
-.hm-mb .wf{position:absolute;top:9px;width:22px;height:17px}
-.hm-mb .bt{position:absolute;top:12px;width:26px;height:13px;border:1.5px solid #c9ced3;border-radius:4px}
-.hm-mb .bt:after{content:'';position:absolute;left:2px;top:2px;bottom:2px;width:60%;background:#c9ced3;border-radius:1px}
+/* Desktop scene: a Golden Gate sunset wallpaper (generated for 1top) and a transparent macOS 27 style menu bar. */
+.hm{--hm-desk:url(/media/hero-motion/v1.3.0/golden-gate-sunset.webp)}
+.hm-desk{background:#3a2a2a var(--hm-desk) 50% 40%/cover no-repeat}
+.hm--narrow .hm-desk{background-position:64% 40%}
+.hm-mb{color:#fff;font-size:15px;line-height:1;background:linear-gradient(#0a0c0f3d,#0a0c0f00);text-shadow:0 1px 3px #0006}
+.hm--narrow .hm-mb{font-size:18px}
+.hm-mb .lf{position:absolute;left:18px;top:0;bottom:0;display:flex;align-items:center;gap:1.3em;white-space:nowrap;font-weight:500}
+.hm-mb .lf b{font-weight:700}
+.hm-mb .ap{display:block;width:.86em;height:1.04em;margin:-.12em -.15em 0 0;background:currentColor;-webkit-mask:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAiCAYAAABMfblJAAACNElEQVR42rWXO2hUQRSGv7nmbYwPUEFBC8HCWImghUSD2PgggrVYiWVES0uxEKxsrAQNFiKoKEhALCRgERA0PlAT0SIKiWACCQazbvazmejmctcssvM3A3NnznfPcOacM9AAqZl6TB1QT/9rbVMDYN3ADWB3nPpAKqm71HG17F8dSQXrVN+qlSrYpLoyFfCcuuBSnU95nCM52EO1LRWsSy1FUEW9qW6qZ+//RukK4FmMyHvAc2C6no2hhgfrgD5gD7ARmANGgMEQwms1A9YDJaALOAj0AtuADBgHhoG7IYTPNYHR0BmgPxpsi94IzEfwG2AQmAEOAD1AJ9AONEebZeBnXDMAXAwhzOe9alKvqVO5UM+rpE6r39U5l9eMekdtyQP71W+m0Vd1x5L0FDNGCs2op9SuauBV0+ms2lkNa1cnEsGGYsT/UQZsiRGZQo9DCFN54M44ptCD/EQGbEgEqwBjRcBW0qlcBCwngmXA2qLJiYQe7i8CfkoIPJnvALJYYmYTAQ8DR6vzaBZC+BErQAo1AZeB7sVuYPH+PUp4rFuj/RNqa4jpbTvwKvEVWQD2ZgAhhFHgKWk1BrysTmlXYlVP5d3VEEK5umoE9UmiqjGqdhS+E9TZBsNK6vHlOupSg2Bl9Xo9T6/b6q8aRirxh+bjuFBj3YI6rK6qpy/tiK1gT8HnKWAImATWAPuAzQXrPgK9IYQv9bbzLeoF9X3suu6rfWpzwYkcUm+p79QX6iV1dZHh319mUxoEhM2kAAAAAElFTkSuQmCC) center/contain no-repeat;mask:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAiCAYAAABMfblJAAACNElEQVR42rWXO2hUQRSGv7nmbYwPUEFBC8HCWImghUSD2PgggrVYiWVES0uxEKxsrAQNFiKoKEhALCRgERA0PlAT0SIKiWACCQazbvazmejmctcssvM3A3NnznfPcOacM9AAqZl6TB1QT/9rbVMDYN3ADWB3nPpAKqm71HG17F8dSQXrVN+qlSrYpLoyFfCcuuBSnU95nCM52EO1LRWsSy1FUEW9qW6qZ+//RukK4FmMyHvAc2C6no2hhgfrgD5gD7ARmANGgMEQwms1A9YDJaALOAj0AtuADBgHhoG7IYTPNYHR0BmgPxpsi94IzEfwG2AQmAEOAD1AJ9AONEebZeBnXDMAXAwhzOe9alKvqVO5UM+rpE6r39U5l9eMekdtyQP71W+m0Vd1x5L0FDNGCs2op9SuauBV0+ms2lkNa1cnEsGGYsT/UQZsiRGZQo9DCFN54M44ptCD/EQGbEgEqwBjRcBW0qlcBCwngmXA2qLJiYQe7i8CfkoIPJnvALJYYmYTAQ8DR6vzaBZC+BErQAo1AZeB7sVuYPH+PUp4rFuj/RNqa4jpbTvwKvEVWQD2ZgAhhFHgKWk1BrysTmlXYlVP5d3VEEK5umoE9UmiqjGqdhS+E9TZBsNK6vHlOupSg2Bl9Xo9T6/b6q8aRirxh+bjuFBj3YI6rK6qpy/tiK1gT8HnKWAImATWAPuAzQXrPgK9IYQv9bbzLeoF9X3suu6rfWpzwYkcUm+p79QX6iV1dZHh319mUxoEhM2kAAAAAElFTkSuQmCC) center/contain no-repeat}
+.hm-mb .ic,.hm-mb .press{position:absolute;top:50%;translate:-50% -50%}
+.hm-mb .press{width:2.6em;height:1.6em;border-radius:99px;background:#ffffff42;box-shadow:0 0 0 .5px #ffffff30 inset}
+.hm-mb .bt{width:1.7em;height:.86em;border:1.5px solid #ffffffe6;border-radius:.3em}
+.hm-mb .bt:before{content:'';position:absolute;right:-.24em;top:30%;width:.12em;height:40%;border-radius:0 .1em .1em 0;background:#ffffffb3}
+.hm-mb .bt:after{content:'';position:absolute;left:.12em;top:.12em;bottom:.12em;width:68%;border-radius:.14em;background:#fff}
+.hm-mb .wf{width:1.2em;height:.9em}
+.hm-mb .sp{width:1.02em;height:1.02em}
+.hm-mb .cc{width:1.2em;height:1.02em}
+.hm-mb svg{overflow:visible;filter:drop-shadow(0 1px 2px #0005)}
+.hm-mb time{position:absolute;right:16px;top:50%;translate:0 -50%;display:flex;gap:.5em;white-space:nowrap;font-weight:500}
 
+/* The 1top popover hangs from its menu-bar icon, with the arrow pointing at the icon. */
+.hm-panel{border-radius:18px;background:#1b1d21f0;border:1px solid #ffffff1f;box-shadow:0 34px 80px -24px #000d,0 0 0 .5px #0008;-webkit-backdrop-filter:blur(26px) saturate(1.4);backdrop-filter:blur(26px) saturate(1.4)}
+.hm-panel .ar{position:absolute;top:-10px;width:24px;height:11px;overflow:visible}
+.hm-panel .ar path{fill:#1b1d21f0;stroke:#ffffff1f;stroke-width:1}
 .hm-panel .ph{position:absolute;left:20px;right:20px;top:20px;display:flex;align-items:center;gap:10px;font-size:20px;font-weight:700}
 .hm-panel .ph svg path{fill:#6ecca8}
 .hm-panel .ph .hm-live{margin-left:auto}

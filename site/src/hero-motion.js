@@ -1,13 +1,15 @@
 // Hero explainer: agent sessions scattered across apps and computers gather into one
 // 1top view, then time windows, token maps, account limits and the menu bar.
 // Every frame is a pure function of time, so live playback and the video render match.
-const T=24,CH=[0,9.6,13,16,19.2,T],CAP=[0,3,5.6,9.6,13,16,19.2,T],REP=[7.1,12.7,15.2,18.6,22.1];
+const T=24,CH=[0,9.6,13,16,19.2,T],CAP=[0,3,5.6,9.6,13,16,19.2,T],REP=[7.1,12.7,15.2,18.6,21.5];
 const clamp=v=>v<0?0:v>1?1:v,seg=(t,a,b)=>clamp((t-a)/(b-a)),lerp=(a,b,p)=>a+(b-a)*p,lerpA=(a,b,p)=>a.map((v,i)=>lerp(v,b[i],p));
 const out3=p=>1-(1-p)**3,io3=p=>p<.5?4*p*p*p:1-(-2*p+2)**3/2,expo=p=>p>=1?1:1-2**(-10*p);
 const fade=(t,a,b,i=.35,o=.35)=>Math.min(out3(seg(t,a,a+i)),1-io3(seg(t,b-o,b)));
 const hex=c=>[1,3,5].map(i=>parseInt(c.slice(i,i+2),16)),rgba=c=>`rgba(${c[0]|0},${c[1]|0},${c[2]|0},${c[3].toFixed(3)})`;
 const fmt=k=>k>=999.95?(k/1000).toFixed(2)+'M':k.toFixed(1)+'k';
 
+// Cursor keeps its English menus in both languages, as the app does by default.
+const CURSOR_MENUS=['File','Edit','Selection','View','Go','Run','Terminal','Window','Help'];
 const COPY={
  en:{label:'Animated overview of 1top. Agent sessions from several apps and computers gather into one dashboard that shows where each session runs, its token usage over time windows, a token map, account limits and a menu-bar panel.',
   cap:['Your AI agents run across apps, terminals and computers.','1top gathers every session into one view.','See what’s running, where it runs, and what it uses.','Switch the time window — every number follows.','Token maps show where your usage goes.','Every subscription’s limits, side by side.','Jump back to any session from the menu bar.'],
@@ -18,7 +20,7 @@ const COPY={
   win6:['24h','12h','5h','1h','30m','10m'],span:['last 24 hours','last 12 hours','last 5 hours','last hour','last 30 minutes','last 10 minutes'],
   ago:['24h ago','12h ago','5h ago','1h ago','30m ago','10m ago'],now:'now',unit:s=>`tokens · ${s}`,rate:'tok/s · 60-second average',
   five:'5-hour',week:'Weekly',reset:s=>`resets in ${s}`,who:['Personal','Work'],
-  stats:['tokens · 1h','tok/s','working'],sessions:'Sessions',full:'Open full dashboard',toast:'Cursor brought forward on MacBook Pro',menus:['File','View','Window'],
+  stats:['tokens · 1h','tok/s','working'],sessions:'Sessions',full:'Open full dashboard',toast:'Cursor brought forward on MacBook Pro',apps:['Finder','Cursor'],menus:[['File','Edit','View','Go','Window','Help'],CURSOR_MENUS],clock:['Mon Oct 26','9:41 AM'],
   desc:['Frontend','Backend','Docs refresh','Notes','iOS client','Data jobs'],
   resets:[['2h 08m','2d 4h'],['2h 15m','3d 0h'],['2h 30m','4d 0h'],['2h 45m','5d 0h']]},
  ko:{label:'1top 동작 개요 애니메이션입니다. 여러 앱과 컴퓨터에 흩어진 에이전트 세션이 하나의 대시보드로 모이고, 실행 위치와 기간별 토큰 사용량, 토큰 맵, 계정 한도, 메뉴 막대 패널을 차례로 보여줍니다.',
@@ -30,7 +32,7 @@ const COPY={
   win6:['24시간','12시간','5시간','1시간','30분','10분'],span:['최근 24시간','최근 12시간','최근 5시간','최근 1시간','최근 30분','최근 10분'],
   ago:['24시간 전','12시간 전','5시간 전','1시간 전','30분 전','10분 전'],now:'현재',unit:s=>`토큰 · ${s}`,rate:'tok/s · 최근 60초 평균',
   five:'5시간',week:'주간',reset:s=>`${s} 후 초기화`,who:['개인','회사'],
-  stats:['토큰 · 1시간','tok/s','작업 중'],sessions:'세션',full:'전체 대시보드',toast:'MacBook Pro에서 Cursor를 앞으로 가져왔습니다',menus:['파일','보기','윈도우'],
+  stats:['토큰 · 1시간','tok/s','작업 중'],sessions:'세션',full:'전체 대시보드',toast:'MacBook Pro에서 Cursor를 앞으로 가져왔습니다',apps:['Finder','Cursor'],menus:[['파일','편집','보기','이동','윈도우','도움말'],CURSOR_MENUS],clock:['10월 26일 (월)','오전 9:41'],
   desc:['프론트엔드','백엔드','문서 정리','리서치 노트','iOS 앱','데이터 작업'],
   resets:[['2시간 8분','2일 4시간'],['2시간 15분','3일 0시간'],['2시간 30분','4일 0시간'],['2시간 45분','5일 0시간']]}
 };
@@ -55,12 +57,12 @@ const WIDE={W:1280,H:800,n:0,zones:[[40,40,540,600],[700,40,540,600]],chip:[290,
  mark:[640,340],win:[40,36,1200,640],head:[72,98],meta:1208,row:[56,186,1168,64,70],
  th:[[80,158],[366,158],[616,158],[856,158],[1076,158,1],[1196,158,1]],thD:[816,158],hl:[[604,146,232,468],[946,146,272,468]],
  compact:k=>[800,186+k*62,400,54],seg:[72,156,84,44],big:[72,224],unit:[72,330],rate:[752,332],chart:[72,380,680,200],
- tree:[68,160,1144,492],card:k=>[68+(k%2)*586,160+(k>>1)*258,558,234],icon:900,menus:[88,146,196],panel:[720,52,380,596],host:[60,104,560,460],cur:[1180,610],toast:[340,46]};
+ tree:[68,160,1144,492],card:k=>[68+(k%2)*586,160+(k>>1)*258,558,234],icon:960,mbh:32,sys:[34,66,95,124],menuN:9,date:1,panel:[770,42,380,564],host:[60,112,520,436],cur:[640,560],toast:[320,48]};
 const NARROW={W:640,H:700,n:1,zones:[[20,24,600,280],[20,396,600,280]],chip:[270,86],at:[[40,72],[330,108],[40,446],[60,206],[330,486],[60,578]],
  mark:[320,350],win:[16,20,608,612],head:[44,80],meta:596,row:[28,160,584,70,74],
  th:[[46,134],[296,134],null,null,[594,134,1],null],thD:null,hl:[[30,124,232,488],[462,124,150,488]],
  compact:k=>[28+(k%2)*300,446+(k>>1)*60,284,52],seg:[44,124,88,42],big:[44,180],unit:[44,264],rate:[596,266],chart:[44,304,552,118],
- tree:[28,124,584,496],card:k=>[28,124+k*124,584,114],icon:430,menus:[80,132],panel:[240,50,380,574],host:[-150,110,360,430],cur:[560,620],toast:[320,636]};
+ tree:[28,124,584,496],card:k=>[28,124+k*124,584,114],icon:430,mbh:40,sys:[38,72,0,102],menuN:2,date:0,panel:[240,50,380,574],host:[-150,116,360,430],cur:[330,560],toast:[320,636]};
 
 function rate(h,dx){
  const a=f=>clamp(1.5-f*dx*4/6.283),g=(c,w,k)=>k*Math.exp(-(((h-c)/w)**2));
@@ -92,7 +94,7 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
  const item=(s,i)=>{const [tn,c]=TOOL[s.tool];return `<div class="hm-item" style="--c:${c}"><i class="hm-f f-dot"></i><b class="hm-f f-name">${s.id}</b><span class="hm-f f-desc">${S.desc[i]}</span><span class="hm-f f-tool">${tn}</span><span class="hm-f f-model">${s.model}</span><span class="hm-f f-app">${s.app}</span><span class="hm-f f-pc">${PCS[s.pc]}</span><span class="hm-f f-status s${s.st}">${S.status[s.st]}</span><span class="hm-f r f-tok"></span><span class="hm-f r f-cpu">${s.cpu}</span><span class="hm-f r f-wave">${'<i></i>'.repeat(5)}</span><span class="hm-f f-pct">${(s.tok/SUM*100).toFixed(1)}%</span><span class="hm-f r f-open">↗</span>${i<4?card(i):''}</div>`};
  const mark=(w,h,inner='')=>`<svg width="${w}" height="${h}" viewBox="0 0 806.8 759.5" aria-hidden="true">${inner}<path d="${MARK}"/></svg>`;
  root.classList.add('hm');root.classList.toggle('hm--capture',capture);root.setAttribute('role','group');root.setAttribute('aria-label',S.label);
- root.innerHTML=`<div class="hm-stage"><div class="hm-canvas" aria-hidden="true"><div class="hm-grid"></div><div class="hm-a hm-glow g1"></div><div class="hm-a hm-glow g2"></div><div class="hm-world">
+ root.innerHTML=`<div class="hm-stage"><div class="hm-canvas" aria-hidden="true"><div class="hm-grid"></div><div class="hm-a hm-glow g1"></div><div class="hm-a hm-glow g2"></div><div class="hm-world"><div class="hm-a hm-desk"></div>
   ${S.zones.map(z=>`<div class="hm-a hm-zone"><span><i></i>${z}</span></div>`).join('')}
   <svg class="hm-wires"><defs><filter id="hmg${ver}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter></defs>${SESS.map(()=>`<path pathLength="1" stroke-dasharray="1 1"/>`).join('')}${SESS.map(()=>'<circle r="4"/><circle r="4"/><circle r="4"/>').join('')}</svg>
   <div class="hm-a hm-halo"></div>
@@ -102,10 +104,10 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
   <div class="hm-a hm-seg"><i class="pill"></i>${S.win6.map(w=>`<span>${w}</span>`).join('')}</div><div class="hm-a hm-big"></div><div class="hm-a hm-unit"></div><div class="hm-a hm-rate"><b>560</b> ${S.rate}</div>
   <svg class="hm-a hm-chart"><defs><linearGradient id="hma${ver}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#82edc6" stop-opacity=".32"/><stop offset="1" stop-color="#82edc6" stop-opacity="0"/></linearGradient><clipPath id="hmc${ver}"><rect x="-10" y="-20" height="400" width="0"/></clipPath></defs><line class="gl"/><line class="gl"/><line class="gl"/><g clip-path="url(#hmc${ver})"><path class="ar" fill="url(#hma${ver})"/><path class="ln"/><circle class="nd" r="6" fill="#82edc6"/><circle class="nr" r="6" fill="none" stroke="#82edc6" stroke-width="2"/></g><text class="t0"></text><text class="t1" text-anchor="end">${S.now}</text></svg>
   <div class="hm-a hm-host"><div class="tb"><i></i><i></i><i></i><b>website — Cursor</b></div><div class="bd"><div class="tree">${[70,52,84,60,46,72].map(w=>`<i style="width:${w}%"></i>`).join('')}</div><div class="code">${[[38,'#8caeff'],[62,0],[54,0],[30,'#ec9a6d'],[72,0],[48,'#82edc6'],[66,0],[40,0],[58,'#b69cff'],[34,0]].map(([w,c])=>`<i style="width:${w}%;${c?`background:${c}55`:''}"></i>`).join('')}</div></div><div class="term"><b>Claude Code</b> › Build the landing page<br><em>●</em> Working · 51.6k tokens</div></div>
+  <div class="hm-a hm-panel"><svg class="ar" viewBox="0 0 24 11" aria-hidden="true"><path d="M0 11C5.5 11 8.6 1.2 12 1.2S18.5 11 24 11"/></svg><div class="ph">${mark(24,23)}1top<span class="hm-live">${S.live} · ${PCS[0]}</span></div><div class="ps"><div><b class="p0"></b><small>${S.stats[0]}</small></div><div><b class="p1"></b><small>${S.stats[1]}</small></div><div><b>4</b><small>${S.stats[2]}</small></div></div><div class="pl">${S.sessions}</div><div class="pf"><span>${S.full}</span><kbd>⌘O</kbd></div></div>
   ${SESS.map(item).join('')}
   ${S.hl.map(h=>`<div class="hm-a hm-hl"><span>${h}</span></div>`).join('')}
-  <div class="hm-a hm-panel"><div class="ph">${mark(24,23)}1top<span class="hm-live">${S.live} · ${PCS[0]}</span></div><div class="ps"><div><b class="p0"></b><small>${S.stats[0]}</small></div><div><b class="p1"></b><small>${S.stats[1]}</small></div><div><b>4</b><small>${S.stats[2]}</small></div></div><div class="pl">${S.sessions}</div><div class="pf"><span>${S.full}</span><kbd>⌘O</kbd></div></div>
-  <div class="hm-a hm-mb"><b>1top</b>${S.menus.map(m=>`<span>${m}</span>`).join('')}<i class="press"></i><svg class="wf" viewBox="0 0 24 18" aria-hidden="true"><path d="M2 6.5a14.5 14.5 0 0 1 20 0M5.2 9.9a9.8 9.8 0 0 1 13.6 0M8.4 13.2a5.2 5.2 0 0 1 7.2 0" fill="none" stroke="#d4d8dc" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.6" fill="#d4d8dc"/></svg><i class="bt"></i><time>9:41</time></div>
+  <div class="hm-a hm-mb">${S.apps.map((a,k)=>`<div class="lf"><i class="ap"></i><b>${a}</b>${S.menus[k].map(m=>`<span>${m}</span>`).join('')}</div>`).join('')}<i class="press"></i><i class="ic bt"></i><svg class="ic wf" viewBox="0 0 24 18" aria-hidden="true"><path d="M2 6.5a14.5 14.5 0 0 1 20 0M5.2 9.9a9.8 9.8 0 0 1 13.6 0M8.4 13.2a5.2 5.2 0 0 1 7.2 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.7" fill="currentColor"/></svg><svg class="ic sp" viewBox="0 0 18 18" aria-hidden="true"><circle cx="7.4" cy="7.4" r="5.6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M11.6 11.6l4.8 4.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><svg class="ic cc" viewBox="0 0 20 17" aria-hidden="true"><rect x="1" y="1.2" width="18" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="15.8" cy="4.2" r="1.8" fill="currentColor"/><rect x="1" y="9.8" width="18" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="4.2" cy="12.8" r="1.8" fill="currentColor"/></svg><time><span>${S.clock[0]}</span>${S.clock[1]}</time></div>
   <div class="hm-a hm-mark"><svg width="150" height="141" viewBox="0 0 806.8 759.5" aria-hidden="true"><defs><clipPath id="hmk${ver}"><rect x="-40" y="-40" height="840" width="0"/></clipPath></defs><g clip-path="url(#hmk${ver})"><path d="${MARK}"/></g></svg></div>
   <div class="hm-a hm-ripple"></div><div class="hm-a"><div class="hm-toast" style="transform:translateX(-50%)"><i>↗</i>${S.toast}</div></div>
   <svg class="hm-a hm-cursor" viewBox="0 0 26 34"><path d="M3 2v25l6.5-6 4.4 10.2 4.4-1.9-4.3-10H22z" fill="#fff" stroke="#0a0c0f" stroke-width="1.6" stroke-linejoin="round"/></svg>
@@ -116,7 +118,7 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
  const E={stage:q('.hm-stage'),canvas:q('.hm-canvas'),world:q('.hm-world'),g1:q('.g1'),g2:q('.g2'),zones:qa('.hm-zone'),wires:q('.hm-wires'),paths:qa('.hm-wires path'),dots:qa('.hm-wires circle'),
   halo:q('.hm-halo'),win:q('.hm-win'),tb:q('.hm-win .tb'),heads:qa('.hm-head'),metas:qa('.hm-meta'),th:qa('.hm-th'),hl:qa('.hm-hl'),seg:q('.hm-seg'),pill:q('.hm-seg .pill'),segs:qa('.hm-seg span'),
   big:q('.hm-big'),unit:q('.hm-unit'),rate:q('.hm-rate'),rateN:q('.hm-rate b'),chart:q('.hm-chart'),gl:qa('.hm-chart .gl'),ar:q('.hm-chart .ar'),ln:q('.hm-chart .ln'),nd:q('.hm-chart .nd'),nr:q('.hm-chart .nr'),clip:q(`#hmc${ver} rect`),t0:q('.hm-chart .t0'),t1:q('.hm-chart .t1'),
-  host:q('.hm-host'),panel:q('.hm-panel'),p0:q('.hm-panel .p0'),p1:q('.hm-panel .p1'),mb:q('.hm-mb'),press:q('.hm-mb .press'),mark:q('.hm-mark'),mpath:q('.hm-mark path'),mclip:q(`#hmk${ver} rect`),
+  desk:q('.hm-desk'),host:q('.hm-host'),panel:q('.hm-panel'),arrow:q('.hm-panel .ar'),apps:qa('.hm-mb .lf'),p0:q('.hm-panel .p0'),p1:q('.hm-panel .p1'),mb:q('.hm-mb'),press:q('.hm-mb .press'),mark:q('.hm-mark'),mpath:q('.hm-mark path'),mclip:q(`#hmk${ver} rect`),
   ripple:q('.hm-ripple'),toast:q('.hm-toast').parentNode,cursor:q('.hm-cursor'),cap:q('.hm-cap'),capBg:q('.hm-cap>i'),caps:qa('.hm-cap span'),chs:qa('.hm-ch button'),fills:qa('.hm-ch b')};
  const IT=qa('.hm-item').map(el=>{const f={};for(const k of FIELDS)f[k]=el.querySelector('.f-'+k);return {el,f,bars:[...el.querySelectorAll('.f-wave i')],strong:[...el.querySelectorAll('.cd-b strong')],fill:[...el.querySelectorAll('.cd-b s')]}});
 
@@ -140,8 +142,9 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
    return {r,o:1,rad:14,bg:[...lerpA([14,17,21],c,.17),1],bd:[...c,.5],f:{name:[18,16,1.04,1],pct:[18,46,r[2]<220?.8:1,1],...(r[2]>190?{tok:[16,18,.88,.75]}:{}),...(roomy?{dot:[18,r[3]-30,1,1],tool:[36,r[3]-39,.85,.8]}:{})}}}
   if(i>3)return gone(lay(i,'tile',t));
   if(m==='card')return {r:L.card(i),o:1,rad:16,bg:[19,23,28,1],bd:[255,255,255,.09],f:{card:[0,0,1,1]}};
-  const P=L.panel,hit=i?0:seg(t,21.3,21.45)*(1-seg(t,22.6,23));
-  return {r:[P[0]+12,P[1]+222+i*66,P[2]-24,58],o:1,rad:12,bg:lerpA([22,26,31,1],[24,44,38,1],hit),bd:lerpA([255,255,255,.05],[130,237,198,.75],hit),f:{dot:[16,24,1,1],name:[34,9,1,1],app:[34,33,.84,.7],tok:[54,17,.95,1],open:[12,14,1,1],card:[0,0,(P[2]-24)/L.card(i)[2],0]}};
+  if(m==='tuck'){const [x,y,w,h]=L.card(i),k=.55,ax=L.icon,ay=L.mbh/2;return {r:[ax+(x-ax)*k,ay+(y-ay)*k,w*k,h*k],o:0,rad:16*k,bg:[19,23,28,1],bd:[255,255,255,.09],f:{card:[0,0,k,0]}}}
+  const P=L.panel,hit=i?0:seg(t,21.38,21.5);
+  return {r:[P[0]+12,P[1]+222+i*66-(m==='pop'?8:0),P[2]-24,58],o:m==='prow'?1:0,rad:12,bg:lerpA([22,26,31,1],[24,44,38,1],hit),bd:lerpA([255,255,255,.05],[130,237,198,.75],hit),f:{dot:[16,24,1,1],name:[34,9,1,1],app:[34,33,.84,.7],tok:[54,17,.95,1],open:[12,14,1,1],card:[0,0,(P[2]-24)/L.card(i)[2],0]}};
  }
  function mix(A,B,p){
   const f={};
@@ -149,11 +152,12 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
   for(const k in B.f)if(!A.f[k]){const b=B.f[k];f[k]=[b[0],b[1],b[2],b[3]*seg(p,k==='card'?.45:.6,1)]}
   return {r:lerpA(A.r,B.r,p),o:lerp(A.o,B.o,p),rad:lerp(A.rad,B.rad,p),bg:lerpA(A.bg,B.bg,p),bd:lerpA(A.bd,B.bd,p),f};
  }
- const MODES=[['chip',0,0],['row',4.6,1],['compact',9.6,.8],['tile',13.1,.85],['card',16,.8],['prow',19.3,.8]];
+  // [mode, start, duration, stagger per item]; the popover rows open and close together.
+ const MODES=[['chip',0,0],['row',4.6,1],['compact',9.6,.8],['tile',13.1,.85],['card',16,.8],['tuck',19.3,.45,.02],['pop',20.5,.01,0],['prow',20.52,.22,0],['shut',21.8,.16,0]];
  function itemAt(i,t){
-  const d=i*.055;let k=0;for(let j=1;j<MODES.length;j++)if(t>=MODES[j][1]+d)k=j;
+  const at=j=>MODES[j][1]+i*(MODES[j][3]??.055);let k=0;for(let j=1;j<MODES.length;j++)if(t>=at(j))k=j;
   const B=lay(i,MODES[k][0],t);if(!k)return B;
-  const p=io3(seg(t,MODES[k][1]+d,MODES[k][1]+d+MODES[k][2]));
+  const p=io3(seg(t,at(k),at(k)+MODES[k][2]));
   return p>=1?B:mix(lay(i,MODES[k-1][0],t),B,p);
  }
  function drawItem(it,st){
@@ -173,8 +177,9 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
   const [,,cw,ch]=L.chart;E.chart.setAttribute('width',cw);E.chart.setAttribute('height',ch+30);E.chart.setAttribute('viewBox',`0 0 ${cw} ${ch+30}`);
   E.gl.forEach((g,k)=>{const y=(ch*(k+1)/4).toFixed(1);g.setAttribute('x1',0);g.setAttribute('x2',cw);g.setAttribute('y1',y);g.setAttribute('y2',y)});
   E.t0.setAttribute('x',0);E.t0.setAttribute('y',ch+26);E.t1.setAttribute('x',cw);E.t1.setAttribute('y',ch+26);
-  size(E.mb,W,36);const sp=[...E.mb.querySelectorAll('span')];E.mb.querySelector('b').style.left='22px';sp.forEach((s,k)=>{s.style.display=L.menus[k]?'':'none';if(L.menus[k])s.style.left=L.menus[k]+'px'});
-  E.press.style.left=L.icon+'px';E.mb.querySelector('.wf').style.left=L.icon+36+'px';E.mb.querySelector('.bt').style.left=L.icon+70+'px';const tm=E.mb.querySelector('time');tm.style.right='20px';tm.style.left='auto';
+  size(E.desk,W,H);size(E.mb,W,L.mbh);E.apps.forEach(g=>g.querySelectorAll('span').forEach((s,k)=>{s.style.display=k<L.menuN?'':'none'}));
+  E.press.style.left=L.icon+'px';E.mb.querySelectorAll('.ic').forEach((el,k)=>{el.style.display=L.sys[k]?'':'none';el.style.left=L.icon+L.sys[k]+'px'});E.mb.querySelector('time span').style.display=L.date?'':'none';
+  E.arrow.style.left=L.icon-L.panel[0]-12+'px';
   size(E.panel,L.panel[2],L.panel[3]);size(E.host,L.host[2],L.host[3]);IT.slice(0,4).forEach((it,i)=>{const c=L.card(i);size(it.f.card,c[2],c[3])});
   fit();
  }
@@ -203,17 +208,18 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
   }
 
   // The mark grows, docks in the title bar, then becomes the menu-bar icon.
-  const dock=io3(seg(t,4.6,5.4)),mbar=io3(seg(t,19.3,20.1)),Wr=L.win;
-  let x=lerp(mx,Wr[0]+96,dock),y=lerp(my,Wr[1]+23,dock),s=lerp(1,.156,dock);x=lerp(x,L.icon,mbar);y=lerp(y,18,mbar);s=lerp(s,.128,mbar);
+  const dock=io3(seg(t,4.6,5.4)),mbar=io3(seg(t,19.3,19.85)),Wr=L.win;
+  let x=lerp(mx,Wr[0]+96,dock),y=lerp(my,Wr[1]+23,dock),s=lerp(1,.156,dock);x=lerp(x,L.icon,mbar);y=lerp(y,L.mbh/2,mbar);s=lerp(s,L.n?.15:.128,mbar);
   put(E.mark,x,y,s,seg(t,3.05,3.15));
   // The mark is traced in from left to right, rises from the baseline and breathes until it docks.
   {const rise=out3(seg(t,3.1,3.75)),live=1+.05*Math.sin(t*5.2)*(1-dock);E.mclip.setAttribute('width',(890*io3(seg(t,3.05,3.6))).toFixed(1));E.mpath.setAttribute('transform',`translate(0 ${(412*(1-(.2+.8*rise)*live)).toFixed(2)}) scale(1 ${((.2+.8*rise)*live).toFixed(4)})`);css(E.mpath,'fill',rgba([...lerpA([110,204,168],[255,255,255],mbar),1]))}
   const ho=out3(seg(t,3.2,3.8))*(1-seg(t,4.5,5));put(E.halo,mx,my,.85+.15*ho+.03*Math.sin(t*3),ho);
 
-  // Window frame grows out of the mark and later folds into the menu-bar panel.
-  const grow=expo(seg(t,4.75,5.55)),fold=io3(seg(t,19.3,20.1));
-  const wr=lerpA(lerpA([mx-90,my-60,180,120],Wr,grow),L.panel,fold);
-  put(E.win,wr[0],wr[1],1,out3(seg(t,4.75,5)));size(E.win,wr[2],wr[3]);css(E.tb,'opacity',(seg(t,5.1,5.5)*(1-seg(t,19.3,19.55))).toFixed(3));
+  // Window frame grows out of the mark and later folds into the menu-bar icon.
+  // It shrinks toward the menu-bar icon together with the account cards while the desktop shows through.
+  const grow=expo(seg(t,4.75,5.55)),fold=io3(seg(t,19.3,19.75)),ax=L.icon,ay=L.mbh/2;
+  const wr=lerpA(lerpA([mx-90,my-60,180,120],Wr,grow),[ax+(Wr[0]-ax)*.55,ay+(Wr[1]-ay)*.55,Wr[2]*.55,Wr[3]*.55],fold);
+  put(E.win,wr[0],wr[1],1,out3(seg(t,4.75,5))*(1-seg(t,19.3,19.7)));size(E.win,wr[2],wr[3]);css(E.tb,'opacity',(seg(t,5.1,5.5)*(1-seg(t,19.3,19.55))).toFixed(3));
 
   [[5.4,9.75],[9.75,13.15],[13.15,16.1],[16.1,19.4]].forEach(([a,b],k)=>{const o=fade(t,a,b,.4,.3);put(E.heads[k],L.head[0],L.head[1]+(1-o)*8,1,o)});
   [[5.6,9.75],[13.3,16.1],[16.3,19.4]].forEach(([a,b],k)=>{const o=fade(t,a,b,.4,.3);put(E.metas[k],0,L.head[1]+8+(1-o)*8,1,o)});
@@ -242,17 +248,22 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
    txt(E.t0,S.ago[w.b]);
   }else[E.seg,E.big,E.unit,E.rate,E.chart].forEach(el=>put(el,0,0,1,0));
 
-  // Menu bar, compact panel, host app focus.
-  const mo=io3(seg(t,19.15,19.6));put(E.mb,0,lerp(-40,0,mo),1,mo);css(E.press,'opacity',seg(t,19.45,19.7).toFixed(3));
-  const po=out3(seg(t,19.85,20.3));put(E.panel,L.panel[0],L.panel[1]+(1-po)*8,1,po);
+  // Desktop: the wallpaper and menu bar appear, the pointer clicks the 1top icon, its popover opens under it,
+  // and picking a session closes the popover and brings Cursor forward (the menu bar switches from Finder to Cursor).
+  const P=L.panel,ix=L.icon-2,iy=L.mbh/2-2,tx=P[0]+P[2]-39,ty=P[1]+251;
+  put(E.desk,0,0,1,io3(seg(t,19.3,19.8)));
+  const mo=io3(seg(t,19.3,19.75)),sw=seg(t,21.74,21.86);put(E.mb,0,lerp(-12,0,mo),1,mo);css(E.apps[0],'opacity',(1-sw).toFixed(3));css(E.apps[1],'opacity',sw.toFixed(3));
+  css(E.press,'opacity',(seg(t,20.5,20.56)*(1-seg(t,21.8,21.95))).toFixed(3));
+  const po=out3(seg(t,20.52,20.74))*(1-io3(seg(t,21.8,21.96)));put(E.panel,P[0],P[1]-8*(1-out3(seg(t,20.52,20.74))),1,po);
   if(po>0){txt(E.p0,fmt(SUM+(t-19.2)*.2));txt(E.p1,String(560+Math.round(14*Math.sin(t*2.3))))}
-  const lit=out3(seg(t,21.35,21.6)),hb=Math.sin(Math.PI*seg(t,21.35,21.9));
-  const hi=out3(seg(t,20.05,20.6));put(E.host,L.host[0],L.host[1]+(1-hi)*12,1+.012*hb,.42*hi+.58*lit);E.host.classList.toggle('lit',lit>.5);
-  css(E.host,'borderColor',rgba(lerpA([38,43,49,1],[130,237,198,.7],lit*(1-seg(t,22.6,23.2)))));css(E.host,'boxShadow',`0 0 ${(40*lit).toFixed(0)}px -10px rgba(130,237,198,${(.35*lit).toFixed(3)})`);
-  const P=L.panel,tx=P[0]+P[2]-39,ty=P[1]+251,mv=io3(seg(t,20.35,21.2)),press=Math.sin(Math.PI*seg(t,21.25,21.45));
-  put(E.cursor,lerp(L.cur[0],tx,mv),lerp(L.cur[1],ty,mv)-40*Math.sin(Math.PI*mv),1-.14*press,out3(seg(t,20.3,20.55))*(1-seg(t,22.4,22.8)));
-  const rp=seg(t,21.3,21.95);put(E.ripple,tx,ty,.3+.9*out3(rp),t>21.3?1-rp:0);
-  const to=fade(t,21.5,23.05,.3,.35);put(E.toast,L.toast[0],L.toast[1]-(1-to)*10,.96+.04*to,to);
+  const lit=out3(seg(t,21.74,21.95)),hb=Math.sin(Math.PI*seg(t,21.74,22.3));
+  const hi=out3(seg(t,19.55,20));put(E.host,L.host[0],L.host[1]+(1-hi)*10,1+.012*hb,hi);E.host.classList.toggle('lit',lit>.5);
+  css(E.host,'borderColor',rgba(lerpA([38,43,49,1],[130,237,198,.7],lit*(1-seg(t,22.6,23.2)))));css(E.host,'boxShadow',`0 30px 70px -24px rgba(0,0,0,.7),0 0 ${(40*lit).toFixed(0)}px -10px rgba(130,237,198,${(.35*lit).toFixed(3)})`);
+  const m1=io3(seg(t,19.95,20.45)),m2=io3(seg(t,20.82,21.42)),press=Math.sin(Math.PI*seg(t,20.46,20.6))+Math.sin(Math.PI*seg(t,21.55,21.7));
+  const cx=lerp(lerp(L.cur[0],ix,m1)+40*Math.sin(Math.PI*m1),tx,m2)-30*Math.sin(Math.PI*m2),cy=lerp(lerp(L.cur[1],iy,m1),ty,m2);
+  put(E.cursor,cx,cy,1-.14*press,out3(seg(t,19.85,20.05))*(1-seg(t,22.5,22.9)));
+  const rp=seg(t,21.58,21.92);put(E.ripple,tx,ty,.3+.9*out3(rp),t>21.58?1-rp:0);
+  const to=fade(t,21.95,23.1,.3,.35);put(E.toast,L.toast[0],L.toast[1]-(1-to)*10,.96+.04*to,to);
 
   if(capR.length){const k=CAP.findIndex((a,j)=>t>=a&&t<CAP[j+1]),b=CAP[k+1],r=lerp(capR[k],capR[(k+1)%capR.length],io3(seg(t,b-.34,b)));css(E.capBg,'width',(r*100).toFixed(3)+'%')}
   E.caps.forEach((c,k)=>{const a=CAP[k],b=CAP[k+1],i=out3(seg(t,a+.12,a+.5)),o=io3(seg(t,b-.32,b)),v=Math.min(i,1-o);css(c,'opacity',v.toFixed(3));css(c,'transform',`translateY(${((1-i)*8-o*8).toFixed(2)}px)`)});
