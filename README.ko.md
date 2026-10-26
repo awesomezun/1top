@@ -64,10 +64,12 @@ macOS 메뉴 막대의 1top 아이콘을 눌러 원하는 세션으로 바로 �
 
 ## 다운로드
 
+Windows v3.7.1은 앱 단독 실행 오류를 수정하고 로컬 진단 기록을 추가합니다. [배포 안내](docs/release-notes_v3.7.1.md). 게시자 서명은 아직 완료 전입니다.
+
 | 플랫폼 | 파일 | 참고 |
 | --- | --- | --- |
 | macOS (Apple Silicon) | [1top-3.6.0-macos-arm64.dmg](https://github.com/awesomezun/1top/releases/download/v3.6.0/1top-3.6.0-macos-arm64.dmg) | 로컬 임시 서명입니다. Developer ID 서명과 공증은 준비 중입니다. SHA-256 `48a2cd8bdd05c010a51a36e0385d14fac730cc2eb514b82e32528b5779c7c2c2` |
-| Windows x64 | [1top-3.6.0-windows-x64-setup.exe](https://github.com/awesomezun/1top/releases/download/v3.6.0/1top-3.6.0-windows-x64-setup.exe) | 프리뷰 설치 파일입니다. 배포자 서명은 준비 중입니다. SHA-256 `d8a1623d664fb3ab6f9aff1ac9dd17dd0f71b9c90fbefebc1acf2e19c6946e7f` |
+| Windows x64 | [1top-3.7.1-windows-x64-setup.exe](https://github.com/awesomezun/1top/releases/download/v3.7.1/1top-3.7.1-windows-x64-setup.exe) | 프리뷰 설치 파일입니다. 배포자 서명은 준비 중입니다. SHA-256 `57cfb74a0c557fbb01d103cb55d3addbabc63152108bfa8a9a99c93ef9f99c64` |
 | Android | [1top-1.5.0-android.apk](https://github.com/awesomezun/1top/releases/download/mobile-v1.5.0/1top-1.5.0-android.apk) | 서명된 프리뷰 APK입니다. SHA-256 `db4ba91ac0bb91bd0e1686b54432db14388993a092d35215f18cba6790d777c9` |
 | iOS | — | 네이티브 빌드는 준비되었고, TestFlight·App Store 배포는 준비 중입니다. |
 

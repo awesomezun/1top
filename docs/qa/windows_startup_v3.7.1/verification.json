@@ -1,0 +1,8 @@
+{
+  "windows_run": 40387977673,
+  "binary_source_commit": "f60c48c7aa78a17ae4ff7dd5742e09c0adfa1d46",
+  "sha256": "57cfb74a0c557fbb01d103cb55d3addbabc63152108bfa8a9a99c93ef9f99c64",
+  "python_tests": 130,
+  "signed": false,
+  "user_machine_retested": false
+}

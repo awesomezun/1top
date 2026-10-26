@@ -1,0 +1,86 @@
+{
+  "version": "3.7.1",
+  "scenarios": [
+    {
+      "title": "1top \u00b7 Local workspace",
+      "ready": true,
+      "maps": true,
+      "dataReady": true,
+      "renderedVersion": "3.7.1",
+      "collector_version": "3.7.1",
+      "collector_owned": true,
+      "collector_pid": 7344,
+      "fixture_tokens": null,
+      "session_count": 0,
+      "host_resources": true,
+      "scenario": "empty-first-launch",
+      "installer": true,
+      "exact_fixture_usage": false
+    },
+    {
+      "title": "1top \u00b7 Local workspace",
+      "ready": true,
+      "maps": true,
+      "dataReady": true,
+      "renderedVersion": "3.7.1",
+      "collector_version": "3.7.1",
+      "collector_owned": true,
+      "collector_pid": 4896,
+      "fixture_tokens": [
+        100,
+        200,
+        10,
+        20
+      ],
+      "session_count": 1,
+      "host_resources": true,
+      "scenario": "cold-start",
+      "installer": true,
+      "exact_fixture_usage": true
+    },
+    {
+      "title": "1top \u00b7 Local workspace",
+      "ready": true,
+      "maps": true,
+      "dataReady": true,
+      "renderedVersion": "3.7.1",
+      "collector_version": "3.7.1",
+      "collector_owned": true,
+      "collector_pid": 8460,
+      "fixture_tokens": [
+        100,
+        200,
+        10,
+        20
+      ],
+      "session_count": 1,
+      "host_resources": true,
+      "scenario": "cold-start-with-proxy",
+      "installer": true,
+      "exact_fixture_usage": true
+    },
+    {
+      "title": "1top \u00b7 Local workspace",
+      "ready": true,
+      "maps": true,
+      "dataReady": true,
+      "renderedVersion": "3.7.1",
+      "collector_version": "3.7.1",
+      "collector_owned": false,
+      "collector_pid": null,
+      "fixture_tokens": [
+        100,
+        200,
+        10,
+        20
+      ],
+      "session_count": 1,
+      "host_resources": true,
+      "scenario": "existing-collector",
+      "installer": true,
+      "exact_fixture_usage": true
+    }
+  ],
+  "unicode_data_path": true,
+  "first_launch_without_prestarted_collector": true
+}
