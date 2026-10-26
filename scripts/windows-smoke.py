@@ -63,6 +63,7 @@ with tempfile.TemporaryDirectory() as tmp:
             assert ui.returncode == 0
             result = json.loads(report.read_text(encoding='utf-8'))
             assert result['maps'] and result['ready'], result
+            assert result['dataReady'] and result['renderedVersion'] == __version__, result
             if name == 'empty-first-launch':
                 assert result['session_count'] == 0, result
             else:

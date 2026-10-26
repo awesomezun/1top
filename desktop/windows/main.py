@@ -122,11 +122,11 @@ def desktop(launcher):
             return
         try:
             for _ in range(240):
-                result = window.evaluate_js('({title:document.title,ready:!!document.querySelector("#sessionsBody"),maps:!!document.querySelector("[data-view=maps]")})')
+                result = window.evaluate_js('({title:document.title,ready:!!document.querySelector("#sessionsBody"),maps:!!document.querySelector("[data-view=maps]"),dataReady:typeof data!=="undefined"&&data?.ready===true,renderedVersion:typeof data!=="undefined"?data?.version:null})')
                 state = local_json(port, '/api/state') or {}
                 sid = os.environ.get('FIXTURE_SESSION')
                 match = next((s for s in state.get('sessions', []) if s['id'] == sid), {})
-                if result and result.get('maps') and state.get('ready') and (not sid or match.get('tokens')):
+                if result and result.get('maps') and result.get('dataReady') and state.get('ready') and (not sid or match.get('tokens')):
                     result.update(collector_version=state['version'],
                                   collector_owned=launcher.child is not None,
                                   collector_pid=launcher.child.pid if launcher.child else None,
