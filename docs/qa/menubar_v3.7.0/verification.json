@@ -1,0 +1,50 @@
+{
+  "version": "3.7.0",
+  "native_panel": {
+    "size": [
+      450,
+      720
+    ],
+    "visible_session_rows": 5,
+    "scroll_viewport_height": 264,
+    "controls_preserved": true,
+    "period_buttons": [
+      "10m",
+      "30m",
+      "1h",
+      "5h",
+      "12h",
+      "24h"
+    ],
+    "trend": "minute-aggregated local reports; no extra relay requests"
+  },
+  "verified_scenarios": [
+    "long session title preserves action buttons",
+    "scroll to final sessions",
+    "four compact accounts including weekly-only Codex Pro",
+    "empty sessions",
+    "offline actions disabled",
+    "usage chart boundary and missing-data model checks",
+    "native installed collector ready with 35 sessions"
+  ],
+  "builds": {
+    "macos": "ad-hoc signed preview; DMG verified",
+    "windows": "CI installer and smoke checks passed"
+  },
+  "ci": [
+    "https://github.com/awesomezun/1top/actions/runs/40273108170",
+    "https://github.com/awesomezun/1top/actions/runs/40273108173"
+  ],
+  "hero": {
+    "source": "Native SwiftUI menu capture with synthetic data",
+    "narrow_width": 390,
+    "horizontal_overflow": false,
+    "aside": "host app; Codex tool",
+    "codex_pro": "weekly only",
+    "chart": "bar chart"
+  },
+  "limits": [
+    "No live AI control actions were sent for UI QA",
+    "Hero opening remains a conceptual explainer; menu panel uses the actual app renderer"
+  ]
+}

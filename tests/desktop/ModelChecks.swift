@@ -35,6 +35,19 @@ import CoreGraphics
             precondition(abs(tile.rect.width * tile.rect.height / 41000 - tile.tile.value / 66) < 0.000001)
         }
         precondition(grouped.layout(in:.zero).isEmpty)
+        let eventData = """
+        {"ready":true,"events":[{"t":-120,"n":99},{"t":0,"fresh":2,"cached":3,"written":1,"output":4},{"t":540,"n":8},{"t":600,"n":99},{"t":120,"n":-7}]}
+        """.data(using:.utf8)!
+        let events = try JSONDecoder().decode(DesktopSnapshot.self, from:eventData).events
+        let trend = DesktopUsageTrend(events:events,period:"10m",end:599)
+        precondition(trend.reported && trend.bins.count == 10)
+        precondition(trend.bins.first?.tokens == 10 && trend.bins.last?.tokens == 8)
+        precondition(trend.bins.reduce(0) { $0 + $1.tokens } == 18)
+        precondition(!DesktopUsageTrend(events:nil,period:"1h",end:599).reported)
+        for period in ["10m","30m","1h","5h","12h","24h"] {
+            let chart=DesktopUsageTrend(events:events,period:period,end:599)
+            precondition(chart.bins.count <= 36 && chart.bins.last?.end == 600)
+        }
         print("Desktop model checks passed: nullable usage, freshness, accounts, safe capabilities, no offline actions.")
     }
 }

@@ -11,6 +11,12 @@ struct DesktopSnapshot: Decodable {
     var system: SystemUsage?
     var action_token: String?
     var account_quotas: [AccountQuota]?
+    var events: [UsageEvent]?
+    struct UsageEvent: Decodable {
+        var t: Double; var n: Double?
+        var fresh: Double?; var cached: Double?; var written: Double?; var output: Double?
+        var total: Double { n ?? ((fresh ?? 0) + (cached ?? 0) + (written ?? 0) + (output ?? 0)) }
+    }
     struct PeriodUsage: Decodable {
         var known_kinds: [String]
         var windows: [Window]
@@ -72,6 +78,25 @@ enum DesktopFormat {
     }
     static func percent(_ value: Double?) -> String { value.map { String(format: "%.0f%%", $0) } ?? "—" }
     static func total(_ tokens: [Double]?) -> Double? { tokens?.reduce(0, +) }
+}
+
+struct DesktopUsageTrend {
+    struct Bin: Identifiable {
+        var id: Int; var start: Double; var end: Double; var tokens: Double
+    }
+    var bins: [Bin]
+    var reported: Bool
+    init(events: [DesktopSnapshot.UsageEvent]?, period: String, end: Double) {
+        let seconds: Double = ["10m":600, "30m":1800, "1h":3600, "5h":18000, "12h":43200, "24h":86400][period] ?? 3600
+        // Reports are aggregated by minute. Align boundaries so today's final minute is included.
+        let finish = floor(end / 60) * 60 + 60, start = finish - seconds
+        let count = min(36, Int(seconds / 60)), step = seconds / Double(count)
+        bins = (0..<count).map { Bin(id:$0, start:start + Double($0)*step, end:start + Double($0+1)*step, tokens:0) }
+        reported = events != nil
+        for event in events ?? [] where event.t.isFinite && event.total.isFinite && event.total >= 0 && event.t >= start && event.t < finish {
+            let index = min(count-1, Int((event.t-start)/step)); bins[index].tokens += event.total
+        }
+    }
 }
 
 struct DesktopUsageMap {

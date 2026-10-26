@@ -4,6 +4,7 @@ import SwiftUI
 struct CompactTokenMap: View {
     @ObservedObject var model: DashboardModel
     @State private var selected: DesktopUsageMap.Tile?
+    @State private var hoveredID: String?
     private let palette: [Color] = [Color(red:0.43,green:0.80,blue:0.66),Color(red:0.51,green:0.65,blue:0.87),
         Color(red:0.74,green:0.60,blue:0.82),Color(red:0.85,green:0.69,blue:0.47),
         Color(red:0.44,green:0.68,blue:0.74),Color(red:0.76,green:0.53,blue:0.60),
@@ -16,13 +17,15 @@ struct CompactTokenMap: View {
         let data = report
         VStack(alignment: .leading, spacing: 7) {
             HStack {
-                Text("토큰 비중").font(.plex(size: 13, weight: .semibold))
+                Text("현재 세션 사용량").font(.plex(size: 12, weight: .medium))
                 Spacer()
-                Text("현재 세션 · \(model.window?.label ?? model.selectedPeriod)").font(.plex(size: 10)).foregroundStyle(.secondary)
+                Text("\(DesktopFormat.number(data.total)) tokens").font(.plex(size: 11)).foregroundStyle(.secondary).monospacedDigit()
+                Image(systemName: "info.circle").font(.system(size: 11)).foregroundStyle(.secondary)
+                    .help("선택한 기간 · 현재 연결된 세션만 비교\n보고 \(data.reported) · 미보고 \(data.unknown) · 0 사용량 \(data.zero) · 캐시 포함\n작은 영역은 마우스를 올리거나 눌러 확인하세요.")
             }
             if data.tiles.isEmpty {
                 Text(data.reported == 0 ? "이 기간의 사용량 보고가 없습니다" : "이 기간의 보고된 사용량은 0입니다")
-                    .font(.plex(size: 12)).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 72)
+                    .font(.plex(size: 12)).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 68)
                     .background(Color.white.opacity(0.025), in: RoundedRectangle(cornerRadius: 6))
             } else {
                 GeometryReader { geometry in
@@ -34,24 +37,33 @@ struct CompactTokenMap: View {
                             let titleWidth = (item.tile.title as NSString).size(withAttributes: [.font:font]).width
                             Button { selected = item.tile } label: {
                                 ZStack(alignment: .topLeading) {
-                                    RoundedRectangle(cornerRadius: 4).fill(tint.opacity(0.20))
-                                    if width >= 80 && height >= 44 {
+                                    RoundedRectangle(cornerRadius: 4).fill(tint.opacity(hoveredID == item.id ? 0.32 : 0.17))
+                                    if width >= 64 && height >= 42 {
                                         VStack(alignment: .leading, spacing: 3) {
                                             if titleWidth <= width - 14 { Text(item.tile.title).font(.plex(size: 11, weight: .semibold)).fixedSize() }
                                             Text(DesktopFormat.number(item.tile.value)).font(.plex(size: 12, weight: .medium)).monospacedDigit().foregroundStyle(tint)
                                         }.padding(7)
+                                    } else if width >= 38 && height >= 24 {
+                                        Text("\(Int((item.tile.value / data.total * 100).rounded()))%")
+                                            .font(.plex(size: 11, weight: .medium)).foregroundStyle(tint).padding(5)
                                     }
                                 }.frame(width: width, height: height).contentShape(Rectangle())
                                     .overlay(RoundedRectangle(cornerRadius: 4).stroke(tint.opacity(0.55), lineWidth: 0.7))
                             }.buttonStyle(.plain).offset(x:item.rect.minX, y:item.rect.minY)
+                                .onHover { hoveredID = $0 ? item.id : nil }
                                 .help(details(item.tile, data.total)).accessibilityLabel(details(item.tile, data.total))
                         }
                     }
-                }.frame(height: 100)
+                }.frame(height: 68)
             }
-            Text("보고 \(data.reported) · 미보고 \(data.unknown) · 0 사용량 \(data.zero) · 캐시 포함")
-                .font(.plex(size: 10)).foregroundStyle(.secondary)
-        }.padding(.horizontal, 20).padding(.bottom, 12)
+            Group {
+                if let tile = data.tiles.first(where: { $0.id == hoveredID }) {
+                    Text("\(tile.title) · \(DesktopFormat.number(tile.value)) · \(String(format: "%.1f", tile.value / data.total * 100))%")
+                } else {
+                    Text("캐시 포함 · 작은 영역에 마우스를 올려 확인")
+                }
+            }.font(.plex(size: 11)).foregroundStyle(.secondary).lineLimit(1).frame(height: 15, alignment: .leading)
+        }.padding(.horizontal, 18).padding(.bottom, 6)
             .popover(item: $selected, arrowEdge: .bottom) { original in
                 let current = data.tiles.first { $0.id == original.id } ?? original
                 VStack(alignment: .leading, spacing: 8) {
