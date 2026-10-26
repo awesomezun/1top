@@ -228,7 +228,7 @@ class Collector:
         from .accounts import AccountQuotaSampler
         self.accounts = AccountQuotaSampler()
         self.lock = threading.Lock()
-        self.snapshot = {'ready': False, 'updated': 0, 'sessions': [], 'error': None}
+        self.snapshot = {'ready': False, 'version': __version__, 'updated': 0, 'sessions': [], 'error': None}
         self.agy_quota = {'kind': 'Antigravity', 'windows': [], 'note': '한도 확인 중', 'updated': 0}
         self.glm_quota = {'kind': 'GLM', 'windows': [], 'note': '연결된 GLM 계정 한도 확인 중', 'updated': 0}
         self.trackers = {}
@@ -726,7 +726,9 @@ class Handler(BaseHTTPRequestHandler):
             data=(BASE/'dist'/route[1:]).read_bytes()
             mime='font/woff2'
         elif route=='/health':
-            data=b'{"ok":true,"version":"1.0.0"}';mime='application/json'
+            self.json_response(200,{'ok':True,'app':'1top','version':__version__,
+                                    'ready':self.server.collector.snapshot.get('ready',False)})
+            return
         else:self.send_error(404);return
         self.send_response(200)
         self.send_header('Content-Type',mime)

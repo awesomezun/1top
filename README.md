@@ -70,10 +70,12 @@ Recorded from the native app with example data (Korean UI).
 
 ## Download
 
+Windows v3.7.1 fixes standalone startup and adds local diagnostics. [Release notes](docs/release-notes_v3.7.1.md). Publisher signing remains pending.
+
 | Platform | File | Notes |
 | --- | --- | --- |
 | macOS (Apple Silicon) | [1top-3.6.0-macos-arm64.dmg](https://github.com/awesomezun/1top/releases/download/v3.6.0/1top-3.6.0-macos-arm64.dmg) | Ad-hoc signature; Developer ID signing and notarization pending. SHA-256 `48a2cd8bdd05c010a51a36e0385d14fac730cc2eb514b82e32528b5779c7c2c2` |
-| Windows x64 | [1top-3.6.0-windows-x64-setup.exe](https://github.com/awesomezun/1top/releases/download/v3.6.0/1top-3.6.0-windows-x64-setup.exe) | Preview installer; publisher signing pending. SHA-256 `d8a1623d664fb3ab6f9aff1ac9dd17dd0f71b9c90fbefebc1acf2e19c6946e7f` |
+| Windows x64 | [1top-3.7.1-windows-x64-setup.exe](https://github.com/awesomezun/1top/releases/download/v3.7.1/1top-3.7.1-windows-x64-setup.exe) | Preview installer; publisher signing pending. SHA-256 `57cfb74a0c557fbb01d103cb55d3addbabc63152108bfa8a9a99c93ef9f99c64` |
 | Android | [1top-1.5.0-android.apk](https://github.com/awesomezun/1top/releases/download/mobile-v1.5.0/1top-1.5.0-android.apk) | Signed preview APK. SHA-256 `db4ba91ac0bb91bd0e1686b54432db14388993a092d35215f18cba6790d777c9` |
 | iOS | — | Native build ready; TestFlight/App Store distribution pending |
 
