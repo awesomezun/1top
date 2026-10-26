@@ -1,7 +1,10 @@
+import {mountHeroMotion} from './hero-motion.js';
+import './hero-motion.css';
 // Each recording is visible in its own section. No carousel or reveal click.
 export function mountLandingMotion(){
+ const stage=document.querySelector('[data-hero-motion]'),stopHero=stage?mountHeroMotion(stage,{lang:document.documentElement.lang==='ko'?'ko':'en'}):()=>{};
  const films=[...document.querySelectorAll('video.product-film')],button=document.querySelector('[data-motion-toggle]');
- if(!films.length)return ()=>{};
+ if(!films.length)return stopHero;
  const preference=matchMedia('(prefers-reduced-motion: reduce)');
  let paused=preference.matches;
  const visible=new Set();
@@ -19,5 +22,5 @@ export function mountLandingMotion(){
  const toggle=()=>{paused=!paused;sync();};
  const change=()=>{paused=preference.matches;sync();};
  button?.addEventListener('click',toggle);preference.addEventListener('change',change);document.addEventListener('visibilitychange',sync);sync();
- return ()=>{observer.disconnect();films.forEach(f=>f.pause());button?.removeEventListener('click',toggle);preference.removeEventListener('change',change);document.removeEventListener('visibilitychange',sync);};
+ return ()=>{stopHero();observer.disconnect();films.forEach(f=>f.pause());button?.removeEventListener('click',toggle);preference.removeEventListener('change',change);document.removeEventListener('visibilitychange',sync);};
 }

@@ -1,7 +1,7 @@
 export function landingMarkup(t,repo){
  const menuBar=`<div class="macos-menubar" aria-label="${t('macOS menu bar with the 1top status icon','1top 아이콘이 있는 macOS 메뉴 막대')}"><div class="macos-menu-left"><img src="/media/v4.2.0/icons/apple.png" alt="Apple"><b>1top</b><span>${t('View','보기')}</span></div><div class="macos-status-anchor" title="1top"><img src="/media/v4.2.0/icons/1top.png" alt="1top 메뉴 막대 아이콘"></div><div class="macos-menu-right"><img src="/media/v4.2.0/icons/wifi.png" alt="Wi-Fi"><img src="/media/v4.2.0/icons/battery.png" alt="Battery"><span>9:41</span></div></div>`;
- return `<main class="product-landing">
- <div class="ambient-grid" aria-hidden="true"></div>
+ return `<div class="ambient-grid" aria-hidden="true"></div>
+<main class="product-landing">
  <section class="product-hero">
   <div class="signal-field" aria-hidden="true"><div class="signal-node signal-a"><span>⌘</span><small>APPS</small></div><div class="signal-node signal-b"><span>›_</span><small>SESSIONS</small></div><div class="signal-node signal-c"><span>▥</span><small>USAGE</small></div><div class="signal-node signal-d"><span>◴</span><small>LIMITS</small></div><i class="signal-line line-a"></i><i class="signal-line line-b"></i></div>
   <a class="release-pill" href="#download"><span class="live-pip"></span>${t('Meet your new menu-bar companion','메뉴 막대에서 만나는 내 AI 작업')}<span>↗</span></a>
@@ -11,6 +11,7 @@ export function landingMarkup(t,repo){
   <p class="hero-meta">${t('Free locally. Open source. Your own AI accounts.','로컬은 무료. 소스는 공개. AI 계정은 그대로.')}<br><span>${t('macOS & Windows previews · Local monitoring is free','macOS · Windows 프리뷰 · 로컬 모니터링 무료')}</span></p>
 
  </section>
+ <div class="hero-motion" data-hero-motion></div>
  <div class="product-index"><a href="#features"><i></i><b>01</b> ${t('Desktop','데스크톱')} <span>↘</span></a><a href="#maps-preview"><i></i><b>02</b> ${t('Token maps','토큰 맵')} <span>↘</span></a><a href="#menubar"><i></i><b>03</b> ${t('Menu bar','메뉴 막대')} <span>↘</span></a><a href="#allowances"><i></i><b>04</b> ${t('Subscriptions','구독 한도')} <span>↘</span></a></div>
  <section class="recorded-product" id="features" aria-label="${t('The app in motion','움직이는 실제 앱 화면')}">
   <div class="recording-intro"><p><i class="live-pip"></i>${t('Recorded from the macOS app · Example data','macOS 앱 화면 녹화 · 예시 데이터')}</p><button class="motion-toggle" data-motion-toggle data-play="${t('Play animations','애니메이션 재생')}" data-pause="${t('Pause animations','애니메이션 일시정지')}" aria-pressed="false">Ⅱ ${t('Pause animations','애니메이션 일시정지')}</button></div>
