@@ -1,12 +1,75 @@
+<p align="center"><a href="https://1top.si"><img src="site/public/og/v2.6.0/cover.png" alt="1top — 흩어진 AI 작업, 한눈에 보이게" width="100%"></a></p>
+
 # 1top
 
-AI 세션·터미널·토큰 사용량·컴퓨터 자원을 한곳에서 확인하는 오픈 소스 대시보드입니다.
+**흩어진 AI 작업, 한눈에 보이게.** AI 세션·터미널·토큰 사용량·컴퓨터 자원을 한곳에서 확인하는 오픈 소스 대시보드입니다.
 
-[웹사이트](https://1top.si) · [설치 없이 체험](https://1top.si/app?demo=1) · [English](README.md)
+[웹사이트](https://1top.si) · [설치 없이 체험](https://1top.si/app?demo=1) · [다운로드](#다운로드) · [변경 사항](docs/release-notes_v3.3.0.md) · [English](README.md)
 
 **v3.3.0 · 초기 프리뷰**
 
-기본 흐름은 **1top 실행 → 독립 데스크톱 대시보드**입니다. 로컬 모니터링은 무료이고 로그인이나 중앙 중계 서버가 필요하지 않습니다. [다운로드 페이지](https://1top.si/#download)에서 Mac Apple Silicon DMG, Windows x64 설치 파일, Android APK를 제공합니다. Mac은 로컬 서명이며 공증 전, Windows는 배포자 서명 전인 프리뷰입니다. Android APK는 서명되어 있으며, iOS 스토어 배포는 준비 중입니다.
+기본 흐름은 **1top 실행 → 독립 데스크톱 대시보드**입니다. 로컬 모니터링은 무료이고 로그인이나 중앙 중계 서버가 필요하지 않습니다. [다운로드 페이지](https://1top.si/#download)나 아래 표에서 Mac Apple Silicon DMG, Windows x64 설치 파일, Android APK를 받을 수 있습니다. Mac은 로컬 서명이며 공증 전, Windows는 배포자 서명 전인 프리뷰입니다. Android APK는 서명되어 있으며, iOS 스토어 배포는 준비 중입니다.
+
+## 스크린샷
+
+### 웹사이트
+
+[1top.si](https://1top.si)는 1top이 하는 일을 24초 모션으로 먼저 보여 줍니다.
+
+![1top.si 첫 화면](docs/readme/v3.3.0/ko/landing.jpg)
+
+| 여러 앱·컴퓨터의 세션이 한 화면에 모입니다 | 기간을 바꾸면 모든 수치가 함께 바뀝니다 |
+| --- | --- |
+| ![세션 장면](docs/readme/v3.3.0/ko/motion-1-sessions.jpg) | ![사용량 장면](docs/readme/v3.3.0/ko/motion-2-usage.jpg) |
+| **토큰 맵으로 사용량이 어디에 쓰였는지 봅니다** | **구독마다 5시간·주간 한도를 나란히 봅니다** |
+| ![토큰 맵 장면](docs/readme/v3.3.0/ko/motion-3-token-map.jpg) | ![계정 한도 장면](docs/readme/v3.3.0/ko/motion-4-limits.jpg) |
+
+macOS 메뉴 막대의 1top 아이콘을 눌러 원하는 세션으로 바로 돌아갑니다.
+
+![메뉴 막대 장면](docs/readme/v3.3.0/ko/motion-5-menu-bar.jpg)
+
+### 대시보드
+
+[설치 없이 체험](https://1top.si/app?demo=1)에서 캡처했습니다. 예시 데이터이며 실제 기기를 제어하지 않습니다.
+
+![대시보드: 컴퓨터와 기간별 토큰 사용량](docs/readme/v3.3.0/ko/dashboard.jpg)
+
+| 사용량 비율 맵 | 세션과 실행 위치 |
+| --- | --- |
+| ![사용량 비율 맵](docs/readme/v3.3.0/ko/usage-share-map.jpg) | ![세션 표](docs/readme/v3.3.0/ko/sessions.jpg) |
+
+![계정 한도: 5시간·주간](docs/readme/v3.3.0/ko/account-limits.jpg)
+
+### macOS 앱
+
+실제 앱을 예시 데이터로 녹화한 화면입니다.
+
+| 데스크톱 대시보드 | 사용량 비율 맵 |
+| --- | --- |
+| ![macOS 데스크톱 대시보드](site/public/media/v4.6.0/desktop.jpg) | ![macOS 사용량 비율 맵](site/public/media/v4.6.0/maps.jpg) |
+
+| 메뉴 막대 세션 요약 | 메뉴 막대 계정 한도 |
+| --- | --- |
+| <img src="site/public/media/v4.5.1/menu.jpg" alt="메뉴 막대 세션 요약" width="320"> | <img src="site/public/media/v4.5.2/accounts.jpg" alt="메뉴 막대 계정 한도" width="320"> |
+
+### Android
+
+| 사용량 비율 | 세션 | 구독 한도 |
+| --- | --- | --- |
+| <img src="docs/qa/usage_only_v3.3.0/android-usage.png" alt="Android 사용량 비율" width="240"> | <img src="docs/qa/mobile_v1.0.0/android-sessions.png" alt="Android 세션" width="240"> | <img src="docs/qa/mobile_v1.0.0/android-accounts.png" alt="Android 구독 한도" width="240"> |
+
+## 다운로드
+
+| 플랫폼 | 파일 | 참고 |
+| --- | --- | --- |
+| macOS (Apple Silicon) | [1top-3.3.0-macos-arm64.dmg](https://github.com/awesomezun/1top/releases/download/v3.3.0/1top-3.3.0-macos-arm64.dmg) | 로컬 임시 서명입니다. Developer ID 서명과 공증은 준비 중입니다. |
+| Windows x64 | [1top-3.3.0-windows-x64-setup.exe](https://github.com/awesomezun/1top/releases/download/v3.3.0/1top-3.3.0-windows-x64-setup.exe) | 서명 전 프리뷰 설치 파일입니다. WebView2가 필요합니다. |
+| Android | [1top-1.2.0-android.apk](https://github.com/awesomezun/1top/releases/download/mobile-v1.2.0/1top-1.2.0-android.apk) | 서명된 프리뷰 APK입니다. SHA-256 `0d1af57f3aee70b9d8277b44a2b4a3240e2ded9bd67466ae4af5a88cfcd9e483` |
+| iOS | — | 네이티브 빌드는 준비되었고, TestFlight·App Store 배포는 준비 중입니다. |
+
+전체 릴리스는 [v3.3.0](https://github.com/awesomezun/1top/releases/tag/v3.3.0), [mobile-v1.2.0](https://github.com/awesomezun/1top/releases/tag/mobile-v1.2.0)에 있습니다. 프리뷰 파일은 정식 서명된 설치 파일의 검증 결과가 아닙니다.
+
+## 할 수 있는 일
 
 - 메뉴 막대 아이콘을 누르면 간략 대시보드, 전체 보기에서는 독립 앱 창
 - 로그인된 계정에서 보고하는 5H·주간 한도와 초기화 시각. 해당하지 않는 한도는 생략하고, 확인 실패와 이전 캐시는 구분합니다.
@@ -22,4 +85,4 @@ AI 세션·터미널·토큰 사용량·컴퓨터 자원을 한곳에서 확인�
 
 미보고 토큰은 0이 아닙니다. Claude Code Goal은 마지막으로 관측한 기록이며, Loop의 현재 예약 상태·다음 실행 시각과 skill의 전체 작업 성공 여부는 확인하지 않습니다. Aside는 읽기 전용 로컬 기록으로 최근 24시간 및 작업 중 세션을 감지합니다. 세션별 CPU·메모리는 추정하지 않으며, 앱 바로가기와 지원되는 세션 중단을 제공합니다. 공유 앱 전체를 종료하지 않습니다.
 
-자세한 설치·빌드·제한은 [README](README.md), [변경 사항](docs/release-notes_v3.3.0.md), [운영 정책](docs/service-policy_v1.0.0.md)을 확인하세요. 이전 안내는 [보존본](docs/archive/README.ko_v1.1.1.md)에 있습니다.
+자세한 설치·빌드·제한은 [README](README.md), [변경 사항](docs/release-notes_v3.3.0.md), [운영 정책](docs/service-policy_v1.0.0.md)을 확인하세요. 이전 안내는 [보존본](docs/archive/)에 있습니다.

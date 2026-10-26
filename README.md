@@ -1,12 +1,73 @@
+<p align="center"><a href="https://1top.si"><img src="site/public/og/v2.6.0/cover.png" alt="1top — Your AI work. In view." width="100%"></a></p>
+
 # 1top
 
-**Your AI agents, across apps and computers.**
+**Your AI work. In view.** Your AI agents, sessions, tokens and computers, together in one place.
 
-[Website](https://1top.si) · [Try the demo](https://1top.si/app?demo=1) · [한국어](README.ko.md)
+[Website](https://1top.si) · [Try the demo](https://1top.si/app?demo=1) · [Download](#download) · [Release notes](docs/release-notes_v3.3.0.md) · [한국어](README.ko.md)
 
 See which computer, application, and terminal owns a session; inspect reported token usage and CPU/RAM; send supported controls to the selected session.
 
-**Status: early preview.** The browser demo is available without installation. Download the macOS Apple Silicon DMG, Windows x64 installer, or Android APK from the [download page](https://1top.si/#download). The Mac app is locally signed but not notarized; the Windows installer is unsigned. Android is distributed as a signed preview APK. iOS store distribution and clean-machine installer acceptance remain pending. Broad process detection does not imply every tool exposes tokens or supports pause/resume.
+**Status: early preview.** The browser demo is available without installation. Download the macOS Apple Silicon DMG, Windows x64 installer, or Android APK below or from the [download page](https://1top.si/#download). The Mac app is locally signed but not notarized; the Windows installer is unsigned. Android is distributed as a signed preview APK. iOS store distribution and clean-machine installer acceptance remain pending. Broad process detection does not imply every tool exposes tokens or supports pause/resume.
+
+## Screenshots
+
+### Website
+
+[1top.si](https://1top.si) opens with a 24-second overview of what 1top does.
+
+![1top.si landing page](docs/readme/v3.3.0/en/landing.jpg)
+
+| Sessions from many apps and computers gather in one view | Switch the time window and every number follows |
+| --- | --- |
+| ![Sessions scene](docs/readme/v3.3.0/en/motion-1-sessions.jpg) | ![Usage scene](docs/readme/v3.3.0/en/motion-2-usage.jpg) |
+| **Token maps show where your usage goes** | **Every subscription's limits, side by side** |
+| ![Token map scene](docs/readme/v3.3.0/en/motion-3-token-map.jpg) | ![Account limits scene](docs/readme/v3.3.0/en/motion-4-limits.jpg) |
+
+Click the 1top icon in the macOS menu bar and jump straight back to a session:
+
+![Menu bar scene](docs/readme/v3.3.0/en/motion-5-menu-bar.jpg)
+
+### Dashboard
+
+These come from the [browser demo](https://1top.si/app?demo=1), which uses example data and controls no real device.
+
+![Dashboard: computers and rolling token usage](docs/readme/v3.3.0/en/dashboard.jpg)
+
+| Usage share map | Sessions and where they run |
+| --- | --- |
+| ![Usage share map](docs/readme/v3.3.0/en/usage-share-map.jpg) | ![Sessions table](docs/readme/v3.3.0/en/sessions.jpg) |
+
+![Account limits: 5-hour and weekly windows](docs/readme/v3.3.0/en/account-limits.jpg)
+
+### macOS app
+
+Recorded from the native app with example data (Korean UI).
+
+| Desktop dashboard | Usage share map |
+| --- | --- |
+| ![macOS desktop dashboard](site/public/media/v4.6.0/desktop.jpg) | ![macOS usage share map](site/public/media/v4.6.0/maps.jpg) |
+
+| Menu-bar summary | Menu-bar account limits |
+| --- | --- |
+| <img src="site/public/media/v4.5.1/menu.jpg" alt="Menu-bar summary panel" width="320"> | <img src="site/public/media/v4.5.2/accounts.jpg" alt="Menu-bar account limits panel" width="320"> |
+
+### Android
+
+| Usage share | Sessions | Plan limits |
+| --- | --- | --- |
+| <img src="docs/qa/usage_only_v3.3.0/android-usage.png" alt="Android usage share" width="240"> | <img src="docs/qa/mobile_v1.0.0/android-sessions.png" alt="Android sessions" width="240"> | <img src="docs/qa/mobile_v1.0.0/android-accounts.png" alt="Android plan limits" width="240"> |
+
+## Download
+
+| Platform | File | Notes |
+| --- | --- | --- |
+| macOS (Apple Silicon) | [1top-3.3.0-macos-arm64.dmg](https://github.com/awesomezun/1top/releases/download/v3.3.0/1top-3.3.0-macos-arm64.dmg) | Local ad-hoc signature; Developer ID signing and notarization pending |
+| Windows x64 | [1top-3.3.0-windows-x64-setup.exe](https://github.com/awesomezun/1top/releases/download/v3.3.0/1top-3.3.0-windows-x64-setup.exe) | Unsigned preview installer; requires WebView2 |
+| Android | [1top-1.2.0-android.apk](https://github.com/awesomezun/1top/releases/download/mobile-v1.2.0/1top-1.2.0-android.apk) | Signed preview APK, SHA-256 `0d1af57f3aee70b9d8277b44a2b4a3240e2ded9bd67466ae4af5a88cfcd9e483` |
+| iOS | — | Native build ready; TestFlight/App Store distribution pending |
+
+All releases: [v3.3.0](https://github.com/awesomezun/1top/releases/tag/v3.3.0) · [mobile-v1.2.0](https://github.com/awesomezun/1top/releases/tag/mobile-v1.2.0). Preview downloads are not production-signed installer acceptance evidence.
 
 ## Using 1top
 
