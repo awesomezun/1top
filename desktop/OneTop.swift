@@ -102,7 +102,7 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         let point = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(point) } ?? button.window?.screen ?? NSScreen.main
         model.refresh(); NSApp.activate(ignoringOtherApps: true)
-        popover.contentSize = NSSize(width: 450, height: 720)
+        popover.contentSize = QuickDashboard.panelSize
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
         // SwiftUI resolves its intrinsic height after presentation. AppKit can otherwise

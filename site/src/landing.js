@@ -1,7 +1,7 @@
 export function landingMarkup(t,repo){
  const menuBar=`<div class="macos-menubar" aria-label="${t('macOS menu bar with the 1top status icon','1top 아이콘이 있는 macOS 메뉴 막대')}"><div class="macos-menu-left"><img src="/media/v4.2.0/icons/apple.png" alt="Apple"><b>1top</b><span>${t('View','보기')}</span></div><div class="macos-status-anchor" title="1top"><img src="/media/v4.2.0/icons/1top.png" alt="1top 메뉴 막대 아이콘"></div><div class="macos-menu-right"><img src="/media/v4.2.0/icons/wifi.png" alt="Wi-Fi"><img src="/media/v4.2.0/icons/battery.png" alt="Battery"><span>9:41</span></div></div>`;
- return `<main class="product-landing">
- <div class="ambient-grid" aria-hidden="true"></div>
+ return `<div class="ambient-grid" aria-hidden="true"></div>
+<main class="product-landing">
  <section class="product-hero">
   <div class="signal-field" aria-hidden="true"><div class="signal-node signal-a"><span>⌘</span><small>APPS</small></div><div class="signal-node signal-b"><span>›_</span><small>SESSIONS</small></div><div class="signal-node signal-c"><span>▥</span><small>USAGE</small></div><div class="signal-node signal-d"><span>◴</span><small>LIMITS</small></div><i class="signal-line line-a"></i><i class="signal-line line-b"></i></div>
   <a class="release-pill" href="#download"><span class="live-pip"></span>${t('Meet your new menu-bar companion','메뉴 막대에서 만나는 내 AI 작업')}<span>↗</span></a>
@@ -11,6 +11,7 @@ export function landingMarkup(t,repo){
   <p class="hero-meta">${t('Free locally. Open source. Your own AI accounts.','로컬은 무료. 소스는 공개. AI 계정은 그대로.')}<br><span>${t('macOS & Windows previews · Local monitoring is free','macOS · Windows 프리뷰 · 로컬 모니터링 무료')}</span></p>
 
  </section>
+ <div class="hero-motion" data-hero-motion></div>
  <div class="product-index"><a href="#features"><i></i><b>01</b> ${t('Desktop','데스크톱')} <span>↘</span></a><a href="#maps-preview"><i></i><b>02</b> ${t('Token maps','토큰 맵')} <span>↘</span></a><a href="#menubar"><i></i><b>03</b> ${t('Menu bar','메뉴 막대')} <span>↘</span></a><a href="#allowances"><i></i><b>04</b> ${t('Subscriptions','구독 한도')} <span>↘</span></a></div>
  <section class="recorded-product" id="features" aria-label="${t('The app in motion','움직이는 실제 앱 화면')}">
   <div class="recording-intro"><p><i class="live-pip"></i>${t('Recorded from the macOS app · Example data','macOS 앱 화면 녹화 · 예시 데이터')}</p><button class="motion-toggle" data-motion-toggle data-play="${t('Play animations','애니메이션 재생')}" data-pause="${t('Pause animations','애니메이션 일시정지')}" aria-pressed="false">Ⅱ ${t('Pause animations','애니메이션 일시정지')}</button></div>
@@ -22,11 +23,11 @@ export function landingMarkup(t,repo){
   <article class="feature-film map-film" id="maps-preview"><div class="film-heading"><div><span class="film-number">02 / TOKEN MAPS</span><h2>${t('Every session.<br>Its share of usage.','어떤 세션이,<br>얼마나 쓰는지.')}</h2></div><p>${t('Compare token share by session, app, tool, or model. Hover over any area to see its name and exact usage.','세션·앱·도구·모델별 토큰 사용 비중을 면적으로 비교합니다. 작은 영역도 마우스를 올리면 이름과 정확한 사용량을 볼 수 있습니다.')}</p></div><div class="film-surface desktop-surface"><video class="product-film" data-film="maps" autoplay loop muted playsinline preload="auto" poster="/media/v4.6.0/maps.jpg" aria-label="${t('Usage share map in the actual dashboard','실제 대시보드의 사용량 비율 맵')}" width="1512" height="948"><source src="/media/v4.6.0/maps.mp4" type="video/mp4"></video></div><div class="film-caption"><span>${t('Sessions → Apps → Tools → Models','세션별 → 실행 앱별 → 실행 도구별 → 모델별')}</span><span>${t('Reported tokens · Selected time window','보고된 토큰 기준 · 선택한 기간별 집계')}</span></div></article>
   <div class="compact-films">
    <article class="feature-film" id="menubar"><div class="film-heading"><div><span class="film-number">03 / MENU BAR</span><h2>${t('A small window.<br>The whole picture.','작은 창으로,<br>지금 상황을 빠르게.')}</h2></div><p>${t('Usage, running sessions, and computer resources — right from the menu bar. Keep the full dashboard one click away.','메뉴 막대에서 사용량과 작업 중인 세션, 컴퓨터 자원을 확인합니다. 자세히 볼 때는 전체 대시보드를 여세요.')}</p></div>
-    <div class="film-surface compact-surface">${menuBar}<video class="product-film" data-film="menu" autoplay loop muted playsinline preload="auto" poster="/media/v4.5.1/menu.jpg" aria-label="${t('Native menu-bar dashboard updating usage and switching time windows','사용량과 기간을 바꾸어 보는 실제 메뉴 막대 대시보드')}" width="476" height="746"><source src="/media/v4.5.1/menu.mp4" type="video/mp4"></video></div>
+    <div class="film-surface compact-surface">${menuBar}<video class="product-film" data-film="menu" autoplay loop muted playsinline preload="auto" poster="/media/v4.10.0/menu.jpg" aria-label="${t('Native menu-bar dashboard updating usage and switching time windows','사용량과 기간을 바꾸어 보는 실제 메뉴 막대 대시보드')}" width="476" height="746"><source src="/media/v4.10.0/menu.mp4" type="video/mp4"></video></div>
     <div class="film-caption"><span>${t('1 hour → 10 minutes → 5 hours','1시간 → 10분 → 5시간')}</span></div>
    </article>
    <article class="feature-film" id="allowances"><div class="film-heading"><div><span class="film-number">04 / ACCOUNT LIMITS</span><h2>${t('Your subscriptions.<br>Side by side.','여러 구독을,<br>한눈에 나란히.')}</h2></div><p>${t('Compare compact 5-hour and weekly allowances across accounts. Add another login from your Mac.','계정마다 5시간·주간 한도를 나란히 비교하세요. Mac에서 계정을 추가하고, 초기화 시각과 마지막 보고도 함께 확인합니다.')}</p></div>
-    <div class="film-surface compact-surface account-film-surface">${menuBar}<video class="product-film" data-film="accounts" autoplay loop muted playsinline preload="auto" poster="/media/v4.5.2/accounts.jpg" aria-label="${t('Native account limits: five-hour and weekly quota reports','실제 계정 한도 화면의 5시간·주간 사용률')}" width="476" height="746"><source src="/media/v4.5.2/accounts.mp4" type="video/mp4"></video></div>
+    <div class="film-surface compact-surface account-film-surface">${menuBar}<video class="product-film" data-film="accounts" autoplay loop muted playsinline preload="auto" poster="/media/v4.10.0/accounts.jpg" aria-label="${t('Native account limits: five-hour and weekly quota reports','실제 계정 한도 화면의 5시간·주간 사용률')}" width="476" height="746"><source src="/media/v4.10.0/accounts.mp4" type="video/mp4"></video></div>
     <div class="film-caption"><span>${t('Account → Allowance → Reset time','계정 → 사용률 → 초기화 시각')}</span></div>
    </article>
   </div>

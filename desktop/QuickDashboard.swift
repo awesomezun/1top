@@ -4,7 +4,9 @@ import SwiftUI
 private let panelBackground = Color(red: 0.055, green: 0.063, blue: 0.075)
 private let panelAccent = Color(red: 0.43, green: 0.80, blue: 0.66)
 struct QuickDashboard: View {
+    static let panelSize = NSSize(width: 450, height: 720)
     @ObservedObject var model: DashboardModel
+    @State private var hoveredSession: String?
     var openDashboard: () -> Void; var openBrowser: () -> Void
     var remoteOptions: () -> Void; var connectRemote: () -> Void
     var toggleLogin: () -> Void; var restart: () -> Void; var quit: () -> Void
@@ -12,8 +14,11 @@ struct QuickDashboard: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Picker("보기", selection: $model.accounts) { Text("세션 요약").tag(false); Text("계정 한도 · 5H / 주간").tag(true) }
-                .pickerStyle(.segmented).padding(.horizontal, 20).padding(.bottom, 16)
+            HStack(spacing: 4) {
+                sectionTab("세션", accounts: false)
+                sectionTab("계정 한도", accounts: true)
+            }.padding(3).background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.horizontal, 18).padding(.bottom, 8)
             Divider()
             if model.accounts { accountView } else { summary; CompactTokenMap(model: model); sessionList }
             if let message = model.message {
@@ -22,67 +27,114 @@ struct QuickDashboard: View {
                     Spacer(minLength: 4)
                     Button { model.message = nil } label: { Image(systemName: "xmark") }
                         .buttonStyle(.plain).accessibilityLabel("알림 닫기")
-                }.padding(12).background(Color.white.opacity(0.04))
+                }.padding(10).background(Color.white.opacity(0.04))
             }
             Divider()
             HStack(spacing: 12) {
                 Button(action: openDashboard) {
                     HStack { Image(systemName: "rectangle.inset.filled"); Text("전체 대시보드"); Spacer(); Text("⌘O").foregroundStyle(.secondary) }
-                        .font(.plex(size: 14, weight: .semibold)).padding(.horizontal, 14).padding(.vertical, 11)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+                        .font(.plex(size: 13, weight: .medium)).padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
                 }.buttonStyle(.plain).accessibilityLabel("전체 대시보드 열기")
-                Button(action: openBrowser) { Image(systemName: "safari").font(.plex(size: 19)) }
+                Button(action: openBrowser) { Image(systemName: "safari").font(.plex(size: 17)) }
                     .buttonStyle(.plain).help("브라우저에서 열기").accessibilityLabel("브라우저에서 열기")
-            }.padding(16)
-        }.frame(width: 450, height: 720).background(panelBackground).preferredColorScheme(.dark).font(.plex(size: 13))
+            }.padding(.horizontal, 18).padding(.vertical, 10)
+        }.frame(width: Self.panelSize.width, height: Self.panelSize.height)
+            .background(panelBackground).preferredColorScheme(.dark).font(.plex(size: 13))
+    }
+    private func sectionTab(_ title: String, accounts: Bool) -> some View {
+        Button { model.accounts = accounts } label: {
+            Text(title).font(.plex(size: 13, weight: .medium)).frame(maxWidth: .infinity).padding(.vertical, 5)
+                .foregroundStyle(model.accounts == accounts ? Color.primary : Color.secondary)
+                .background(model.accounts == accounts ? Color.white.opacity(0.09) : .clear, in: RoundedRectangle(cornerRadius: 6))
+        }.buttonStyle(.plain).accessibilityAddTraits(model.accounts == accounts ? .isSelected : [])
     }
     private var summary: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("사용량").font(.plex(size: 15, weight: .semibold)); Spacer()
-                Picker("최근 누적 기간", selection: $model.selectedPeriod) {
-                    ForEach([("10m", "10분"), ("30m", "30분"), ("1h", "1시간"), ("5h", "5시간"), ("12h", "12시간"), ("24h", "24시간")], id: \.0) { Text("최근 \($0.1)").tag($0.0) }
-                }.labelsHidden().frame(width: 130).accessibilityLabel("최근 누적 기간")
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 4) {
+                ForEach([("10m", "10분"), ("30m", "30분"), ("1h", "1시간"), ("5h", "5시간"), ("12h", "12시간"), ("24h", "24시간")], id: \.0) { key, title in
+                    Button { model.selectedPeriod = key } label: {
+                        Text(title).font(.plex(size: 12, weight: .medium)).frame(maxWidth: .infinity).padding(.vertical, 4)
+                            .foregroundStyle(model.selectedPeriod == key ? panelAccent : Color.secondary)
+                            .background(model.selectedPeriod == key ? panelAccent.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
+                    }.buttonStyle(.plain).accessibilityLabel("최근 \(title)")
+                        .accessibilityAddTraits(model.selectedPeriod == key ? .isSelected : [])
+                }
+            }.accessibilityElement(children: .contain).accessibilityLabel("사용량 기간")
+            HStack(alignment: .top, spacing: 18) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Text(DesktopFormat.number(model.periodTokens)).font(.plex(size: 27, weight: .semibold)).monospacedDigit()
+                        Text("tokens").font(.plex(size: 12)).foregroundStyle(.secondary)
+                    }
+                    Text(model.window?.partial == true ? "누적 사용량 · 일부 기록" : "누적 사용량 · 캐시 포함")
+                        .font(.plex(size: 12)).foregroundStyle(.secondary).help(usageExplanation)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .trailing, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Text(DesktopFormat.number(model.rate)).font(.plex(size: 27, weight: .semibold)).monospacedDigit()
+                        Text("tok/s").font(.plex(size: 12)).foregroundStyle(.secondary)
+                        Image(systemName: "info.circle").font(.system(size: 11)).foregroundStyle(.secondary)
+                            .help("최근 60초 평균 소비 속도\n" + usageExplanation)
+                    }
+                    usageTrend.frame(width: 164, height: 24)
+                }
             }
-            HStack(alignment: .top, spacing: 0) {
-                metric(DesktopFormat.number(model.periodTokens), "누적 tokens", note: model.window?.partial == true ? "일부 기간만 기록됨" : "수집된 보고량")
-                Spacer(minLength: 12)
-                metric(DesktopFormat.number(model.rate), "tokens/s", note: "최근 60초 평균")
-                Spacer(minLength: 12)
-                metric(model.snapshot?.ready == true ? "\(model.working)" : "—", "작업 중", note: "전체 \(model.sessions.count)개")
-            }
-            HStack(spacing: 20) {
+            HStack(spacing: 22) {
                 resource("CPU", value: model.snapshot?.system?.host?.cpu)
                 resource("메모리", value: model.snapshot?.system?.host?.memory?.percent)
             }
-            Text("캐시 포함 · 요금 아님 · \(model.knownCount)/\(model.sessions.count)개 세션 토큰 확인")
-                .font(.plex(size: 12)).foregroundStyle(.secondary)
-        }.padding(20)
+        }.padding(.horizontal, 18).padding(.top, 10).padding(.bottom, 12)
+    }
+    private var usageTrend: some View {
+        let trend = DesktopUsageTrend(events: model.snapshot?.events, period: model.selectedPeriod, end: model.snapshot?.updated ?? model.now.timeIntervalSince1970)
+        let peak = max(1, trend.bins.map(\.tokens).max() ?? 0)
+        return Group {
+            if trend.reported {
+                HStack(alignment: .bottom, spacing: 2) {
+                    ForEach(trend.bins) { bin in
+                        RoundedRectangle(cornerRadius: 1).fill(panelAccent.opacity(bin.tokens > 0 ? 0.65 : 0.15))
+                            .frame(maxWidth: .infinity).frame(height: max(1, CGFloat(bin.tokens / peak) * 22))
+                            .help("\(Date(timeIntervalSince1970: bin.start).formatted(date: .omitted, time: .shortened))–\(Date(timeIntervalSince1970: bin.end).formatted(date: .omitted, time: .shortened))\n\(bin.tokens.formatted(.number.precision(.fractionLength(0)))) tokens · 캐시 포함")
+                    }
+                }.accessibilityElement(children: .ignore)
+                    .accessibilityLabel("최근 \(model.window?.label ?? model.selectedPeriod) 전체 토큰 사용량 추이")
+            } else {
+                Text("추이 기록 미확인").font(.plex(size: 11)).foregroundStyle(.secondary)
+            }
+        }
+    }
+    private var usageExplanation: String {
+        "누적: 선택 기간에 수집한 전체 사용량. 맵과 세션 목록: 현재 연결된 세션의 사용량.\n캐시 포함 · 청구 금액 아님 · \(model.knownCount)/\(model.sessions.count)개 세션 토큰 확인" +
+            (model.window?.partial == true ? "\n일부 기간만 기록되었습니다." : "")
     }
     private var sessionList: some View {
         VStack(spacing: 0) {
             Divider()
             HStack {
-                Text("세션").font(.plex(size: 15, weight: .semibold))
-                Text("\(model.sessions.count)").foregroundStyle(.secondary); Spacer()
-                Text("작업 중인 순서").font(.plex(size: 12)).foregroundStyle(.secondary)
-            }.padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 8)
+                Text("세션").font(.plex(size: 13, weight: .semibold))
+                Text("\(model.sessions.count)").font(.plex(size: 12)).foregroundStyle(.secondary); Spacer()
+                Circle().fill(model.fresh ? panelAccent : Color.orange).frame(width: 5, height: 5)
+                Text(model.fresh ? "작업 중 \(model.working)" : "마지막 기록")
+                    .font(.plex(size: 12, weight: .medium)).foregroundStyle(model.fresh ? panelAccent : Color.orange)
+            }.padding(.horizontal, 18).padding(.top, 10).padding(.bottom, 7)
+                .help("작업 중인 세션부터 표시합니다. 아래로 스크롤하면 모든 세션을 볼 수 있습니다.")
             if model.sessions.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "terminal").font(.plex(size: 25)).foregroundStyle(.secondary)
                     Text(model.snapshot?.ready == true ? "감지된 AI 세션이 없습니다" : "로컬 세션을 확인하고 있습니다").font(.plex(size: 14))
                     Text("실행 중인 AI 세션이 여기에 표시됩니다.").font(.plex(size: 12)).foregroundStyle(.secondary)
-                }.frame(maxWidth: .infinity).frame(height: 155)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(model.sortedSessions) { session in
-                            sessionRow(session); Divider().padding(.leading, 20)
+                            sessionRow(session); Divider().padding(.leading, 32).opacity(0.5)
                         }
                     }
-                }.frame(maxHeight: min(270, CGFloat(model.sessions.count) * 89))
+                }.frame(maxHeight: .infinity)
             }
-        }
+        }.frame(maxHeight: .infinity)
     }
     private var accountView: some View {
         VStack(spacing: 10) {
@@ -157,8 +209,8 @@ struct QuickDashboard: View {
     }
     private var header: some View {
         HStack(spacing: 10) {
-            Image(systemName: "waveform.path").font(.plex(size: 20, weight: .semibold)).foregroundStyle(panelAccent)
-            Text("1top").font(.plex(size: 22, weight: .semibold)).accessibilityLabel("1top"); Spacer()
+            Image(systemName: "waveform.path").font(.plex(size: 18, weight: .semibold)).foregroundStyle(panelAccent)
+            Text("1top").font(.plex(size: 19, weight: .semibold)).accessibilityLabel("1top"); Spacer()
             Circle().fill(model.fresh ? panelAccent : Color.orange).frame(width: 6, height: 6)
             Text(model.connectionLabel).font(.plex(size: 12)).foregroundStyle(.secondary)
             Menu {
@@ -173,44 +225,40 @@ struct QuickDashboard: View {
                 Button("1top 종료", action: quit)
             } label: { Image(systemName: "ellipsis.circle").font(.plex(size: 18)) }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 24).accessibilityLabel("1top 옵션")
-        }.padding(20)
-    }
-    private func metric(_ value: String, _ label: String, note: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(value).font(.plex(size: 28, weight: .semibold, design: .rounded)).monospacedDigit()
-            Text(label).font(.plex(size: 13, weight: .medium))
-            Text(note).font(.plex(size: 11)).foregroundStyle(.secondary)
-        }
+        }.padding(.horizontal, 18).padding(.vertical, 9)
     }
     private func resource(_ label: String, value: Double?) -> some View {
-        VStack(spacing: 7) {
-            HStack { Text(label); Spacer(); Text(DesktopFormat.percent(value)).monospacedDigit() }.font(.plex(size: 12)).foregroundStyle(.secondary)
+        HStack(spacing: 7) {
+            Text(label).foregroundStyle(.secondary)
             GeometryReader { geo in
                 Capsule().fill(Color.white.opacity(0.08)).overlay(alignment: .leading) {
                     Capsule().fill((value ?? 0) > 90 ? Color.orange : panelAccent.opacity(0.7))
                         .frame(width: geo.size.width * min(100, max(0, value ?? 0)) / 100)
                 }
             }.frame(height: 3)
-        }
+            Text(DesktopFormat.percent(value)).monospacedDigit().frame(width: 31, alignment: .trailing)
+        }.font(.plex(size: 12)).help("\(label) · 이 Mac 전체 사용률 \(DesktopFormat.percent(value))")
     }
     private func sessionRow(_ s: DesktopSession) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            RoundedRectangle(cornerRadius: 2).fill(s.state == "working" ? panelAccent : Color.gray.opacity(0.4)).frame(width: 3, height: 38)
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 7) {
+        HStack(alignment: .center, spacing: 8) {
+            Circle().fill(s.state == "working" ? panelAccent : s.state == "waiting" ? Color.orange : Color.gray.opacity(0.5))
+                .frame(width: 5, height: 5).help(s.stateLabel).accessibilityLabel(s.stateLabel)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
                     Text(s.project ?? s.kind).font(.plex(size: 14, weight: .semibold)).lineLimit(1)
-                    Text(s.kind == "Aside" ? (s.model?.isEmpty == false ? s.model! : "모델 미확인") : (s.kind == "Claude" ? "Claude Code" : s.kind)).font(.plex(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 }
-                Text(s.locationLabel).font(.plex(size: 12)).foregroundStyle(.secondary).lineLimit(1).help(s.title ?? s.locationLabel)
-                Text(s.stateLabel).font(.plex(size: 11)).foregroundStyle(s.state == "working" ? panelAccent : .secondary)
-            }.frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .trailing, spacing: 5) {
+                Text([s.kind == "Aside" ? (s.model ?? "모델 미확인") : (s.kind == "Claude" ? "Claude Code" : s.kind), s.locationLabel].joined(separator: " · "))
+                    .font(.plex(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+            }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
+                .help("\(s.project ?? s.kind)\n\(s.locationLabel) · \(s.model ?? s.kind)\n\(s.stateLabel)" + (s.title.map { "\n" + $0 } ?? ""))
+            VStack(alignment: .trailing, spacing: 1) {
                 Text(DesktopFormat.number(DesktopFormat.total(s.tokens == nil ? nil : (s.usage?.windows?[model.selectedPeriod] ?? nil))))
                     .font(.plex(size: 14, weight: .medium)).monospacedDigit()
-                Text("\(DesktopFormat.number(s.tokens == nil ? nil : s.usage?.rate)) tok/s").font(.plex(size: 11)).foregroundStyle(.secondary).monospacedDigit()
-            }.help("선택한 기간 누적 토큰 · 최근 60초 평균 소비")
+                Text(s.state == "working" ? "\(DesktopFormat.number(s.tokens == nil ? nil : s.usage?.rate)) tok/s" : s.stateLabel)
+                    .font(.plex(size: 11)).foregroundStyle(s.state == "working" ? panelAccent : .secondary).monospacedDigit()
+            }.fixedSize().help("선택한 기간 누적 토큰 · 최근 60초 평균 소비 · \(s.stateLabel)")
             Button { control("focus", s) } label: { Image(systemName: "arrow.up.right").font(.plex(size: 14)) }
-                .buttonStyle(.plain).disabled(!model.fresh || model.busy || !s.allows("focus"))
+                .buttonStyle(.plain).frame(width: 22, height: 30).disabled(!model.fresh || model.busy || !s.allows("focus"))
                 .accessibilityLabel("\(s.project ?? s.kind) · \(s.terminalName) 바로가기")
             Menu {
                 Button("터미널 바로가기") { control("focus", s) }.disabled(!s.allows("focus"))
@@ -219,8 +267,10 @@ struct QuickDashboard: View {
                 Divider()
                 Button("CLI 종료…", role: .destructive) { control("terminate", s) }.disabled(!s.allows("terminate"))
             } label: { Image(systemName: "ellipsis").font(.plex(size: 14)) }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 18)
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 22)
                 .disabled(!model.fresh || model.busy).accessibilityLabel("\(s.project ?? s.kind) 세션 제어")
-        }.padding(.horizontal, 20).padding(.vertical, 12)
+        }.padding(.horizontal, 18).padding(.vertical, 6)
+            .background(hoveredSession == s.id ? Color.white.opacity(0.035) : .clear)
+            .onHover { hoveredSession = $0 ? s.id : nil }
     }
 }
