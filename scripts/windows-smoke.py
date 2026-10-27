@@ -25,10 +25,7 @@ with tempfile.TemporaryDirectory() as tmp:
     sid = str(uuid.uuid4())
     log = profile / 'projects' / 'fixture' / f'{sid}.jsonl'
     log.parent.mkdir(parents=True)
-    log.write_text(json.dumps({'type': 'assistant', 'timestamp': datetime.now(timezone.utc).isoformat(), 'message': {
-        'id': 'fixture-response', 'model': 'test-model', 'usage': {
-            'input_tokens': 100, 'cache_read_input_tokens': 200,
-            'cache_creation_input_tokens': 10, 'output_tokens': 20}}}) + '\n', encoding='utf-8')
+    log.write_text('', encoding='utf-8')
     (profile / 'sessions').mkdir()
     script = temp / 'node_modules/@anthropic-ai/claude-code/cli.js'
     script.parent.mkdir(parents=True)
@@ -60,6 +57,19 @@ with tempfile.TemporaryDirectory() as tmp:
                 assert local_json(18789, '/health') is None, 'Cold-start test must not prestart the collector'
             report = root / f'build/windows/{name}.json'
             ui = subprocess.Popen([str(target / '1top.exe')], env={**case_env, 'ONETOP_SMOKE_REPORT': str(report)})
+            if name == 'cold-start':
+                # Emit a real-time report AFTER recording begins. Pre-existing
+                # usage belongs to lifetime totals, not the recorded window.
+                for _ in range(240):
+                    if (local_json(18789, '/health') or {}).get('app') == '1top':
+                        break
+                    time.sleep(.25)
+                else:
+                    raise RuntimeError('Cold-start collector never became available')
+                log.write_text(json.dumps({'type': 'assistant', 'timestamp': datetime.now(timezone.utc).isoformat(), 'message': {
+                    'id': 'fixture-response', 'model': 'test-model', 'usage': {
+                        'input_tokens': 100, 'cache_read_input_tokens': 200,
+                        'cache_creation_input_tokens': 10, 'output_tokens': 20}}}) + '\n', encoding='utf-8')
             ui.wait(120)
             assert ui.returncode == 0
             result = json.loads(report.read_text(encoding='utf-8'))

@@ -28,10 +28,7 @@ profile.mkdir(parents=True, exist_ok=True)
 sid = str(uuid.uuid4())
 log = profile / 'projects/fixture' / f'{sid}.jsonl'
 log.parent.mkdir(parents=True, exist_ok=True)
-log.write_text(json.dumps({'type': 'assistant', 'timestamp': datetime.now(timezone.utc).isoformat(), 'message': {
-    'id': 'fixture-response', 'model': 'test-model', 'usage': {
-        'input_tokens': 100, 'cache_read_input_tokens': 200,
-        'cache_creation_input_tokens': 10, 'output_tokens': 20}}}) + '\n', encoding='utf-8')
+log.write_text('', encoding='utf-8')
 (profile / 'sessions').mkdir(exist_ok=True)
 script = temp / 'node_modules/@anthropic-ai/claude-code/cli.js'
 script.parent.mkdir(parents=True, exist_ok=True)
@@ -83,6 +80,17 @@ try:
             '-LaunchArguments', subprocess.list2cmdline(['--smoke-config', str(config_path)])],
             check=True, capture_output=True, text=True)
         ui_pid = int(activation.stdout.strip().splitlines()[-1])
+        if name in ('cold-start', 'after-update'):
+            for _ in range(240):
+                if (local_json(18789, '/health') or {}).get('app') == '1top':
+                    break
+                time.sleep(.25)
+            else:
+                raise RuntimeError('Packaged collector never became available')
+            log.write_text(json.dumps({'type': 'assistant', 'timestamp': datetime.now(timezone.utc).isoformat(), 'message': {
+                'id': 'fixture-response', 'model': 'test-model', 'usage': {
+                    'input_tokens': 100, 'cache_read_input_tokens': 200,
+                    'cache_creation_input_tokens': 10, 'output_tokens': 20}}}) + '\n', encoding='utf-8')
         for _ in range(480):
             if report.exists() and not psutil.pid_exists(ui_pid):
                 break

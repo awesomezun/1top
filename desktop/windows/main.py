@@ -137,7 +137,7 @@ def desktop(launcher):
                 state = local_json(port, '/api/state') or {}
                 sid = os.environ.get('FIXTURE_SESSION')
                 match = next((s for s in state.get('sessions', []) if s['id'] == sid), {})
-                if result and result.get('maps') and result.get('dataReady') and state.get('ready') and (not sid or match.get('tokens')):
+                if result and result.get('maps') and result.get('dataReady') and state.get('ready') and (not sid or match.get('tokens') == [100, 200, 10, 20]):
                     result.update(window.evaluate_js('({connection:document.querySelector("#connectionText").textContent,rendered_sessions:document.querySelectorAll("#sessionsBody tr").length,render_error:(()=>{try{render();return null}catch(e){return String(e.stack)}})()})'))
                     previous = window.evaluate_js('localStorage.getItem("onetop-msix-smoke")')
                     expected = os.environ.get('ONETOP_SMOKE_STORAGE_EXPECT')
