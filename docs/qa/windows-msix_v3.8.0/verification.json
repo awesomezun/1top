@@ -1,0 +1,39 @@
+{
+  "version": "3.8.0",
+  "source_commit": "26e23761ea1ea2acab31b7f14dc4a07b6f4c982e",
+  "windows_run": "https://github.com/awesomezun/1top/actions/runs/40452102674",
+  "checks_run": "https://github.com/awesomezun/1top/actions/runs/40452102694",
+  "result": "passed",
+  "python_tests": 137,
+  "installed_msix_scenarios": 7,
+  "installed_exe_scenarios": 4,
+  "rendered_connection_verified": true,
+  "exact_lifetime_and_recent_fixture_tokens": [
+    100,
+    200,
+    10,
+    20
+  ],
+  "real_ai_calls": 0,
+  "test_package": {
+    "file": "1top-3.8.0.0-windows-x64-test.msix",
+    "size_bytes": 27262956,
+    "sha256": "626468fdabcdf0c359c10965f1e384f5bfc8e9964d05b2b136d7fe1335f8de4d",
+    "identity": "1top.MsixValidation",
+    "consumer_distribution": false
+  },
+  "screenshots": "Actual installed Windows app with synthetic usage; inspected sessions, map and resources.",
+  "limits": [
+    "GitHub Windows runner; consumer Windows acceptance pending",
+    "Microsoft Store identity and certification pending",
+    "Windows App Certification Kit not yet run on final identity",
+    "Missing-WebView2 installation recovery is implemented but CI used a preinstalled runtime"
+  ],
+  "site": {
+    "url": "https://1top.si",
+    "source_commit": "ea4e4621365dc5288c675d488cb3616fa72a3560",
+    "version": 26,
+    "status": "deployed",
+    "windows_download": "Microsoft Store pending; previous EXE preview retained"
+  }
+}

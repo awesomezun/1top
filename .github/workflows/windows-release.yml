@@ -1,17 +1,25 @@
-name: Windows installer
+name: Windows installers and MSIX
 on:
   workflow_dispatch:
+    inputs:
+      store_package:
+        description: 'Build an unsigned Store submission MSIX using WINDOWS_STORE_IDENTITY repository variable'
+        type: boolean
+        default: false
   push:
     paths:
       - 'desktop/windows/**'
       - 'agent/**'
       - 'scripts/build-windows.ps1'
       - 'scripts/windows-smoke.py'
+      - 'scripts/*windows-msix*'
+      - 'scripts/windows-msix-smoke.py'
+      - 'tests/test_msix.py'
       - '.github/workflows/windows-release.yml'
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -25,18 +33,38 @@ jobs:
       - run: pip install -e . pyinstaller pywebview pystray pillow
       - run: python -m unittest discover -s tests -p test_windows.py -v
       - run: python -m unittest discover -s tests -p test_desktop_startup.py -v
+      - run: python -m unittest discover -s tests -p test_msix.py -v
       - run: ./scripts/build-windows.ps1
         shell: pwsh
       - run: python scripts/windows-smoke.py
+      - run: ./scripts/package-windows-msix.ps1 -Channel test
+        shell: pwsh
+      - run: ./scripts/test-windows-msix.ps1
+        shell: pwsh
+      - name: Build Partner Center submission package
+        if: github.event_name == 'workflow_dispatch' && inputs.store_package
+        shell: pwsh
+        env:
+          STORE_IDENTITY: ${{ vars.WINDOWS_STORE_IDENTITY }}
+        run: |
+          if (-not $env:STORE_IDENTITY) { throw 'Reserve 1top in Partner Center and set WINDOWS_STORE_IDENTITY first' }
+          $env:STORE_IDENTITY | Set-Content build/windows/store-identity.json -Encoding utf8NoBOM
+          ./scripts/package-windows-msix.ps1 -Channel store -IdentityFile build/windows/store-identity.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: 1top-windows-x64
           path: |
             release/**/*.exe
+            release/**/*.msix
+            release/**/*.sha256
+            release/**/build-info.json
             build/windows/smoke-report.json
             build/windows/cold-start*.json
             build/windows/existing-collector.json
             build/windows/empty-first-launch.json
             build/windows/diagnostics/**
+            build/windows/msix-test/*.json
+            build/windows/msix-test/*.png
+            build/windows/msix-test/**/logs/**
           if-no-files-found: error

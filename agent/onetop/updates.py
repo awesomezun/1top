@@ -21,6 +21,12 @@ class UpdateMonitor:
     def __init__(self):
         self.value={'current':__version__,'available':False,'checked':None,'automatic_install':False}
     def check(self):
+        from .windows_runtime import package_identity, STORE_UPDATES
+        if package_identity():
+            self.value={'current':__version__,'available':False,'checked':time.time(),
+                        'automatic_install':False,'channel':'microsoft-store',
+                        'release_url':STORE_UPDATES,'status':'store-managed'}
+            return
         try:
             opener=urllib.request.build_opener(NoRedirect(),urllib.request.HTTPSHandler(context=SSL))
             with opener.open(urllib.request.Request(FEED,headers={'User-Agent':'1top/'+__version__}),timeout=10) as response:

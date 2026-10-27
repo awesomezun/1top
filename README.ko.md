@@ -6,7 +6,7 @@
 
 **v3.6.0 · 초기 프리뷰**
 
-기본 흐름은 **1top 실행 → 독립 데스크톱 대시보드**입니다. 로컬 모니터링은 무료이고 로그인이나 중앙 중계 서버가 필요하지 않습니다. [아래 표](#다운로드)나 [다운로드 페이지](https://1top.si/#download)에서 Mac Apple Silicon DMG, Windows x64 설치 파일, Android APK를 받을 수 있습니다. Mac은 로컬 서명이며 공증 전, Windows는 배포자 서명 전인 프리뷰입니다. Android APK는 서명되어 있으며, iOS 스토어 배포는 준비 중입니다.
+기본 흐름은 **1top 실행 → 독립 데스크톱 대시보드**입니다. 로컬 모니터링은 무료이고 로그인이나 중앙 중계 서버가 필요하지 않습니다. [아래 표](#다운로드)나 [다운로드 페이지](https://1top.si/#download)에서 Mac Apple Silicon DMG, Android APK를 받을 수 있습니다. Mac은 로컬 서명이며 공증 전, Windows는 Microsoft Store MSIX 배포를 준비 중이며 아직 Store에 공개되지 않았습니다. Android APK는 서명되어 있으며, iOS 스토어 배포는 준비 중입니다.
 
 ## 스크린샷
 
@@ -64,12 +64,12 @@ macOS 메뉴 막대의 1top 아이콘을 눌러 원하는 세션으로 바로 �
 
 ## 다운로드
 
-Windows v3.7.1은 앱 단독 실행 오류를 수정하고 로컬 진단 기록을 추가합니다. [배포 안내](docs/release-notes_v3.7.1.md). 게시자 서명은 아직 완료 전입니다.
+Windows v3.8.0부터 Microsoft Store용 MSIX 패키징을 제공합니다. 개발자 등록·심사는 완료 전이며, 아직 공개 Store 설치본은 없습니다. [배포 안내](docs/windows-store_v3.8.0.md). [이전 미서명 EXE 프리뷰](https://github.com/awesomezun/1top/releases/tag/v3.7.1)는 보존되어 있습니다.
 
 | 플랫폼 | 파일 | 참고 |
 | --- | --- | --- |
 | macOS (Apple Silicon) | [1top-3.6.0-macos-arm64.dmg](https://github.com/awesomezun/1top/releases/download/v3.6.0/1top-3.6.0-macos-arm64.dmg) | 로컬 임시 서명입니다. Developer ID 서명과 공증은 준비 중입니다. SHA-256 `48a2cd8bdd05c010a51a36e0385d14fac730cc2eb514b82e32528b5779c7c2c2` |
-| Windows x64 | [1top-3.7.1-windows-x64-setup.exe](https://github.com/awesomezun/1top/releases/download/v3.7.1/1top-3.7.1-windows-x64-setup.exe) | 프리뷰 설치 파일입니다. 배포자 서명은 준비 중입니다. SHA-256 `57cfb74a0c557fbb01d103cb55d3addbabc63152108bfa8a9a99c93ef9f99c64` |
+| Windows x64 | Microsoft Store · 준비 중 | MSIX 패키징. 계정 본인 확인과 Store 심사 후 공개됩니다. |
 | Android | [1top-1.5.0-android.apk](https://github.com/awesomezun/1top/releases/download/mobile-v1.5.0/1top-1.5.0-android.apk) | 서명된 프리뷰 APK입니다. SHA-256 `db4ba91ac0bb91bd0e1686b54432db14388993a092d35215f18cba6790d777c9` |
 | iOS | — | 네이티브 빌드는 준비되었고, TestFlight·App Store 배포는 준비 중입니다. |
 

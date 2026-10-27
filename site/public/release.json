@@ -13,11 +13,20 @@
     },
     "windows": {
       "architecture": "x64",
-      "url": "https://github.com/awesomezun/1top/releases/download/v3.7.1/1top-3.7.1-windows-x64-setup.exe",
-      "sha256": "57cfb74a0c557fbb01d103cb55d3addbabc63152108bfa8a9a99c93ef9f99c64",
-      "version": "3.7.1",
+      "status": "microsoft-store-pending",
+      "distribution": "msix",
+      "url": null,
+      "store_product_id": null,
       "signed": false,
-      "status": "preview"
+      "store_certified": false,
+      "legacy_preview": {
+        "architecture": "x64",
+        "url": "https://github.com/awesomezun/1top/releases/download/v3.7.1/1top-3.7.1-windows-x64-setup.exe",
+        "sha256": "57cfb74a0c557fbb01d103cb55d3addbabc63152108bfa8a9a99c93ef9f99c64",
+        "version": "3.7.1",
+        "signed": false,
+        "status": "preview"
+      }
     },
     "android": {
       "status": "preview",
