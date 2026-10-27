@@ -65,5 +65,6 @@ jobs:
             build/windows/empty-first-launch.json
             build/windows/diagnostics/**
             build/windows/msix-test/*.json
+            build/windows/msix-test/*.png
             build/windows/msix-test/**/logs/**
           if-no-files-found: error

@@ -142,6 +142,12 @@ def desktop(launcher):
                     written = os.environ.get('ONETOP_SMOKE_STORAGE_WRITE')
                     if written:
                         window.evaluate_js('localStorage.setItem("onetop-msix-smoke",' + json.dumps(written) + ')')
+                    migration_expected = os.environ.get('ONETOP_SMOKE_MIGRATION_EXPECT')
+                    migration_ok = None
+                    if migration_expected:
+                        marker = storage.parent / 'msix-migration-probe.txt'
+                        migration_ok = marker.read_text(encoding='utf-8') == migration_expected
+                        marker.write_text('packaged-preserved', encoding='utf-8')
                     result.update(collector_version=state['version'],
                                   collector_owned=launcher.child is not None,
                                   collector_pid=launcher.child.pid if launcher.child else None,
@@ -149,7 +155,11 @@ def desktop(launcher):
                                   host_resources=state.get('system', {}).get('host', {}).get('memory', {}).get('total', 0) > 0,
                                   package_identity=package_identity(), webview_storage=str(storage),
                                   persisted_storage=previous, storage_expectation_met=expected is None or previous == expected,
+                                  existing_data_preserved=migration_ok,
                                   update_channel=(local_json(port, '/api/updates') or {}).get('channel'))
+                    if package_identity():
+                        from PIL import ImageGrab
+                        ImageGrab.grab(all_screens=True).save(Path(report).with_suffix('.png'))
                     Path(report).write_text(json.dumps(result), encoding='utf-8')
                     return
                 time.sleep(.25)

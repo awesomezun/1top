@@ -41,7 +41,8 @@ def configure_test_activation():
     values = json.loads(path.read_text(encoding='utf-8'))
     allowed = {'ONETOP_DATA', 'ONETOP_PORT', 'ONETOP_SMOKE_REPORT', 'CLAUDE_CONFIG_DIR',
                'FIXTURE_SESSION', 'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
-               'no_proxy', 'ONETOP_SMOKE_STORAGE_EXPECT', 'ONETOP_SMOKE_STORAGE_WRITE'}
+               'no_proxy', 'ONETOP_SMOKE_STORAGE_EXPECT', 'ONETOP_SMOKE_STORAGE_WRITE',
+               'ONETOP_SMOKE_MIGRATION_EXPECT'}
     if not isinstance(values, dict) or not set(values) <= allowed or not all(isinstance(v, str) for v in values.values()):
         raise ValueError('Invalid packaged test configuration')
     os.environ.update(values)

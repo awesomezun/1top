@@ -40,17 +40,25 @@ base = {'CLAUDE_CONFIG_DIR': str(profile), 'FIXTURE_SESSION': sid,
 results = []
 fixture = agent = None
 ui_pid = None
-cases = ('after-update',) if args.after_update else ('empty-first-launch', 'cold-start', 'cold-start-with-proxy', 'existing-collector')
+cases = ('after-update', 'default-data-after-update') if args.after_update else (
+    'default-data-location', 'empty-first-launch', 'cold-start', 'cold-start-with-proxy', 'existing-collector')
 try:
     for name in cases:
         config = dict(base)
-        if name == 'empty-first-launch':
+        if name in ('empty-first-launch', 'default-data-location'):
             config.pop('FIXTURE_SESSION')
             config['ONETOP_SMOKE_STORAGE_WRITE'] = 'preserved-through-msix-update'
         else:
             config['ONETOP_SMOKE_STORAGE_EXPECT'] = 'preserved-through-msix-update'
             if fixture is None:
                 fixture = subprocess.Popen(['node', str(script)], env={**os.environ, **base})
+        if name.startswith('default-data'):
+            config.pop('ONETOP_DATA')
+            marker = Path(os.environ['LOCALAPPDATA']) / '1top/msix-migration-probe.txt'
+            if not args.after_update:
+                marker.parent.mkdir(parents=True, exist_ok=True)
+                marker.write_text('legacy-preserved', encoding='utf-8')
+            config['ONETOP_SMOKE_MIGRATION_EXPECT'] = 'packaged-preserved' if args.after_update else 'legacy-preserved'
         if name == 'cold-start-with-proxy':
             config.update(HTTP_PROXY='http://127.0.0.1:1', HTTPS_PROXY='http://127.0.0.1:1',
                           ALL_PROXY='http://127.0.0.1:1', NO_PROXY='', no_proxy='')
@@ -88,7 +96,10 @@ try:
         assert result['host_resources'], result
         assert result['update_channel'] == 'microsoft-store', result
         assert result['collector_owned'] == (name != 'existing-collector'), result
-        if name == 'empty-first-launch':
+        if name.startswith('default-data'):
+            assert result['existing_data_preserved'], result
+            assert '1top' in result['webview_storage'] and 'msix-test' not in result['webview_storage'], result
+        if name in ('empty-first-launch', 'default-data-location'):
             assert result['session_count'] == 0, result
         else:
             assert result['fixture_tokens'] == [100, 200, 10, 20], result
