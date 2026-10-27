@@ -74,7 +74,8 @@ def desktop(launcher):
     url = f'http://127.0.0.1:{port}'
     width, height = desktop_size()
     window = webview.create_window('1top — This PC', url, width=width, height=height,
-                                   min_size=(min(900, width), min(620, height)), background_color='#0c0f12')
+                                   min_size=(min(900, width), min(620, height)),
+                                   maximized=width < 1200 or height < 800, background_color='#0c0f12')
     quitting = threading.Event()
 
     def show(*_):
