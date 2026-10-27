@@ -13,6 +13,8 @@ node_modules
 *.pem
 *.key
 *.p12
+*.pfx
+*.cer
 *.mobileprovision
 build/
 release/

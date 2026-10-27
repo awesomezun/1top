@@ -24,6 +24,8 @@ def startup_dialog(error, logs, retry=True):
 
 
 def main():
+    from onetop.windows_runtime import configure_test_activation, ensure_webview_runtime
+    configure_test_activation()
     if '--agent' in sys.argv:
         from onetop.cli import main as agent_main
         extra = sys.argv[sys.argv.index('--agent') + 1:]
@@ -35,6 +37,11 @@ def main():
     port = int(os.environ.get('ONETOP_PORT', '18766'))
     launcher = CollectorLauncher(port)
     try:
+        if not ensure_webview_runtime():
+            startup_dialog('Microsoft Edge WebView2 Runtime is needed. Reopen 1top to retry setup, '
+                           'or install the runtime from https://developer.microsoft.com/microsoft-edge/webview2.',
+                           launcher.log_dir, retry=False)
+            return
         while True:
             try:
                 launcher.start(agent_command(port))
@@ -61,6 +68,8 @@ def desktop(launcher):
     import pystray
     from PIL import Image
     from onetop.desktop_startup import local_json
+    from onetop.windows_runtime import package_identity, webview_storage, STORE_UPDATES
+    storage = webview_storage()
     port = launcher.port
     url = f'http://127.0.0.1:{port}'
     window = webview.create_window('1top — This PC', url, width=1400, height=900,
@@ -102,7 +111,8 @@ def desktop(launcher):
     tray = pystray.Icon('1top', Image.open(icon_path), '1top · AI sessions', menu=pystray.Menu(
         pystray.MenuItem('Open dashboard', show, default=True),
         pystray.MenuItem('Open in browser', lambda *_: webbrowser.open(url)),
-        pystray.MenuItem('Check for updates', lambda *_: webbrowser.open('https://github.com/awesomezun/1top/releases')),
+        pystray.MenuItem('Check for updates', lambda *_: os.startfile(STORE_UPDATES) if package_identity()
+                        else webbrowser.open('https://github.com/awesomezun/1top/releases')),
         pystray.MenuItem('Connect remote server…', lambda *_: threading.Thread(target=connect_remote, daemon=True).start()),
         pystray.MenuItem('Remote workspace', lambda *_: webbrowser.open('https://1top.si/app')),
         pystray.MenuItem('Quit 1top', quit_app)))
@@ -127,11 +137,19 @@ def desktop(launcher):
                 sid = os.environ.get('FIXTURE_SESSION')
                 match = next((s for s in state.get('sessions', []) if s['id'] == sid), {})
                 if result and result.get('maps') and result.get('dataReady') and state.get('ready') and (not sid or match.get('tokens')):
+                    previous = window.evaluate_js('localStorage.getItem("onetop-msix-smoke")')
+                    expected = os.environ.get('ONETOP_SMOKE_STORAGE_EXPECT')
+                    written = os.environ.get('ONETOP_SMOKE_STORAGE_WRITE')
+                    if written:
+                        window.evaluate_js('localStorage.setItem("onetop-msix-smoke",' + json.dumps(written) + ')')
                     result.update(collector_version=state['version'],
                                   collector_owned=launcher.child is not None,
                                   collector_pid=launcher.child.pid if launcher.child else None,
                                   fixture_tokens=match.get('tokens'), session_count=len(state.get('sessions', [])),
-                                  host_resources=state.get('system', {}).get('host', {}).get('memory', {}).get('total', 0) > 0)
+                                  host_resources=state.get('system', {}).get('host', {}).get('memory', {}).get('total', 0) > 0,
+                                  package_identity=package_identity(), webview_storage=str(storage),
+                                  persisted_storage=previous, storage_expectation_met=expected is None or previous == expected,
+                                  update_channel=(local_json(port, '/api/updates') or {}).get('channel'))
                     Path(report).write_text(json.dumps(result), encoding='utf-8')
                     return
                 time.sleep(.25)
@@ -140,7 +158,7 @@ def desktop(launcher):
 
     window.events.loaded += lambda: threading.Thread(target=smoke, daemon=True).start()
     try:
-        webview.start(gui='edgechromium')
+        webview.start(gui='edgechromium', private_mode=False, storage_path=str(storage))
     finally:
         tray.stop()
 
