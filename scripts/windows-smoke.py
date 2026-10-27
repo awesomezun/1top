@@ -48,7 +48,7 @@ with tempfile.TemporaryDirectory() as tmp:
             if name == 'existing-collector':
                 agent = subprocess.Popen([str(target / '1top.exe'), '--agent', '--port', '18789'], env=env)
                 for _ in range(120):
-                    if (local_json(18789, '/health') or {}).get('app') == '1top':
+                    if (local_json(18789, '/health') or {}).get('ready') is True:
                         break
                     time.sleep(.25)
                 else:
@@ -61,7 +61,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 # Emit a real-time report AFTER recording begins. Pre-existing
                 # usage belongs to lifetime totals, not the recorded window.
                 for _ in range(240):
-                    if (local_json(18789, '/health') or {}).get('app') == '1top':
+                    if (local_json(18789, '/health') or {}).get('ready') is True:
                         break
                     time.sleep(.25)
                 else:

@@ -63,7 +63,7 @@ try:
         if name == 'existing-collector':
             agent = subprocess.Popen([str(target), '--agent', '--port', '18789'], env={**os.environ, **base})
             for _ in range(120):
-                if (local_json(18789, '/health') or {}).get('app') == '1top':
+                if (local_json(18789, '/health') or {}).get('ready') is True:
                     break
                 time.sleep(.25)
             else:
@@ -82,7 +82,7 @@ try:
         ui_pid = int(activation.stdout.strip().splitlines()[-1])
         if name in ('cold-start', 'after-update'):
             for _ in range(240):
-                if (local_json(18789, '/health') or {}).get('app') == '1top':
+                if (local_json(18789, '/health') or {}).get('ready') is True:
                     break
                 time.sleep(.25)
             else:
