@@ -68,12 +68,13 @@ def desktop(launcher):
     import pystray
     from PIL import Image
     from onetop.desktop_startup import local_json
-    from onetop.windows_runtime import package_identity, webview_storage, STORE_UPDATES
+    from onetop.windows_runtime import package_identity, webview_storage, desktop_size, STORE_UPDATES
     storage = webview_storage()
     port = launcher.port
     url = f'http://127.0.0.1:{port}'
-    window = webview.create_window('1top — This PC', url, width=1400, height=900,
-                                   min_size=(900, 620), background_color='#0c0f12')
+    width, height = desktop_size()
+    window = webview.create_window('1top — This PC', url, width=width, height=height,
+                                   min_size=(min(900, width), min(620, height)), background_color='#0c0f12')
     quitting = threading.Event()
 
     def show(*_):
@@ -137,6 +138,7 @@ def desktop(launcher):
                 sid = os.environ.get('FIXTURE_SESSION')
                 match = next((s for s in state.get('sessions', []) if s['id'] == sid), {})
                 if result and result.get('maps') and result.get('dataReady') and state.get('ready') and (not sid or match.get('tokens')):
+                    result.update(window.evaluate_js('({connection:document.querySelector("#connectionText").textContent,rendered_sessions:document.querySelectorAll("#sessionsBody tr").length,render_error:(()=>{try{render();return null}catch(e){return String(e.stack)}})()})'))
                     previous = window.evaluate_js('localStorage.getItem("onetop-msix-smoke")')
                     expected = os.environ.get('ONETOP_SMOKE_STORAGE_EXPECT')
                     written = os.environ.get('ONETOP_SMOKE_STORAGE_WRITE')
@@ -152,6 +154,7 @@ def desktop(launcher):
                                   collector_owned=launcher.child is not None,
                                   collector_pid=launcher.child.pid if launcher.child else None,
                                   fixture_tokens=match.get('tokens'), session_count=len(state.get('sessions', [])),
+                                  fixture_period_tokens=match.get('usage', {}).get('windows', {}).get('1h'),
                                   host_resources=state.get('system', {}).get('host', {}).get('memory', {}).get('total', 0) > 0,
                                   package_identity=package_identity(), webview_storage=str(storage),
                                   persisted_storage=previous, storage_expectation_met=expected is None or previous == expected,
@@ -160,6 +163,13 @@ def desktop(launcher):
                     if package_identity():
                         from PIL import ImageGrab
                         ImageGrab.grab(all_screens=True).save(Path(report).with_suffix('.png'))
+                        window.evaluate_js('selectView("maps");renderMaps()')
+                        time.sleep(.2)
+                        result['map_total'] = window.evaluate_js('document.querySelector("#mapTotal").textContent')
+                        ImageGrab.grab(all_screens=True).save(Path(report).with_name(Path(report).stem + '-maps.png'))
+                        window.evaluate_js('selectView("system");renderSystem()')
+                        time.sleep(.2)
+                        ImageGrab.grab(all_screens=True).save(Path(report).with_name(Path(report).stem + '-resources.png'))
                     Path(report).write_text(json.dumps(result), encoding='utf-8')
                     return
                 time.sleep(.25)

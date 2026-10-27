@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from datetime import datetime, timezone
 
 import psutil
 from onetop import __version__
@@ -24,7 +25,7 @@ with tempfile.TemporaryDirectory() as tmp:
     sid = str(uuid.uuid4())
     log = profile / 'projects' / 'fixture' / f'{sid}.jsonl'
     log.parent.mkdir(parents=True)
-    log.write_text(json.dumps({'type': 'assistant', 'timestamp': time.time(), 'message': {
+    log.write_text(json.dumps({'type': 'assistant', 'timestamp': datetime.now(timezone.utc).isoformat(), 'message': {
         'id': 'fixture-response', 'model': 'test-model', 'usage': {
             'input_tokens': 100, 'cache_read_input_tokens': 200,
             'cache_creation_input_tokens': 10, 'output_tokens': 20}}}) + '\n', encoding='utf-8')
@@ -64,10 +65,13 @@ with tempfile.TemporaryDirectory() as tmp:
             result = json.loads(report.read_text(encoding='utf-8'))
             assert result['maps'] and result['ready'], result
             assert result['dataReady'] and result['renderedVersion'] == __version__, result
+            assert result['connection'] == '실시간 연결' and result['render_error'] is None, result
+            assert result['rendered_sessions'] == result['session_count'], result
             if name == 'empty-first-launch':
                 assert result['session_count'] == 0, result
             else:
                 assert result['fixture_tokens'] == [100, 200, 10, 20], result
+                assert result['fixture_period_tokens'] == [100, 200, 10, 20], result
             assert result['collector_version'] == __version__, result
             assert result['host_resources'], result
             assert result['collector_owned'] == (name != 'existing-collector'), result

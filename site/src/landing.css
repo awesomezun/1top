@@ -56,3 +56,5 @@ body:not(.in-app) .brand span{color:#73e4b8}
 body:not(.in-app) header:has(+ .ambient-grid){border-bottom-color:transparent}
 /* On windows wider than the column, fade the hero glow out before the column edge instead of cutting it off. */
 @media(min-width:1393px){.product-hero:before{mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent)}}
+
+.download-options .download-main:disabled{opacity:.65;cursor:default;color:#a8b8c5;background:#1d2b37;border-color:#405668;box-shadow:none}

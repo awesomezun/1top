@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import time
 import uuid
+from datetime import datetime, timezone
 
 import psutil
 from onetop import __version__
@@ -27,7 +28,7 @@ profile.mkdir(parents=True, exist_ok=True)
 sid = str(uuid.uuid4())
 log = profile / 'projects/fixture' / f'{sid}.jsonl'
 log.parent.mkdir(parents=True, exist_ok=True)
-log.write_text(json.dumps({'type': 'assistant', 'timestamp': time.time(), 'message': {
+log.write_text(json.dumps({'type': 'assistant', 'timestamp': datetime.now(timezone.utc).isoformat(), 'message': {
     'id': 'fixture-response', 'model': 'test-model', 'usage': {
         'input_tokens': 100, 'cache_read_input_tokens': 200,
         'cache_creation_input_tokens': 10, 'output_tokens': 20}}}) + '\n', encoding='utf-8')
@@ -91,6 +92,8 @@ try:
         result = json.loads(report.read_text(encoding='utf-8'))
         assert result['package_identity'] == package['PackageFullName'], result
         assert result['maps'] and result['ready'] and result['dataReady'], result
+        assert result['connection'] == '실시간 연결' and result['render_error'] is None, result
+        assert result['rendered_sessions'] == result['session_count'], result
         assert result['renderedVersion'] == __version__ == result['collector_version'], result
         assert result['storage_expectation_met'], result
         assert result['host_resources'], result
@@ -103,6 +106,7 @@ try:
             assert result['session_count'] == 0, result
         else:
             assert result['fixture_tokens'] == [100, 200, 10, 20], result
+            assert result['fixture_period_tokens'] == [100, 200, 10, 20], result
         if agent:
             assert agent.poll() is None, 'An external collector must survive UI quit'
         else:

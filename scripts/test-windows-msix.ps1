@@ -29,8 +29,10 @@ try {
     python scripts/windows-msix-smoke.py --package-info "$testRoot/installed.json"
     if ($LASTEXITCODE) { throw 'Installed MSIX launch verification failed' }
     # Updating the installed package must preserve WebView and collector data.
-    ./scripts/package-windows-msix.ps1 -Channel test -PackageVersion '3.8.1.0'
-    Copy-Item "release/v$version/msix/test/1top-3.8.1.0-windows-x64-test.msix" "$testRoot/update-only.msix"
+    $current = [version]"$version.0"
+    $next = "$($current.Major).$($current.Minor).$($current.Build + 1).0"
+    ./scripts/package-windows-msix.ps1 -Channel test -PackageVersion $next
+    Copy-Item "release/v$version/msix/test/1top-$next-windows-x64-test.msix" "$testRoot/update-only.msix"
     & $sdk sign /fd SHA256 /sha1 $cert.Thumbprint "$testRoot/update-only.msix"
     if ($LASTEXITCODE) { throw 'Update test signing failed' }
     Add-AppxPackage -Path (Resolve-Path "$testRoot/update-only.msix").Path

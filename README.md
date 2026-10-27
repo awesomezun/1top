@@ -14,7 +14,7 @@
 
 See which computer, application, and terminal owns a session; inspect reported token usage and CPU/RAM; send supported controls to the selected session.
 
-**Status: early preview.** The browser demo is available without installation. Download the macOS Apple Silicon DMG, Windows x64 installer, or Android APK [below](#download) or from the [download page](https://1top.si/#download). The Mac app is locally signed but not notarized; the Windows installer is unsigned. Android is distributed as a signed preview APK. iOS store distribution and clean-machine installer acceptance remain pending. Broad process detection does not imply every tool exposes tokens or supports pause/resume.
+**Status: early preview.** The browser demo is available without installation. Download the macOS Apple Silicon DMG or Android APK [below](#download) or from the [download page](https://1top.si/#download). The Mac app is locally signed but not notarized; Windows is moving to Microsoft Store MSIX distribution and is not yet published there. Android is distributed as a signed preview APK. iOS store distribution and clean-machine installer acceptance remain pending. Broad process detection does not imply every tool exposes tokens or supports pause/resume.
 
 ## Screenshots
 
@@ -70,12 +70,12 @@ Recorded from the native app with example data (Korean UI).
 
 ## Download
 
-Windows v3.7.1 fixes standalone startup and adds local diagnostics. [Release notes](docs/release-notes_v3.7.1.md). Publisher signing remains pending.
+Windows v3.8.0 adds Microsoft Store MSIX packaging. Store registration and certification are pending; there is no public Store installer yet. [Distribution details](docs/windows-store_v3.8.0.md). The [previous unsigned EXE preview](https://github.com/awesomezun/1top/releases/tag/v3.7.1) remains archived.
 
 | Platform | File | Notes |
 | --- | --- | --- |
 | macOS (Apple Silicon) | [1top-3.6.0-macos-arm64.dmg](https://github.com/awesomezun/1top/releases/download/v3.6.0/1top-3.6.0-macos-arm64.dmg) | Ad-hoc signature; Developer ID signing and notarization pending. SHA-256 `48a2cd8bdd05c010a51a36e0385d14fac730cc2eb514b82e32528b5779c7c2c2` |
-| Windows x64 | [1top-3.7.1-windows-x64-setup.exe](https://github.com/awesomezun/1top/releases/download/v3.7.1/1top-3.7.1-windows-x64-setup.exe) | Preview installer; publisher signing pending. SHA-256 `57cfb74a0c557fbb01d103cb55d3addbabc63152108bfa8a9a99c93ef9f99c64` |
+| Windows x64 | Microsoft Store · in preparation | MSIX packaging; publication requires account verification and Store certification. |
 | Android | [1top-1.5.0-android.apk](https://github.com/awesomezun/1top/releases/download/mobile-v1.5.0/1top-1.5.0-android.apk) | Signed preview APK. SHA-256 `db4ba91ac0bb91bd0e1686b54432db14388993a092d35215f18cba6790d777c9` |
 | iOS | — | Native build ready; TestFlight/App Store distribution pending |
 

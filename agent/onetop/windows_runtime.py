@@ -9,6 +9,14 @@ import sys
 STORE_UPDATES = 'ms-windows-store://downloadsandupdates'
 
 
+def desktop_size():
+    from ctypes import wintypes
+    work = wintypes.RECT()
+    if ctypes.windll.user32.SystemParametersInfoW(48, 0, ctypes.byref(work), 0):
+        return min(1400, max(800, work.right - work.left - 48)), min(900, max(540, work.bottom - work.top - 48))
+    return 1200, 800
+
+
 def package_identity():
     if sys.platform != 'win32':
         return None
