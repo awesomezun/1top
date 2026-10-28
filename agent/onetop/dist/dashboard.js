@@ -5,11 +5,11 @@ window.OneTopDashboard=(()=>{
  const defaults={session:210,model:145,status:85,period:110,total:95,rate:120,cpu:65,memory:75,controls:155};
  const minima={session:120,model:100,status:75,period:95,total:85,rate:120,cpu:65,memory:75,controls:150};
  const panels=['summary','flow','map','sessions','shared'];
- const state={theme:'dark',lang:'ko',unit:'hour',period:'1h',columns:[...ids],widths:{...defaults},panels:[...panels],spans:{summary:12,flow:6,map:6,sessions:12,shared:12},heights:{}};
+ const state={theme:'dark',lang:'ko',period:'1h',columns:[...ids],widths:{...defaults},panels:[...panels],spans:{summary:12,flow:6,map:6,sessions:12,shared:12},heights:{}};
  let hooks={},editing=false,dragging=false,frame,initialized=false;
  const list=(v,allowed)=>Array.isArray(v)&&v.length===allowed.length&&new Set(v).size===allowed.length&&v.every(x=>allowed.includes(x));
  try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved){
-  for(const [k,values] of Object.entries({theme:['dark','light'],lang:['ko','en','zh'],unit:['hour','minute']}))if(values.includes(saved[k]))state[k]=saved[k];
+  for(const [k,values] of Object.entries({theme:['dark','light'],lang:['ko','en','zh']}))if(values.includes(saved[k]))state[k]=saved[k];
   if(list(saved.columns,ids))state.columns=saved.columns;if(list(saved.panels,panels))state.panels=saved.panels;
   if(['10m','30m','1h','5h','12h','24h'].includes(saved.period))state.period=saved.period;
   for(const id of ids)if(Number.isFinite(saved.widths?.[id]))state.widths[id]=Math.max(minima[id],Math.min(700,saved.widths[id]));
@@ -62,9 +62,8 @@ window.OneTopDashboard=(()=>{
    const id=ids[i];th.dataset.column=id;th.draggable=true;
    const content=th.innerHTML;th.replaceChildren();const label=document.createElement('button');label.type='button';label.className='column-label';label.innerHTML=content;
    if(th.id){label.id=th.id;th.removeAttribute('id');}th.append(label);
-   if(id==='rate'){const choices=document.createElement('div');choices.className='rate-units pref-segment';choices.innerHTML='<button type="button" data-rate-unit="hour">시간</button><button type="button" data-rate-unit="minute">분</button>';th.append(choices);choices.onclick=e=>{const b=e.target.closest('[data-rate-unit]');if(b){state.unit=b.dataset.rateUnit;save();hooks.refresh?.();afterTable();}};}
-   const resize=document.createElement('button');resize.type='button';resize.className='column-resize';resize.setAttribute('aria-label','열 너비 조절');th.append(resize);
-   th.ondragstart=e=>{if(e.target.closest('.column-resize,.rate-units')){e.preventDefault();return;}e.dataTransfer.setData('application/onetop-column',id);};th.ondragover=e=>{if([...e.dataTransfer.types].includes('application/onetop-column'))e.preventDefault();};
+   const resize=document.createElement('button');resize.type='button';resize.className='column-resize';resize.setAttribute('aria-label','열 너비 조절');resize.title='좌우로 끌어 열 너비 조절';resize.innerHTML='<span aria-hidden="true">↔</span>';th.append(resize);
+   th.ondragstart=e=>{if(e.target.closest('.column-resize')){e.preventDefault();return;}e.dataTransfer.setData('application/onetop-column',id);};th.ondragover=e=>{if([...e.dataTransfer.types].includes('application/onetop-column'))e.preventDefault();};
    th.ondrop=e=>{const from=e.dataTransfer.getData('application/onetop-column');if(!ids.includes(from))return;e.preventDefault();move(state.columns,from,id);afterTable();save();};
    label.onkeydown=e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();const delta=e.key==='ArrowLeft'?-1:1;if(e.shiftKey)state.widths[id]=Math.max(minima[id],Math.min(700,state.widths[id]+delta*10));else{const i=state.columns.indexOf(id);move(state.columns,id,state.columns[Math.max(0,Math.min(ids.length-1,i+delta))]);}afterTable();save();label.focus();};
    resize.onkeydown=e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();state.widths[id]=Math.max(minima[id],Math.min(700,state.widths[id]+(e.key==='ArrowLeft'?-10:10)));afterTable();save();};
@@ -76,19 +75,19 @@ window.OneTopDashboard=(()=>{
   if(!initialized)return;const table=document.querySelector('.sessions-table');
   [...table.tBodies[0].rows].forEach(row=>{[...row.cells].forEach((td,i)=>{if(!td.dataset.column)td.dataset.column=ids[i];});for(const id of state.columns){const td=row.querySelector(`td[data-column="${id}"]`);if(td)row.append(td);}});
   for(const id of state.columns){table.tHead.rows[0].append(table.tHead.querySelector(`[data-column="${id}"]`));table.querySelector('colgroup').append(table.querySelector(`col[data-column="${id}"]`));}
-  document.querySelectorAll('[data-rate-unit]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.rateUnit===state.unit)));applyWidths();drawGauges();window.OneTopI18n?.apply();
+  applyWidths();drawGauges();window.OneTopI18n?.apply();
  }
- function number(n){const digits=state.unit==='minute'?3:2;return n>0&&n<10**-digits?'<' +(10**-digits):Number(n.toFixed(digits)).toLocaleString(state.lang==='ko'?'ko-KR':state.lang==='zh'?'zh-CN':'en-US');}
+ function number(n){const digits=2;return n>0&&n<10**-digits?'<' +(10**-digits):Number(n.toFixed(digits)).toLocaleString(state.lang==='ko'?'ko-KR':state.lang==='zh'?'zh-CN':'en-US');}
  function rateCell(rate,kind,note=''){
   if(!Number.isFinite(rate)||rate<0)return '<span class="unknown-value">—</span>';
-  const suffix=state.lang==='ko'?(state.unit==='hour'?'%/시간':'%/분'):state.lang==='zh'?(state.unit==='hour'?'%/小时':'%/分钟'):(state.unit==='hour'?'%/h':'%/min');
-  return `<div class="burn-gauge" title="${esc(note)}"><canvas width="96" height="46" data-burn-rate="${rate}" data-kind="${esc(kind)}" role="img" aria-label="${esc(number(rate/(state.unit==='minute'?60:1)))}${suffix}"></canvas><strong>${esc(number(rate/(state.unit==='minute'?60:1)))}<small>${suffix}</small></strong></div>`;
+  const suffix=state.lang==='ko'?'%/시간':state.lang==='zh'?'%/小时':'%/h';
+  return `<div class="burn-gauge" title="${esc(note)}"><canvas width="96" height="46" data-burn-rate="${rate}" data-kind="${esc(kind)}" role="img" aria-label="${esc(number(rate))}${suffix}"></canvas><strong>${esc(number(rate))}<small>${suffix}</small></strong></div>`;
  }
  function nice(n){if(n<=0)return 1;const power=10**Math.floor(Math.log10(n)),ratio=n/power;return (ratio<=1?1:ratio<=2?2:ratio<=5?5:10)*power;}
  function drawGauges(){
   const canvases=[...document.querySelectorAll('canvas[data-burn-rate]')],max=nice(Math.max(1,...canvases.map(c=>Number(c.dataset.burnRate)))),css=getComputedStyle(document.documentElement);
   for(const c of canvases){const {width:w,height:h}=c.getBoundingClientRect();if(!w||!h)continue;const dpr=devicePixelRatio||1;c.width=w*dpr;c.height=h*dpr;const x=c.getContext('2d');x.scale(dpr,dpr);const cx=w/2,cy=h-11,r=Math.min(29,w/2-13),n=Number(c.dataset.burnRate),a=Math.PI+Math.PI*Math.min(1,n/max),color=c.dataset.kind==='Claude'?'#bd8965':'#378d76';
-   x.lineWidth=5;x.strokeStyle=css.getPropertyValue('--line');x.beginPath();x.arc(cx,cy,r,Math.PI,Math.PI*2);x.stroke();x.strokeStyle=color;x.beginPath();x.arc(cx,cy,r,Math.PI,a);x.stroke();x.lineWidth=1.5;x.beginPath();x.moveTo(cx,cy);x.lineTo(cx+Math.cos(a)*(r-8),cy+Math.sin(a)*(r-8));x.stroke();x.font='11px "IBM Plex Sans",sans-serif';x.fillStyle=css.getPropertyValue('--muted');x.textAlign='left';x.fillText('0',4,h-1);x.textAlign='right';x.fillText(number(max/(state.unit==='minute'?60:1))+'%',w-2,h-1);
+   x.lineWidth=5;x.strokeStyle=css.getPropertyValue('--line');x.beginPath();x.arc(cx,cy,r,Math.PI,Math.PI*2);x.stroke();x.strokeStyle=color;x.beginPath();x.arc(cx,cy,r,Math.PI,a);x.stroke();x.lineWidth=1.5;x.beginPath();x.moveTo(cx,cy);x.lineTo(cx+Math.cos(a)*(r-8),cy+Math.sin(a)*(r-8));x.stroke();x.font='11px "IBM Plex Sans",sans-serif';x.fillStyle=css.getPropertyValue('--muted');x.textAlign='left';x.fillText('0',4,h-1);x.textAlign='right';x.fillText(number(max)+'%',w-2,h-1);
   }
  }
  function init(options){hooks=options;window.OneTopI18n?.setLanguage(state.lang);prefs();panelSetup();setupColumns();initialized=true;afterTable();new ResizeObserver(queueDraw).observe(document.getElementById('dashboardGrid'));}
