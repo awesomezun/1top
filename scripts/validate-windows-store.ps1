@@ -51,6 +51,18 @@ try {
     if ($state.ready -ne $true) { throw 'Final identity package collector did not become ready' }
     if ($state.system.host.memory.total -le 0) { throw 'System resources were not collected' }
     if (-not (Get-Process -Id $appPid -ErrorAction SilentlyContinue)) { throw 'Packaged UI exited unexpectedly' }
+    Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class OneTopDpiProbe {
+  [DllImport("shcore.dll")]
+  public static extern int GetProcessDpiAwareness(IntPtr process, out int awareness);
+}
+'@
+    $awareness=0
+    $dpiStatus=[OneTopDpiProbe]::GetProcessDpiAwareness((Get-Process -Id $appPid).Handle,[ref]$awareness)
+    $result.runtime_dpi=@{hresult=$dpiStatus; awareness=$awareness; per_monitor_aware=($dpiStatus -eq 0 -and $awareness -eq 2)}
+    if (-not $result.runtime_dpi.per_monitor_aware) { throw 'The running Store app is not per-monitor DPI aware' }
     $updates = Invoke-RestMethod 'http://127.0.0.1:18766/api/updates' -TimeoutSec 5 -NoProxy
     if ($updates.channel -ne 'microsoft-store') { throw 'Incorrect update channel' }
     $result.collector_ready=$true
