@@ -1,0 +1,45 @@
+{
+  "version": "3.19.3",
+  "status": "preview",
+  "signed": false,
+  "notarized": false,
+  "releases": "https://github.com/awesomezun/1top/releases/tag/v3.19.3",
+  "platforms": {
+    "macos": {
+      "architecture": "arm64",
+      "url": "https://github.com/awesomezun/1top/releases/download/v3.19.3/1top-3.19.3-macos-arm64.dmg",
+      "version": "3.19.3",
+      "status": "preview",
+      "signed": false,
+      "notarized": false,
+      "sha256": "3f551f0612a3d5ef023cc46527ca318f5e4af9e56b8be68434b440cfba87626c"
+    },
+    "windows": {
+      "architecture": "x64",
+      "status": "microsoft-store-pending",
+      "distribution": "msix",
+      "url": null,
+      "store_product_id": null,
+      "signed": false,
+      "store_certified": false,
+      "legacy_preview": {
+        "architecture": "x64",
+        "url": "https://github.com/awesomezun/1top/releases/download/v3.7.1/1top-3.7.1-windows-x64-setup.exe",
+        "sha256": "57cfb74a0c557fbb01d103cb55d3addbabc63152108bfa8a9a99c93ef9f99c64",
+        "version": "3.7.1",
+        "signed": false,
+        "status": "preview"
+      }
+    },
+    "android": {
+      "status": "preview",
+      "version": "1.5.0",
+      "signed": true,
+      "url": "https://github.com/awesomezun/1top/releases/download/mobile-v1.5.0/1top-1.5.0-android.apk",
+      "sha256": "db4ba91ac0bb91bd0e1686b54432db14388993a092d35215f18cba6790d777c9"
+    },
+    "ios": {
+      "status": "native-build-ready-store-distribution-pending"
+    }
+  }
+}

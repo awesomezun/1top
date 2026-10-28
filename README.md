@@ -74,12 +74,12 @@ Windows v3.8.0 adds Microsoft Store MSIX packaging. Store registration and certi
 
 | Platform | File | Notes |
 | --- | --- | --- |
-| macOS (Apple Silicon) | [1top-3.19.3-macos-arm64.dmg](https://github.com/awesomezun/1top/releases/download/v3.19.3/1top-3.19.3-macos-arm64.dmg) | Ad-hoc signature; Developer ID signing and notarization pending. SHA-256 `3f551f0612a3d5ef023cc46527ca318f5e4af9e56b8be68434b440cfba87626c` |
+| macOS (Apple Silicon) | [1top-3.19.4-macos-arm64.dmg](https://github.com/awesomezun/1top/releases/download/v3.19.4/1top-3.19.4-macos-arm64.dmg) | Ad-hoc signature; Developer ID signing and notarization pending. SHA-256 `9e2a44cfa665cfa44ae689268e46f29647dfbcddf086e5a849d1f3a3832d96dd` |
 | Windows x64 | Microsoft Store · in preparation | MSIX packaging; publication requires account verification and Store certification. |
 | Android | [1top-1.5.0-android.apk](https://github.com/awesomezun/1top/releases/download/mobile-v1.5.0/1top-1.5.0-android.apk) | Signed preview APK. SHA-256 `db4ba91ac0bb91bd0e1686b54432db14388993a092d35215f18cba6790d777c9` |
 | iOS | — | Native build ready; TestFlight/App Store distribution pending |
 
-All releases: [v3.19.3](https://github.com/awesomezun/1top/releases/tag/v3.19.3) · [mobile-v1.5.0](https://github.com/awesomezun/1top/releases/tag/mobile-v1.5.0). Preview downloads are not production-signed installer acceptance evidence.
+All releases: [v3.19.4](https://github.com/awesomezun/1top/releases/tag/v3.19.4) · [mobile-v1.5.0](https://github.com/awesomezun/1top/releases/tag/mobile-v1.5.0). Preview downloads are not production-signed installer acceptance evidence.
 
 ## Using 1top
 
@@ -89,7 +89,7 @@ Remote access is optional. Managed access currently requires a server-issued gra
 
 A browser login cannot inspect or control arbitrary local processes. The companion provides that local connection. Nothing is installed on a phone just to view the dashboard.
 
-**v3.19.3:** edit dashboard panels and table columns, compare selected-period usage and hourly burn-rate gauges, and switch themes or languages. Session controls and message inboxes remain available. See [release notes](docs/release-notes_v3.19.3.md).
+**v3.19.4:** edit dashboard panels and table columns, compare selected-period usage and hourly burn-rate gauges, and switch themes or languages. Session controls and message inboxes remain available. See [release notes](docs/release-notes_v3.19.4.md).
 
 ## What you can see
 

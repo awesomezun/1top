@@ -1,18 +1,18 @@
 {
-  "version": "3.19.3",
+  "version": "3.19.4",
   "status": "preview",
   "signed": false,
   "notarized": false,
-  "releases": "https://github.com/awesomezun/1top/releases/tag/v3.19.3",
+  "releases": "https://github.com/awesomezun/1top/releases/tag/v3.19.4",
   "platforms": {
     "macos": {
       "architecture": "arm64",
-      "url": "https://github.com/awesomezun/1top/releases/download/v3.19.3/1top-3.19.3-macos-arm64.dmg",
-      "version": "3.19.3",
+      "url": "https://github.com/awesomezun/1top/releases/download/v3.19.4/1top-3.19.4-macos-arm64.dmg",
+      "version": "3.19.4",
       "status": "preview",
       "signed": false,
       "notarized": false,
-      "sha256": "3f551f0612a3d5ef023cc46527ca318f5e4af9e56b8be68434b440cfba87626c"
+      "sha256": "9e2a44cfa665cfa44ae689268e46f29647dfbcddf086e5a849d1f3a3832d96dd"
     },
     "windows": {
       "architecture": "x64",
