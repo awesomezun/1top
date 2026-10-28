@@ -642,6 +642,8 @@ class Collector:
             sessions.append(s)
         from .aside import discover as aside_sessions
         for s in aside_sessions(now=now):
+            s['account_binding']=weekly_usage.bind_adapter(self.db,s,roots,now)
+            s.pop('billing_account',None)
             s.update(tokens=None,model=s.get('configured_model',''),last_usage=0,loading=False)
             if s['path']:
                 try:self.read_tracker(s)

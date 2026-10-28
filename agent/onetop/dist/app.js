@@ -116,23 +116,38 @@ function renderSessionSummary(){
 }
 let speedScale={key:null,max:1,lower:0,since:0};
 function renderFleetSpeed(){
- const s=OneTopSpeed.measure(data,selectedPeriod),next=OneTopSpeed.niceMax(s.rate),now=Date.now();
+ const s=OneTopSpeed.measure(data,selectedPeriod),rate=s.rate===null?null:s.rate*3600,next=OneTopSpeed.niceMax(rate),now=Date.now();
  if(speedScale.key!==selectedPeriod||next>speedScale.max)speedScale={key:selectedPeriod,max:next,lower:0,since:0};
- else if(next<speedScale.max&&s.rate<speedScale.max*.4){if(speedScale.lower!==next){speedScale.lower=next;speedScale.since=now;}else if(now-speedScale.since>30000)speedScale.max=next;}
+ else if(next<speedScale.max&&rate<speedScale.max*.4){if(speedScale.lower!==next){speedScale.lower=next;speedScale.since=now;}else if(now-speedScale.since>30000)speedScale.max=next;}
  else speedScale.lower=0;
- $('fleetSpeedValue').textContent=fmt(s.rate);
- $('fleetSpeedTotal').textContent=rangeCaption(selectedPeriod)+' · '+OneTopI18n.t('총')+' '+fmt(s.tokens)+' tokens';
+ $('fleetSpeedValue').textContent=fmt(rate);
+ $('fleetSpeedUnit').textContent=OneTopI18n.t('tokens/시간');
  $('fleetSpeedScope').textContent=OneTopI18n.t('컴퓨터')+' '+(s.computers===s.expected?s.computers:s.computers+'/'+s.expected);
  $('fleetSpeedScope').title=OneTopI18n.t(s.partial?'확인된 기록 기준':'연결된 모든 AI 사용량');
  $('fleetSpeedValue').title=OneTopI18n.t('선택 기간 평균');
- const band=$('fleetSpeedBand'),lit=s.rate===null?0:Math.round(s.rate/speedScale.max*40);
- if(!band.children.length)band.innerHTML='<i></i>'.repeat(40);
- [...band.children].forEach((segment,i)=>segment.classList.toggle('lit',i<lit));
- band.setAttribute('aria-label',fmt(s.rate)+' tokens/s');
- band.setAttribute('aria-valuenow',s.rate===null?'0':s.rate);
+ const band=$('fleetSpeedBand');
+ band.dataset.rate=rate===null?'':String(rate);band.dataset.max=String(speedScale.max);
+ band.setAttribute('aria-label',fmt(rate)+' '+OneTopI18n.t('tokens/시간'));
+ if(rate===null)band.removeAttribute('aria-valuenow');else band.setAttribute('aria-valuenow',rate);
  band.setAttribute('aria-valuemax',speedScale.max);
- $('fleetSpeedMax').textContent=fmt(speedScale.max)+' tokens/s';
+ drawFleetSpeed();
 }
+function drawFleetSpeed(){
+ const canvas=$('fleetSpeedBand');if(!canvas||!canvas.getContext)return;
+ const {width:w,height:h}=canvas.getBoundingClientRect();if(!w||!h)return;
+ const dpr=devicePixelRatio||1,c=canvas.getContext('2d'),css=getComputedStyle(document.documentElement),accent=css.getPropertyValue('--accent'),line=css.getPropertyValue('--line'),muted=css.getPropertyValue('--muted');
+ canvas.width=w*dpr;canvas.height=h*dpr;c.scale(dpr,dpr);
+ const left=8,right=w-8,y=30,span=right-left,max=Number(canvas.dataset.max)||1,rate=canvas.dataset.rate===''?null:Number(canvas.dataset.rate),position=left+span*Math.min(1,(rate||0)/max);
+ c.lineCap='round';c.lineWidth=4;c.strokeStyle=line;c.beginPath();c.moveTo(left,y);c.lineTo(right,y);c.stroke();
+ if(rate>0){c.strokeStyle=accent;c.beginPath();c.moveTo(left,y);c.lineTo(position,y);c.stroke();}
+ c.lineCap='butt';c.lineWidth=1;
+ const major=w<300?2:4,steps=major*5;
+ for(let i=0;i<=steps;i++){const x=left+span*i/steps,big=i%5===0;c.strokeStyle=i/steps<=(rate||0)/max?accent:line;c.beginPath();c.moveTo(x,y+(big?12:13));c.lineTo(x,y+(big?22:18));c.stroke();}
+ c.font='11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';c.fillStyle=muted;
+ for(let i=0;i<=major;i++){c.textAlign=i===0?'left':i===major?'right':'center';c.fillText(fmt(max*i/major),left+span*i/major,h-2);}
+ if(rate!==null){c.strokeStyle=accent;c.lineWidth=1.5;c.beginPath();c.moveTo(position,y-13);c.lineTo(position,y+7);c.stroke();c.fillStyle=accent;c.beginPath();c.arc(position,y,4,0,Math.PI*2);c.fill();}
+}
+
 function renderHost(){
  const h=data.system?.host;if(!h)return;
  const card=(title,value,unit,sub,percent,warn=false)=>`<article class="host-card ${warn?'warning':''}"><div class="label">${title}<span>${warn?'주의':''}</span></div><div class="value">${value}<small>${unit}</small></div><div class="sub">${sub}</div><div class="meter"><i style="width:${Math.min(100,Math.max(0,percent||0))}%"></i></div></article>`;
@@ -374,8 +389,15 @@ window.addEventListener('resize',drawWeeklyCharts);
 
 function memoryPercent(rss){const capacity=data?.system?.host?.memory?.total;return Number.isFinite(rss)&&Number.isFinite(capacity)&&capacity>0?pct(rss/capacity*100):'—';}
 function sessionBurnCell(s){
- const e=s.usage?.weekly_estimate?.[selectedPeriod],q=data.account_quotas?.find(q=>q.id===(e?.account_id||s.usage?.weekly_account));
+ let e=s.usage?.weekly_estimate?.[selectedPeriod];
+ const q=data.account_quotas?.find(q=>q.id===(e?.account_id||s.usage?.weekly_account));
+ // Current burn does not depend on whether the selected history window has
+ // token events. A known idle session still has a measurable zero burn rate.
+ if(!e&&q){const c=data.weekly_usage?.accounts.find(a=>a.id===q.id)?.calibration;if(c)e={account_id:q.id,basis:'calibrated_token_equivalent',calibration:c};}
  const rate=s.tokens==null?null:OneTopWeekly.sessionBurn(e,s.usage?.rate,q);
+ if(rate==null&&s.tokens!=null&&Number.isFinite(s.usage?.rate)&&s.usage.rate>=0&&Date.now()/1000-data.updated<=20){
+  return `<div class="token-rate"><strong>${esc(fmt(s.usage.rate*3600))}</strong><small>${esc(OneTopI18n.t('tokens/시간'))}</small></div>`;
+ }
  return OneTopDashboard.rateCell(rate,s.kind,OneTopWeekly.basis(e));
 }
 let renameRequest=null;
@@ -398,4 +420,4 @@ $('renameForm').onsubmit=async event=>{
  finally{actionBusy=false;$('saveRename').disabled=false;$('cancelRename').disabled=false;renderTable();}
 };
 $('renameDialog').addEventListener('cancel',event=>{if(actionBusy)event.preventDefault();else renameRequest=null;});
-OneTopDashboard.init({refresh:()=>{if(data?.ready)render();},layout:()=>{if(data?.ready){drawCharts();renderMaps();drawWeeklyCharts();}}});
+OneTopDashboard.init({refresh:()=>{if(data?.ready)render();},layout:()=>{if(data?.ready){drawCharts();renderMaps();drawWeeklyCharts();drawFleetSpeed();}}});

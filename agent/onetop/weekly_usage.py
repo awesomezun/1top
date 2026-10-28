@@ -32,12 +32,25 @@ def event_account(spec, timestamp):
     return binding[0] if binding and timestamp>=binding[1] else None
 
 
+def bind_adapter(db, spec, roots, now):
+    """Match an app's explicit provider identity to an already observed account."""
+    account=spec.get('billing_account');kind=spec.get('billing_kind')
+    known=any(value[:2]==(account,kind) for value in roots.values())
+    previous=db.execute('SELECT account,kind,since FROM adapter_accounts WHERE sid=?',(spec['id'],)).fetchone()
+    since=previous[2] if previous and previous[:2]==(account,kind) else now
+    db.execute('INSERT OR REPLACE INTO adapter_accounts VALUES(?,?,?,?)',
+               (spec['id'],account if known else None,kind,since))
+    return (account,since) if account and known else None
+
+
 def initialize(db):
     columns={r[1] for r in db.execute('PRAGMA table_info(events)')}
     if columns and 'account' not in columns:db.execute('ALTER TABLE events ADD COLUMN account TEXT')
     db.execute('''CREATE TABLE IF NOT EXISTS weekly_samples (
         account TEXT, kind TEXT, t REAL, pct REAL, reset REAL,
         PRIMARY KEY(account,t))''')
+    db.execute('''CREATE TABLE IF NOT EXISTS adapter_accounts (
+        sid TEXT PRIMARY KEY, account TEXT, kind TEXT, since REAL)''')
 
 
 def record(db, quotas, now):
@@ -131,10 +144,17 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
     columns={r[1] for r in db.execute('PRAGMA table_info(events)')}
     events=collections.defaultdict(list);session_events=collections.defaultdict(list)
     unbound=collections.defaultdict(list)
+    adapter_kinds=dict(db.execute('SELECT sid,kind FROM adapter_accounts'))
     if 'account' in columns:
         for account,sid,kind,t,total in db.execute('''SELECT account,sid,kind,t,fresh+cached+written+output
                 FROM events WHERE t>? AND t<=? ORDER BY t''',(now-86400-FRESH,now)):
             if valid_number(total) and total>0:
+                # Runtime/app and billing provider are different dimensions.
+                # Account-attributed events retain their recorded identity even
+                # after the app changes provider. Unbound old reports remain
+                # unbound and cannot inflate a calibration's missing denominator.
+                if kind=='Aside':
+                    kind=next((q['kind'] for q in quotas if q['id']==account),adapter_kinds.get(sid) or 'Aside')
                 session_events[sid].append((t,account,kind,total))
                 if account:events[account].append((t,sid,total))
                 else:unbound[kind].append(t)

@@ -81,6 +81,19 @@ class CustomTimeRanges(unittest.TestCase):
         self.assertNotIn('custom:129600', result['sessions'][0]['usage'].get('weekly_estimate', {}))
         self.assertEqual(result['sessions'][0]['usage']['windows']['custom:129600'][0], 25)
 
+    def test_aside_equivalent_and_grouping_survive_week_and_all_ranges(self):
+        self.db.execute("UPDATE events SET kind='Aside'")
+        self.db.execute("UPDATE events SET account=NULL WHERE sid='child'")
+        for session in self.snapshot['sessions']:
+            session.update(kind='Aside',billing_kind='Codex')
+        for key,expected in [('custom:604800',.23),('all',1.23)]:
+            result=extend_snapshot(self.db,self.snapshot,key)
+            group=result['root_sessions'][0]
+            self.assertAlmostEqual(group['usage']['weekly_estimate'][key]['used_pp'],expected)
+            self.assertEqual(group['children_count'],1)
+            child=next(s for s in result['sessions'] if s['id']=='child')
+            self.assertEqual(child['usage']['weekly_estimate'][key]['inferred_account_tokens'],3)
+
     def test_provider_history_is_partial_not_extrapolated(self):
         self.db.executemany('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',
                            [('a','Codex',self.now-600,10,self.now+86400),

@@ -109,7 +109,12 @@ try:
         assert all('%/시간' in v for v in page.locator('.burn-gauge small').all_text_contents())
         assert page.locator('#fleetSpeed').is_visible()
         assert page.locator('#fleetSpeedValue').inner_text()!='—'
-        assert page.locator('#fleetSpeedBand i').count()==40
+        assert page.locator('#fleetSpeedBand').evaluate('(c)=>c.tagName')=='CANVAS'
+        assert page.locator('#fleetSpeedUnit').inner_text()=='tokens/시간'
+        assert page.locator('#fleetSpeedTotal').count()==0
+        assert page.locator('#fleetSpeedBand').evaluate('(c)=>Math.abs(Number(c.getAttribute("aria-valuenow"))-OneTopSpeed.measure(data,selectedPeriod).rate*3600)<.001')
+        assert page.locator('#fleetSpeedBand').evaluate('(c)=>c.getContext("2d").getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0)')
+        assert page.locator('#sessionsView .range-buttons').evaluate('(e)=>Math.abs(e.getBoundingClientRect().right-e.closest(".range-toolbar").getBoundingClientRect().right)<1')
         before_speed=page.locator('#fleetSpeedValue').inner_text()
         page.locator('#providers [data-provider]').first.click()
         assert page.locator('#fleetSpeedValue').inner_text()==before_speed
@@ -249,17 +254,18 @@ try:
             page.wait_for_function('!document.documentElement.dataset.preferenceTransition')
         page.locator('[data-theme-switch]').click()
         page.wait_for_function("document.getAnimations().some(a=>a.effect?.pseudoElement==='::view-transition-new(root)'&&a.playState==='running')")
-        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.23.0.png'))
+        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.24.0.png'))
         finish_transition();assert page.locator('html').get_attribute('data-theme')=='light'
         pref_x=page.locator('[data-theme-switch]').bounding_box()['x']
         page.locator('[data-language="en"]').click()
         page.wait_for_function("[...document.querySelectorAll('canvas')].some(c=>c.style.viewTransitionName==='onetop-matrix')")
         page.wait_for_timeout(240)
         assert page.evaluate("[...document.querySelectorAll('canvas')].filter(c=>c.style.viewTransitionName==='onetop-matrix').some(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0))")
-        page.screenshot(path=str(ROOT/'build/language-reveal-v3.23.0.png'))
+        page.screenshot(path=str(ROOT/'build/language-reveal-v3.24.0.png'))
         finish_transition();assert page.locator('#pageTitle').inner_text()=='Dashboard'
         assert_range_geometry()
         assert abs(page.locator('[data-theme-switch]').bounding_box()['x']-pref_x)<1
+        assert page.locator('#fleetSpeedUnit').inner_text()=='tokens/h'
         assert 'Weekly limit' in page.locator('#periodColumn').inner_text()
         assert page.locator('#search').get_attribute('placeholder')=='Search terminal, project or model'
         page.locator('[data-language="zh"]').click();finish_transition();assert page.locator('#pageTitle').inner_text()=='仪表盘'
@@ -293,16 +299,16 @@ try:
         assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order
         assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==panel_order
         checks.append('preferences and layout survive reload')
-        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.23.0.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.24.0.png'),full_page=False)
         page.locator('[data-theme-switch]').click()
         finish_transition()
-        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.23.0.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.24.0.png'),full_page=False)
         page.locator('[data-language="en"]').click();finish_transition()
         for width in (1100,768,390):
             page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
             assert_range_geometry()
             if not page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'):
-                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.23.0.png'))
+                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.24.0.png'))
                 print(page.locator('body *').evaluate_all('(xs)=>xs.filter(e=>e.getBoundingClientRect().right>innerWidth+1&&!e.closest("[hidden],.table-scroll")).map(e=>({tag:e.tagName,id:e.id,cls:e.className,right:e.getBoundingClientRect().right})).slice(0,30)'),flush=True)
                 raise AssertionError(width)
         checks.append('1100px, 768px and mobile layout')
@@ -310,9 +316,9 @@ try:
         page.evaluate('localStorage.removeItem("onetop.dashboard.v1")')
         page.set_viewport_size({'width':1440,'height':1100});page.reload()
         page.locator('#sessionsBody tr').first.wait_for();page.wait_for_timeout(300)
-        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.23.0.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.24.0.png'),full_page=False)
         assert not errors,errors
-        (ROOT/'build/dashboard-browser-v3.23.0.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
+        (ROOT/'build/dashboard-browser-v3.24.0.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
         print(json.dumps({'checks':checks,'errors':errors},ensure_ascii=False))
         browser.close()
 finally:

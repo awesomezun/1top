@@ -23,6 +23,46 @@ class WeeklyUsageTests(unittest.TestCase):
     def test_migration_is_idempotent_and_does_not_assign_old_events(self):
         self.event(self.now-50,'old',99,None);w.initialize(self.db)
         self.assertIsNone(self.db.execute('SELECT account FROM events').fetchone()[0])
+    def test_adapter_matches_exact_account_and_preserves_binding_until_switch(self):
+        roots={Path('/pro'):('a','Codex',0),Path('/team'):('b','Codex',0)}
+        spec={'id':'aside:0:s','billing_account':'a','billing_kind':'Codex'}
+        self.assertEqual(w.bind_adapter(self.db,spec,roots,100),('a',100))
+        self.assertEqual(w.bind_adapter(self.db,spec,roots,200),('a',100))
+        spec['billing_account']='b'
+        self.assertEqual(w.bind_adapter(self.db,spec,roots,300),('b',300))
+        spec['account_binding']=('b',300)
+        self.assertIsNone(w.event_account(spec,250))
+        self.assertEqual(w.event_account(spec,310),'b')
+        spec['billing_account']='not-observed'
+        self.assertIsNone(w.bind_adapter(self.db,spec,roots,400))
+        spec.update(billing_account='a',billing_kind='Claude')
+        self.assertIsNone(w.bind_adapter(self.db,spec,roots,500))
+    def test_aside_tokens_calibrate_same_account_without_changing_runtime_kind(self):
+        self.point(self.now-240,20);self.point(self.now-120,22)
+        self.event(self.now-180,'cli',100)
+        self.db.execute('INSERT INTO events VALUES(?,?,?,?,?,?,?,?)',(self.now-160,'aside:0:s','Aside',300,0,0,0,'a'))
+        self.db.execute('INSERT INTO adapter_accounts VALUES(?,?,?,?)',('aside:0:s','a','Codex',self.now-300))
+        result,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex'}],self.now,bindings={'cli':'a','aside:0:s':'a'})
+        self.assertEqual(result['accounts'][0]['calibration']['tokens'],400)
+        self.assertEqual(shares['aside:0:s']['1h']['used_pp'],1.5)
+        self.assertEqual(shares['cli']['1h']['used_pp'],.5)
+        self.assertEqual(self.db.execute("SELECT kind FROM events WHERE sid='aside:0:s'").fetchone()[0],'Aside')
+    def test_old_aside_tokens_use_existing_calibration_without_rewriting_identity(self):
+        self.point(self.now-240,20);self.point(self.now-120,22)
+        self.event(self.now-180,'cli',100)
+        self.db.execute('INSERT INTO events VALUES(?,?,?,?,?,?,?,?)',(self.now-500,'aside:0:s','Aside',50,0,0,0,None))
+        self.db.execute('INSERT INTO adapter_accounts VALUES(?,?,?,?)',('aside:0:s','a','Codex',self.now))
+        _,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex'}],self.now,bindings={'aside:0:s':'a'})
+        self.assertEqual(shares['aside:0:s']['1h']['used_pp'],1)
+        self.assertEqual(shares['aside:0:s']['1h']['inferred_account_tokens'],50)
+        self.assertIsNone(self.db.execute("SELECT account FROM events WHERE sid='aside:0:s'").fetchone()[0])
+    def test_unbound_aside_activity_cannot_inflate_codex_calibration(self):
+        self.point(self.now-240,20);self.point(self.now-120,22)
+        self.event(self.now-180,'cli',100)
+        self.db.execute('INSERT INTO events VALUES(?,?,?,?,?,?,?,?)',(self.now-160,'aside:0:s','Aside',300,0,0,0,None))
+        self.db.execute('INSERT INTO adapter_accounts VALUES(?,?,?,?)',('aside:0:s','a','Codex',self.now))
+        result,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex'}],self.now,bindings={'aside:0:s':'a'})
+        self.assertIsNone(result['accounts'][0]['calibration']);self.assertEqual(shares,{})
     def test_single_sample_is_unknown_not_zero(self):
         self.point(self.now-30,24)
         self.assertIsNone(self.period()['used_pp']);self.assertTrue(self.period()['partial'])

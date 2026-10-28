@@ -9,7 +9,7 @@ import speed from '../agent/onetop/dist/speed.js';
 const html=fs.readFileSync(new URL('../agent/onetop/dist/index.html',import.meta.url),'utf8');
 const source=fs.readFileSync(new URL('../agent/onetop/dist/app.js',import.meta.url),'utf8');
 const nodes=Object.fromEntries([...html.matchAll(/\bid="([^"]+)"/g)].map(([,id])=>[id,{
- value:'',innerHTML:'',dataset:{},children:[],setAttribute(){},addEventListener(){},querySelectorAll(){return [];},
+ value:'',innerHTML:'',dataset:{},children:[],setAttribute(){},removeAttribute(){},addEventListener(){},querySelectorAll(){return [];},
  classList:{add(){},remove(){},toggle(){}}
 }]));
 const context=vm.createContext({
@@ -202,6 +202,15 @@ assert.equal(visibleText(vm.runInContext('sessionWeeklyCell(compactSession,[100,
 assert.equal(JSON.parse(vm.runInContext('sessionBurnCell(compactSession)',context)).rate,null);
 assert.doesNotMatch(source,/주간 한도 환산/);
 console.log('Period usage and burn rate stay in separate columns; stale rates are unknown, missing estimates use tokens once.');
+vm.runInContext(`
+ data.account_quotas[0].stale=false;
+ data.weekly_usage={accounts:[{id:'compact-account',calibration:compactEstimate.calibration}]};
+ const asideIdle={kind:'Aside',tokens:[100,0,0,0],usage:{rate:0,weekly_account:'compact-account',weekly_estimate:{}}};
+`,context);
+assert.equal(JSON.parse(vm.runInContext('sessionBurnCell(asideIdle)',context)).rate,0);
+vm.runInContext('asideIdle.usage.rate=18000',context);
+assert.equal(JSON.parse(vm.runInContext('sessionBurnCell(asideIdle)',context)).rate,21.6);
+console.log('Aside current burn uses matched account calibration even when the selected period has no events.');
 
 // Exercise real delegated click handlers. Only unrelated render sections are stubbed.
 nodes.modelFilter.options=[{value:'all'}];nodes.search.value='';nodes.stateFilter.value='all';nodes.modelFilter.value='all';
