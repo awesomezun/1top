@@ -29,14 +29,17 @@
  // Balanced recursive partition: each rectangle preserves exact value / total area.
  function layout(items,width=100,height=100){
   const result=[];
-  function split(nodes,x,y,w,h){
+  function split(nodes,x,y,w,h,depth=0){
    if(!nodes.length)return;
    if(nodes.length===1){result.push({...nodes[0],x,y,w,h});return;}
    const total=nodes.reduce((n,v)=>n+v.value,0);let part=0,best=Infinity,cut=1;
    for(let i=1;i<nodes.length;i++){part+=nodes[i-1].value;const delta=Math.abs(total/2-part);if(delta<best){best=delta;cut=i;}}
    const left=nodes.slice(0,cut),right=nodes.slice(cut),ratio=left.reduce((n,v)=>n+v.value,0)/total;
-   if(w>=h){split(left,x,y,w*ratio,h);split(right,x+w*ratio,y,w*(1-ratio),h);}
-   else{split(left,x,y,w,h*ratio);split(right,x,y+h*ratio,w,h*(1-ratio));}
+   // Wide panels need two weighted rows before subdividing. Otherwise the
+   // largest sessions become full-height strips instead of a readable quilt.
+   const rowBands=depth===0&&nodes.length>=4&&w>h*2;
+   if(w>=h&&!rowBands){split(left,x,y,w*ratio,h,depth+1);split(right,x+w*ratio,y,w*(1-ratio),h,depth+1);}
+   else{split(left,x,y,w,h*ratio,depth+1);split(right,x,y+h*ratio,w,h*(1-ratio),depth+1);}
   }
   split(items.filter(v=>safe(v.value)&&v.value>0),0,0,width,height);return result;
  }

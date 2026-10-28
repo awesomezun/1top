@@ -73,6 +73,7 @@ with tempfile.TemporaryDirectory() as tmp:
             ui.wait(120)
             assert ui.returncode == 0
             result = json.loads(report.read_text(encoding='utf-8'))
+            assert 'smoke_failure' not in result, result
             assert result['maps'] and result['ready'], result
             assert result['dataReady'] and result['renderedVersion'] == __version__, result
             assert result['connection'] == '실시간 연결' and result['render_error'] is None, result

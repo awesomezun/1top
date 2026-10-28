@@ -7,13 +7,16 @@ struct DesktopSnapshot: Decodable {
     var updated: Double?
     var error: String?
     var sessions: [DesktopSession]?
+    var root_sessions: [DesktopSession]?
     var period_usage: PeriodUsage?
     var system: SystemUsage?
     var action_token: String?
     var account_quotas: [AccountQuota]?
     var events: [UsageEvent]?
+    var weekly_usage: WeeklyUsage?
     struct UsageEvent: Decodable {
         var t: Double; var n: Double?
+        var kind: String?
         var fresh: Double?; var cached: Double?; var written: Double?; var output: Double?
         var total: Double { n ?? ((fresh ?? 0) + (cached ?? 0) + (written ?? 0) + (output ?? 0)) }
     }
@@ -40,14 +43,34 @@ struct DesktopSnapshot: Decodable {
 }
 struct DesktopSession: Decodable, Identifiable {
     var id: String; var kind: String; var project: String?; var title: String?; var model: String?
+    var effort: String?
     var status: String?; var display_status: String?; var tokens: [Double]?
     var usage: Usage?; var resources: Resources?; var orca_terminal: Terminal?
     var location: Location?; var control_key: String?; var input_verified: Bool?
-    struct Usage: Decodable { var rate: Double?; var windows: [String: [Double]?]? }
+    var children_count: Int?; var children_working: Int?; var children_ids: [String]?
+    var group_usage_partial: Bool?
+    struct Usage: Decodable {
+        var rate: Double?; var windows: [String: [Double]?]?
+        var weekly_estimate: [String: WeeklyEstimate]?; var weekly_account: String?
+        func weeklyBurnPerHour(period: String) -> Double? {
+            guard let estimate = weekly_estimate?[period],
+                  let weekly_account, !weekly_account.isEmpty,
+                  estimate.account_id == weekly_account else { return nil }
+            return estimate.burnPerHour(tokensPerSecond: rate)
+        }
+    }
     struct Resources: Decodable { var cpu: Double?; var rss: Double? }
     struct Terminal: Decodable { var title: String? }
     struct Location: Decodable { var app: String?; var app_path: String?; var terminal: String? }
     var state: String { display_status ?? status ?? "unknown" }
+    var reportedEffort: String? {
+        guard let value = effort?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        return value
+    }
+    var isWorkingGroup: Bool { state == "working" || (children_working ?? 0) > 0 }
+    var groupStateLabel: String {
+        (children_working ?? 0) > 0 ? "\(stateLabel) · 하위 \(children_working ?? 0)개 작업 중" : stateLabel
+    }
     var terminalName: String { orca_terminal?.title ?? location?.app ?? "실행 위치 미확인" }
     var locationLabel: String { orca_terminal != nil ? "Orca · \(terminalName)" : terminalName }
     var stateLabel: String {
@@ -68,6 +91,67 @@ struct DesktopSession: Decodable, Identifiable {
         }
     }
 }
+struct WeeklyEstimate: Decodable {
+    var used_pp: Double; var account_id: String; var partial: Bool
+    var basis: String?; var tokens: Double?; var calibration: Calibration?
+    struct Calibration: Decodable {
+        var tokens: Double; var used_pp: Double; var seconds: Double; var confidence: String
+        var source: String?; var kind: String?; var reset: Double?; var valid_until: Double?
+        var age_seconds: Double?; var report_source: String?; var from: Double?; var to: Double?
+    }
+    func permitsBurnRate(for quota: AccountQuota?, at now: Double) -> Bool {
+        guard let quota, quota.id == account_id, now.isFinite else { return false }
+        guard calibration?.source == "historical_provider_calibration" else { return !quota.stale }
+        guard quota.kind == "Claude", calibration?.kind == "Claude",
+              let reset = calibration?.reset, reset.isFinite,
+              let validUntil = calibration?.valid_until, validUntil.isFinite,
+              let observedTo = calibration?.to, observedTo.isFinite, observedTo > 0, observedTo <= now,
+              let currentReset = quota.windows.first(where: { $0.label == "주간" })?.reset,
+              currentReset.isFinite, currentReset > now,
+              abs(reset - currentReset) <= 60, validUntil > now,
+              validUntil <= min(reset, observedTo + 86400) else { return false }
+        return true
+    }
+    // A recent-token-rate equivalent, not a forecast of future account deductions.
+    func burnPerHour(tokensPerSecond: Double?) -> Double? {
+        guard basis == "calibrated_token_equivalent", let calibration,
+              calibration.tokens.isFinite, calibration.tokens > 0,
+              calibration.used_pp.isFinite, calibration.used_pp > 0,
+              calibration.seconds.isFinite, calibration.seconds >= 120,
+              let tokensPerSecond, tokensPerSecond.isFinite, tokensPerSecond >= 0 else { return nil }
+        let value = tokensPerSecond * (calibration.used_pp / calibration.tokens) * 3600
+        return value.isFinite ? value : nil
+    }
+    var scopeLabel: String {
+        "환산 추정" + (calibration?.confidence == "early" ? " · 초기" : "") + (partial ? " · 일부 토큰" : "")
+    }
+    var calculationLabel: String {
+        guard let calibration, let tokens else { return "환산 기준 미확인" }
+        let historical = calibration.source == "historical_provider_calibration"
+        let date = calibration.to.flatMap { $0.isFinite ? Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .shortened) : nil }
+        return "선택 기간 \(DesktopFormat.number(tokens)) tokens × (\(DesktopFormat.quota(calibration.used_pp)) ÷ \(DesktopFormat.number(calibration.tokens)) tokens)\n기준 \(Int(calibration.seconds / 60))분 관측 · 현재 계정 기준 환산" +
+            (historical ? "\n이전 제공자 관측 기준" + (date.map { " · " + $0 } ?? "") : "")
+    }
+}
+struct WeeklyUsage: Decodable {
+    var accounts: [Account]
+    struct Account: Decodable, Identifiable {
+        var id: String; var periods: [String: Period]
+        var history: [[Double]]?
+        var flow: [[Double]]?
+    }
+    struct Period: Decodable {
+        var used_pp: Double?; var partial: Bool; var observed_seconds: Double
+        // Partial periods use their observed duration, never the requested window length.
+        var burnPerHour: Double? {
+            guard let used_pp, used_pp.isFinite, used_pp >= 0,
+                  observed_seconds.isFinite, observed_seconds >= 120 else { return nil }
+            let value = (used_pp / observed_seconds) * 3600
+            return value.isFinite ? value : nil
+        }
+    }
+}
+
 enum DesktopFormat {
     static func number(_ value: Double?) -> String {
         guard let value, value.isFinite else { return "—" }
@@ -76,25 +160,111 @@ enum DesktopFormat {
         if value >= 1e3 { return String(format: "%.1fk", value / 1e3) }
         return String(format: value.rounded() == value ? "%.0f" : "%.1f", value)
     }
+    static func quota(_ value: Double?) -> String {
+        guard let value, value.isFinite, value >= 0 else { return "—" }
+        if value > 0 && value < 0.01 { return "<0.01%" }
+        return value.formatted(.number.precision(.fractionLength(0...2))) + "%"
+    }
     static func percent(_ value: Double?) -> String { value.map { String(format: "%.0f%%", $0) } ?? "—" }
     static func total(_ tokens: [Double]?) -> Double? { tokens?.reduce(0, +) }
+    static func burnRate(_ value: Double?) -> String {
+        guard let value, value.isFinite, value >= 0 else { return "—" }
+        return quota(value) + "/시간"
+    }
+    static func duration(_ seconds: Double?) -> String {
+        guard let seconds, seconds.isFinite, seconds >= 0,
+              seconds < Double(Int.max) / 2 else { return "—" }
+        let minutes = Int(seconds / 60)
+        if minutes == 0 { return "1분 미만" }
+        if minutes < 60 { return "\(minutes)분" }
+        return minutes % 60 == 0 ? "\(minutes / 60)시간" : "\(minutes / 60)시간 \(minutes % 60)분"
+    }
 }
 
 struct DesktopUsageTrend {
     struct Bin: Identifiable {
         var id: Int; var start: Double; var end: Double; var tokens: Double
+        var tokensByKind: [String: Double] = [:]
     }
     var bins: [Bin]
     var reported: Bool
+    // Canonical bottom-to-top order; independent of event arrival order.
+    var series: [String] {
+        let kinds = Set(bins.flatMap { $0.tokensByKind.keys })
+        let preferred = ["Claude", "Codex", "GLM", "Antigravity", "Aside"]
+        return preferred.filter(kinds.contains) + kinds.filter { !preferred.contains($0) }
+            .sorted { $0.utf16.lexicographicallyPrecedes($1.utf16) }
+    }
+    var maximum: Double { Self.niceMaximum(bins.map(\.tokens).max() ?? 0) }
+    static func niceMaximum(_ peak: Double) -> Double {
+        guard peak.isFinite, peak > 0 else { return 1 }
+        let power = pow(10, floor(log10(peak))), fraction = peak / power
+        return ([1.0, 2, 5, 10].first { $0 >= fraction } ?? 10) * power
+    }
     init(events: [DesktopSnapshot.UsageEvent]?, period: String, end: Double) {
         let seconds: Double = ["10m":600, "30m":1800, "1h":3600, "5h":18000, "12h":43200, "24h":86400][period] ?? 3600
-        // Reports are aggregated by minute. Align boundaries so today's final minute is included.
-        let finish = floor(end / 60) * 60 + 60, start = finish - seconds
-        let count = min(36, Int(seconds / 60)), step = seconds / Double(count)
+        // Shared with the full dashboard: snapshot clock, minute boundary,
+        // and 1/5/15-minute buckets. No width-dependent resampling.
+        let finish = floor((end.isFinite ? end : 0) / 60) * 60 + 60, start = finish - seconds
+        let step: Double = seconds > 18000 ? 900 : seconds > 3600 ? 300 : 60
+        let count = Int(seconds / step)
         bins = (0..<count).map { Bin(id:$0, start:start + Double($0)*step, end:start + Double($0+1)*step, tokens:0) }
         reported = events != nil
         for event in events ?? [] where event.t.isFinite && event.total.isFinite && event.total >= 0 && event.t >= start && event.t < finish {
             let index = min(count-1, Int((event.t-start)/step)); bins[index].tokens += event.total
+            let value = event.kind?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let kind = value.flatMap { $0.isEmpty ? nil : $0 } ?? "unknown"
+            bins[index].tokensByKind[kind, default: 0] += event.total
+        }
+    }
+}
+
+struct DesktopWeeklyUsageTrend {
+    struct Bin: Identifiable {
+        var id: Int; var start: Double; var end: Double
+        // nil means no eligible report, not zero consumption.
+        var usedPP: Double?
+    }
+    var bins: [Bin]
+    var observedSeconds: Double
+    var observedFrom: Double?
+    var observedTo: Double?
+    var total: Double { bins.compactMap(\.usedPP).reduce(0, +) }
+    var reported: Bool { observedSeconds > 0 }
+
+    init(history: [[Double]]?, flow: [[Double]]? = nil, period: String, end: Double) {
+        let seconds: Double = ["10m":600, "30m":1800, "1h":3600, "5h":18000, "12h":43200, "24h":86400][period] ?? 3600
+        let finish = end.isFinite ? end : 0, start = finish - seconds
+        let count = min(36, Int(seconds / 60)), step = seconds / Double(count)
+        bins = (0..<count).map { Bin(id:$0, start:start + Double($0)*step, end:start + Double($0+1)*step) }
+        observedSeconds = 0
+        var intervals = flow ?? []
+        if flow == nil {
+            // Legacy payloads lack reset-aware intervals. Never fall back when
+            // an explicit empty flow says the server rejected every interval.
+            let points = history ?? []
+            intervals = zip(points, points.dropFirst()).compactMap { before, after in
+                guard before.count >= 2, after.count >= 2,
+                      before[1].isFinite, after[1].isFinite,
+                      (0...100).contains(before[1]), (0...100).contains(after[1]) else { return nil }
+                return [before[0], after[0], after[1] - before[1]]
+            }
+        }
+        var previousEnd: Double?
+        for interval in intervals {
+            guard interval.count >= 3 else { continue }
+            let t0 = interval[0], t1 = interval[1], delta = interval[2]
+            guard t0.isFinite, t1.isFinite, delta.isFinite,
+                  t0 >= start, t1 <= finish, t1 > t0, t1 - t0 <= 300,
+                  (0...100).contains(delta), t0 >= (previousEnd ?? t0) else { continue }
+            // Place changes at report time. Do not interpolate a rounded provider
+            // update over earlier bins or invent values across resets and gaps.
+            let index = min(count - 1, max(0, Int((t1 - start) / step)))
+            bins[index].usedPP = (bins[index].usedPP ?? 0) + delta
+            observedSeconds += t1 - t0
+            observedFrom = min(observedFrom ?? t0, t0)
+            observedTo = max(observedTo ?? t1, t1)
+            previousEnd = t1
         }
     }
 }
@@ -181,6 +351,9 @@ final class DashboardModel: ObservableObject {
     private let session: URLSession
     private var fetching = false
     private var task: URLSessionDataTask?
+    private var sessionSortAmounts: [String: Double] = [:]
+    private var sessionSortUpdated: Double?
+    private var sessionSortPeriod: String?
     var onUpdate: (() -> Void)?
     init(baseURL: URL) {
         self.baseURL = baseURL
@@ -189,9 +362,9 @@ final class DashboardModel: ObservableObject {
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         self.session = URLSession(configuration: config)
     }
-    var sessions: [DesktopSession] { snapshot?.sessions ?? [] }
+    var sessions: [DesktopSession] { snapshot?.root_sessions ?? snapshot?.sessions ?? [] }
     var fresh: Bool { connected && snapshot?.isFresh(at: now) == true }
-    var working: Int { sessions.filter { $0.state == "working" }.count }
+    var working: Int { sessions.filter(\.isWorkingGroup).count }
     var knownCount: Int { sessions.filter { $0.tokens != nil }.count }
     var rate: Double? {
         let reported = sessions.compactMap { $0.tokens != nil ? $0.usage?.rate : nil }
@@ -203,11 +376,30 @@ final class DashboardModel: ObservableObject {
         return DesktopFormat.total(window?.tokens)
     }
     var sortedSessions: [DesktopSession] {
-        let ranks = ["working":0, "waiting":1, "resuming":2, "paused":3, "interrupted":4, "unknown":5, "idle":6]
-        return sessions.sorted {
-            let a = ranks[$0.state] ?? 5, b = ranks[$1.state] ?? 5
+        let ranks = ["working":0, "waiting":1, "resuming":1, "paused":2, "interrupted":2, "unknown":2, "idle":2]
+        let rows = sessions, timestamp = now.timeIntervalSince1970
+        // Hold within-tier order for one minute. Activity changes still move a
+        // group immediately; changing the selected period refreshes its amounts.
+        if sessionSortPeriod != selectedPeriod || sessionSortUpdated == nil ||
+            timestamp - (sessionSortUpdated ?? timestamp) >= 60 || timestamp < (sessionSortUpdated ?? timestamp) {
+            sessionSortAmounts = [:]; sessionSortPeriod = selectedPeriod; sessionSortUpdated = timestamp
+        }
+        let ids = Set(rows.map(\.id))
+        sessionSortAmounts = sessionSortAmounts.filter { ids.contains($0.key) }
+        for row in rows where sessionSortAmounts[row.id] == nil {
+            let values = row.usage?.windows?[selectedPeriod] ?? nil
+            let amount = values.flatMap { values -> Double? in
+                guard !values.isEmpty, values.allSatisfy({ $0.isFinite && $0 >= 0 }) else { return nil }
+                let total = values.reduce(0, +)
+                return total.isFinite ? total : nil
+            }
+            sessionSortAmounts[row.id] = amount ?? -1
+        }
+        return rows.sorted {
+            let a = $0.isWorkingGroup ? 0 : ranks[$0.state] ?? 2
+            let b = $1.isWorkingGroup ? 0 : ranks[$1.state] ?? 2
             if a != b { return a < b }
-            let ar = $0.usage?.rate ?? 0, br = $1.usage?.rate ?? 0
+            let ar = sessionSortAmounts[$0.id] ?? -1, br = sessionSortAmounts[$1.id] ?? -1
             if ar != br { return ar > br }
             return $0.id < $1.id
         }
@@ -286,6 +478,20 @@ final class DashboardModel: ObservableObject {
 struct AccountQuota: Decodable, Identifiable {
     var id: String; var kind: String; var account_label: String; var plan: String?
     var windows: [Window]; var updated: Double; var stale: Bool; var note: String
+    var status: String?
+    var statusLabel: String {
+        if !stale { return "확인됨" }
+        switch status {
+        case "last_report": return "마지막 보고"
+        case "report_pending": return "보고 대기"
+        case "login_required", "login_expired": return "재로그인 필요"
+        case "refresh_pending": return "갱신 중"
+        case "rate_limited": return "조회 제한"
+        case "access_denied": return "권한 확인"
+        case "credential_store_unavailable": return "저장소 확인"
+        default: return updated > 0 ? "마지막 보고" : "조회 지연"
+        }
+    }
     struct Window: Decodable, Identifiable {
         var label: String; var pct: Double?; var reset: Double
         var id: String { label }

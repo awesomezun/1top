@@ -6,6 +6,7 @@ import sqlite3
 import time
 from pathlib import Path
 import psutil
+from .effort import level
 
 ACTIVE={'running','working','streaming','executing'}
 
@@ -44,6 +45,10 @@ def discover(home=None,now=None,running=None):
                     'terminal_note':'Aside 내부 세션 · 터미널 CLI가 아님 · 바로가기는 Aside 앱 열기',
                     'note':'최근 24시간 저장 세션 또는 작업 중 세션 · 제공자 토큰 보고 · 개별 프로세스 자원 미귀속',
                     'aside_account':'u'+db.parent.name,'aside_session':sid,'native_status':status})
+                effort = level(configuration.get('thinkingLevel'))
+                if effort and configuration.get('modelId'):
+                    rows[-1].update(effort=effort, effort_model=configuration['modelId'],
+                                    effort_source='aside_session_configuration', effort_updated=updated)
         except (OSError,sqlite3.Error):continue
     return rows
 

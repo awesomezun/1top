@@ -20,9 +20,10 @@ class BoundaryTests(unittest.TestCase):
     self.assertEqual(orca_executable(),str(local))
     with patch.dict('os.environ',{'ORCA_CLI_COMMAND':'/explicit/orca'}):self.assertEqual(orca_executable(),'/explicit/orca')
  def test_confirmed_orca_identity_overrides_detached_terminal_ancestry(self):
-  s={'id':'test','kind':'Codex','control_key':'key','project':'fixture','status':'working','location':{'app':'Terminal'},'orca_terminal':{'title':'Named tab'},'input_verified':True}
+  s={'id':'test','kind':'Codex','control_key':'key','project':'fixture','status':'working','location':{'app':'Terminal'},'orca_terminal':{'title':'Named tab'},'input_verified':True,'effort':'xhigh','effort_source':'codex_turn_context','effort_updated':123}
   row=export_snapshot({'sessions':[s]})['sessions'][0]
   self.assertEqual(row['app'],'Orca');self.assertEqual(row['terminal'],'Named tab');self.assertIn('pause',row['capabilities'])
+  self.assertEqual(row['effort'],'xhigh');self.assertEqual(row['effort_source'],'codex_turn_context');self.assertEqual(row['effort_updated'],123)
  def test_process_classification_ignores_prompt(self):
   self.assertIsNone(cli_kind('node',['node','index.js','run claude with @openai/codex']))
   self.assertEqual(cli_kind('node',['node','/lib/node_modules/@openai/codex/bin/codex.js']),'Codex')

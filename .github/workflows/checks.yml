@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node tests/maps.mjs && node tests/relay-settings.mjs
+      - run: node tests/weekly.mjs && node tests/maps.mjs && node tests/relay-settings.mjs
       - run: npm ci --legacy-peer-deps && npm test && npm run check
         working-directory: cloud
       - run: npm ci && npm run build

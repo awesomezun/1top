@@ -20,9 +20,10 @@ for p in sorted(root.rglob('*'),key=lambda x:len(x.parts),reverse=True):
 PY
 codesign --force --options runtime --timestamp --sign "$ONETOP_DEVELOPER_ID" "$OUT"
 codesign --verify --deep --strict "$OUT"
-ditto -c -k --keepParent "$OUT" "$OUT.zip"
-xcrun notarytool submit "$OUT.zip" --keychain-profile "$ONETOP_NOTARY_PROFILE" --wait
+ditto -c -k --keepParent "$OUT" "$OUT-submission.zip"
+xcrun notarytool submit "$OUT-submission.zip" --keychain-profile "$ONETOP_NOTARY_PROFILE" --wait
 xcrun stapler staple "$OUT"
 xcrun stapler validate "$OUT"
 spctl --assess --type execute --verbose=2 "$OUT"
+ditto -c -k --keepParent "$OUT" "$OUT.zip"
 echo "Notarized candidate verified: $OUT"

@@ -19,16 +19,26 @@ from urllib.parse import urlsplit
 from .controls import Controller, ActionError, target_key, process_start
 from .resources import ResourceSampler
 from .usage import session_usage, window_usage, WINDOWS
-from .discovery import inventory, context, applications, orca_executable
+from . import weekly_usage
+from .discovery import inventory, context, applications, orca_executable, registry_status, claude_transcript
 from . import __version__
 from .context_usage import request_context, stored_context
 from .platform_support import data_directory
+from .hierarchy import codex_metadata, annotate as annotate_hierarchy, group_sessions
+from .effort import codex_level, backfill_codex, apply_statusline
 
 BASE = Path(__file__).resolve().parent
 HOME = Path.home()
 DATA = data_directory()
 KINDS = ['Claude', 'Codex', 'GLM', 'Antigravity', 'Aside']
 ZERO = [0, 0, 0, 0]  # fresh input, cache read, cache write, output
+
+
+class DashboardHTTPServer(ThreadingHTTPServer):
+    # WebView loads scripts, styles and fonts together at startup. Windows
+    # rejects connections beyond the small default listen backlog instead of
+    # letting every dependency reach its handler.
+    request_queue_size = 64
 
 
 def epoch(value):
@@ -104,10 +114,17 @@ def pane_thread_name(title, cwd):
     if not title.endswith(suffix):return None
     name=title[:-len(suffix)]
     # Codex decorates the stable thread name with a Braille activity spinner.
-    return re.sub(r'^[\u2800-\u28ff]\s+', '', name)
+    name = re.sub(r'^[\u2800-\u28ff]\s+', '', name)
+    # Codex adds this exact attention prefix while the stable thread name stays
+    # unchanged. Strip the decoration, not an arbitrary pipe-delimited prefix.
+    return re.sub(r'^\[\s*[.!]\s*\] Action Required \| ', '', name)
 
 
 def bind_terminal(spec, metadata, terminals, pane_titles, specs):
+    if spec.get('is_subagent'):
+        spec.update(pids=[], orca_terminal=None, terminal_match='unverified',
+                    terminal_note='하위 에이전트 · 부모 세션의 실행 위치에서 확인')
+        return
     pids=spec['pids']
     source='프로세스의 Orca 터미널 ID'
     if spec['kind']=='Codex' and not spec.get('process_only'):
@@ -136,7 +153,8 @@ class Ledger:
     def __init__(self, kind, state=None):
         self.s = state or {'kind': kind, 'offset': 0, 'inode': None, 'total': ZERO[:],
                            'seen': {}, 'models': [], 'last_usage': 0, 'model': '',
-                           'status': 'unknown', 'status_at': 0, 'known': False}
+                           'status': 'unknown', 'status_at': 0, 'known': False,
+                           'effort_schema': 1}
 
     def consume(self, d):
         s = self.s
@@ -147,6 +165,12 @@ class Ledger:
                 if p.get('model') and p['model']!=s['model']:
                     s.update(context_usage=None,request_input=None,context_size=None)
                 s['model'] = p.get('model') or s['model']
+                s['model_at'] = t
+                s['effort_schema'] = 1
+                # This turn is authoritative. An absent level must not retain
+                # an earlier turn/model's level or the CLI launch default.
+                s['effort'] = codex_level(p)
+                s['effort_updated'] = t if s['effort'] else None
             if d.get('type') == 'event_msg':
                 typ = p.get('type')
                 statuses = {'task_started': 'working', 'task_complete': 'idle',
@@ -213,6 +237,7 @@ class Ledger:
             if ctx is not None:s.update(context_usage=ctx,context_at=t,context_mid=mid)
         if model:
             s['model'] = model
+            s['model_at'] = t
             if model not in s['models']:
                 s['models'].append(model)
         if sum(delta):
@@ -242,6 +267,7 @@ class Collector:
         self.last_error = None
         self.resources = None
         self.shared_roots = []
+        self.session_metadata = {}
 
     def initialize(self):
         DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -252,6 +278,7 @@ class Collector:
             CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, t REAL, sid TEXT, kind TEXT,
                 fresh INTEGER, cached INTEGER, written INTEGER, output INTEGER);
             CREATE INDEX IF NOT EXISTS event_time ON events(t);''')
+        weekly_usage.initialize(self.db)
         row = self.db.execute("SELECT value FROM meta WHERE key='started'").fetchone()
         self.started = float(row[0]) if row else time.time()
         self.db.execute("INSERT OR IGNORE INTO meta VALUES ('started',?)", (str(self.started),))
@@ -280,13 +307,12 @@ class Collector:
             info['started']=process.get('started')
             info['birth']=process.get('birth')
             try:
-                raw = run(['ps','eww','-p',str(pid),'-o','command='])
+                env = psutil.Process(pid).environ()
                 # Deliberately whitelist metadata. Credentials never leave this function.
                 safe_ids={'ORCA_TERMINAL_HANDLE':'orca_handle','ORCA_TAB_ID':'orca_tab','TMUX_PANE':'tmux_pane'}
                 for key in ('ANTHROPIC_BASE_URL','ANTHROPIC_DEFAULT_OPUS_MODEL','ANTHROPIC_MODEL','CLAUDE_CONFIG_DIR',*safe_ids):
-                    match = re.search(r'(?:^|\s)'+key+r'=([^\s]*)',raw)
-                    if match:
-                        val = match.group(1)
+                    if env.get(key):
+                        val = env[key]
                         if key in safe_ids:
                             info[safe_ids[key]]=val
                         elif key.endswith('BASE_URL'):
@@ -295,8 +321,8 @@ class Collector:
                             info['config_dir'] = val
                         else:
                             info['configured_model'] = val
-                del raw
-            except (OSError, subprocess.SubprocessError):
+                del env
+            except (OSError, psutil.Error):
                 pass
             self.process_cache[pid] = info
         return self.process_cache[pid]
@@ -325,9 +351,6 @@ class Collector:
                             open_logs[l[1:]] = pid
             except (OSError, subprocess.SubprocessError):
                 pass
-        if time.time() - self.index_at > 60:
-            self.index = {p.stem: str(p) for p in (HOME/'.claude/projects').glob('*/*.jsonl')}
-            self.index_at = time.time()
         for pid, p in processes.items():
             if p['exe'] == 'codex':
                 if p['tty'] != '??':
@@ -344,12 +367,12 @@ class Collector:
                 pass
             sid = reg.get('sessionId') or f'process-{pid}'
             cwd = cwds.get(pid) or reg.get('cwd') or ''
-            path = self.index.get(sid)
+            path = claude_transcript(meta['config_dir'],sid)
             spec = {'id': sid, 'kind': kind, 'cwd': cwd, 'title': reg.get('name') or Path(cwd).name,
                     'pid': pid, 'pids': [pid], 'cpu': p['cpu'], 'rss': round(p['rss']),
-                    'status': reg.get('status','unknown'), 'status_at': epoch(reg.get('statusUpdatedAt')),
+                    'status': registry_status(reg), 'status_at': epoch(reg.get('statusUpdatedAt')),
                     'waiting_for': reg.get('waitingFor'), 'path': path,
-                    'configured_model': meta['configured_model'], 'provider': meta['provider'],
+                    'configured_model': meta['configured_model'], 'provider': meta['provider'], 'config_dir':meta['config_dir'],
                     'source': 'Claude Code 세션 레지스트리' if reg else 'macOS 프로세스', 'connected': True}
             if kind == 'Antigravity':
                 spec['note'] = '실행 상태는 확인됩니다. 이 설치의 대화 DB에는 검증된 토큰 필드가 없어 세션 토큰은 표시하지 않습니다.'
@@ -386,6 +409,11 @@ class Collector:
                           'status':'unknown', 'status_at':0, 'connected':True,
                           'source':'Codex 백엔드가 열고 있는 세션 기록',
                           'note':'여러 CLI가 한 백엔드를 공유할 수 있습니다. 세션 수와 CLI 프로세스 수는 다를 수 있습니다.'})
+            cache_key = (path, r[0])
+            if cache_key not in self.session_metadata:
+                self.session_metadata[cache_key] = codex_metadata(path, r[0])
+            specs[-1].update(self.session_metadata[cache_key])
+        self.session_metadata = {key: value for key, value in self.session_metadata.items() if key[0] in open_logs}
         try:
             r = json.loads(run([orca_executable(),'terminal','list','--json'],timeout=5))['result']
             self.terminals=r.get('terminals',[])
@@ -447,7 +475,7 @@ class Collector:
             specs[-1]['process_started']=process_start(pid)
             if specs[-1]['process_started']:specs[-1]['control_key']=target_key(specs[-1])
             counts[row['kind']]+=1
-        self.specs, self.process_counts = specs, dict(counts)
+        self.specs, self.process_counts = annotate_hierarchy(specs), dict(counts)
         self.discovery_at = time.time()
 
     def read_tracker(self, spec):
@@ -462,6 +490,7 @@ class Collector:
             tracker = self.trackers[path] = Ledger(spec['kind'])
             s = tracker.s
         s['inode'] = st.st_ino
+        effort_migrated = backfill_codex(s, path) if spec['kind'] == 'Codex' else False
         if s['offset']==0 and spec['kind']=='Codex' and st.st_size>16*1024*1024:
             # Codex already reports authoritative cumulative totals; no need to reread gigabytes.
             with open(path,'rb') as f:
@@ -485,16 +514,27 @@ class Collector:
                             event = tracker.consume(json.loads(line))
                             if event and event[0]>=self.started:
                                 t,v=event
-                                self.db.execute('INSERT INTO events(t,sid,kind,fresh,cached,written,output) VALUES(?,?,?,?,?,?,?)',
-                                                (t,spec['id'],spec['kind'],*v))
+                                self.db.execute('INSERT INTO events(t,sid,kind,fresh,cached,written,output,account) VALUES(?,?,?,?,?,?,?,?)',
+                                                (t,spec['id'],spec['kind'],*v,weekly_usage.event_account(spec,t)))
                         except (ValueError, TypeError, KeyError):
                             pass
                 s['offset'] = f.tell()
+        if start < st.st_size or effort_migrated:
             self.db.execute('INSERT OR REPLACE INTO trackers VALUES (?,?)',(path,json.dumps(s,separators=(',',':'))))
         spec['loading'] = s['offset'] < st.st_size
         spec['progress'] = round(100*s['offset']/max(1,st.st_size))
         spec['tokens'] = s['total'] if s['known'] and not spec['loading'] else None
         spec['model'] = s['model'] or spec.get('configured_model','')
+        spec['model_updated'] = s.get('model_at', s.get('last_usage', 0))
+        if spec['kind'] == 'Codex':
+            for key in ('effort', 'effort_source', 'effort_updated'):
+                spec.pop(key, None)
+            if s.get('effort'):
+                spec.update(effort=s['effort'], effort_source='codex_turn_context',
+                            effort_updated=s.get('effort_updated'))
+        elif spec['kind'] == 'Aside' and spec['model'] != spec.get('effort_model'):
+            for key in ('effort', 'effort_source', 'effort_updated'):
+                spec.pop(key, None)
         spec['models'] = s.get('models',[])
         spec['last_usage'] = s['last_usage']
         spec['request_input'] = s.get('request_input')
@@ -549,12 +589,16 @@ class Collector:
             self.discover()
         now=time.time()
         sessions=[]
+        roots=self.accounts.roots()
         for src in self.specs:
             s=dict(src)
+            s['account_binding']=weekly_usage.account_for(s,roots)
             s.update(tokens=None,model=s.get('configured_model',''),last_usage=0,loading=False)
             if s['path']:
                 try:self.read_tracker(s)
                 except OSError:s['note']='세션 기록을 읽을 수 없습니다.'
+            if s['kind'] in ('Claude', 'GLM'):
+                apply_statusline(s, now)
             # Registry states are reported, not inferred from CPU or a refreshing terminal clock.
             if s['status'] not in ('working','idle','waiting','interrupted'):
                 s['status']='unknown'
@@ -567,7 +611,7 @@ class Collector:
                 try:self.read_tracker(s)
                 except OSError:s['note']='Aside 사용량 기록을 읽을 수 없습니다.'
             sessions.append(s)
-        self.db.execute('DELETE FROM events WHERE t<?',(now-86400,))
+        self.db.execute('DELETE FROM events WHERE t<?',(now-86400-weekly_usage.FRESH,))
         self.db.commit()
         # The browser needs a chart, not a growing raw event log. Bound payloads by minute/provider.
         events=[dict(zip(['t','kind','fresh','cached','written','output'],r)) for r in
@@ -579,22 +623,34 @@ class Collector:
         minute,five,history,window=session_usage(self.db,now,self.started)
         periods,session_periods=window_usage(self.db,now,self.started,
                                             (s['kind'] for s in sessions if s['tokens'] is not None))
+        account_quotas=self.accounts.snapshot(now)
+        weekly_usage.restore_claude_last_report(self.db,account_quotas,now)
+        weekly_usage.record(self.db,account_quotas,now)
+        weekly,estimates=weekly_usage.snapshot(self.db,account_quotas,now,
+            bindings={s['id']:s['account_binding'][0] for s in sessions if s.get('account_binding')},
+            recording_started=self.started)
+        self.db.commit()
         for s in sessions:
+            binding=s.pop('account_binding',None)
             known=s['tokens'] is not None
             v=minute.get(s['id'],ZERO[:]) if known else None
             s['usage']={'last_minute':v,'last_five_minutes':five.get(s['id'],ZERO[:]) if known else None,
                         'rate':sum(v)/window if v is not None else None,
                         'output_rate':v[3]/window if v is not None else None,
                         'window_seconds':window,'history':history.get(s['id'],[]),
+                        'weekly_estimate':estimates.get(s['id'],{}) if known and not s.get('loading') else {},
+                        'weekly_account':binding[0] if binding else None,
                         'windows':{key:session_periods.get(s['id'],{}).get(key,ZERO[:]) if known else None
                                    for key,_,_ in WINDOWS}}
         if self.resources is None:self.resources=ResourceSampler()
         system=self.resources.sample(sessions,self.shared_roots)
+        roots = group_sessions(sessions)
         result={'ready':True,'version':__version__,'updated':now,'started':self.started,'sessions':sessions,
+                'root_sessions':roots,
                 'events':events,'recent':recent,'period_usage':periods,'quotas':quotas,'process_counts':self.process_counts,
                 'orca_terminals':self.terminal_count,'error':None,'poll_seconds':3,
                 'applications':getattr(self,'apps',[]),'system':system,'operations':self.operations.sample(sessions),
-                'account_quotas':self.accounts.snapshot(now),
+                'account_quotas':account_quotas,'weekly_usage':weekly,
                 'collection_ms':round((time.monotonic()-collect_started)*1000,1)}
         with self.lock:self.snapshot=result
 
@@ -716,10 +772,13 @@ class Handler(BaseHTTPRequestHandler):
             mime='application/json; charset=utf-8'
         elif route=='/api/updates':
             self.json_response(200,getattr(self.server,'updates',None).value if getattr(self.server,'updates',None) else {});return
-        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/maps.css','/typography.css','/benchmark.json'):
+        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/weekly.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js'):
             name='index.html' if route=='/' else route[1:]
             data=(BASE/'dist'/name).read_bytes()
             mime={'html':'text/html','js':'application/javascript','css':'text/css','json':'application/json'}[name.rsplit('.',1)[1]]+'; charset=utf-8'
+        elif route=='/brand-mark_v1.1.0.png':
+            data=(BASE/'dist'/'brand-mark_v1.1.0.png').read_bytes()
+            mime='image/png'
         elif route in {f'/fonts/ibm-plex/v1.0.0/{name}.woff2' for name in (
             'IBMPlexSans', 'IBMPlexSansKR-Regular', 'IBMPlexSansKR-Medium',
             'IBMPlexSansKR-SemiBold', 'IBMPlexSansKR-Bold') }:

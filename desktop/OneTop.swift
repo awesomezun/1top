@@ -93,8 +93,20 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
     }
     func updated() {
         updateStatusTitle()
+        syncDashboardAppearance()
         if model.connected, window != nil, !webLoaded, !webLoading { loadDashboard() }
         if !model.connected, !webLoaded { loadingLabel?.stringValue = "로컬 수집기에 연결하고 있습니다…\n연결되면 대시보드가 자동으로 열립니다.\n간략 보기의 수집기 다시 시작을 사용할 수 있습니다." }
+    }
+    func syncDashboardAppearance() {
+        guard webLoaded, let webView else { return }
+        webView.evaluateJavaScript("document.documentElement.dataset.theme") { [weak self] value, _ in
+            guard let self, let theme = value as? String, ["light", "dark"].contains(theme) else { return }
+            let appearance = NSAppearance(named: theme == "light" ? .aqua : .darkAqua)
+            self.window?.appearance = appearance; self.popover?.appearance = appearance
+            self.window?.backgroundColor = theme == "light" ? .windowBackgroundColor : NSColor(calibratedWhite: 0.055, alpha: 1)
+            self.webView?.underPageBackgroundColor = self.window?.backgroundColor
+            if !self.testing, UserDefaults.standard.string(forKey: "dashboardTheme") != theme { UserDefaults.standard.set(theme, forKey: "dashboardTheme") }
+        }
     }
     @objc func togglePopover() { if popover.isShown { popover.performClose(nil) } else { showPopover() } }
     func showPopover() {
@@ -136,7 +148,7 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         w.appearance = NSAppearance(named: .darkAqua); w.center(); w.setFrameAutosaveName("1top.desktop.v2")
         let toolbar = NSToolbar(identifier: "1top.toolbar"); toolbar.delegate = self; toolbar.displayMode = .iconAndLabel
         w.toolbar = toolbar; w.toolbarStyle = .unified
-        let config = WKWebViewConfiguration(); config.websiteDataStore = .nonPersistent()
+        let config = WKWebViewConfiguration(); config.websiteDataStore = testing ? .nonPersistent() : .default()
         // No privileged native bridge. The renderer uses the existing guarded HTTP controls.
         let web = WKWebView(frame: .zero, configuration: config); web.navigationDelegate = self; web.uiDelegate = self
         web.underPageBackgroundColor = w.backgroundColor; web.translatesAutoresizingMaskIntoConstraints = false
@@ -182,7 +194,7 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if action.navigationType == .linkActivated, let url = action.request.url, ["http", "https"].contains(url.scheme ?? "") { NSWorkspace.shared.open(url) }; return nil
     }
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { webLoading = false; webLoaded = true; loadingLabel?.isHidden = true }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { webLoading = false; webLoaded = true; loadingLabel?.isHidden = true; syncDashboardAppearance() }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { failedNavigation() }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failedNavigation() }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { failedNavigation(); model.refresh() }

@@ -20,6 +20,8 @@ class AccountingTests(unittest.TestCase):
             self.addCleanup(c.db.close)
             c.db.executescript('CREATE TABLE trackers(path TEXT PRIMARY KEY,data TEXT); CREATE TABLE events(t REAL,sid TEXT,kind TEXT,fresh INTEGER,cached INTEGER,written INTEGER,output INTEGER);')
             spec={'path':str(path),'id':'test-session','kind':'Claude','configured_model':''}
+            from onetop.weekly_usage import initialize
+            initialize(c.db)
             c.read_tracker(spec);self.assertIsNone(spec['tokens']);self.assertEqual(c.trackers[str(path)].s['offset'],0)
             with path.open('ab') as f:f.write(raw[len(raw)//2:])
             c.read_tracker(spec);self.assertEqual(spec['tokens'],[10,100,20,12])

@@ -1,10 +1,10 @@
-"""Local account-scoped subscription limits. No prompts, token refresh, or credential export."""
+"""Local account-scoped limits. Claude quotas come from nonsecret CLI reports."""
 import base64
 import copy
 import hashlib
 import json
 import queue
-from .platform_support import cli_command
+from .platform_support import cli_command, data_directory
 import math
 import os
 import selectors
@@ -16,12 +16,15 @@ import time
 import unicodedata
 import getpass
 import urllib.request
+import urllib.error
 from datetime import datetime
+from itertools import islice
 from pathlib import Path
 
 import certifi
 import psutil
 from .account_login import managed_profiles_dir
+from .claude_profiles import CredentialError, keychain_document, refresh_managed, managed
 
 
 def read_json(path):
@@ -56,6 +59,44 @@ def claude_windows(payload,now):
             for key,label in [('five_hour','5H'),('seven_day','주간')]]
 
 
+def claude_statusline_report(root,key,now):
+    """Read only reports attributable to the profile's current signed-in account."""
+    latest=None;root=root.resolve()
+    for path in islice((data_directory()/'claude-statusline').glob('*.json'),4096):
+        if path.is_symlink():continue
+        try:
+            if path.stat().st_size>16*1024:continue
+            with path.open('rb') as stream:raw=stream.read(16*1024+1)
+            if len(raw)>16*1024:continue
+            report=json.loads(raw)
+        except (OSError,ValueError):continue
+        if not isinstance(report,dict):continue
+        if report.get('schema')!=1 or isinstance(report.get('schema'),bool):continue
+        if report.get('source')!='claude_statusline' or report.get('account_id')!=key:continue
+        profile=report.get('profile');reported=report.get('t');session=report.get('session_id')
+        if not isinstance(profile,str) or not Path(profile).is_absolute():continue
+        try:
+            if Path(profile).resolve()!=root:continue
+        except (OSError,ValueError):continue
+        if not isinstance(session,str) or not session or len(session)>1024:continue
+        if not isinstance(reported,(int,float)) or isinstance(reported,bool) or not math.isfinite(reported) or not 0<reported<=now+5:continue
+        limits=report.get('rl')
+        if not isinstance(limits,dict):continue
+        windows=[]
+        for name,label in [('five_hour','5H'),('seven_day','주간')]:
+            value=limits.get(name)
+            if not isinstance(value,dict):continue
+            used=value.get('used_percentage');reset=value.get('resets_at')
+            if pct(used) is None or not 0<=used<=100:continue
+            if not isinstance(reset,(int,float)) or isinstance(reset,bool) or not math.isfinite(reset) or reset<=0:continue
+            windows.append(window(label,used,reset,now))
+        if not windows:continue
+        if latest is None or reported>latest['updated']:
+            latest={'windows':windows,'updated':reported,'source':'claude_statusline',
+                    'verified_activity':report.get('verified_activity') is True}
+    return latest
+
+
 def codex_windows(result,now):
     snapshots=result.get('rateLimitsByLimitId') or {}
     snap=snapshots.get('codex') or result.get('rateLimits') or {}
@@ -88,7 +129,8 @@ def claude_usage(token):
     # Credentials go only to this fixed provider endpoint, never the 1top relay.
     opener=urllib.request.build_opener(NoRedirect(),urllib.request.HTTPSHandler(context=ssl.create_default_context(cafile=certifi.where())))
     req=urllib.request.Request('https://api.anthropic.com/api/oauth/usage',headers={
-        'Authorization':'Bearer '+token,'anthropic-beta':'oauth-2025-04-20','User-Agent':'1top/2.1.0'})
+        'Authorization':'Bearer '+token,'anthropic-beta':'oauth-2025-04-20',
+        'User-Agent':'1top/3.9.0','Accept':'application/json'})
     with opener.open(req,timeout=8) as response:
         data=response.read(512*1024)
         value=json.loads(data)
@@ -184,24 +226,22 @@ def profile_roots(home=Path.home()):
 def claude_credentials(root):
     fallback=read_json(root/'.credentials.json').get('claudeAiOauth') or {}
     if not isinstance(fallback,dict):fallback={}
-    if os.name=='nt' or os.uname().sysname!='Darwin':return fallback
     # Claude Code stores its current macOS login in Keychain. A migrated
     # .credentials.json may remain on disk long after that token has expired.
-    suffix='' if root==Path.home()/'.claude' else '-'+hashlib.sha256(unicodedata.normalize('NFC',str(root)).encode()).hexdigest()[:8]
-    try:
-        result=subprocess.run(['/usr/bin/security','find-generic-password','-a',getpass.getuser(),'-w',
-                               '-s','Claude Code-credentials'+suffix],capture_output=True,text=True,timeout=3)
-        if result.returncode or len(result.stdout)>128*1024:return fallback
-        value=json.loads(result.stdout)
-        current=value.get('claudeAiOauth') if isinstance(value,dict) else None
-        if isinstance(current,dict) and current.get('accessToken'):return current
-    except (ValueError,OSError,subprocess.SubprocessError):pass
+    try:value=keychain_document(root)
+    except CredentialError:
+        if fallback and (not fallback.get('expiresAt') or timestamp(fallback['expiresAt'])>time.time()
+                         or (managed(root) and fallback.get('refreshToken'))):return fallback
+        raise
+    current=value.get('claudeAiOauth') if value else None
+    if isinstance(current,dict) and current.get('accessToken'):return current
     return fallback
 
 
 class AccountQuotaSampler:
     def __init__(self):
-        self.lock=threading.Lock();self.rows=[];self.cached={};self.thread=None
+        self.lock=threading.Lock();self.rows=[];self.cached={};self.thread=None;self.refresh_failures={};self.profile_accounts={};self.profile_jobs={};self.profile_timeout=25
+        self.local_refresh_lock=threading.Lock();self.next_local_refresh=0
     def start(self):
         if self.thread:return
         self.thread=threading.Thread(target=self.loop,daemon=True);self.thread.start()
@@ -212,34 +252,77 @@ class AccountQuotaSampler:
             time.sleep(120)
     def snapshot(self,now=None):
         now=now or time.time()
+        self.refresh_claude_reports(now)
         with self.lock:rows=copy.deepcopy(self.rows)
         for row in rows:
             row['stale']=row['stale'] or now-row['updated']>300
             for w in row['windows']:
                 if w['reset'] and w['reset']<=now:w['pct']=None
         return rows
+    def refresh_claude_reports(self,now):
+        """Refresh known local reports without spawning CLIs or rediscovering profiles."""
+        if time.monotonic()<self.next_local_refresh or not self.local_refresh_lock.acquire(blocking=False):return
+        try:
+            self.next_local_refresh=time.monotonic()+1
+            with self.lock:bindings={root:value for root,value in self.profile_accounts.items() if value[1]=='Claude'}
+            updates={}
+            for root,binding in bindings.items():
+                job=self.profile_jobs.get(('Claude',str(root)))
+                if job is not None and not job['done'].is_set():continue
+                try:row=self.claude(root,now)
+                except (OSError,ValueError,TypeError):continue
+                # Full sampling owns identity changes; this path refreshes known accounts only.
+                if row is None or row['id']!=binding[0]:continue
+                existing=updates.get(row['id'])
+                if existing is None or (not row['stale'],row['updated'])>(not existing['stale'],existing['updated']):updates[row['id']]=row
+            with self.lock:
+                current_ids={value[0] for root,value in self.profile_accounts.items() if bindings.get(root)==value}
+                for index,previous in enumerate(self.rows):
+                    row=updates.get(previous['id'])
+                    if row and row['id'] in current_ids and row['updated']>=previous['updated']:
+                        self.rows[index]=row;self.cached[row['id']]=copy.deepcopy(row)
+        finally:self.local_refresh_lock.release()
+    def roots(self):
+        with self.lock:return dict(self.profile_accounts)
     def claude(self,root,now):
-        config_path=Path.home()/'.claude.json' if root==Path.home()/'.claude' else root/'.claude.json'
+        config_path=Path.home()/'.claude.json' if root.resolve()==(Path.home()/'.claude').resolve() else root/'.claude.json'
         config=read_json(config_path);account=config.get('oauthAccount') or {}
+        if not isinstance(account,dict):return None
         account_id=account.get('accountUuid')
         if not account_id:return None
         key=identity('Claude',account_id,account.get('organizationUuid',''))
-        credentials=claude_credentials(root)
+        # Claude Code owns its login and refresh. Monitoring must never read its
+        # credentials or contact the subscription endpoint on the user's behalf.
         row={'id':key,'kind':'Claude','account_label':account.get('emailAddress') or account.get('displayName') or 'Claude 계정 '+key[-6:],
-             'plan':credentials.get('subscriptionType') or account.get('seatTier') or '',
-             'windows':claude_windows({},now),'updated':0,'stale':True,'note':'계정 한도를 확인하지 못했습니다.'}
+             'plan':account.get('seatTier') or ('max' if '_claude_max_' in str(account.get('organizationRateLimitTier') or '') else ''),
+             'windows':claude_windows({},now),'updated':0,'stale':True,'status':'report_pending',
+             'note':'Claude Code의 다음 사용량 보고를 기다립니다.'}
+        previous=self.cached.get(key)
+        if previous:
+            row.update(windows=copy.deepcopy(previous['windows']),updated=previous['updated'])
+            if previous.get('source'):row['source']=previous['source']
+            if previous.get('verified_activity') is True:row['verified_activity']=True
         cache=config.get('cachedUsageUtilization') or {}
-        if cache.get('accountUuid')==account_id and isinstance(cache.get('utilization'),dict):
-            row.update(windows=claude_windows(cache['utilization'],now),updated=timestamp(cache.get('fetchedAtMs')),note='Claude 계정 캐시 · 마지막 보고값',stale=True)
-        token=credentials.get('accessToken')
-        if isinstance(token,str) and token and timestamp(credentials.get('expiresAt'))>now:
-            try:
-                usage=claude_usage(token)
-                # An account switch during a request invalidates its association.
-                after=(read_json(config_path).get('oauthAccount') or {})
-                if (after.get('accountUuid'),after.get('organizationUuid'))!=(account_id,account.get('organizationUuid')):return None
-                row.update(windows=claude_windows(usage,now),updated=now,stale=False,note='Claude 계정 사용률 · 2분마다 확인')
-            except Exception:pass
+        if (isinstance(cache,dict) and cache.get('accountUuid')==account_id
+                and cache.get('organizationUuid')==account.get('organizationUuid') and isinstance(cache.get('utilization'),dict)):
+            reported=timestamp(cache.get('fetchedAtMs'))
+            if row['updated']<reported<=now:
+                row.update(windows=claude_windows(cache['utilization'],now),updated=reported,source='claude_cache')
+        report=claude_statusline_report(root,key,now)
+        if report and report['updated']>=row['updated']:row.update(report)
+        # An account switch while reading must not attribute the previous user's report.
+        after=read_json(config_path).get('oauthAccount') or {}
+        if not isinstance(after,dict) or (after.get('accountUuid'),after.get('organizationUuid'))!=(account_id,account.get('organizationUuid')):return None
+        for value in row['windows']:
+            if value['reset'] and value['reset']<=now:value['pct']=None
+        has_value=any(value['pct'] is not None for value in row['windows'])
+        if row.get('source')=='claude_statusline' and row.get('verified_activity') is True and now-row['updated']<=300 and has_value:
+            row.update(stale=False,note='Claude Code 상태줄 보고')
+            row.pop('status',None)
+        elif row.get('source')=='claude_statusline' and row.get('verified_activity') is not True and row['updated']:
+            row.update(status='last_report',note='Claude Code 마지막 보고값 · 다음 응답에서 갱신')
+        elif row['updated']:
+            row['note']='Claude Code 상태줄 보고 · 마지막 보고값' if row.get('source')=='claude_statusline' else 'Claude 계정 캐시 · 마지막 보고값'
         return row
     def codex(self,root,now):
         auth=read_json(root/'auth.json');tokens=auth.get('tokens') or {}
@@ -265,10 +348,54 @@ class AccountQuotaSampler:
                        windows=windows,updated=now,stale=False,note='Codex 계정 사용률 · 2분마다 확인')
         except Exception:pass
         return row
+    def profile(self,kind,root,now):
+        # Keep a slow provider subprocess from stalling every other account.
+        job_key=(kind,str(root));job=self.profile_jobs.get(job_key)
+        if job is None:
+            job={'done':threading.Event(),'row':None}
+            self.profile_jobs[job_key]=job
+            def query():
+                try:job['row']=self.claude(root,now) if kind=='Claude' else self.codex(root,now)
+                except Exception:pass
+                finally:job['done'].set()
+            threading.Thread(target=query,daemon=True).start()
+            job['done'].wait(self.profile_timeout)
+        if job['done'].is_set():
+            self.profile_jobs.pop(job_key,None)
+            return job['row']
+        if kind=='Claude':
+            config=Path.home()/'.claude.json' if root==Path.home()/'.claude' else root/'.claude.json'
+            account=read_json(config).get('oauthAccount') or {}
+            if not account.get('accountUuid'):return None
+            key=identity(kind,account['accountUuid'],account.get('organizationUuid',''))
+            label=account.get('emailAddress') or 'Claude 계정 '+key[-6:]
+            windows=claude_windows({},now)
+        else:
+            account=(read_json(root/'auth.json').get('tokens') or {}).get('account_id')
+            if not account:return None
+            key=identity(kind,account);label='Codex 계정 '+key[-6:];windows=codex_windows({},now)[0]
+        row=copy.deepcopy(self.cached.get(key) or {'id':key,'kind':kind,'account_label':label,
+                          'plan':'','windows':windows,'updated':0})
+        row.update(stale=True,status='refresh_pending',note='계정 조회 응답을 기다립니다.')
+        return row
     def sample(self):
-        now=time.time();rows={}
+        now=time.time();rows={};bindings={}
         for kind,root in profile_roots():
-            row=self.claude(root,now) if kind=='Claude' else self.codex(root,now)
-            if row and (row['id'] not in rows or row['updated']>rows[row['id']]['updated']):rows[row['id']]=row
+            if kind=='Claude':
+                config=Path.home()/'.claude.json' if root==Path.home()/'.claude' else root/'.claude.json'
+                account=read_json(config).get('oauthAccount') or {}
+                existing=rows.get(identity('Claude',account.get('accountUuid'),account.get('organizationUuid','')))
+                if existing and (not existing['stale'] or existing.get('status')=='refresh_pending'):
+                    bindings[root.resolve()]=(existing['id'],kind,now)
+                    continue
+            row=self.profile(kind,root,now)
+            if row:bindings[root.resolve()]=(row['id'],kind,now)
+            if row and (row['id'] not in rows or (not row['stale'],row['updated'])>(not rows[row['id']]['stale'],rows[row['id']]['updated'])):rows[row['id']]=row
         self.cached=copy.deepcopy(rows)
-        with self.lock:self.rows=list(rows.values())
+        with self.lock:
+            # Keep a binding start only while the profile identity stays unchanged.
+            for root,value in bindings.items():
+                old=self.profile_accounts.get(root)
+                if old and old[:2]==value[:2]:bindings[root]=old
+            self.profile_accounts=bindings
+            self.rows=list(rows.values())

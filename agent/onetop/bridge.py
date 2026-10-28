@@ -71,7 +71,9 @@ def export_snapshot(state):
             'app':'Orca' if term else loc.get('app') or 'Unknown',
             'terminal':term.get('title') or loc.get('terminal',''),
             'project':s.get('project',''),'title':s.get('project','')+' · '+s['kind'],
-            'model':s.get('model',''),'status':s.get('display_status') or status,'tokens':s.get('tokens'),
+            'model':s.get('model',''),'effort':s.get('effort'),
+            'effort_source':s.get('effort_source'),'effort_updated':s.get('effort_updated'),
+            'status':s.get('display_status') or status,'tokens':s.get('tokens'),
             'context_usage':{k:s['context_usage'].get(k) for k in ('basis','input_tokens','capacity','parts','observed_at','model')} if isinstance(s.get('context_usage'),dict) else None,
             'rate':u.get('rate'),'windows':u.get('windows',{}),'cpu':r.get('cpu'),'rss':r.get('rss'),
             'capabilities':capabilities})

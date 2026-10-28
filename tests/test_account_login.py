@@ -3,6 +3,7 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 import tempfile
 import unittest
 import threading
@@ -12,7 +13,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-from onetop.account_login import AccountLogin, login_script
+from onetop.account_login import AccountLogin, login_script, statusline_command, install_new_claude_statusline
 from onetop.accounts import claude_credentials, profile_roots
 from onetop.controls import ActionError
 
@@ -61,6 +62,8 @@ class EnrollmentTests(unittest.TestCase):
             scripts = list((data/'accounts/codex').glob('*/*.command'))
             self.assertEqual(len(scripts),1)
             self.assertEqual(old.read_text(),'original')
+            self.assertFalse((scripts[0].parent/'settings.json').exists())
+            self.assertFalse((scripts[0].parent/'1top-statusline.json').exists())
             self.assertEqual(scripts[0].stat().st_mode & 0o777,0o700)
             self.assertEqual(scripts[0].parent.stat().st_mode & 0o777,0o700)
             self.assertIn('CODEX_HOME='+str(scripts[0].parent),shlex.split(scripts[0].read_text().splitlines()[-1]))
@@ -86,14 +89,52 @@ class EnrollmentTests(unittest.TestCase):
             self.assertIn(('Codex',profile),profile_roots(Path(d)/'home'))
 
     def test_keychain_lookup_is_scoped_and_never_enumerates(self):
-        with tempfile.TemporaryDirectory() as d, patch('onetop.accounts.subprocess.run') as run:
+        from onetop.claude_profiles import keychain_document, service_name
+        with tempfile.TemporaryDirectory() as d, patch('onetop.claude_profiles._keychain_operation') as query, patch('subprocess.run') as run:
             root=Path(d)
-            run.return_value=subprocess.CompletedProcess([],0,json.dumps({'claudeAiOauth':{'accessToken':'private'}}),'')
-            self.assertEqual(claude_credentials(root)['accessToken'],'private')
-            args=run.call_args.args[0]
-            self.assertEqual(args[-1],'Claude Code-credentials-'+hashlib.sha256(str(root).encode()).hexdigest()[:8])
-            self.assertIn('find-generic-password',args)
+            query.return_value=json.dumps({'claudeAiOauth':{'accessToken':'private'}}).encode()
+            with patch('onetop.claude_profiles.os.name','posix'), patch('onetop.claude_profiles.os.uname') as uname:
+                uname.return_value.sysname='Darwin'
+                self.assertEqual(keychain_document(root)['claudeAiOauth']['accessToken'],'private')
+            self.assertEqual(service_name(root),'Claude Code-credentials-'+hashlib.sha256(str(root).encode()).hexdigest()[:8])
+            query.assert_called_once_with(root)
+            run.assert_not_called()
 
     def test_missing_keychain_stays_unknown(self):
-        with tempfile.TemporaryDirectory() as d, patch('onetop.accounts.subprocess.run',return_value=subprocess.CompletedProcess([],44,'','')):
+        with tempfile.TemporaryDirectory() as d, patch('onetop.accounts.keychain_document',return_value=None):
             self.assertEqual(claude_credentials(Path(d)),{})
+
+    def test_new_claude_profile_has_private_statusline_before_official_login(self):
+        with tempfile.TemporaryDirectory() as d:
+            data=Path(d);manager=AccountLogin(data/'accounts')
+            def launch(args,**kwargs):
+                if '--version' in args:return subprocess.CompletedProcess(args,0,'2.1.310','')
+                profiles=list((data/'accounts/claude').iterdir())
+                self.assertEqual(len(profiles),1)
+                root=profiles[0];settings=json.loads((root/'settings.json').read_text())
+                spec=root/'1top-statusline.json';document=json.loads(spec.read_text())
+                self.assertEqual(document,{'profile':str(root.resolve()),'original_command':'','report_directory':str(data.resolve()/'claude-statusline')})
+                self.assertEqual(settings['statusLine']['type'],'command')
+                self.assertEqual(shlex.split(settings['statusLine']['command']),[sys.executable,'-m','onetop.cli','statusline','--config',str(spec.resolve())])
+                for path in (spec,root/'settings.json'):self.assertEqual(path.stat().st_mode & 0o777,0o600)
+                self.assertIn('auth login --claudeai',(root/'Sign in to 1top.command').read_text())
+                return subprocess.CompletedProcess(args,0,'','')
+            with patch('onetop.account_login.executable',return_value='/tmp/claude'),patch('onetop.account_login.subprocess.run',side_effect=launch),patch('onetop.account_login.data_directory',return_value=data),patch.object(sys,'frozen',False,create=True):
+                manager.start('Claude')
+
+    def test_statusline_command_quotes_packaged_and_development_launchers(self):
+        spec='/tmp/profile with spaces/1top-statusline.json'
+        with patch.object(sys,'executable','/tmp/1top app/onetop-agent'),patch.object(sys,'frozen',True,create=True):
+            self.assertEqual(shlex.split(statusline_command(spec)),['/tmp/1top app/onetop-agent','statusline','--config',spec])
+        with patch.object(sys,'executable','/tmp/python env/python'),patch.object(sys,'frozen',False,create=True):
+            expected=['/tmp/python env/python','-m','onetop.cli','statusline','--config',spec]
+            self.assertEqual(shlex.split(statusline_command(spec)),expected)
+            with patch('onetop.account_login.os.name','nt'):
+                self.assertEqual(statusline_command(spec),subprocess.list2cmdline(expected))
+
+    def test_statusline_initializer_refuses_existing_profile_content(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);settings=root/'settings.json';settings.write_text('existing-user-config')
+            with self.assertRaises(FileExistsError):install_new_claude_statusline(root)
+            self.assertEqual(settings.read_text(),'existing-user-config')
+            self.assertFalse((root/'1top-statusline.json').exists())
