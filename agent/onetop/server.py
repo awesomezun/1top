@@ -34,6 +34,13 @@ KINDS = ['Claude', 'Codex', 'GLM', 'Antigravity', 'Aside']
 ZERO = [0, 0, 0, 0]  # fresh input, cache read, cache write, output
 
 
+class DashboardHTTPServer(ThreadingHTTPServer):
+    # WebView loads scripts, styles and fonts together at startup. Windows
+    # rejects connections beyond the small default listen backlog instead of
+    # letting every dependency reach its handler.
+    request_queue_size = 64
+
+
 def epoch(value):
     if isinstance(value, (int, float)):
         return value / 1000 if value > 1e12 else value

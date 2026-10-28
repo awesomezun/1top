@@ -12,7 +12,7 @@ class LocalDefaultTests(unittest.TestCase):
             if pair_error:bridge.pair.side_effect=pair_error
             with patch('sys.argv',['1top',command]), patch('platform.system',return_value='Darwin'), \
                  patch('onetop.server.DATA',Path(tmp)), patch('onetop.server.Collector'), \
-                 patch('onetop.controls.Controller'), patch('http.server.ThreadingHTTPServer'), \
+                 patch('onetop.controls.Controller'), patch('onetop.server.DashboardHTTPServer'), \
                  patch('onetop.bridge.CloudLink',return_value=bridge), patch('onetop.bridge.open_url') as open_url, \
                  patch('threading.Thread') as thread, patch('time.sleep',side_effect=KeyboardInterrupt), patch('signal.signal'):
                 main()

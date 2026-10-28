@@ -20,17 +20,16 @@ def main():
     if args.config:parser.error('--config requires statusline')
     if platform.system() not in ('Darwin','Windows'):
         print('This release supports macOS and Windows.',file=sys.stderr);sys.exit(2)
-    from .server import Collector,Handler,DATA
+    from .server import Collector,Handler,DATA,DashboardHTTPServer
     from .controls import Controller
     from .bridge import CloudLink,save_private,open_url
-    from http.server import ThreadingHTTPServer
     import secrets
     DATA.mkdir(parents=True,exist_ok=True,mode=0o700)
     lock=(DATA/'agent.lock').open('a+')
     try:lock_instance(lock)
     except BlockingIOError:
         print('1top is already running.',file=sys.stderr);return
-    server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
+    server=DashboardHTTPServer(('127.0.0.1',args.port),Handler)
     collector=Collector();server.collector=collector;server.action_token=secrets.token_urlsafe(32)
     from .account_login import AccountLogin
     server.account_login=AccountLogin()
