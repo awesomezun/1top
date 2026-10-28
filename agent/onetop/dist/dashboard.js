@@ -9,10 +9,11 @@ window.OneTopDashboard=(()=>{
  let hooks={},editing=false,dragging=false,frame,initialized=false;
  let gaugeScale={scope:null,max:1,lower:null,since:0};
  const list=(v,allowed)=>Array.isArray(v)&&v.length===allowed.length&&new Set(v).size===allowed.length&&v.every(x=>allowed.includes(x));
+ function validPeriod(value){if(['10m','30m','1h','5h','12h','24h','all'].includes(value))return true;if(!/^custom:[0-9]{1,13}$/.test(value))return false;const n=Number(value.split(':')[1]);return Number.isSafeInteger(n)&&n>=600&&n%60===0&&n<=8e12;}
  try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved){
   for(const [k,values] of Object.entries({theme:['dark','light'],lang:['ko','en','zh']}))if(values.includes(saved[k]))state[k]=saved[k];
   if(list(saved.columns,ids))state.columns=saved.columns;if(list(saved.panels,panels))state.panels=saved.panels;
-  if(['10m','30m','1h','5h','12h','24h'].includes(saved.period))state.period=saved.period;
+  if(validPeriod(saved.period))state.period=saved.period;
   for(const id of ids)if(Number.isFinite(saved.widths?.[id]))state.widths[id]=Math.max(minima[id],Math.min(700,saved.widths[id]));
   for(const id of panels){if(Number.isInteger(saved.spans?.[id]))state.spans[id]=Math.max(id==='summary'?6:3,Math.min(12,saved.spans[id]));if(Number.isFinite(saved.heights?.[id]))state.heights[id]=Math.max(150,Math.min(1200,saved.heights[id]));}
  }}catch{}
@@ -60,12 +61,12 @@ window.OneTopDashboard=(()=>{
   const table=document.querySelector('.sessions-table');table.style.tableLayout='fixed';
   const cols=document.createElement('colgroup');cols.innerHTML=ids.map(id=>`<col data-column="${id}">`).join('');table.prepend(cols);
   [...table.tHead.rows[0].cells].forEach((th,i)=>{
-   const id=ids[i];th.dataset.column=id;th.draggable=true;
-   const content=th.innerHTML;th.replaceChildren();const label=document.createElement('button');label.type='button';label.className='column-label';label.innerHTML=content;
+   const id=ids[i];th.dataset.column=id;th.draggable=false;
+   const content=th.innerHTML;th.replaceChildren();const label=document.createElement('button');label.type='button';label.className='column-label';label.draggable=true;label.innerHTML=content;
    if(th.id){label.id=th.id;th.removeAttribute('id');}th.append(label);
    if(id==='rate'){const scale=document.createElement('span');scale.className='burn-scale';th.append(scale);}
    const resize=document.createElement('button');resize.type='button';resize.className='column-resize';resize.setAttribute('aria-label','열 너비 조절');resize.title='좌우로 끌어 열 너비 조절';th.append(resize);
-   th.ondragstart=e=>{if(e.target.closest('.column-resize')){e.preventDefault();return;}e.dataTransfer.setData('application/onetop-column',id);};th.ondragover=e=>{if([...e.dataTransfer.types].includes('application/onetop-column'))e.preventDefault();};
+   th.ondragstart=e=>{if(dragging||!e.target.closest('.column-label')){e.preventDefault();return;}e.dataTransfer.setData('application/onetop-column',id);};th.ondragover=e=>{if([...e.dataTransfer.types].includes('application/onetop-column'))e.preventDefault();};
    th.ondrop=e=>{const from=e.dataTransfer.getData('application/onetop-column');if(!ids.includes(from))return;e.preventDefault();move(state.columns,from,id);afterTable();save();};
    label.onkeydown=e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();const delta=e.key==='ArrowLeft'?-1:1;if(e.shiftKey)state.widths[id]=Math.max(minima[id],Math.min(700,state.widths[id]+delta*10));else{const i=state.columns.indexOf(id);move(state.columns,id,state.columns[Math.max(0,Math.min(ids.length-1,i+delta))]);}afterTable();save();label.focus();};
    resize.onkeydown=e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();state.widths[id]=Math.max(minima[id],Math.min(700,state.widths[id]+(e.key==='ArrowLeft'?-10:10)));afterTable();save();};
@@ -109,5 +110,5 @@ window.OneTopDashboard=(()=>{
   }
  }
  function init(options){hooks=options;window.OneTopI18n?.setLanguage(state.lang);prefs();panelSetup();setupColumns();initialized=true;afterTable();new ResizeObserver(queueDraw).observe(document.getElementById('dashboardGrid'));}
- return {init,afterTable,rateCell,drawGauges,state,rememberPeriod(value){state.period=value;save();},get interacting(){return dragging;}};
+ return {init,afterTable,rateCell,drawGauges,state,validPeriod,rememberPeriod(value){if(validPeriod(value)){state.period=value;save();}},get interacting(){return dragging;}};
 })();

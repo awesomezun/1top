@@ -14,7 +14,7 @@ const context=vm.createContext({
  document:{getElementById:id=>nodes[id]||null,querySelectorAll:()=>[],querySelector:()=>null,addEventListener(){}},
  window:{addEventListener(){}},fetch:()=>new Promise(()=>{}),setInterval(){},setTimeout(){},clearTimeout(){},
  AbortSignal,URL,Date,OneTopWeekly:weekly,
- OneTopDashboard:{init(){},afterTable(){},rateCell:(rate)=>JSON.stringify({rate}),interacting:false,state:{period:'1h'},rememberPeriod(){}},
+ OneTopDashboard:{init(){},afterTable(){},rateCell:(rate)=>JSON.stringify({rate}),interacting:false,validPeriod:()=>true,state:{period:'1h'},rememberPeriod(){}},
  OneTopI18n:{locale:()=> 'ko-KR'}
 });
 vm.runInContext(source,context);

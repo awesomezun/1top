@@ -12,13 +12,15 @@ import time
 import secrets
 import psutil
 import platform
+from contextlib import closing
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
 from .controls import Controller, ActionError, target_key, process_start
 from .resources import ResourceSampler
 from .usage import session_usage, window_usage, WINDOWS
+from .time_ranges import parse_period, extend_snapshot
 from . import weekly_usage
 from .discovery import inventory, context, applications, orca_executable, registry_status, claude_transcript
 from . import __version__
@@ -253,6 +255,8 @@ class Collector:
         from .accounts import AccountQuotaSampler
         self.accounts = AccountQuotaSampler()
         self.lock = threading.Lock()
+        self.range_lock = threading.Lock()
+        self.range_cache = {}
         self.snapshot = {'ready': False, 'version': __version__, 'updated': 0, 'sessions': [], 'error': None}
         self.agy_quota = {'kind': 'Antigravity', 'windows': [], 'note': '한도 확인 중', 'updated': 0}
         self.glm_quota = {'kind': 'GLM', 'windows': [], 'note': '연결된 GLM 계정 한도 확인 중', 'updated': 0}
@@ -282,7 +286,28 @@ class Collector:
         row = self.db.execute("SELECT value FROM meta WHERE key='started'").fetchone()
         self.started = float(row[0]) if row else time.time()
         self.db.execute("INSERT OR IGNORE INTO meta VALUES ('started',?)", (str(self.started),))
+        self.db.execute("INSERT OR IGNORE INTO meta VALUES ('history_started',?)",
+                        (str(max(self.started, time.time() - 86400)),))
+        self.history_started = float(self.db.execute("SELECT value FROM meta WHERE key='history_started'").fetchone()[0])
         self.db.commit()
+
+    def state_for_period(self, key):
+        duration = parse_period(key)
+        with self.lock:
+            snapshot = self.snapshot
+        if duration is None or not snapshot.get('ready'):
+            return snapshot
+        with self.range_lock:
+            cached = self.range_cache.get(key)
+            if cached and cached['updated'] == snapshot['updated']:
+                return cached
+            with closing(sqlite3.connect((DATA/'monitor.sqlite').as_uri() + '?mode=ro', uri=True, timeout=5)) as db:
+                db.execute('BEGIN')
+                result = extend_snapshot(db, snapshot, key)
+            if len(self.range_cache) >= 8:
+                self.range_cache.clear()
+            self.range_cache[key] = result
+            return result
 
     def processes(self):
         rows = {}
@@ -611,7 +636,7 @@ class Collector:
                 try:self.read_tracker(s)
                 except OSError:s['note']='Aside 사용량 기록을 읽을 수 없습니다.'
             sessions.append(s)
-        self.db.execute('DELETE FROM events WHERE t<?',(now-86400-weekly_usage.FRESH,))
+        # Retain local reports for user-selected ranges beyond 24 hours.
         self.db.commit()
         # The browser needs a chart, not a growing raw event log. Bound payloads by minute/provider.
         events=[dict(zip(['t','kind','fresh','cached','written','output'],r)) for r in
@@ -646,6 +671,7 @@ class Collector:
         system=self.resources.sample(sessions,self.shared_roots)
         roots = group_sessions(sessions)
         result={'ready':True,'version':__version__,'updated':now,'started':self.started,'sessions':sessions,
+                'history_started':getattr(self,'history_started',self.started),
                 'root_sessions':roots,
                 'events':events,'recent':recent,'period_usage':periods,'quotas':quotas,'process_counts':self.process_counts,
                 'orca_terminals':self.terminal_count,'error':None,'poll_seconds':3,
@@ -766,7 +792,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(403);return
         route=urlsplit(self.path).path
         if route=='/api/state':
-            with self.server.collector.lock:snapshot=self.server.collector.snapshot
+            period = parse_qs(urlsplit(self.path).query).get('period', [None])[0]
+            if period is not None:
+                try:snapshot=self.server.collector.state_for_period(period)
+                except ValueError:
+                    self.json_response(400,{'ok':False,'message':'유효한 기간을 입력하세요. 최소 10분입니다.'});return
+            else:
+                with self.server.collector.lock:snapshot=self.server.collector.snapshot
             snapshot=self.server.controller.decorate(snapshot)
             data=json.dumps({**snapshot,'action_token':self.server.action_token},ensure_ascii=False).encode()
             mime='application/json; charset=utf-8'

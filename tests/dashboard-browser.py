@@ -4,18 +4,32 @@ Run with system Python (Playwright installed). Never forwards control POSTs to r
 """
 import json
 from pathlib import Path
+import sqlite3
+import sys
 import threading
 import time
 import urllib.request
+from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / 'agent/onetop/dist'
+sys.path.insert(0,str(ROOT/'agent'))
+from onetop.time_ranges import extend_snapshot
 with urllib.request.urlopen('http://127.0.0.1:18766/api/state') as response:
     snapshot = json.load(response)
 snapshot['action_token'] = 'presentation-test-only'
 calls = []
+range_requests = []
+history = sqlite3.connect(':memory:',check_same_thread=False)
+history.executescript('''CREATE TABLE events(t REAL,sid TEXT,kind TEXT,fresh INTEGER,cached INTEGER,written INTEGER,output INTEGER,account TEXT);
+    CREATE TABLE weekly_samples(account TEXT,kind TEXT,t REAL,pct REAL,reset REAL);''')
+sample_session=next(s for s in snapshot['sessions'] if s.get('tokens') is not None)
+history.executemany('INSERT INTO events VALUES(?,?,?,?,?,?,?,?)',
+    [(snapshot['updated']-age,sample_session['id'],sample_session['kind'],n,0,0,0,None)
+     for age,n in [(3600,100),(26*3600,200),(6*86400,300)]])
+history.commit()
 
 
 class Preview(BaseHTTPRequestHandler):
@@ -24,7 +38,12 @@ class Preview(BaseHTTPRequestHandler):
         route = self.path.split('?', 1)[0]
         if route == '/api/state':
             snapshot['updated'] = time.time()
-            body, mime = json.dumps(snapshot).encode(), 'application/json'
+            period=parse_qs(urlsplit(self.path).query).get('period',[None])[0]
+            if period:
+                range_requests.append(period)
+                result=extend_snapshot(history,{**snapshot,'history_started':snapshot['updated']-7*86400},period)
+            else: result=snapshot
+            body, mime = json.dumps(result).encode(), 'application/json'
         elif route == '/api/updates': body, mime = b'{}', 'application/json'
         else:
             path = (DIST / ('index.html' if route == '/' else route.lstrip('/'))).resolve()
@@ -63,6 +82,7 @@ try:
         assert page.locator('#views [data-view=maps] span').inner_text()=='사용량 맵'
         menu_x=page.locator('#views button>span').evaluate_all('(xs)=>xs.map(x=>x.getBoundingClientRect().x)')
         assert max(menu_x)-min(menu_x)<1,menu_x
+        assert page.locator('#views [data-view=sessions]').evaluate('(e)=>getComputedStyle(e).fontWeight')=='650'
         assert page.locator('.session-actions [data-action]').count()>0
         assert page.locator('#sessionsBody td[data-column="memory"]').all_text_contents()
         assert all('%' in v or v.strip()=='—' for v in page.locator('#sessionsBody td[data-column="memory"]').all_text_contents())
@@ -74,6 +94,29 @@ try:
         page.locator('#sessionsView [data-range="5h"]').click()
         assert '5시간' in page.locator('#periodColumn').inner_text()
         checks.append('hourly burn rate and selected period')
+        page.locator('#sessionsView [data-custom-range]').click()
+        page.locator('#rangeAmount').fill('9')
+        page.locator('[data-duration-unit="60"]').click()
+        page.locator('#rangeForm [type=submit]').click()
+        assert page.locator('#rangeError').is_visible()
+        page.locator('#rangeAmount').fill('36')
+        page.locator('[data-duration-unit="3600"]').click()
+        page.locator('#rangeForm [type=submit]').click()
+        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 36시간'")
+        assert range_requests[-1]=='custom:129600'
+        assert page.locator('#rangeAmount').get_attribute('max') is None
+        page.reload();page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 36시간'")
+        page.locator('#sessionsView [data-custom-range]').click()
+        page.locator('#rangeAmount').fill('7');page.locator('[data-duration-unit="86400"]').click()
+        page.locator('#rangeForm [type=submit]').click()
+        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 7일'")
+        assert range_requests[-1]=='custom:604800'
+        page.locator('#sessionsView [data-custom-range]').click();page.locator('#allHistory').click()
+        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='전체 기록'")
+        assert range_requests[-1]=='all'
+        page.locator('#sessionsView [data-range="5h"]').click()
+        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 5시간'")
+        checks.append('custom 36 hours, 7 days, all history, minimum validation, persistence and preset restoration')
         header=page.locator('th[data-column="memory"] .column-label')
         header.focus();page.keyboard.press('ArrowLeft');page.keyboard.press('Shift+ArrowRight')
         order=page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')
@@ -90,6 +133,8 @@ try:
         handle=page.locator('th[data-column="memory"] .column-resize').bounding_box()
         grip=page.locator('th[data-column="memory"] .column-resize')
         assert grip.inner_text()==''
+        assert grip.evaluate('(e)=>!e.closest("[draggable=true]")')
+        order_before_resize=page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')
         assert grip.evaluate('(e)=>getComputedStyle(e).backgroundColor')=='rgba(0, 0, 0, 0)'
         assert grip.evaluate('(e)=>getComputedStyle(e,"::after").width')=='1px'
         assert handle['width']>=14
@@ -97,7 +142,8 @@ try:
         page.mouse.move(handle['x']+handle['width']/2,handle['y']+20);page.mouse.down()
         page.mouse.move(handle['x']+handle['width']/2+20,handle['y']+20);page.mouse.up()
         assert page.locator('col[data-column="memory"]').evaluate('(e)=>parseFloat(e.style.width)')==width+20
-        checks.append('visible width handles and mouse column drag/resize')
+        assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order_before_resize
+        checks.append('thin width handles resize without reordering; labels reorder columns')
         assert not page.locator('[data-panel="flow"] .panel-drag').is_visible()
         page.locator('#editDashboard').click()
         move=page.locator('[data-panel="map"] .panel-drag');move.focus();page.keyboard.press('ArrowLeft')
@@ -116,14 +162,14 @@ try:
             page.wait_for_function('!document.documentElement.dataset.preferenceTransition')
         page.locator('[data-theme-switch]').click()
         page.wait_for_function("document.getAnimations().some(a=>a.effect?.pseudoElement==='::view-transition-new(root)'&&a.playState==='running')")
-        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.19.6.png'))
+        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.20.0.png'))
         finish_transition();assert page.locator('html').get_attribute('data-theme')=='light'
         pref_x=page.locator('[data-theme-switch]').bounding_box()['x']
         page.locator('[data-language="en"]').click()
         page.wait_for_function("[...document.querySelectorAll('canvas')].some(c=>c.style.viewTransitionName==='onetop-matrix')")
         page.wait_for_timeout(240)
         assert page.evaluate("[...document.querySelectorAll('canvas')].filter(c=>c.style.viewTransitionName==='onetop-matrix').some(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0))")
-        page.screenshot(path=str(ROOT/'build/language-reveal-v3.19.6.png'))
+        page.screenshot(path=str(ROOT/'build/language-reveal-v3.20.0.png'))
         finish_transition();assert page.locator('#pageTitle').inner_text()=='Dashboard'
         assert abs(page.locator('[data-theme-switch]').bounding_box()['x']-pref_x)<1
         assert 'Weekly limit' in page.locator('#periodColumn').inner_text()
@@ -158,22 +204,26 @@ try:
         assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order
         assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==panel_order
         checks.append('preferences and layout survive reload')
-        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.19.6.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.20.0.png'),full_page=False)
         page.locator('[data-theme-switch]').click()
         finish_transition()
-        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.19.6.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.20.0.png'),full_page=False)
         page.locator('[data-language="en"]').click();finish_transition()
         for width in (1100,768,390):
             page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
-            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),width
+            if not page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'):
+                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.20.0.png'))
+                print(page.locator('body *').evaluate_all('(xs)=>xs.filter(e=>e.getBoundingClientRect().right>innerWidth+1&&!e.closest("[hidden],.table-scroll")).map(e=>({tag:e.tagName,id:e.id,cls:e.className,right:e.getBoundingClientRect().right})).slice(0,30)'),flush=True)
+                raise AssertionError(width)
         checks.append('1100px, 768px and mobile layout')
         page.evaluate('localStorage.removeItem("onetop.dashboard.v1")')
         page.set_viewport_size({'width':1440,'height':1100});page.reload()
         page.locator('#sessionsBody tr').first.wait_for();page.wait_for_timeout(300)
-        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.19.6.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.20.0.png'),full_page=False)
         assert not errors,errors
-        (ROOT/'build/dashboard-browser-v3.19.6.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
+        (ROOT/'build/dashboard-browser-v3.20.0.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
         print(json.dumps({'checks':checks,'errors':errors},ensure_ascii=False))
         browser.close()
 finally:
     server.shutdown();server.server_close()
+    history.close()

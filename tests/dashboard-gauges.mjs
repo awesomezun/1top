@@ -51,3 +51,6 @@ assert.match(hidden.api.rateCell(0,'Codex'),/data-burn-rate="0"/);
 hidden.api.state.lang='en';hidden.api.drawGauges();assert.equal(hidden.label.textContent,'0–5%/h');
 hidden.api.state.lang='zh';hidden.api.drawGauges();assert.equal(hidden.label.textContent,'0–5%/小时');
 console.log('Burn gauges: shared linear 1/2/5 steps, low/high rates, immediate expansion, stable shrink, hidden/unknown values, and language labels passed.');
+
+for(const period of ['10m','24h','all','custom:600','custom:129600','custom:315360000000'])assert.equal(hidden.api.validPeriod(period),true);
+for(const period of ['custom:0','custom:599','custom:601','custom:nan','custom:1e30','custom:-600','bad'])assert.equal(hidden.api.validPeriod(period),false);
