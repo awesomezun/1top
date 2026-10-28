@@ -51,24 +51,22 @@ function selectPeriod(key){
  if(customPeriod(key)||data?.chart_range){$('notice').hidden=false;$('notice').textContent=OneTopI18n.t('기간을 불러오는 중…');refresh();}
  else render();
 }
+function rangeCaption(key){return OneTopI18n.t(key==='all'?'전체 기록':'최근 '+OneTopRanges.label(key,OneTopI18n.language||'ko'));}
 function updateRangeControls(){
  const lang=OneTopI18n.language||'ko',max=OneTopRanges.stops.length-1;
  document.querySelectorAll('.range-buttons').forEach(el=>{
+  const heading=el.closest('.range-toolbar').querySelector('[data-range-label]');
   if(!el.querySelector('.duration-slider')){
-   el.innerHTML='<div class="range-slider-row"><div class="range-scale"><input class="duration-slider" type="range" min="0" max="18" step="1" aria-label="사용 기간"><div class="range-ticks" aria-hidden="true"><span style="left:0%">10분</span><span style="left:16.6667%">1시간</span><span style="left:33.3333%">5시간</span><span style="left:50%">1일</span><span style="left:66.6667%">1주일</span><span style="left:77.7778%">1개월</span><span style="left:100%">전체</span></div></div><input class="duration-value" type="text" aria-label="기간 직접 입력" spellcheck="false" autocomplete="off"></div>';
-   const slider=el.querySelector('.duration-slider'),input=el.querySelector('.duration-value');
-   slider.oninput=()=>{slider.dataset.sliding='true';const key=OneTopRanges.fromPosition(slider.value);input.value=OneTopRanges.label(key,OneTopI18n.language);slider.setAttribute('aria-valuetext',input.value);slider.style.setProperty('--position',Number(slider.value)/Number(slider.max)*100+'%');};
+   el.innerHTML='<div class="range-slider-row"><div class="range-scale"><input class="duration-slider" type="range" min="0" max="18" step="1" aria-label="사용 기간"><div class="range-ticks" aria-hidden="true"><span style="left:0%">10분</span><span style="left:16.6667%">1시간</span><span style="left:33.3333%">5시간</span><span style="left:50%">1일</span><span style="left:66.6667%">1주일</span><span style="left:77.7778%">1개월</span><span style="left:100%">전체</span></div></div></div>';
+   const slider=el.querySelector('.duration-slider');
+   slider.oninput=()=>{slider.dataset.sliding='true';const key=OneTopRanges.fromPosition(slider.value);heading.textContent=rangeCaption(key);slider.setAttribute('aria-valuetext',OneTopRanges.label(key,OneTopI18n.language));slider.style.setProperty('--position',Number(slider.value)/Number(slider.max)*100+'%');};
    slider.onchange=()=>{delete slider.dataset.sliding;selectPeriod(OneTopRanges.fromPosition(slider.value));};
    slider.onpointercancel=()=>{delete slider.dataset.sliding;updateRangeControls();};
-   input.onfocus=()=>input.select();
-   input.oninput=()=>input.setCustomValidity('');
-   input.onchange=()=>{const key=OneTopRanges.parse(input.value);if(!key){input.setCustomValidity(OneTopI18n.t('기간 입력 예: 30분, 36시간, 7일'));input.reportValidity();return;}input.setCustomValidity('');selectPeriod(key);};
-   input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();input.onchange();if(input.checkValidity())input.blur();}else if(e.key==='Escape'){input.value=OneTopRanges.label(selectedPeriod,OneTopI18n.language);input.setCustomValidity('');input.blur();}};
   }
-  const slider=el.querySelector('.duration-slider'),input=el.querySelector('.duration-value');
+  const slider=el.querySelector('.duration-slider');
   if(slider.dataset.sliding)return;
+  heading.textContent=rangeCaption(selectedPeriod);
   slider.max=max;slider.value=OneTopRanges.position(selectedPeriod);slider.setAttribute('aria-valuetext',OneTopRanges.label(selectedPeriod,lang));slider.style.setProperty('--position',Number(slider.value)/Number(slider.max)*100+'%');
-  if(document.activeElement!==input){input.value=OneTopRanges.label(selectedPeriod,lang);input.setCustomValidity('');}
  });
 }
 function renderPeriods(){
@@ -81,7 +79,7 @@ function renderPeriods(){
  if(focus)document.querySelector(`[data-period="${focus}"]`)?.focus({preventScroll:true});
  $('periodCoverage').textContent='기록된 사용량 · 미보고 사용량 제외';
  updateRangeControls();
- const w=periodMeta();if(w){$('periodColumn').textContent=periodCaption(w)+(usageUnit==='weekly'?' · 주간 한도 %':' 누적');$('sessionPeriodTitle').textContent=periodCaption(w);}
+ const w=periodMeta();if(w){$('periodColumn').textContent=periodCaption(w)+(usageUnit==='weekly'?' · 주간 한도 %':' 누적');}
 }
 
 function render(){
