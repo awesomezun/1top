@@ -71,6 +71,8 @@ class RollingUsageTests(unittest.TestCase):
         def tracker(s):
             s['tokens']=[999999,888888,0,1234] if s['id']=='known' else None
         c.read_tracker=tracker
+        from onetop.weekly_usage import initialize
+        initialize(self.db)
         with patch('onetop.server.time.time',return_value=self.now), patch('onetop.aside.discover',return_value=[]):c.collect()
         known,unknown=c.snapshot['sessions']
         self.assertEqual(known['usage']['windows']['24h'],[0,0,0,0])

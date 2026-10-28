@@ -48,6 +48,14 @@ import CoreGraphics
             let chart=DesktopUsageTrend(events:events,period:period,end:599)
             precondition(chart.bins.count <= 36 && chart.bins.last?.end == 600)
         }
+        let quotaData = """
+        {"ready":true,"weekly_usage":{"accounts":[{"id":"a","periods":{"1h":{"used_pp":3,"partial":true,"observed_seconds":120}}}]},"sessions":[{"id":"s","kind":"Codex","usage":{"weekly_estimate":{"1h":{"used_pp":0.75,"account_id":"a","partial":true}}}}]}
+        """.data(using:.utf8)!
+        let quotaSnapshot = try JSONDecoder().decode(DesktopSnapshot.self, from:quotaData)
+        precondition(quotaSnapshot.weekly_usage?.accounts[0].periods["1h"]?.used_pp == 3)
+        precondition(quotaSnapshot.sessions?[0].usage?.weekly_estimate?["1h"]?.used_pp == 0.75)
+        precondition(DesktopFormat.quota(nil) == "—" && DesktopFormat.quota(0) == "0%")
+        precondition(DesktopFormat.quota(0.001) == "<0.01%" && DesktopFormat.quota(0.75) == "0.75%")
         print("Desktop model checks passed: nullable usage, freshness, accounts, safe capabilities, no offline actions.")
     }
 }

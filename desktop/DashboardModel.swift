@@ -12,6 +12,7 @@ struct DesktopSnapshot: Decodable {
     var action_token: String?
     var account_quotas: [AccountQuota]?
     var events: [UsageEvent]?
+    var weekly_usage: WeeklyUsage?
     struct UsageEvent: Decodable {
         var t: Double; var n: Double?
         var fresh: Double?; var cached: Double?; var written: Double?; var output: Double?
@@ -43,7 +44,7 @@ struct DesktopSession: Decodable, Identifiable {
     var status: String?; var display_status: String?; var tokens: [Double]?
     var usage: Usage?; var resources: Resources?; var orca_terminal: Terminal?
     var location: Location?; var control_key: String?; var input_verified: Bool?
-    struct Usage: Decodable { var rate: Double?; var windows: [String: [Double]?]? }
+    struct Usage: Decodable { var rate: Double?; var windows: [String: [Double]?]?; var weekly_estimate: [String: WeeklyEstimate]?; var weekly_account: String? }
     struct Resources: Decodable { var cpu: Double?; var rss: Double? }
     struct Terminal: Decodable { var title: String? }
     struct Location: Decodable { var app: String?; var app_path: String?; var terminal: String? }
@@ -68,6 +69,19 @@ struct DesktopSession: Decodable, Identifiable {
         }
     }
 }
+struct WeeklyEstimate: Decodable {
+    var used_pp: Double; var account_id: String; var partial: Bool
+}
+struct WeeklyUsage: Decodable {
+    var accounts: [Account]
+    struct Account: Decodable, Identifiable {
+        var id: String; var periods: [String: Period]
+    }
+    struct Period: Decodable {
+        var used_pp: Double?; var partial: Bool; var observed_seconds: Double
+    }
+}
+
 enum DesktopFormat {
     static func number(_ value: Double?) -> String {
         guard let value, value.isFinite else { return "—" }
@@ -75,6 +89,11 @@ enum DesktopFormat {
         if value >= 1e6 { return String(format: "%.2fM", value / 1e6) }
         if value >= 1e3 { return String(format: "%.1fk", value / 1e3) }
         return String(format: value.rounded() == value ? "%.0f" : "%.1f", value)
+    }
+    static func quota(_ value: Double?) -> String {
+        guard let value, value.isFinite, value >= 0 else { return "—" }
+        if value > 0 && value < 0.01 { return "<0.01%" }
+        return value.formatted(.number.precision(.fractionLength(0...2))) + "%"
     }
     static func percent(_ value: Double?) -> String { value.map { String(format: "%.0f%%", $0) } ?? "—" }
     static func total(_ tokens: [Double]?) -> Double? { tokens?.reduce(0, +) }

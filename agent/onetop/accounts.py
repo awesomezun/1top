@@ -200,7 +200,7 @@ def claude_credentials(root):
 
 class AccountQuotaSampler:
     def __init__(self):
-        self.lock=threading.Lock();self.rows=[];self.cached={};self.thread=None;self.refresh_failures={}
+        self.lock=threading.Lock();self.rows=[];self.cached={};self.thread=None;self.refresh_failures={};self.profile_accounts={};self.profile_jobs={};self.profile_timeout=25
     def start(self):
         if self.thread:return
         self.thread=threading.Thread(target=self.loop,daemon=True);self.thread.start()
@@ -217,6 +217,8 @@ class AccountQuotaSampler:
             for w in row['windows']:
                 if w['reset'] and w['reset']<=now:w['pct']=None
         return rows
+    def roots(self):
+        with self.lock:return dict(self.profile_accounts)
     def claude(self,root,now):
         config_path=Path.home()/'.claude.json' if root==Path.home()/'.claude' else root/'.claude.json'
         config=read_json(config_path);account=config.get('oauthAccount') or {}
@@ -297,15 +299,55 @@ class AccountQuotaSampler:
                        windows=windows,updated=now,stale=False,note='Codex 계정 사용률 · 2분마다 확인')
         except Exception:pass
         return row
+    def profile(self,kind,root,now):
+        # Security.framework can wait indefinitely for the user's Keychain response.
+        # Leave that operation alive; never let it stall every other account.
+        job_key=(kind,str(root));job=self.profile_jobs.get(job_key)
+        if job is None:
+            job={'done':threading.Event(),'row':None}
+            self.profile_jobs[job_key]=job
+            def query():
+                try:job['row']=self.claude(root,now) if kind=='Claude' else self.codex(root,now)
+                except Exception:pass
+                finally:job['done'].set()
+            threading.Thread(target=query,daemon=True).start()
+            job['done'].wait(self.profile_timeout)
+        if job['done'].is_set():
+            self.profile_jobs.pop(job_key,None)
+            return job['row']
+        if kind=='Claude':
+            config=Path.home()/'.claude.json' if root==Path.home()/'.claude' else root/'.claude.json'
+            account=read_json(config).get('oauthAccount') or {}
+            if not account.get('accountUuid'):return None
+            key=identity(kind,account['accountUuid'],account.get('organizationUuid',''))
+            label=account.get('emailAddress') or 'Claude 계정 '+key[-6:]
+            windows=claude_windows({},now)
+        else:
+            account=(read_json(root/'auth.json').get('tokens') or {}).get('account_id')
+            if not account:return None
+            key=identity(kind,account);label='Codex 계정 '+key[-6:];windows=codex_windows({},now)[0]
+        row=copy.deepcopy(self.cached.get(key) or {'id':key,'kind':kind,'account_label':label,
+                          'plan':'','windows':windows,'updated':0})
+        row.update(stale=True,status='refresh_pending',note='계정 조회 응답 대기 · 로그인 저장소의 권한 요청을 확인해 주세요.')
+        return row
     def sample(self):
-        now=time.time();rows={}
+        now=time.time();rows={};bindings={}
         for kind,root in profile_roots():
             if kind=='Claude':
                 config=Path.home()/'.claude.json' if root==Path.home()/'.claude' else root/'.claude.json'
                 account=read_json(config).get('oauthAccount') or {}
                 existing=rows.get(identity('Claude',account.get('accountUuid'),account.get('organizationUuid','')))
-                if existing and not existing['stale']:continue
-            row=self.claude(root,now) if kind=='Claude' else self.codex(root,now)
+                if existing and (not existing['stale'] or existing.get('status')=='refresh_pending'):
+                    bindings[root.resolve()]=(existing['id'],kind,now)
+                    continue
+            row=self.profile(kind,root,now)
+            if row:bindings[root.resolve()]=(row['id'],kind,now)
             if row and (row['id'] not in rows or (not row['stale'],row['updated'])>(not rows[row['id']]['stale'],rows[row['id']]['updated'])):rows[row['id']]=row
         self.cached=copy.deepcopy(rows)
-        with self.lock:self.rows=list(rows.values())
+        with self.lock:
+            # Keep a binding start only while the profile identity stays unchanged.
+            for root,value in bindings.items():
+                old=self.profile_accounts.get(root)
+                if old and old[:2]==value[:2]:bindings[root]=old
+            self.profile_accounts=bindings
+            self.rows=list(rows.values())

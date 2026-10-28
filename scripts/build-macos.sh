@@ -8,7 +8,8 @@ if [[ -e "$APP" ]]; then echo "Versioned build already exists: $APP" >&2; exit 1
 "$PYTHON" -m PyInstaller --noconfirm --clean --name onetop-agent --onedir --collect-data onetop --collect-data certifi --distpath build/agent-dist --workpath build/pyinstaller --specpath build scripts/agent_entry.py
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/agent"
 cp -R build/agent-dist/onetop-agent/. "$APP/Contents/Resources/agent/"
-xcrun swiftc -O -framework AppKit -framework SwiftUI -framework WebKit -framework CoreText -target arm64-apple-macosx13.0 desktop/*.swift -o "$APP/Contents/MacOS/1top"
+SWIFT_SDK="${ONETOP_MACOS_SDK:-$(xcrun --show-sdk-path)}"
+xcrun swiftc -O -sdk "$SWIFT_SDK" -framework AppKit -framework SwiftUI -framework WebKit -framework CoreText -target arm64-apple-macosx13.0 desktop/*.swift -o "$APP/Contents/MacOS/1top"
 scripts/macos-icon.sh
 cp -R desktop/Fonts "$APP/Contents/Resources/Fonts"
 cp build/1top.icns "$APP/Contents/Resources/1top.icns"

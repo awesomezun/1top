@@ -7,6 +7,7 @@ struct QuickDashboard: View {
     static let panelSize = NSSize(width: 450, height: 720)
     @ObservedObject var model: DashboardModel
     @State private var hoveredSession: String?
+    @AppStorage("weeklyTokensMode") private var tokensMode = false
     var openDashboard: () -> Void; var openBrowser: () -> Void
     var remoteOptions: () -> Void; var connectRemote: () -> Void
     var toggleLogin: () -> Void; var restart: () -> Void; var quit: () -> Void
@@ -61,6 +62,13 @@ struct QuickDashboard: View {
                         .accessibilityAddTraits(model.selectedPeriod == key ? .isSelected : [])
                 }
             }.accessibilityElement(children: .contain).accessibilityLabel("사용량 기간")
+            HStack {
+                Text(tokensMode ? "기간 누적" : "주간 한도 · 계정별 100%").font(.plex(size: 12, weight: .medium)).foregroundStyle(.secondary)
+                Spacer()
+                Button(tokensMode ? "주간 한도 % 보기" : "토큰 보기") { tokensMode.toggle() }
+                    .buttonStyle(.plain).font(.plex(size: 11)).foregroundStyle(panelAccent)
+            }
+            if !tokensMode { weeklyOverview } else {
             HStack(alignment: .top, spacing: 18) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
@@ -80,11 +88,56 @@ struct QuickDashboard: View {
                     usageTrend.frame(width: 164, height: 24)
                 }
             }
+            }
             HStack(spacing: 22) {
                 resource("CPU", value: model.snapshot?.system?.host?.cpu)
                 resource("메모리", value: model.snapshot?.system?.host?.memory?.percent)
             }
         }.padding(.horizontal, 18).padding(.top, 10).padding(.bottom, 12)
+    }
+    private var weeklyOverview: some View {
+        let rows = model.snapshot?.account_quotas ?? []
+        return Group {
+            if rows.isEmpty {
+                Text("계정 한도에서 로그인 계정을 추가하세요.").font(.plex(size: 12)).foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                        ForEach(rows) { q in weeklyCard(q) }
+                    }
+                }.frame(height: rows.count > 2 ? 174 : 84)
+            }
+        }
+    }
+    private func weeklyCard(_ q: AccountQuota) -> some View {
+        let w = q.windows.first { $0.label == "주간" }
+        let p = model.snapshot?.weekly_usage?.accounts.first { $0.id == q.id }?.periods[model.selectedPeriod]
+        let color = q.kind == "Codex" ? Color(red:0.56, green:0.67, blue:1) : panelAccent
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(q.kind == "Claude" ? "Claude Code" : q.kind).font(.plex(size: 12, weight: .semibold)).lineLimit(1)
+                Text(q.plan ?? "").font(.plex(size: 10)).foregroundStyle(color).lineLimit(1)
+                Spacer(minLength: 0)
+                Text(DesktopFormat.quota(w?.pct)).font(.plex(size: 19, weight: .semibold)).monospacedDigit().fixedSize()
+            }
+            Text(q.account_label).font(.plex(size: 10)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            GeometryReader { geo in
+                Capsule().fill(Color.white.opacity(0.08)).overlay(alignment: .leading) {
+                    Capsule().fill(color.opacity(q.stale ? 0.4 : 0.8)).frame(width: geo.size.width * min(100,max(0,w?.pct ?? 0))/100)
+                }
+            }.frame(height: 3).padding(.vertical, 2)
+            HStack(spacing: 4) {
+                Text(p?.used_pp.map { "+" + DesktopFormat.quota($0).replacingOccurrences(of: "%", with: "%p") + (p?.partial == true ? " · 일부" : "") } ?? (q.stale ? "한도 조회 대기" : "다음 보고 대기"))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Text(q.stale ? q.statusLabel : "남음 " + DesktopFormat.quota(w?.pct.map { max(0,100-$0) }))
+                    .foregroundStyle(q.stale ? Color.orange : color)
+            }.font(.plex(size: 10)).lineLimit(1)
+        }.padding(8).frame(height: 82).background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 7))
+            .help("\(q.account_label)\n주간 한도 100% 중 사용 · \(q.note)\n선택 기간의 한도 증가량. 새 기록부터 계산하며 다른 계정과 합산하지 않습니다.")
+    }
+    private var weeklyExplanation: String {
+        "계정의 주간 한도 증가량을 같은 구간의 세션 토큰 비중으로 배분한 추정입니다. 캐시·모델별 가중치 미반영 · 다른 기기의 사용이 섞일 수 있음 · 다른 계정끼리 합산하지 않음"
     }
     private var usageTrend: some View {
         let trend = DesktopUsageTrend(events: model.snapshot?.events, period: model.selectedPeriod, end: model.snapshot?.updated ?? model.now.timeIntervalSince1970)
@@ -255,11 +308,11 @@ struct QuickDashboard: View {
             }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
                 .help("\(s.project ?? s.kind)\n\(s.locationLabel) · \(s.model ?? s.kind)\n\(s.stateLabel)" + (s.title.map { "\n" + $0 } ?? ""))
             VStack(alignment: .trailing, spacing: 1) {
-                Text(DesktopFormat.number(DesktopFormat.total(s.tokens == nil ? nil : (s.usage?.windows?[model.selectedPeriod] ?? nil))))
+                Text(tokensMode ? DesktopFormat.number(DesktopFormat.total(s.tokens == nil ? nil : (s.usage?.windows?[model.selectedPeriod] ?? nil))) : (s.usage?.weekly_estimate?[model.selectedPeriod].map { "≈" + DesktopFormat.quota($0.used_pp) } ?? (DesktopFormat.number(DesktopFormat.total(s.usage?.windows?[model.selectedPeriod] ?? nil)) + " tok")))
                     .font(.plex(size: 14, weight: .medium)).monospacedDigit()
-                Text(s.state == "working" ? "\(DesktopFormat.number(s.tokens == nil ? nil : s.usage?.rate)) tok/s" : s.stateLabel)
+                Text(!tokensMode ? (s.usage?.weekly_estimate?[model.selectedPeriod].map { $0.partial ? "추정 · 일부 구간" : "추정" } ?? (s.usage?.weekly_account == nil ? "계정 연결 필요" : "다음 한도 보고 대기")) : s.state == "working" ? "\(DesktopFormat.number(s.tokens == nil ? nil : s.usage?.rate)) tok/s" : s.stateLabel)
                     .font(.plex(size: 11)).foregroundStyle(s.state == "working" ? panelAccent : .secondary).monospacedDigit()
-            }.fixedSize().help("선택한 기간 누적 토큰 · 최근 60초 평균 소비 · \(s.stateLabel)")
+            }.fixedSize().help(tokensMode ? "선택한 기간 누적 토큰 · 최근 60초 평균 소비 · \(s.stateLabel)" : weeklyExplanation)
             Button { control("focus", s) } label: { Image(systemName: "arrow.up.right").font(.plex(size: 14)) }
                 .buttonStyle(.plain).frame(width: 22, height: 30).disabled(!model.fresh || model.busy || !s.allows("focus"))
                 .accessibilityLabel("\(s.project ?? s.kind) · \(s.terminalName) 바로가기")

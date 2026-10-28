@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 from .controls import Controller, ActionError, target_key, process_start
 from .resources import ResourceSampler
 from .usage import session_usage, window_usage, WINDOWS
+from . import weekly_usage
 from .discovery import inventory, context, applications, orca_executable, registry_status, claude_transcript
 from . import __version__
 from .context_usage import request_context, stored_context
@@ -252,6 +253,7 @@ class Collector:
             CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, t REAL, sid TEXT, kind TEXT,
                 fresh INTEGER, cached INTEGER, written INTEGER, output INTEGER);
             CREATE INDEX IF NOT EXISTS event_time ON events(t);''')
+        weekly_usage.initialize(self.db)
         row = self.db.execute("SELECT value FROM meta WHERE key='started'").fetchone()
         self.started = float(row[0]) if row else time.time()
         self.db.execute("INSERT OR IGNORE INTO meta VALUES ('started',?)", (str(self.started),))
@@ -345,7 +347,7 @@ class Collector:
                     'pid': pid, 'pids': [pid], 'cpu': p['cpu'], 'rss': round(p['rss']),
                     'status': registry_status(reg), 'status_at': epoch(reg.get('statusUpdatedAt')),
                     'waiting_for': reg.get('waitingFor'), 'path': path,
-                    'configured_model': meta['configured_model'], 'provider': meta['provider'],
+                    'configured_model': meta['configured_model'], 'provider': meta['provider'], 'config_dir':meta['config_dir'],
                     'source': 'Claude Code 세션 레지스트리' if reg else 'macOS 프로세스', 'connected': True}
             if kind == 'Antigravity':
                 spec['note'] = '실행 상태는 확인됩니다. 이 설치의 대화 DB에는 검증된 토큰 필드가 없어 세션 토큰은 표시하지 않습니다.'
@@ -481,8 +483,8 @@ class Collector:
                             event = tracker.consume(json.loads(line))
                             if event and event[0]>=self.started:
                                 t,v=event
-                                self.db.execute('INSERT INTO events(t,sid,kind,fresh,cached,written,output) VALUES(?,?,?,?,?,?,?)',
-                                                (t,spec['id'],spec['kind'],*v))
+                                self.db.execute('INSERT INTO events(t,sid,kind,fresh,cached,written,output,account) VALUES(?,?,?,?,?,?,?,?)',
+                                                (t,spec['id'],spec['kind'],*v,weekly_usage.event_account(spec,t)))
                         except (ValueError, TypeError, KeyError):
                             pass
                 s['offset'] = f.tell()
@@ -545,8 +547,10 @@ class Collector:
             self.discover()
         now=time.time()
         sessions=[]
+        roots=self.accounts.roots()
         for src in self.specs:
             s=dict(src)
+            s['account_binding']=weekly_usage.account_for(s,roots)
             s.update(tokens=None,model=s.get('configured_model',''),last_usage=0,loading=False)
             if s['path']:
                 try:self.read_tracker(s)
@@ -563,7 +567,7 @@ class Collector:
                 try:self.read_tracker(s)
                 except OSError:s['note']='Aside 사용량 기록을 읽을 수 없습니다.'
             sessions.append(s)
-        self.db.execute('DELETE FROM events WHERE t<?',(now-86400,))
+        self.db.execute('DELETE FROM events WHERE t<?',(now-86400-weekly_usage.FRESH,))
         self.db.commit()
         # The browser needs a chart, not a growing raw event log. Bound payloads by minute/provider.
         events=[dict(zip(['t','kind','fresh','cached','written','output'],r)) for r in
@@ -575,13 +579,20 @@ class Collector:
         minute,five,history,window=session_usage(self.db,now,self.started)
         periods,session_periods=window_usage(self.db,now,self.started,
                                             (s['kind'] for s in sessions if s['tokens'] is not None))
+        account_quotas=self.accounts.snapshot(now)
+        weekly_usage.record(self.db,account_quotas,now)
+        weekly,estimates=weekly_usage.snapshot(self.db,account_quotas,now)
+        self.db.commit()
         for s in sessions:
+            binding=s.pop('account_binding',None)
             known=s['tokens'] is not None
             v=minute.get(s['id'],ZERO[:]) if known else None
             s['usage']={'last_minute':v,'last_five_minutes':five.get(s['id'],ZERO[:]) if known else None,
                         'rate':sum(v)/window if v is not None else None,
                         'output_rate':v[3]/window if v is not None else None,
                         'window_seconds':window,'history':history.get(s['id'],[]),
+                        'weekly_estimate':estimates.get(s['id'],{}) if known and not s.get('loading') else {},
+                        'weekly_account':binding[0] if binding else None,
                         'windows':{key:session_periods.get(s['id'],{}).get(key,ZERO[:]) if known else None
                                    for key,_,_ in WINDOWS}}
         if self.resources is None:self.resources=ResourceSampler()
@@ -590,7 +601,7 @@ class Collector:
                 'events':events,'recent':recent,'period_usage':periods,'quotas':quotas,'process_counts':self.process_counts,
                 'orca_terminals':self.terminal_count,'error':None,'poll_seconds':3,
                 'applications':getattr(self,'apps',[]),'system':system,'operations':self.operations.sample(sessions),
-                'account_quotas':self.accounts.snapshot(now),
+                'account_quotas':account_quotas,'weekly_usage':weekly,
                 'collection_ms':round((time.monotonic()-collect_started)*1000,1)}
         with self.lock:self.snapshot=result
 
@@ -712,7 +723,7 @@ class Handler(BaseHTTPRequestHandler):
             mime='application/json; charset=utf-8'
         elif route=='/api/updates':
             self.json_response(200,getattr(self.server,'updates',None).value if getattr(self.server,'updates',None) else {});return
-        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/maps.css','/typography.css','/benchmark.json'):
+        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/weekly.js','/maps.css','/typography.css','/benchmark.json'):
             name='index.html' if route=='/' else route[1:]
             data=(BASE/'dist'/name).read_bytes()
             mime={'html':'text/html','js':'application/javascript','css':'text/css','json':'application/json'}[name.rsplit('.',1)[1]]+'; charset=utf-8'
