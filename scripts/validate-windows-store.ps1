@@ -77,7 +77,18 @@ try {
         if (-not $proc.WaitForExit(600000)) { $proc.Kill(); $result.wack.error='Timed out after 10 minutes' }
         else { $result.wack.exit_code=$proc.ExitCode }
         $result.wack.report_exists=Test-Path $report
-        # Report content is reviewed separately. Exit 0 alone is not certification.
+        if (Test-Path $report) {
+            [xml]$xml=Get-Content $report -Raw
+            $result.wack.overall_result=$xml.REPORT.OVERALL_RESULT
+            $findings=@($xml.SelectNodes('//TEST') | Where-Object { $_.RESULT.InnerText -ne 'PASS' } | ForEach-Object {
+                @{name=$_.NAME; result=$_.RESULT.InnerText; optional=($_.OPTIONAL -eq 'TRUE');
+                  messages=@($_.MESSAGES.MESSAGE | ForEach-Object { $_.TEXT })}
+            })
+            $result.wack.findings=$findings
+            $result.wack.required_tests_passed=(@($findings | Where-Object { -not $_.optional }).Count -eq 0)
+            $result.wack.passed=($xml.REPORT.OVERALL_RESULT -eq 'PASS')
+            if (-not $result.wack.required_tests_passed) { throw 'Review mandatory WACK findings in verification.json and wack.xml' }
+        } else { throw 'WACK produced no report' }
     } else { $result.wack.error='WACK or an active non-Session0 desktop is unavailable on this runner' }
 } finally {
     if ($appPid) { & taskkill /PID $appPid /T /F 2>$null | Out-Null }
