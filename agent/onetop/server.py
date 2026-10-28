@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 from .controls import Controller, ActionError, target_key, process_start
 from .resources import ResourceSampler
 from .usage import session_usage, window_usage, WINDOWS
-from .discovery import inventory, context, applications, orca_executable
+from .discovery import inventory, context, applications, orca_executable, registry_status, claude_transcript
 from . import __version__
 from .context_usage import request_context, stored_context
 from .platform_support import data_directory
@@ -280,13 +280,12 @@ class Collector:
             info['started']=process.get('started')
             info['birth']=process.get('birth')
             try:
-                raw = run(['ps','eww','-p',str(pid),'-o','command='])
+                env = psutil.Process(pid).environ()
                 # Deliberately whitelist metadata. Credentials never leave this function.
                 safe_ids={'ORCA_TERMINAL_HANDLE':'orca_handle','ORCA_TAB_ID':'orca_tab','TMUX_PANE':'tmux_pane'}
                 for key in ('ANTHROPIC_BASE_URL','ANTHROPIC_DEFAULT_OPUS_MODEL','ANTHROPIC_MODEL','CLAUDE_CONFIG_DIR',*safe_ids):
-                    match = re.search(r'(?:^|\s)'+key+r'=([^\s]*)',raw)
-                    if match:
-                        val = match.group(1)
+                    if env.get(key):
+                        val = env[key]
                         if key in safe_ids:
                             info[safe_ids[key]]=val
                         elif key.endswith('BASE_URL'):
@@ -295,8 +294,8 @@ class Collector:
                             info['config_dir'] = val
                         else:
                             info['configured_model'] = val
-                del raw
-            except (OSError, subprocess.SubprocessError):
+                del env
+            except (OSError, psutil.Error):
                 pass
             self.process_cache[pid] = info
         return self.process_cache[pid]
@@ -325,9 +324,6 @@ class Collector:
                             open_logs[l[1:]] = pid
             except (OSError, subprocess.SubprocessError):
                 pass
-        if time.time() - self.index_at > 60:
-            self.index = {p.stem: str(p) for p in (HOME/'.claude/projects').glob('*/*.jsonl')}
-            self.index_at = time.time()
         for pid, p in processes.items():
             if p['exe'] == 'codex':
                 if p['tty'] != '??':
@@ -344,10 +340,10 @@ class Collector:
                 pass
             sid = reg.get('sessionId') or f'process-{pid}'
             cwd = cwds.get(pid) or reg.get('cwd') or ''
-            path = self.index.get(sid)
+            path = claude_transcript(meta['config_dir'],sid)
             spec = {'id': sid, 'kind': kind, 'cwd': cwd, 'title': reg.get('name') or Path(cwd).name,
                     'pid': pid, 'pids': [pid], 'cpu': p['cpu'], 'rss': round(p['rss']),
-                    'status': reg.get('status','unknown'), 'status_at': epoch(reg.get('statusUpdatedAt')),
+                    'status': registry_status(reg), 'status_at': epoch(reg.get('statusUpdatedAt')),
                     'waiting_for': reg.get('waitingFor'), 'path': path,
                     'configured_model': meta['configured_model'], 'provider': meta['provider'],
                     'source': 'Claude Code 세션 레지스트리' if reg else 'macOS 프로세스', 'connected': True}

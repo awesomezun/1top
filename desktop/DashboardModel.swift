@@ -286,6 +286,18 @@ final class DashboardModel: ObservableObject {
 struct AccountQuota: Decodable, Identifiable {
     var id: String; var kind: String; var account_label: String; var plan: String?
     var windows: [Window]; var updated: Double; var stale: Bool; var note: String
+    var status: String?
+    var statusLabel: String {
+        if !stale { return "확인됨" }
+        switch status {
+        case "login_required", "login_expired": return "재로그인 필요"
+        case "refresh_pending": return "갱신 중"
+        case "rate_limited": return "조회 제한"
+        case "access_denied": return "권한 확인"
+        case "credential_store_unavailable": return "저장소 확인"
+        default: return updated > 0 ? "마지막 보고" : "조회 지연"
+        }
+    }
     struct Window: Decodable, Identifiable {
         var label: String; var pct: Double?; var reset: Double
         var id: String { label }

@@ -35,6 +35,22 @@ def app_from(path,name=''):
     base=Path(name).stem
     return (base,path or '') if base in APP_NAMES else ('','')
 
+# Claude Code 2.1 writes busy/shell/idle/waiting; busy and shell are an active turn.
+REGISTRY_STATES={'busy':'working','shell':'working'}
+
+
+def registry_status(reg):
+    status=reg.get('status','unknown')
+    return REGISTRY_STATES.get(status,status)
+
+
+def claude_transcript(root, sid):
+    """Match exact session identity inside its own profile, never a global SID index."""
+    if not isinstance(sid,str) or not re.fullmatch(r'[a-zA-Z0-9_-]+',sid):return None
+    paths=list((Path(root).expanduser()/'projects').glob('*/'+sid+'.jsonl'))
+    return str(paths[0]) if len(paths)==1 else None
+
+
 def inventory():
     rows={}
     for p in psutil.process_iter(['pid','ppid','name','exe','cmdline','cwd','create_time']):

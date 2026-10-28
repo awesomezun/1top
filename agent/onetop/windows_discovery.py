@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 import psutil
 from .controls import target_key
-from .discovery import inventory, applications, context
+from .discovery import inventory, applications, context, registry_status
 
 UUID = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}$')
 
@@ -92,7 +92,7 @@ def discover(collector):
         spec = {'id':sid or f'cli-{pid}-{row["birth"]}', 'kind':kind, 'cwd':cwd,
                 'title':reg.get('name') or Path(cwd).name or kind, 'pid':pid, 'pids':[pid],
                 'path':str(path) if path else None, 'configured_model':model,
-                'status':reg.get('status','unknown'), 'status_at':0, 'connected':True,
+                'status':registry_status(reg), 'status_at':0, 'connected':True,
                 'process_only':path is None, 'process_started':started, 'process_birth':row['birth'],
                 'location':context(pid, rows), 'input_verified':False, 'terminal_match':'unavailable',
                 'terminal_note':'Windows host application is matched by process ancestry; terminal tab identity is unreported.',

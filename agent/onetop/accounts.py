@@ -1,4 +1,4 @@
-"""Local account-scoped subscription limits. No prompts, token refresh, or credential export."""
+"""Local account-scoped limits. Only 1top-enrolled profiles may refresh their login."""
 import base64
 import copy
 import hashlib
@@ -16,12 +16,14 @@ import time
 import unicodedata
 import getpass
 import urllib.request
+import urllib.error
 from datetime import datetime
 from pathlib import Path
 
 import certifi
 import psutil
 from .account_login import managed_profiles_dir
+from .claude_profiles import CredentialError, keychain_document, refresh_managed
 
 
 def read_json(path):
@@ -88,7 +90,8 @@ def claude_usage(token):
     # Credentials go only to this fixed provider endpoint, never the 1top relay.
     opener=urllib.request.build_opener(NoRedirect(),urllib.request.HTTPSHandler(context=ssl.create_default_context(cafile=certifi.where())))
     req=urllib.request.Request('https://api.anthropic.com/api/oauth/usage',headers={
-        'Authorization':'Bearer '+token,'anthropic-beta':'oauth-2025-04-20','User-Agent':'1top/2.1.0'})
+        'Authorization':'Bearer '+token,'anthropic-beta':'oauth-2025-04-20',
+        'User-Agent':'1top/3.9.0','Accept':'application/json'})
     with opener.open(req,timeout=8) as response:
         data=response.read(512*1024)
         value=json.loads(data)
@@ -184,24 +187,20 @@ def profile_roots(home=Path.home()):
 def claude_credentials(root):
     fallback=read_json(root/'.credentials.json').get('claudeAiOauth') or {}
     if not isinstance(fallback,dict):fallback={}
-    if os.name=='nt' or os.uname().sysname!='Darwin':return fallback
     # Claude Code stores its current macOS login in Keychain. A migrated
     # .credentials.json may remain on disk long after that token has expired.
-    suffix='' if root==Path.home()/'.claude' else '-'+hashlib.sha256(unicodedata.normalize('NFC',str(root)).encode()).hexdigest()[:8]
-    try:
-        result=subprocess.run(['/usr/bin/security','find-generic-password','-a',getpass.getuser(),'-w',
-                               '-s','Claude Code-credentials'+suffix],capture_output=True,text=True,timeout=3)
-        if result.returncode or len(result.stdout)>128*1024:return fallback
-        value=json.loads(result.stdout)
-        current=value.get('claudeAiOauth') if isinstance(value,dict) else None
-        if isinstance(current,dict) and current.get('accessToken'):return current
-    except (ValueError,OSError,subprocess.SubprocessError):pass
+    try:value=keychain_document(root)
+    except CredentialError:
+        if fallback and (not fallback.get('expiresAt') or timestamp(fallback['expiresAt'])>time.time()):return fallback
+        raise
+    current=value.get('claudeAiOauth') if value else None
+    if isinstance(current,dict) and current.get('accessToken'):return current
     return fallback
 
 
 class AccountQuotaSampler:
     def __init__(self):
-        self.lock=threading.Lock();self.rows=[];self.cached={};self.thread=None
+        self.lock=threading.Lock();self.rows=[];self.cached={};self.thread=None;self.refresh_failures={}
     def start(self):
         if self.thread:return
         self.thread=threading.Thread(target=self.loop,daemon=True);self.thread.start()
@@ -224,14 +223,31 @@ class AccountQuotaSampler:
         account_id=account.get('accountUuid')
         if not account_id:return None
         key=identity('Claude',account_id,account.get('organizationUuid',''))
-        credentials=claude_credentials(root)
+        auth_issue=None
+        try:credentials=claude_credentials(root)
+        except CredentialError as error:credentials={};auth_issue=error.code
         row={'id':key,'kind':'Claude','account_label':account.get('emailAddress') or account.get('displayName') or 'Claude 계정 '+key[-6:],
              'plan':credentials.get('subscriptionType') or account.get('seatTier') or '',
              'windows':claude_windows({},now),'updated':0,'stale':True,'note':'계정 한도를 확인하지 못했습니다.'}
+        if key in self.cached:
+            row.update(windows=copy.deepcopy(self.cached[key]['windows']),updated=self.cached[key]['updated'])
         cache=config.get('cachedUsageUtilization') or {}
-        if cache.get('accountUuid')==account_id and isinstance(cache.get('utilization'),dict):
+        if cache.get('accountUuid')==account_id and isinstance(cache.get('utilization'),dict) and timestamp(cache.get('fetchedAtMs'))>row['updated']:
             row.update(windows=claude_windows(cache['utilization'],now),updated=timestamp(cache.get('fetchedAtMs')),note='Claude 계정 캐시 · 마지막 보고값',stale=True)
         token=credentials.get('accessToken')
+        issue=auth_issue
+        if token and timestamp(credentials.get('expiresAt'))<=now+60:
+            # Revoked logins retry only after a credential change; transient failures back off.
+            fingerprint=hashlib.sha256(str(credentials.get('refreshToken','')).encode()).hexdigest()
+            failed=self.refresh_failures.get(str(root))
+            if failed and failed[0]==fingerprint and now<failed[1]:issue=failed[2]
+            else:
+                try:
+                    credentials=refresh_managed(root,now);token=credentials.get('accessToken')
+                    self.refresh_failures.pop(str(root),None)
+                except CredentialError as error:issue=error.code
+                except (OSError,ValueError):issue='provider_unavailable'
+                if issue:self.refresh_failures[str(root)]=(fingerprint,now+(86400 if issue=='login_required' else 300),issue)
         if isinstance(token,str) and token and timestamp(credentials.get('expiresAt'))>now:
             try:
                 usage=claude_usage(token)
@@ -239,7 +255,23 @@ class AccountQuotaSampler:
                 after=(read_json(config_path).get('oauthAccount') or {})
                 if (after.get('accountUuid'),after.get('organizationUuid'))!=(account_id,account.get('organizationUuid')):return None
                 row.update(windows=claude_windows(usage,now),updated=now,stale=False,note='Claude 계정 사용률 · 2분마다 확인')
-            except Exception:pass
+            except urllib.error.HTTPError as error:
+                issue={401:'login_required',403:'access_denied',429:'rate_limited'}.get(error.code,'provider_unavailable')
+                error.close()
+            except (OSError,ValueError):issue='provider_unavailable'
+        elif not issue:issue='login_required' if not token else 'login_expired'
+        if issue and row['stale']:
+            row['status']=issue
+            row['note']={
+                'login_required':'로그인을 다시 연결해 주세요. 저장된 인증을 갱신할 수 없습니다.',
+                'login_expired':'로그인이 만료됐습니다. 이 프로필의 Claude Code에서 로그인해 주세요.',
+                'refresh_pending':'로그인 갱신 중 · 잠시 후 다시 확인합니다.',
+                'access_denied':'이 로그인으로 한도 조회가 허용되지 않았습니다.',
+                'rate_limited':'제공자 조회 제한 · 잠시 후 다시 확인합니다.',
+                'credential_store_unavailable':'macOS 키체인 등 로그인 저장소의 접근 권한을 확인해 주세요.',
+                'account_changed':'계정이 변경됐습니다. 다음 조회에서 다시 확인합니다.',
+            }.get(issue,'제공자 연결 지연 · 잠시 후 다시 확인합니다.')
+            if row['updated']:row['note']+=' 마지막 보고값을 표시합니다.'
         return row
     def codex(self,root,now):
         auth=read_json(root/'auth.json');tokens=auth.get('tokens') or {}
@@ -268,7 +300,12 @@ class AccountQuotaSampler:
     def sample(self):
         now=time.time();rows={}
         for kind,root in profile_roots():
+            if kind=='Claude':
+                config=Path.home()/'.claude.json' if root==Path.home()/'.claude' else root/'.claude.json'
+                account=read_json(config).get('oauthAccount') or {}
+                existing=rows.get(identity('Claude',account.get('accountUuid'),account.get('organizationUuid','')))
+                if existing and not existing['stale']:continue
             row=self.claude(root,now) if kind=='Claude' else self.codex(root,now)
-            if row and (row['id'] not in rows or row['updated']>rows[row['id']]['updated']):rows[row['id']]=row
+            if row and (row['id'] not in rows or (not row['stale'],row['updated'])>(not rows[row['id']]['stale'],rows[row['id']]['updated'])):rows[row['id']]=row
         self.cached=copy.deepcopy(rows)
         with self.lock:self.rows=list(rows.values())

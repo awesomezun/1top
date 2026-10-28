@@ -172,7 +172,7 @@ struct QuickDashboard: View {
                 Text(quota.plan ?? "").font(.plex(size: 10, weight: .medium)).foregroundStyle(tint)
                 Spacer()
                 Circle().fill(quota.stale ? Color.orange : panelAccent).frame(width: 5, height: 5)
-                Text(quota.updated > 0 ? (quota.stale ? "마지막 보고" : "확인됨") : "미확인")
+                Text(quota.statusLabel)
                     .font(.plex(size: 10)).foregroundStyle(quota.stale ? Color.orange : Color.secondary)
             }
             Text(quota.account_label).font(.plex(size: 11)).foregroundStyle(.secondary).lineLimit(1)
@@ -195,6 +195,9 @@ struct QuickDashboard: View {
                     }.frame(maxWidth: .infinity)
                 }
             }.padding(.top, 2)
+            if quota.stale, quota.status != nil {
+                Text(quota.note).font(.plex(size: 10)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            }
         }.padding(.horizontal, 12).padding(.vertical, 10)
             .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.06)))
