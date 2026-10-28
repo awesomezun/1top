@@ -1,0 +1,77 @@
+{
+  "package_removed": true,
+  "package_full_name": "1top.1top_3.8.1.0_x64__r8xhxszfcrbgp",
+  "store_certified": false,
+  "source_unchanged": true,
+  "collector_ready": true,
+  "update_channel": "microsoft-store",
+  "installed": true,
+  "package_family_name": "1top.1top_r8xhxszfcrbgp",
+  "activated_pid": 4156,
+  "wack": {
+    "findings": [
+      {
+        "messages": [
+          "File C:\\Program Files\\WindowsApps\\1top.1top_3.8.1.0_x64__r8xhxszfcrbgp\\app\\1top.exe contains a reference to a \"Launch Process\" related API kernel32.dll!CreateProcessW",
+          "File C:\\Program Files\\WindowsApps\\1top.1top_3.8.1.0_x64__r8xhxszfcrbgp\\app\\_internal\\python313.dll contains a reference to a \"Launch Process\" related API kernel32.dll!CreateProcessW",
+          "File C:\\Program Files\\WindowsApps\\1top.1top_3.8.1.0_x64__r8xhxszfcrbgp\\app\\_internal\\python313.dll contains a reference to a \"Launch Process\" related API shell32.dll!ShellExecuteW",
+          "File C:\\Program Files\\WindowsApps\\1top.1top_3.8.1.0_x64__r8xhxszfcrbgp\\app\\MicrosoftEdgeWebview2Setup.exe contains a reference to a \"Launch Process\" related API kernel32.dll!CreateProcessW",
+          "File 1top.exe contains a blocked executable reference to \"Cmd\".",
+          "File 1top.exe contains a blocked executable reference to \"ReG\".",
+          "File 1top.exe contains a blocked executable reference to \"cDB\".",
+          "File 1top.exe contains a blocked executable reference to \"cSi\".",
+          "File MicrosoftEdgeWebview2Setup.exe contains a blocked executable reference to \"Cmd\".",
+          "File MicrosoftEdgeWebview2Setup.exe contains a blocked executable reference to \"reG\".",
+          "File libcrypto-3.dll contains a blocked executable reference to \"cmd\".",
+          "File libssl-3.dll contains a blocked executable reference to \"cmd\".",
+          "File python313.dll contains a blocked executable reference to \"cMD\".",
+          "File ucrtbase.dll contains a blocked executable reference to \"cmd.exe\".",
+          "File ucrtbase.dll contains a blocked executable reference to \"CDb\".",
+          "File _socket.pyd contains a blocked executable reference to \"cmd\".",
+          "File IBMPlexSansKR-Bold.woff2 contains a blocked executable reference to \"REG\".",
+          "File IBMPlexSansKR-Medium.woff2 contains a blocked executable reference to \"cmD\".",
+          "File IBMPlexSansKR-Medium.woff2 contains a blocked executable reference to \"csI\".",
+          "File IBMPlexSansKR-Medium.woff2 contains a blocked executable reference to \"REg\".",
+          "File IBMPlexSansKR-Regular.woff2 contains a blocked executable reference to \"REG\".",
+          "File IBMPlexSansKR-SemiBold.woff2 contains a blocked executable reference to \"CdB\".",
+          "File Python.Runtime.dll contains a blocked executable reference to \"reg\"."
+        ],
+        "optional": true,
+        "name": "Blocked executables",
+        "result": "FAIL"
+      },
+      {
+        "messages": [
+          "Failed to process the binary C:\\Program Files\\WindowsApps\\1top.1top_3.8.1.0_x64__r8xhxszfcrbgp\\app\\1top.exe.",
+          "The app 1top.1top_3.8.1.0_x64__r8xhxszfcrbgp is not DPI Aware."
+        ],
+        "optional": false,
+        "name": "DPIAwarenessValidation",
+        "result": "WARNING"
+      }
+    ],
+    "exit_code": 0,
+    "overall_result": "WARNING",
+    "passed": false,
+    "session_id": 2,
+    "required_tests_passed": false,
+    "available": true,
+    "report_exists": true
+  },
+  "source_sha256": "3a69036f78693893e346a0a6ec2bdf0d809a3599a6a9bbf940159adec4bcc863",
+  "consumer_windows_test": false,
+  "identity": {
+    "name": "1top.1top",
+    "publisher": "CN=C67D4C93-82EC-4ADD-871B-12E21D388915",
+    "publisher_display_name": "1top",
+    "display_name": "1top"
+  },
+  "test_trust_removed": true,
+  "version": "3.8.1",
+  "runtime_dpi": {
+    "per_monitor_aware": true,
+    "hresult": 0,
+    "awareness": 2
+  },
+  "memory_bytes": 17174360064
+}

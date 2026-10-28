@@ -1,0 +1,39 @@
+name: Store MSIX validation
+on:
+  pull_request:
+    paths:
+      - 'scripts/validate-windows-store.ps1'
+      - '.github/workflows/windows-store-validation.yml'
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Windows installers and MSIX run containing the Store package
+        type: string
+        required: true
+jobs:
+  validate:
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && vars.WINDOWS_STORE_BUILD_RUN != '')
+    runs-on: windows-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: 1top-windows-x64
+          path: build/store-input
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run || vars.WINDOWS_STORE_BUILD_RUN }}
+      - name: Validate final identity and attempt Windows App Certification Kit
+        shell: pwsh
+        env:
+          STORE_IDENTITY: ${{ vars.WINDOWS_STORE_IDENTITY }}
+        run: ./scripts/validate-windows-store.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 1top-store-validation
+          path: build/store-validation
+          if-no-files-found: error

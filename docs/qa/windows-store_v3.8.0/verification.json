@@ -1,0 +1,29 @@
+{
+  "update_channel": "microsoft-store",
+  "test_trust_removed": true,
+  "source_unchanged": true,
+  "package_removed": true,
+  "package_full_name": "1top.1top_3.8.0.0_x64__r8xhxszfcrbgp",
+  "version": "3.8.0",
+  "installed": true,
+  "activated_pid": 5204,
+  "wack": {
+    "exit_code": 0,
+    "available": true,
+    "report_exists": true,
+    "passed": false,
+    "session_id": 2
+  },
+  "identity": {
+    "name": "1top.1top",
+    "publisher": "CN=C67D4C93-82EC-4ADD-871B-12E21D388915",
+    "publisher_display_name": "1top",
+    "display_name": "1top"
+  },
+  "collector_ready": true,
+  "store_certified": false,
+  "consumer_windows_test": false,
+  "source_sha256": "54f439a9dae561fa8a7231352b5a01ff2e3efb5781717a70693d7d873ec6c7e2",
+  "package_family_name": "1top.1top_r8xhxszfcrbgp",
+  "memory_bytes": 17174360064
+}

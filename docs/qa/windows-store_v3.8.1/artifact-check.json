@@ -1,0 +1,14 @@
+{
+  "artifact": "build/store-submission_v3.8.1/artifacts/release/v3.8.1/msix/store/1top-3.8.1.0-windows-x64-store.msix",
+  "sha256": "3a69036f78693893e346a0a6ec2bdf0d809a3599a6a9bbf940159adec4bcc863",
+  "size": 27262860,
+  "identity": {
+    "Name": "1top.1top",
+    "Publisher": "CN=C67D4C93-82EC-4ADD-871B-12E21D388915",
+    "Version": "3.8.1.0",
+    "ProcessorArchitecture": "x64"
+  },
+  "signed": false,
+  "store_certified": false,
+  "source_run": 40619202111
+}
