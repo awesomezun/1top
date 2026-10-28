@@ -96,6 +96,21 @@ struct WeeklyEstimate: Decodable {
     var basis: String?; var tokens: Double?; var calibration: Calibration?
     struct Calibration: Decodable {
         var tokens: Double; var used_pp: Double; var seconds: Double; var confidence: String
+        var source: String?; var kind: String?; var reset: Double?; var valid_until: Double?
+        var age_seconds: Double?; var report_source: String?; var from: Double?; var to: Double?
+    }
+    func permitsBurnRate(for quota: AccountQuota?, at now: Double) -> Bool {
+        guard let quota, quota.id == account_id, now.isFinite else { return false }
+        guard calibration?.source == "historical_provider_calibration" else { return !quota.stale }
+        guard quota.kind == "Claude", calibration?.kind == "Claude",
+              let reset = calibration?.reset, reset.isFinite,
+              let validUntil = calibration?.valid_until, validUntil.isFinite,
+              let observedTo = calibration?.to, observedTo.isFinite, observedTo > 0, observedTo <= now,
+              let currentReset = quota.windows.first(where: { $0.label == "주간" })?.reset,
+              currentReset.isFinite, currentReset > now,
+              abs(reset - currentReset) <= 60, validUntil > now,
+              validUntil <= min(reset, observedTo + 86400) else { return false }
+        return true
     }
     // A recent-token-rate equivalent, not a forecast of future account deductions.
     func burnPerHour(tokensPerSecond: Double?) -> Double? {
@@ -112,7 +127,10 @@ struct WeeklyEstimate: Decodable {
     }
     var calculationLabel: String {
         guard let calibration, let tokens else { return "환산 기준 미확인" }
-        return "선택 기간 \(DesktopFormat.number(tokens)) tokens × (\(DesktopFormat.quota(calibration.used_pp)) ÷ \(DesktopFormat.number(calibration.tokens)) tokens)\n기준 \(Int(calibration.seconds / 60))분 관측 · 현재 계정 기준 환산"
+        let historical = calibration.source == "historical_provider_calibration"
+        let date = calibration.to.flatMap { $0.isFinite ? Date(timeIntervalSince1970: $0).formatted(date: .abbreviated, time: .shortened) : nil }
+        return "선택 기간 \(DesktopFormat.number(tokens)) tokens × (\(DesktopFormat.quota(calibration.used_pp)) ÷ \(DesktopFormat.number(calibration.tokens)) tokens)\n기준 \(Int(calibration.seconds / 60))분 관측 · 현재 계정 기준 환산" +
+            (historical ? "\n이전 제공자 관측 기준" + (date.map { " · " + $0 } ?? "") : "")
     }
 }
 struct WeeklyUsage: Decodable {
@@ -170,16 +188,32 @@ struct DesktopUsageTrend {
     }
     var bins: [Bin]
     var reported: Bool
+    // Canonical bottom-to-top order; independent of event arrival order.
+    var series: [String] {
+        let kinds = Set(bins.flatMap { $0.tokensByKind.keys })
+        let preferred = ["Claude", "Codex", "GLM", "Antigravity", "Aside"]
+        return preferred.filter(kinds.contains) + kinds.filter { !preferred.contains($0) }
+            .sorted { $0.utf16.lexicographicallyPrecedes($1.utf16) }
+    }
+    var maximum: Double { Self.niceMaximum(bins.map(\.tokens).max() ?? 0) }
+    static func niceMaximum(_ peak: Double) -> Double {
+        guard peak.isFinite, peak > 0 else { return 1 }
+        let power = pow(10, floor(log10(peak))), fraction = peak / power
+        return ([1.0, 2, 5, 10].first { $0 >= fraction } ?? 10) * power
+    }
     init(events: [DesktopSnapshot.UsageEvent]?, period: String, end: Double) {
         let seconds: Double = ["10m":600, "30m":1800, "1h":3600, "5h":18000, "12h":43200, "24h":86400][period] ?? 3600
-        // Reports are aggregated by minute. Align boundaries so today's final minute is included.
-        let finish = floor(end / 60) * 60 + 60, start = finish - seconds
-        let count = min(36, Int(seconds / 60)), step = seconds / Double(count)
+        // Shared with the full dashboard: snapshot clock, minute boundary,
+        // and 1/5/15-minute buckets. No width-dependent resampling.
+        let finish = floor((end.isFinite ? end : 0) / 60) * 60 + 60, start = finish - seconds
+        let step: Double = seconds > 18000 ? 900 : seconds > 3600 ? 300 : 60
+        let count = Int(seconds / step)
         bins = (0..<count).map { Bin(id:$0, start:start + Double($0)*step, end:start + Double($0+1)*step, tokens:0) }
         reported = events != nil
         for event in events ?? [] where event.t.isFinite && event.total.isFinite && event.total >= 0 && event.t >= start && event.t < finish {
             let index = min(count-1, Int((event.t-start)/step)); bins[index].tokens += event.total
-            let kind = event.kind.flatMap { $0.isEmpty ? nil : $0 } ?? "unknown"
+            let value = event.kind?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let kind = value.flatMap { $0.isEmpty ? nil : $0 } ?? "unknown"
             bins[index].tokensByKind[kind, default: 0] += event.total
         }
     }

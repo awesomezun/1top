@@ -53,10 +53,24 @@ import CoreGraphics
         precondition(colouredTrend.bins[1].tokensByKind == ["Claude":30,"Codex":70])
         precondition(colouredTrend.bins[2].tokensByKind == ["unknown":5])
         precondition(!DesktopUsageTrend(events:nil,period:"1h",end:599).reported)
-        for period in ["10m","30m","1h","5h","12h","24h"] {
+        for (period,count) in [("10m",10),("30m",30),("1h",60),("5h",60),("12h",48),("24h",96)] {
             let chart=DesktopUsageTrend(events:events,period:period,end:599)
-            precondition(chart.bins.count <= 36 && chart.bins.last?.end == 600)
+            precondition(chart.bins.count == count && chart.bins.last?.end == 600)
         }
+        precondition(colouredTrend.series == ["Claude","Codex","unknown"])
+        precondition(colouredTrend.maximum == 100)
+        let reversedTrend = DesktopUsageTrend(events:colouredEvents?.reversed(),period:"10m",end:599)
+        precondition(reversedTrend.series == colouredTrend.series)
+        precondition(reversedTrend.bins.map(\.tokens) == colouredTrend.bins.map(\.tokens))
+        let boundaryEvents = try JSONDecoder().decode(DesktopSnapshot.self, from:
+            """
+            {"ready":true,"events":[{"t":0,"n":2,"kind":"Codex"},{"t":59,"n":3,"kind":"Claude"},{"t":60,"n":7,"kind":"GLM"},{"t":3599,"n":11,"kind":"Aside"},{"t":3600,"n":99,"kind":"Codex"},{"t":-1,"n":99,"kind":"Codex"}]}
+            """.data(using:.utf8)!).events
+        let boundaryChart = DesktopUsageTrend(events:boundaryEvents,period:"1h",end:3599)
+        precondition(boundaryChart.bins.count == 60 && boundaryChart.bins.first?.start == 0)
+        precondition(boundaryChart.bins[0].tokens == 5 && boundaryChart.bins[1].tokens == 7 && boundaryChart.bins[59].tokens == 11)
+        precondition(boundaryChart.bins.reduce(0) { $0 + $1.tokens } == 23 && boundaryChart.maximum == 20)
+        precondition(DesktopUsageTrend.niceMaximum(0) == 1 && DesktopUsageTrend.niceMaximum(201) == 500)
         let quotaData = """
         {"ready":true,"weekly_usage":{"accounts":[{"id":"a","periods":{"1h":{"used_pp":3,"partial":true,"observed_seconds":120}}}]},"sessions":[{"id":"s","kind":"Codex","usage":{"weekly_estimate":{"1h":{"used_pp":0.75,"account_id":"a","partial":true}}}}]}
         """.data(using:.utf8)!
@@ -72,6 +86,38 @@ import CoreGraphics
         precondition(estimate.scopeLabel == "환산 추정 · 초기")
         precondition(estimate.calculationLabel.contains("10.00M tokens"))
         precondition(estimate.calculationLabel.contains("4분 관측"))
+        let historicalNow = 1_000_000.0
+        var historicalEstimate = estimate
+        historicalEstimate.calibration?.source = "historical_provider_calibration"
+        historicalEstimate.calibration?.kind = "Claude"
+        historicalEstimate.calibration?.to = historicalNow - 100
+        historicalEstimate.calibration?.reset = historicalNow + 5000
+        historicalEstimate.calibration?.valid_until = historicalNow + 5000
+        var historicalQuota = AccountQuota(id:"a",kind:"Claude",account_label:"test",windows:[AccountQuota.Window(label:"주간",pct:12,reset:historicalNow+5000)],updated:historicalNow-100,stale:true,note:"last report",status:"last_report")
+        precondition(historicalEstimate.permitsBurnRate(for:historicalQuota,at:historicalNow))
+        precondition(historicalEstimate.calculationLabel.contains("이전 제공자 관측 기준"))
+        precondition(!estimate.permitsBurnRate(for:historicalQuota,at:historicalNow))
+        historicalQuota.kind = "Codex"
+        precondition(!historicalEstimate.permitsBurnRate(for:historicalQuota,at:historicalNow))
+        historicalQuota.stale = false
+        precondition(estimate.permitsBurnRate(for:historicalQuota,at:historicalNow))
+        historicalQuota.kind = "Claude"; historicalQuota.stale = true
+        historicalQuota.id = "other"
+        precondition(!historicalEstimate.permitsBurnRate(for:historicalQuota,at:historicalNow))
+        historicalQuota.id = "a"; historicalQuota.windows[0].reset += 61
+        precondition(!historicalEstimate.permitsBurnRate(for:historicalQuota,at:historicalNow))
+        historicalQuota.windows[0].reset -= 61
+        var expiredEstimate = historicalEstimate
+        expiredEstimate.calibration?.valid_until = historicalNow
+        precondition(!expiredEstimate.permitsBurnRate(for:historicalQuota,at:historicalNow))
+        expiredEstimate = historicalEstimate; expiredEstimate.calibration?.to = historicalNow + 1
+        precondition(!expiredEstimate.permitsBurnRate(for:historicalQuota,at:historicalNow))
+        expiredEstimate = historicalEstimate; expiredEstimate.calibration?.kind = "Codex"
+        precondition(!expiredEstimate.permitsBurnRate(for:historicalQuota,at:historicalNow))
+        expiredEstimate = historicalEstimate; expiredEstimate.calibration?.reset = historicalNow + 172800
+        expiredEstimate.calibration?.valid_until = historicalNow + 90000
+        historicalQuota.windows[0].reset = historicalNow + 172800
+        precondition(!expiredEstimate.permitsBurnRate(for:historicalQuota,at:historicalNow))
 
         // Ten percentage points observed over 30 minutes means 20 pp/hour,
         // even if the user selected a partially recorded 5-hour period.

@@ -59,10 +59,6 @@ function render(){
  $('localVersion').textContent='LOCAL · v'+data.version;
  $('footerVersion').textContent='1top '+data.version+' · 이 컴퓨터의 로컬 데이터';
  const scoped=visibleSessions().filter(s=>provider==='all'||s.kind===provider),known=scoped.filter(s=>s.tokens!==null);
- const toolKinds=[...new Set(visibleSessions().map(s=>s.kind))].filter(k=>k!=='Aside');
- $('providers').innerHTML=toolKinds.map(k=>`<button class="provider-nav ${provider===k?'active':''}" data-provider="${esc(k)}" aria-pressed="${provider===k}">${dot(k)}<span>${esc(kindName(k))}</span><small>${visibleSessions().filter(s=>s.kind===k).length}</small></button>`).join('');
- const apps=[...new Set(visibleSessions().map(hostApp))].sort();
- $('hostApps').innerHTML=apps.map(app=>`<button class="provider-nav" data-app-filter="${esc(app)}" aria-pressed="false"><i class="dot" style="background:#8b939f"></i><span>${esc(app)}</span><small>${visibleSessions().filter(s=>hostApp(s)===app).length}</small></button>`).join('');
  const selectedModel=$('modelFilter').value;
  $('modelFilter').innerHTML='<option value="all">모든 모델</option>'+[...new Set(data.sessions.map(s=>s.model||''))].sort().map(m=>`<option value="${esc(m)}">${esc(m||'모델 미확인')}</option>`).join('');
  $('modelFilter').value=[...$('modelFilter').options].some(o=>o.value===selectedModel)?selectedModel:'all';
@@ -80,19 +76,29 @@ function render(){
 }
 function renderSessionSummary(){
  const h=data.system?.host;
- const resource=(name,value,hint)=>`<button class="session-resource" data-summary-view="system" title="${esc(hint)}"><span>${name}</span><b>${value}</b></button>`;
- $('sessionResourceStrip').innerHTML=resource('CPU',pct(h?.cpu),'전체 컴퓨터 CPU 사용률')+resource('메모리',pct(h?.memory?.percent),`${bytes(h?.memory?.used)} / ${bytes(h?.memory?.total)}`)+resource('네트워크',`${bytes(h?.network?.rx)}/s ↓`,`업로드 ${bytes(h?.network?.tx)}/s ↑`)+resource('디스크',bytes(h?.disk?.free),'남은 저장 공간');
+ const track=value=>OneTopWeekly.valid(value)?`<i class="summary-mini-track" aria-hidden="true"><i style="width:${Math.min(100,value)}%"></i></i>`:'';
+ const resource=(name,value,hint,percent)=>`<button class="session-resource" data-summary-view="system" title="${esc(hint)}"><span>${name}</span><b>${value}</b>${track(percent)}</button>`;
+ $('sessionResourceStrip').innerHTML=resource('CPU',pct(h?.cpu),'전체 컴퓨터 CPU 사용률',h?.cpu)+resource('메모리',pct(h?.memory?.percent),`${bytes(h?.memory?.used)} / ${bytes(h?.memory?.total)}`,h?.memory?.percent)+resource('네트워크',`${bytes(h?.network?.rx)}/s ↓`,`업로드 ${bytes(h?.network?.tx)}/s ↑`)+resource('디스크',bytes(h?.disk?.free),'남은 저장 공간');
  $('sessionAccountStrip').innerHTML=(data.account_quotas||[]).map(q=>{
   const n=OneTopWeekly.weekly(q)?.pct,known=OneTopWeekly.valid(n),current=known&&!q.stale;
   const label=q.account_label||q.plan||'계정 확인 중',shortLabel=label.includes('@')?label.split('@')[0]:label;
   const note=current?`${OneTopWeekly.percent(n)} 사용 · 주간 한도 100% 기준`:OneTopWeekly.valid(n)?`마지막 보고 ${OneTopWeekly.percent(n)} · 최신 보고 대기`:'주간 사용량 보고 대기';
-  return `<button class="session-account ${known?'':'is-pending'}" data-summary-view="accounts" style="--account-color:${colors[q.kind]||'#8d9ba8'}" title="${esc(kindName(q.kind)+' · '+label+'\n'+note)}"><i></i><span class="session-account-identity"><b>${esc(kindName(q.kind))}</b><small>${esc(shortLabel)}</small></span><strong>${known?OneTopWeekly.percent(n)+(current?'':'<small>마지막 보고</small>'):'보고 대기'}</strong></button>`;
+  return `<button class="session-account ${known?(current?'':'is-last-report'):'is-pending'}" data-summary-view="accounts" style="--account-color:${colors[q.kind]||'#8d9ba8'}" title="${esc(kindName(q.kind)+' · '+label+'\n'+note)}"><i></i><span class="session-account-identity"><b>${esc(kindName(q.kind))}</b><small>${esc(shortLabel)}</small></span><strong>${known?OneTopWeekly.percent(n)+(current?'':'<small>마지막 보고</small>'):'보고 대기'}</strong>${track(n)}</button>`;
  }).join('')||'<button class="session-accounts-empty" data-summary-view="accounts">계정 연결 · 사용량 보고 대기 ↗</button>';
 }
 function renderHost(){
  const h=data.system?.host;if(!h)return;
  const card=(title,value,unit,sub,percent,warn=false)=>`<article class="host-card ${warn?'warning':''}"><div class="label">${title}<span>${warn?'주의':''}</span></div><div class="value">${value}<small>${unit}</small></div><div class="sub">${sub}</div><div class="meter"><i style="width:${Math.min(100,Math.max(0,percent||0))}%"></i></div></article>`;
  $('hostCards').innerHTML=card('전체 CPU',h.cpu==null?'—':h.cpu.toFixed(1),'%',`${h.cores}개 논리 코어 · load ${loadAverage(h.load?.slice(0,1))}`,h.cpu,h.cpu>90)+card('메모리',bytes(h.memory.used),'',`${bytes(h.memory.total)} 중 ${h.memory.percent}% · swap ${bytes(h.swap.used)}`,h.memory.percent,h.memory.percent>90)+card('네트워크 · '+(h.network.interfaces.join(' + ')||'미확인'),bytes(h.network.rx),'/s ↓',`업로드 ${bytes(h.network.tx)}/s ↑ · 물리 인터페이스`,0)+card('디스크 여유',bytes(h.disk.free),'',`${h.disk.percent}% 사용 · 읽기 ${bytes(h.disk.read)}/s · 쓰기 ${bytes(h.disk.write)}/s`,h.disk.percent,h.disk.percent>95);
+}
+function renderSidebar(orderedRows){
+ const roots=visibleSessions(),seen=new Set(orderedRows.map(s=>s.id)),ordered=[...orderedRows,...roots.filter(s=>!seen.has(s.id))];
+ const toolKinds=[...new Set(ordered.map(s=>s.kind))].filter(k=>k!=='Aside');
+ const tools=toolKinds.map(k=>`<button class="provider-nav ${provider===k?'active':''}" data-provider="${esc(k)}" aria-pressed="${provider===k}">${dot(k)}<span>${esc(kindName(k))}</span><small>${roots.filter(s=>s.kind===k).length}</small></button>`).join('');
+ if($('providers').innerHTML!==tools)$('providers').innerHTML=tools;
+ const query=$('search').value.toLocaleLowerCase(),apps=[...new Set(ordered.map(hostApp))];
+ const hosts=apps.map(app=>`<button class="provider-nav ${query===app.toLocaleLowerCase()?'active':''}" data-app-filter="${esc(app)}" aria-pressed="${query===app.toLocaleLowerCase()}"><i class="dot" style="background:#8b939f"></i><span>${esc(app)}</span><small>${roots.filter(s=>hostApp(s)===app).length}</small></button>`).join('');
+ if($('hostApps').innerHTML!==hosts)$('hostApps').innerHTML=hosts;
 }
 function renderTable(){
  if(!data?.ready)return;const query=$('search').value.toLocaleLowerCase(),state=$('stateFilter').value,modelFilter=$('modelFilter').value;
@@ -115,6 +121,7 @@ function renderTable(){
  // Activity changes move tiers immediately; stable sorting keeps each tier's cached order.
  if(sort==='period')rows.sort((a,b)=>activityTier(a)-activityTier(b));
  sessionOrder.ids=rows.map(s=>s.id);
+ renderSidebar(rows);
  $('tableCount').textContent=rows.length;$('tableEmpty').hidden=rows.length>0;
  const active=document.activeElement?.closest('[data-action]'),focus=active?{a:active.dataset.action,id:active.dataset.target}:null;
  const listed=rows.flatMap(s=>[s,...(expandedSessions.has(s.id)?children(s):[])]);
@@ -144,13 +151,24 @@ function renderBenchmark(){
  if(benchmark)$('benchmarkNumbers').innerHTML=`<table><thead><tr><th>버전</th><th>평균 CPU</th><th>평균 RSS</th><th>API 평균 응답</th><th>응답 크기</th></tr></thead><tbody>${benchmark.map(b=>`<tr><td>v${esc(b.version)}</td><td>${pct(b.cpu_one_core_mean)}</td><td>${bytes(b.rss_mean_bytes)}</td><td>${b.api_ms_mean.toFixed(1)} ms</td><td>${bytes(b.api_bytes_mean)}</td></tr>`).join('')}</tbody></table>`;
 }
 function canvasBase(id){const canvas=$(id);if(!canvas||canvas.closest('[hidden]'))return null;const r=canvas.getBoundingClientRect();if(!r.width||!r.height)return null;const dpr=devicePixelRatio||1;canvas.width=Math.round(r.width*dpr);canvas.height=Math.round(r.height*dpr);const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);return {ctx,w:r.width,h:r.height,l:58,t:10,b:30,r:9};}
-function axes(c,max,unit=''){const {ctx,w,h,l,t,b,r}=c;ctx.font='13px "IBM Plex Sans", "IBM Plex Sans KR", sans-serif';for(let i=0;i<4;i++){const y=t+(h-t-b)*i/3;ctx.strokeStyle='#272a30';ctx.beginPath();ctx.moveTo(l,y+.5);ctx.lineTo(w-r,y+.5);ctx.stroke();ctx.fillStyle='#9198a5';ctx.textAlign='left';ctx.fillText(fmt(max*(1-i/3))+unit,0,y+3);}}
-function tokenChart(id,events,minutes){const c=canvasBase(id);if(!c)return;const end=Math.floor(Date.now()/60000)*60+60,start=end-minutes*60,step=minutes>300?900:minutes>60?300:60,n=(end-start)/step,series=[...new Set(events.map(e=>e.kind))],bins=Array.from({length:n},()=>Object.fromEntries(series.map(k=>[k,0])));for(const e of events){const i=Math.floor((e.t-start)/step);if(i>=0&&i<n)bins[i][e.kind]+=e.n??(e.fresh+e.cached+e.written+e.output);}const max=Math.max(1,...bins.map(b=>Object.values(b).reduce((a,v)=>a+v,0)));axes(c,max);const {ctx,w,h,l,t,b,r}=c,bw=(w-l-r)/n;bins.forEach((v,i)=>{let y=h-b;for(const k of series){const bh=v[k]/max*(h-t-b);ctx.fillStyle=colors[k]||'#8b939f';ctx.globalAlpha=.86;ctx.fillRect(l+i*bw+1,y-bh,Math.max(1,bw-2),bh);y-=bh;}ctx.globalAlpha=1;});ctx.fillStyle='#9198a5';for(let i=0;i<4;i++){ctx.textAlign=i===0?'left':i===3?'right':'center';ctx.fillText(time(start+(end-start)*i/3),l+(w-l-r)*i/3,h-5);}}
+function axes(c,max,unit='',ticks=4){const {ctx,w,h,l,t,b,r}=c;ctx.font='13px "IBM Plex Sans", "IBM Plex Sans KR", sans-serif';for(let i=0;i<ticks;i++){const fraction=i/(ticks-1),y=t+(h-t-b)*fraction;ctx.strokeStyle='#272a30';ctx.beginPath();ctx.moveTo(l,y+.5);ctx.lineTo(w-r,y+.5);ctx.stroke();ctx.fillStyle='#9198a5';ctx.textAlign='left';ctx.fillText(fmt(max*(1-fraction))+unit,0,y+3);}}
+function tokenFlowData(events,minutes,updated){
+ const end=Math.floor((Number.isFinite(updated)?updated:0)/60)*60+60,start=end-minutes*60,step=minutes>300?900:minutes>60?300:60,n=Math.ceil((end-start)/step);
+ const reports=events.map(e=>({t:e.t,kind:typeof e.kind==='string'&&e.kind.trim()?e.kind.trim():'unknown',n:e.n??((e.fresh??0)+(e.cached??0)+(e.written??0)+(e.output??0))})).filter(e=>Number.isFinite(e.t)&&e.t>=start&&e.t<end&&Number.isFinite(e.n)&&e.n>=0);
+ const canonical=['Claude','Codex','GLM','Antigravity','Aside'],rank=k=>canonical.includes(k)?canonical.indexOf(k):canonical.length;
+ const series=[...new Set(reports.map(e=>e.kind))].sort((a,b)=>rank(a)-rank(b)||(a<b?-1:a>b?1:0));
+ const bins=Array.from({length:n},()=>Object.fromEntries(series.map(k=>[k,0])));
+ for(const e of reports)bins[Math.floor((e.t-start)/step)][e.kind]+=e.n;
+ const peak=Math.max(0,...bins.map(bin=>Object.values(bin).reduce((a,b)=>a+b,0))),power=peak>0?10**Math.floor(Math.log10(peak)):1;
+ const max=peak>0?([1,2,5,10].find(v=>v>=peak/power)||10)*power:1;
+ return {start,end,step,series,bins,peak,max};
+}
+function tokenChart(id,events,minutes){const c=canvasBase(id);if(!c)return;const {start,end,series,bins,max}=tokenFlowData(events,minutes,data.updated);axes(c,max,'',3);const {ctx,w,h,l,t,b,r}=c,bw=(w-l-r)/bins.length;bins.forEach((v,i)=>{let y=h-b;for(const k of series){const bh=v[k]/max*(h-t-b);ctx.fillStyle=colors[k]||'#8b939f';ctx.globalAlpha=.86;ctx.fillRect(l+i*bw+1,y-bh,Math.max(1,bw-2),bh);y-=bh;}ctx.globalAlpha=1;});ctx.fillStyle='#9198a5';for(let i=0;i<4;i++){ctx.textAlign=i===0?'left':i===3?'right':'center';ctx.fillText(time(start+(end-start)*i/3),l+(w-l-r)*i/3,h-5);}}
 function drawCharts(){
  if(!data?.ready)return;
  const tokenEvents=data.events.filter(e=>provider==='all'||e.kind===provider),minutes=(periodMeta()?.seconds||3600)/60;
  tokenChart('tokenChart',tokenEvents,minutes);tokenChart('accountTokenChart',tokenEvents,minutes);
- const legend=[...new Set(tokenEvents.map(e=>e.kind))].map(k=>`<span>${dot(k)}${k==='Aside'?'앱 내부 세션':esc(kindName(k))}</span>`).join('');
+ const legend=tokenFlowData(tokenEvents,minutes,data.updated).series.map(k=>`<span>${dot(k)}${k==='Aside'?'앱 내부 세션':esc(kindName(k))}</span>`).join('');
  $('chartLegend').innerHTML=legend;$('accountChartLegend').innerHTML=legend;$('accountTokenPeriod').textContent='최근 '+(periodMeta()?.label||selectedPeriod);
  const c=canvasBase('systemChart'),hist=data.system?.history||[];
  if(c){axes(c,100,'%');const {ctx,w,h,l,t,b,r}=c,start=hist[0]?.t||0,end=hist.at(-1)?.t||start+1;for(const [key,color] of [['cpu','#398f77'],['memory','#7d88bc']]){ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.beginPath();let started=false;for(const v of hist){if(v[key]==null){started=false;continue;}const x=l+(v.t-start)/Math.max(1,end-start)*(w-l-r),y=h-b-v[key]/100*(h-t-b);if(started)ctx.lineTo(x,y);else ctx.moveTo(x,y);started=true;}ctx.stroke();}ctx.fillStyle='#9198a5';ctx.textAlign='left';ctx.fillText(time(start),l,h-5);ctx.textAlign='right';ctx.fillText(time(end),w-r,h-5);}

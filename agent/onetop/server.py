@@ -769,6 +769,9 @@ class Handler(BaseHTTPRequestHandler):
             name='index.html' if route=='/' else route[1:]
             data=(BASE/'dist'/name).read_bytes()
             mime={'html':'text/html','js':'application/javascript','css':'text/css','json':'application/json'}[name.rsplit('.',1)[1]]+'; charset=utf-8'
+        elif route=='/brand-mark_v1.1.0.png':
+            data=(BASE/'dist'/'brand-mark_v1.1.0.png').read_bytes()
+            mime='image/png'
         elif route in {f'/fonts/ibm-plex/v1.0.0/{name}.woff2' for name in (
             'IBMPlexSans', 'IBMPlexSansKR-Regular', 'IBMPlexSansKR-Medium',
             'IBMPlexSansKR-SemiBold', 'IBMPlexSansKR-Bold') }:

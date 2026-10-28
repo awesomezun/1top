@@ -10,16 +10,20 @@
  const pending=(account,quota,tokens)=>!account?'계정 연결 필요':quota?.stale?'한도 조회 대기':tokens===0?'이 기간의 보고 토큰 없음':'환산 기준 수집 중';
  const duration=s=>s<60?'1분 미만':s<3600?Math.floor(s/60)+'분':Math.floor(s/3600)+'시간 '+Math.floor(s%3600/60)+'분';
  const scope=e=>e?.basis==='calibrated_token_equivalent'?'환산 추정'+(e.calibration?.confidence==='early'?' · 초기 기준':'')+(e.partial?' · 일부 토큰':''):'관측 구간 추정';
- const basis=e=>e?.calibration?`${duration(e.calibration.seconds)} 기준 · ${number(e.calibration.used_pp)}% / ${Math.round(e.calibration.tokens).toLocaleString('ko-KR')} tokens`:'';
+ const basis=e=>e?.calibration?`${duration(e.calibration.seconds)} 기준 · ${number(e.calibration.used_pp)}% / ${Math.round(e.calibration.tokens).toLocaleString('ko-KR')} tokens${e.calibration.source==='historical_provider_calibration'&&valid(e.calibration.to)?' · 저장된 제공자 보고 · '+new Date(e.calibration.to*1000).toLocaleString('ko-KR'):''}`:'';
  // Partial periods must use the observed duration, never the selected window length.
  const accountBurn=(period,quota)=>{
   if(!quota||quota.stale!==false||!valid(period?.used_pp)||!valid(period?.observed_seconds)||period.observed_seconds<120)return null;
   const rate=period.used_pp/period.observed_seconds*3600;
   return valid(rate)?rate:null;
  };
- const sessionBurn=(estimate,tokensPerSecond,quota)=>{
+ const historicalCalibration=(estimate,quota,now=Date.now()/1000)=>{
+  const c=estimate?.calibration,reset=weekly(quota)?.reset;
+  return [true,false].includes(quota?.stale)&&quota.kind==='Claude'&&c?.kind==='Claude'&&c.source==='historical_provider_calibration'&&['claude_statusline','historical_provider_report'].includes(c.report_source)&&valid(now)&&valid(c.to)&&c.to>0&&c.to<=now&&valid(c.reset)&&c.reset>now&&valid(reset)&&Math.abs(reset-c.reset)<=60&&valid(c.valid_until)&&c.valid_until>now&&c.valid_until<=Math.min(c.reset,c.to+86400);
+ };
+ const sessionBurn=(estimate,tokensPerSecond,quota,now=Date.now()/1000)=>{
   const c=estimate?.calibration;
-  if(!quota||quota.stale!==false||estimate?.account_id!==quota.id||estimate?.basis!=='calibrated_token_equivalent'||!valid(tokensPerSecond)||!valid(c?.tokens)||c.tokens<=0||!valid(c?.used_pp)||c.used_pp<=0||!valid(c?.seconds)||c.seconds<120)return null;
+  if(!quota||(c?.source==='historical_provider_calibration'?!historicalCalibration(estimate,quota,now):quota.stale!==false)||estimate?.account_id!==quota.id||estimate?.basis!=='calibrated_token_equivalent'||!valid(tokensPerSecond)||!valid(c?.tokens)||c.tokens<=0||!valid(c?.used_pp)||c.used_pp<=0||!valid(c?.seconds)||c.seconds<120)return null;
   const rate=tokensPerSecond*(c.used_pp/c.tokens)*3600;
   return valid(rate)?rate:null;
  };
@@ -87,6 +91,6 @@
   result.partial=!result.hasData||uncertainTiming||result.observedSeconds<end-start-1e-6;
   return result;
  };
- const api={valid,number,percent,estimate,weekly,pending,explanation,duration,scope,basis,accountBurn,sessionBurn,burn,increaseTrend,quotaTrend};
+ const api={valid,number,percent,estimate,weekly,pending,explanation,duration,scope,basis,accountBurn,historicalCalibration,sessionBurn,burn,increaseTrend,quotaTrend};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.OneTopWeekly=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

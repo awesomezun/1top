@@ -6,6 +6,11 @@ from .usage import WINDOWS
 
 RETENTION = 8 * 86400
 FRESH = 300
+# Claude's callbacks are response-driven. A closed, account-attributed interval
+# may span one hour; its approximate local token ratio expires after one day or
+# the weekly reset, whichever comes first. This never refreshes the quota itself.
+CLAUDE_CALIBRATION_GAP = 3600
+CLAUDE_CALIBRATION_AGE = 86400
 
 
 def valid_number(value):
@@ -141,6 +146,8 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
     result=[];shares=collections.defaultdict(dict)
     for quota in quotas:
         account=quota['id'];points,corrections,excluded=reconciled_history(history[account]);observations=[];event_index=0
+        claude_history=(quota['kind']=='Claude' and quota.get('source') in ('claude_statusline','historical_provider_report'))
+        calibration_gap=CLAUDE_CALIBRATION_GAP if claude_history else FRESH
         for before,after in zip(points,points[1:]):
             t0,t1=before[0],after[0];delta,uncertain=interval(before,after)
             if any(t0<corrected<=t1 for corrected in corrections):uncertain=True
@@ -150,11 +157,12 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
                 if t>t0:weights[sid]+=tokens
             # Give the log collector time to receive reports; do not allocate incomplete tails.
             settled=t1<=now-10
-            observations.append((t0,t1,delta,uncertain,weights if settled and t1-t0<=FRESH else {}))
+            observations.append((t0,t1,delta,uncertain,weights if settled and t1-t0<=calibration_gap else {}))
         # Calibrate an account-specific token equivalent, then apply it to the
         # selected period's reported tokens. Never reuse a short observed share
         # as if it represented all tokens in a longer selected period.
         current_reset=points[-1][2] if points else None
+        account_observed_since=events[account][0][0] if events[account] else None
         eligible=[]
         for index,o in enumerate(observations):
             t0,t1,delta,uncertain,weights=o
@@ -162,19 +170,32 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
                         and abs(points[index+1][2]-current_reset)<=60)
             missing=any(t0<t<=t1 for t in unbound[quota['kind']])
             after_correction=not corrections or t0>=corrections[-1]
-            if same_cycle and after_correction and not uncertain and delta is not None and weights and not missing:
+            attribution_started=(not claude_history or (account_observed_since is not None and account_observed_since<=t0))
+            if same_cycle and after_correction and attribution_started and not uncertain and delta is not None and weights and not missing:
                 eligible.append(o)
         calibration_tokens=sum(sum(o[4].values()) for o in eligible)
         calibration_pp=sum(o[2] for o in eligible)
         calibration_seconds=sum(o[1]-o[0] for o in eligible)
+        weekly=next((window for window in quota.get('windows',[]) if window.get('label')=='주간'),{})
+        reported_reset=weekly.get('reset')
+        historical_valid=(claude_history and eligible and valid_number(reported_reset) and reported_reset>now
+                          and current_reset is not None and abs(reported_reset-current_reset)<=60
+                          and 0<=now-eligible[-1][1]<=CLAUDE_CALIBRATION_AGE)
         # No quota movement is not evidence of a zero token-to-quota conversion.
         usable=(calibration_tokens>0 and calibration_pp>=1 and calibration_seconds>=120
-                and not quota.get('stale',False) and points and now-points[-1][0]<=FRESH)
+                and current_reset is not None and current_reset>now
+                and (historical_valid if claude_history else
+                     (not quota.get('stale',False) and points and now-points[-1][0]<=FRESH)))
         calibration=({'tokens':calibration_tokens,'used_pp':round(calibration_pp,4),
                       'seconds':calibration_seconds,'from':eligible[0][0],'to':eligible[-1][1],
                       'pp_per_token':calibration_pp/calibration_tokens,
                       'confidence':'early' if calibration_seconds<600 or calibration_pp<3 else 'limited'}
                      if usable else None)
+        if calibration and historical_valid:
+            calibration.update(source='historical_provider_calibration',kind='Claude',reset=reported_reset,
+                               valid_until=min(reported_reset,calibration['to']+CLAUDE_CALIBRATION_AGE),
+                               age_seconds=max(0,now-calibration['to']),report_source=quota.get('source'),
+                               account_observed_since=account_observed_since)
         periods={}
         for key,_,seconds in WINDOWS:
             start=now-seconds
@@ -186,7 +207,7 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
             value=sum(o[2] for o in chunks) if chunks else None
             allocation=collections.Counter();unattributed=0
             for t0,t1,delta,uncertain,weights in chunks:
-                if uncertain or not weights:
+                if uncertain or not weights or t1-t0>FRESH:
                     unattributed+=delta;continue
                 total=sum(weights.values())
                 for sid,tokens in weights.items():allocation[sid]+=delta*tokens/total

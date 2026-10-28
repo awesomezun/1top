@@ -11,11 +11,11 @@ struct CompactUsageFlow: View {
     }
     private var tokenChart: some View {
         let trend = DesktopUsageTrend(events: model.snapshot?.events, period: model.selectedPeriod, end: end)
-        let scale = niceMaximum(trend.bins.map(\.tokens).max() ?? 0)
+        let scale = trend.maximum
         return VStack(alignment: .leading, spacing: 8) {
             plot(scale: scale) {
                 HStack(alignment: .bottom, spacing: 2) {
-                    ForEach(trend.bins) { bin in tokenBar(bin, scale: scale) }
+                    ForEach(trend.bins) { bin in tokenBar(bin, scale: scale, series: trend.series) }
                 }
                 if !trend.reported {
                     Text("사용 기록 대기").font(.plex(size: 12)).foregroundStyle(.secondary)
@@ -24,11 +24,11 @@ struct CompactUsageFlow: View {
             timeAxis(start: trend.bins.first?.start, finish: trend.bins.last?.end)
         }
     }
-    private func tokenBar(_ bin: DesktopUsageTrend.Bin, scale: Double) -> some View {
+    private func tokenBar(_ bin: DesktopUsageTrend.Bin, scale: Double, series: [String]) -> some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
-            ForEach(bin.tokensByKind.keys.sorted(), id: \.self) { kind in
-                Rectangle().fill(color(kind))
+            ForEach(Array(series.reversed()), id: \.self) { kind in
+                Rectangle().fill(color(kind).opacity(0.86))
                     .frame(height: plotHeight * (bin.tokensByKind[kind] ?? 0) / scale)
             }
         }.frame(maxWidth: .infinity).frame(height: plotHeight).contentShape(Rectangle())
@@ -68,18 +68,15 @@ struct CompactUsageFlow: View {
         }.font(.plex(size: 12)).foregroundStyle(.secondary).lineLimit(1)
             .padding(.leading, axisWidth + 6).frame(height: 18)
     }
-    private func niceMaximum(_ peak: Double) -> Double {
-        guard peak.isFinite, peak > 0 else { return 1 }
-        let power = pow(10, floor(log10(peak))), fraction = peak / power
-        let factor = [1.0, 2, 5, 10].first { $0 >= fraction } ?? 10
-        return factor * power
-    }
     private func axisLabel(_ value: Double) -> String {
         let scale: Double = value >= 1e9 ? 1e9 : value >= 1e6 ? 1e6 : value >= 1e3 ? 1e3 : 1
         let suffix = scale == 1e9 ? "B" : scale == 1e6 ? "M" : scale == 1e3 ? "k" : ""
         return (value / scale).formatted(.number.precision(.significantDigits(1...3))) + suffix
     }
-    private func color(_ kind: String) -> Color { kind == "unknown" ? .gray : AgentPalette.color(kind) }
+    private func color(_ kind: String) -> Color {
+        ["Claude", "Codex", "GLM", "Antigravity", "Aside"].contains(kind)
+            ? AgentPalette.color(kind) : Color(red: 139/255, green: 147/255, blue: 159/255)
+    }
     private func time(_ timestamp: Double?) -> String {
         guard let timestamp, timestamp.isFinite else { return "—" }
         return Date(timeIntervalSince1970: timestamp).formatted(date: .omitted, time: .shortened)

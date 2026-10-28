@@ -230,7 +230,9 @@ struct QuickDashboard: View {
     }
     private func sessionRow(_ s: DesktopSession) -> some View {
         let quota = model.snapshot?.account_quotas?.first { $0.id == s.usage?.weekly_account }
-        let burn = model.fresh && quota?.stale == false ? s.usage?.weeklyBurnPerHour(period: model.selectedPeriod) : nil
+        let estimate = s.usage?.weekly_estimate?[model.selectedPeriod]
+        let burn = model.fresh && estimate?.permitsBurnRate(for: quota, at: model.now.timeIntervalSince1970) == true
+            ? s.usage?.weeklyBurnPerHour(period: model.selectedPeriod) : nil
         let pending = !model.fresh ? "마지막 기록" : quota?.stale == true ? (quota?.statusLabel ?? "한도 조회 대기") : s.usage?.weekly_account == nil ? "계정 연결 필요" : "환산 기준 수집 중"
         return HStack(alignment: .center, spacing: 8) {
             Circle().fill(s.isWorkingGroup ? panelAccent : s.state == "waiting" ? Color.orange : Color.gray.opacity(0.5))

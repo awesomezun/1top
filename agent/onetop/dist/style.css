@@ -55,6 +55,7 @@
 @media(max-width:800px){.session-summary-row{align-items:flex-start}.session-summary-label{padding-top:8px}.session-resource-strip,.session-account-strip{flex-wrap:wrap}.session-resource,.session-account{flex:1 1 calc(50% - 6px)}.session-resource>b{font-size:15px}.session-account>strong{font-size:20px}.session-resource{padding-block:7px}.session-summary{margin-bottom:18px}}
 
 /* Filter chips stay visually distinct from the workspace navigation. */
+.rail .brand{gap:8px}.rail .brand-mark{display:block;width:32px;height:32px;object-fit:contain;flex:none}
 .rail nav#providers,.rail nav#hostApps{display:flex;flex-direction:column;align-items:flex-start;flex-wrap:nowrap;gap:6px;padding:0 7px;margin:0 0 14px;overflow:visible}
 #providers .provider-nav,#hostApps .provider-nav{flex:0 1 auto;min-width:0;max-width:100%;gap:5px;padding:5px 8px;border:1px solid #30353d;border-radius:999px;background:#15181d;color:var(--muted);font-size:12px;line-height:1.4}
 #providers .provider-nav .dot,#hostApps .provider-nav .dot{width:5px;height:5px;margin:0}
@@ -64,3 +65,15 @@
 #providers .provider-nav[aria-pressed=true] small,#hostApps .provider-nav[aria-pressed=true] small{color:#a1cfb9}
 .account-token-flow .chart-wrap{height:300px;padding:8px 22px 0}.account-token-flow .chart-foot{padding-bottom:18px}.account-chart-period{font-size:14px;color:var(--muted)}
 @media(max-width:640px){.rail nav#providers,.rail nav#hostApps{padding:0;margin:10px 0;gap:6px}.account-token-flow .chart-wrap{height:230px;padding-inline:12px}.account-token-flow .panel-heading{flex-direction:row;align-items:center}}
+
+/* Period controls remain left aligned, with a more visible selected range. */
+.range-buttons{gap:5px;padding:5px;border-color:#414c47;background:#141b18}
+.range-buttons button{font-size:16px;font-weight:600;min-height:42px;padding:9px 16px;color:#d6dce3;border:1px solid #3b444d;background:#20262c}
+.range-buttons button:hover{background:#303a42;color:#fff}
+.range-buttons button[aria-pressed=true]{background:#9cdec1;border-color:#b7efd7;color:#10271d}
+@media(max-width:700px){.range-buttons{gap:3px}.range-buttons button{font-size:14px;min-height:42px;padding:8px 4px}}
+
+.session-resource,.session-account{position:relative}
+.session-summary .summary-mini-track{position:absolute;left:9px;right:9px;bottom:1px;width:auto;height:2px;border-radius:2px;background:#303833;pointer-events:none}
+.summary-mini-track>i{display:block;height:100%;border-radius:inherit;background:var(--account-color,#6ecca8)}
+.session-account.is-last-report .summary-mini-track>i{opacity:.45}

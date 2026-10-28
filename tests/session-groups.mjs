@@ -65,8 +65,10 @@ vm.runInContext(`
  renderSessionSummary();
 `,context);
 assert.equal((nodes.sessionResourceStrip.innerHTML.match(/data-summary-view="system"/g)||[]).length,4);
+assert.equal((nodes.sessionResourceStrip.innerHTML.match(/summary-mini-track/g)||[]).length,2); // CPU/RAM only, no invented network/disk capacity.
 assert.match(nodes.sessionResourceStrip.innerHTML,/27\.5%/);
 assert.equal((nodes.sessionAccountStrip.innerHTML.match(/data-summary-view="accounts"/g)||[]).length,4);
+assert.equal((nodes.sessionAccountStrip.innerHTML.match(/summary-mini-track/g)||[]).length,3); // Missing report gets no fake bar.
 assert.match(nodes.sessionAccountStrip.innerHTML,/<strong>12%<small>마지막 보고<\/small><\/strong>/);
 assert.match(nodes.sessionAccountStrip.innerHTML,/<strong>0%<\/strong>/);
 assert.match(nodes.sessionAccountStrip.innerHTML,/<strong>보고 대기<\/strong>/);
@@ -116,7 +118,7 @@ assert.equal(new Set(allIDs).size,allIDs.length);
 context.chartCalls=[];
 vm.runInContext(`
  tokenChart=(id,events,minutes)=>chartCalls.push({id,events,minutes});canvasBase=()=>null;
- data.events=[{kind:'Claude',t:1,n:10},{kind:'Codex',t:2,n:20}];provider='Claude';selectedPeriod='30m';
+ data.events=[{kind:'Claude',t:data.updated-1,n:10},{kind:'Codex',t:data.updated-1,n:20}];provider='Claude';selectedPeriod='30m';
  drawCharts();
 `,context);
 assert.deepEqual(context.chartCalls.map(c=>c.id),['tokenChart','accountTokenChart']);
@@ -236,3 +238,43 @@ const css=fs.readFileSync(new URL('../agent/onetop/dist/style.css',import.meta.u
 assert.match(css,/\.rail nav#providers,\.rail nav#hostApps\{[^}]*flex-direction:column;align-items:flex-start;flex-wrap:nowrap/);
 assert.match(css,/\.range-toolbar\{[^}]*justify-content:flex-start/);
 console.log('Actual clicks: provider/host tags toggle off, other filters persist, child groups stay collapsed by default and retain explicit toggles across polls.');
+
+vm.runInContext(`
+ provider='all';selectedPeriod='1h';sessionOrder={key:null,at:0,ids:[]};expandedSessions.clear();
+ const tagClaude={...ranked('tag-claude',300,1000,0),kind:'Claude',location:{app:'Zed'}};
+ const tagCodex={...ranked('tag-codex',200,30,0),kind:'Codex',orca_terminal:{title:'Test'}};
+ const tagOtherCodex={...ranked('tag-codex-2',100,20,0),kind:'Codex',location:{app:'Terminal'}};
+ const tagGLM={...ranked('tag-glm',99999,99999,0),kind:'GLM',status:'idle',location:{app:'Aside'}};
+ data.root_sessions=[tagGLM,tagCodex,tagOtherCodex,tagClaude];
+ data.sessions=[...data.root_sessions,{...ranked('hidden-child',1,1,0),kind:'Antigravity',is_subagent:true,location:{app:'Child app'}}];
+ render();
+`,context);
+const providerTags=()=>[...nodes.providers.innerHTML.matchAll(/data-provider="([^"]+)"/g)].map(([,kind])=>kind);
+const appTags=()=>[...nodes.hostApps.innerHTML.matchAll(/data-app-filter="([^"]+)"/g)].map(([,app])=>app);
+assert.deepEqual(providerTags(),['Claude','Codex','GLM']); // Neither count-descending nor backend arrival order.
+assert.deepEqual(appTags(),['Zed','Orca','Terminal','Aside']);
+assert.match(nodes.providers.innerHTML,/data-provider="Codex"[^>]*>[\s\S]*?<small>2<\/small>/);
+vm.runInContext(`tagCodex.usage.windows['1h']=[5000,0,0,0];render();`,context);
+assert.deepEqual(providerTags(),['Claude','Codex','GLM']); // Same frozen rank as the table.
+rankingClock+=60000;vm.runInContext('render()',context);
+assert.deepEqual(providerTags(),['Codex','Claude','GLM']);
+vm.runInContext(`selectedPeriod='30m';render();`,context);
+assert.deepEqual(providerTags(),['Claude','Codex','GLM']);
+assert.deepEqual(appTags(),['Zed','Orca','Terminal','Aside']);
+assert.match(html,/<img class="brand-mark" src="\/brand-mark_v1\.1\.0\.png"/);
+assert.deepEqual(fs.readFileSync(new URL('../agent/onetop/dist/brand-mark_v1.1.0.png',import.meta.url)),fs.readFileSync(new URL('../site/public/brand/v1.1.0/mark.png',import.meta.url)));
+assert.match(css,/\.range-buttons button\{[^}]*font-size:16px/);
+assert.match(css,/\.session-summary \.summary-mini-track\{position:absolute;/);
+console.log('Sidebar follows actual stable root order and period changes; canonical logo and compact absolute-positioned summary bars preserved.');
+
+const flow=(events,minutes,updated=3600)=>{context.flowEvents=events;context.flowMinutes=minutes;context.flowUpdated=updated;return JSON.parse(vm.runInContext('JSON.stringify(tokenFlowData(flowEvents,flowMinutes,flowUpdated))',context));};
+const flowFixture=[{t:3060,kind:'Codex',n:200},{t:3060,kind:'Claude',n:100},{t:3659,kind:' Zeta ',n:20},{t:3659,kind:'Alpha',n:10},{t:3659,kind:' ',n:5},{t:3660,kind:'GLM',n:900},{t:3059,kind:'Aside',n:700},{t:3060,kind:'Bad',n:NaN}];
+const flowSample=flow(flowFixture,10);
+assert.deepEqual(flowSample.series,['Claude','Codex','Alpha','Zeta','unknown']);
+assert.equal(flowSample.bins.length,10);assert.equal(flowSample.start,3060);assert.equal(flowSample.end,3660);
+assert.equal(flowSample.bins[0].Claude,100);assert.equal(flowSample.bins[0].Codex,200);assert.equal(flowSample.max,500);
+for(const [minutes,step,count] of [[10,60,10],[30,60,30],[60,60,60],[300,300,60],[720,900,48],[1440,900,96]]){
+ const f=flow(flowFixture,minutes);assert.equal(f.step,step);assert.equal(f.bins.length,count);assert.equal(f.end,3660);assert.equal(f.start,3660-minutes*60);
+}
+assert.equal(flow([],60).max,1);
+console.log('Token-flow aggregation: six native-matched resolutions, snapshot clock, canonical stacking, half-open bins and shared nice axis.');
