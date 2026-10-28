@@ -54,8 +54,8 @@ function selectPeriod(key){
 function updateRangeControls(){
  const lang=OneTopI18n.language||'ko',max=OneTopRanges.stops.length-1;
  document.querySelectorAll('.range-buttons').forEach(el=>{
-  if(!el.querySelector('.range-presets')){
-   el.innerHTML='<div class="range-presets"></div><div class="range-slider-row"><span class="range-edge">10분</span><input class="duration-slider" type="range" min="0" max="18" step="1" aria-label="사용 기간"><span class="range-edge">전체 기록</span><input class="duration-value" type="text" aria-label="기간 직접 입력" spellcheck="false" autocomplete="off"></div>';
+  if(!el.querySelector('.duration-slider')){
+   el.innerHTML='<div class="range-slider-row"><div class="range-scale"><input class="duration-slider" type="range" min="0" max="18" step="1" aria-label="사용 기간"><div class="range-ticks" aria-hidden="true"><span style="left:0%">10분</span><span style="left:16.6667%">1시간</span><span style="left:50%">1일</span><span style="left:77.7778%">1개월</span><span style="left:100%">전체</span></div></div><input class="duration-value" type="text" aria-label="기간 직접 입력" spellcheck="false" autocomplete="off"></div>';
    const slider=el.querySelector('.duration-slider'),input=el.querySelector('.duration-value');
    slider.oninput=()=>{slider.dataset.sliding='true';const key=OneTopRanges.fromPosition(slider.value);input.value=OneTopRanges.label(key,OneTopI18n.language);slider.setAttribute('aria-valuetext',input.value);slider.style.setProperty('--position',Number(slider.value)/Number(slider.max)*100+'%');};
    slider.onchange=()=>{delete slider.dataset.sliding;selectPeriod(OneTopRanges.fromPosition(slider.value));};
@@ -64,10 +64,6 @@ function updateRangeControls(){
    input.oninput=()=>input.setCustomValidity('');
    input.onchange=()=>{const key=OneTopRanges.parse(input.value);if(!key){input.setCustomValidity(OneTopI18n.t('기간 입력 예: 30분, 36시간, 7일'));input.reportValidity();return;}input.setCustomValidity('');selectPeriod(key);};
    input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();input.onchange();if(input.checkValidity())input.blur();}else if(e.key==='Escape'){input.value=OneTopRanges.label(selectedPeriod,OneTopI18n.language);input.setCustomValidity('');input.blur();}};
-  }
-  const presets=el.querySelector('.range-presets');
-  for(const w of data.period_usage.windows.filter(w=>!customPeriod(w.key)).sort((a,b)=>a.seconds-b.seconds)){
-   let b=presets.querySelector('[data-range="'+w.key+'"]');if(!b){b=document.createElement('button');b.dataset.range=w.key;presets.append(b);}b.textContent=w.label;b.setAttribute('aria-pressed',String(w.key===selectedPeriod));
   }
   const slider=el.querySelector('.duration-slider'),input=el.querySelector('.duration-value');
   if(slider.dataset.sliding)return;
@@ -240,7 +236,6 @@ $('providers').onclick=e=>{const b=e.target.closest('[data-provider]');if(!b)ret
 $('hostApps').onclick=e=>{const b=e.target.closest('[data-app-filter]');if(!b)return;const selected=$('search').value.toLocaleLowerCase()===b.dataset.appFilter.toLocaleLowerCase();selectView('sessions');$('search').value=selected?'':b.dataset.appFilter;render();};
 $('modelFilter').onchange=renderTable;
 $('clearFilter').onclick=()=>{provider='all';render();};$('search').oninput=renderTable;$('stateFilter').onchange=renderTable;$('sort').onchange=renderTable;
-document.querySelectorAll('.range-buttons').forEach(el=>el.onclick=e=>{const b=e.target.closest('[data-range]');if(b)selectPeriod(b.dataset.range);});
 
 $('usageMode').onclick=e=>{const b=e.target.closest('[data-unit]');if(b){usageUnit=b.dataset.unit;render();}};
 $('periodCards').onclick=e=>{const b=e.target.closest('[data-period]');if(b)selectPeriod(b.dataset.period);};

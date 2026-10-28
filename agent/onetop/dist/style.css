@@ -68,10 +68,10 @@
 
 /* Period controls remain left aligned, with a more visible selected range. */
 .range-buttons{gap:5px;padding:5px;border-color:#414c47;background:#141b18}
-.range-buttons button{font-size:16px;font-weight:600;min-height:42px;padding:9px 16px;color:#d6dce3;border:1px solid #3b444d;background:#20262c}
-.range-buttons button:hover{background:#303a42;color:#fff}
-.range-buttons button[aria-pressed=true]{background:#9cdec1;border-color:#b7efd7;color:#10271d}
-@media(max-width:700px){.range-buttons{gap:3px}.range-buttons button{font-size:14px;min-height:42px;padding:8px 4px}}
+
+
+
+@media(max-width:700px){.range-buttons{gap:3px}}
 
 .session-resource,.session-account{position:relative}
 .session-summary .summary-mini-track{position:absolute;left:9px;right:9px;bottom:1px;width:auto;height:2px;border-radius:2px;background:#303833;pointer-events:none}
