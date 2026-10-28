@@ -1,6 +1,6 @@
-// Hero explainer: agent sessions scattered across apps and computers gather into one
-// 1top view, then time windows, token maps, account limits and the menu bar.
-// Every frame is a pure function of time, so live playback and the video render match.
+// Hero explainer v2.0.0: agent sessions scattered across apps and computers gather into one
+// 1top view with weekly-limit shares, then the token flow, usage map, weekly account limits and
+// the unified menu-bar panel. Every frame is a pure function of time, so live playback and the video render match.
 const T=24,CH=[0,9.6,13,16,19.2,T],CAP=[0,3,5.6,9.6,13,16,19.2,T],REP=[7.1,12.7,15.2,18.6,21.5];
 const clamp=v=>v<0?0:v>1?1:v,seg=(t,a,b)=>clamp((t-a)/(b-a)),lerp=(a,b,p)=>a+(b-a)*p,lerpA=(a,b,p)=>a.map((v,i)=>lerp(v,b[i],p));
 const out3=p=>1-(1-p)**3,io3=p=>p<.5?4*p*p*p:1-(-2*p+2)**3/2,expo=p=>p>=1?1:1-2**(-10*p);
@@ -11,64 +11,78 @@ const fmt=k=>k>=999.95?(k/1000).toFixed(2)+'M':k.toFixed(1)+'k';
 // Cursor keeps its English menus in both languages, as the app does by default.
 const CURSOR_MENUS=['File','Edit','Selection','View','Go','Run','Terminal','Window','Help'];
 const COPY={
- en:{label:'Animated overview of 1top. Agent sessions from several apps and computers gather into one dashboard that shows where each session runs, its token usage over time windows, a token map, account limits and a menu-bar panel.',
-  cap:['Your AI agents run across apps, terminals and computers.','1top gathers every session into one view.','See what’s running, where it runs, and what it uses.','Switch the time window — every number follows.','Token maps show where your usage goes.','Every subscription’s limits, side by side.','Jump back to any session from the menu bar.'],
-  ch:['Sessions','Usage','Token maps','Limits','Menu bar'],show:'Show',
+ en:{label:'Animated overview of 1top. Agent sessions from several apps and computers gather into one dashboard that shows where each session runs and how much of its weekly subscription limit it uses, then the token flow over time windows, a usage map, weekly account limits and the menu-bar panel.',
+  cap:['Your AI agents run across apps, terminals and computers.','1top gathers every session into one view.','See where each one runs and how much of your weekly limit it uses.','Switch the time window — the token flow and every number follow.','The usage map shows which sessions used the most.','See how much of each subscription’s weekly limit is used.','Limits and sessions, one click away in the menu bar.'],
+  ch:['Sessions','Usage','Usage map','Weekly limits','Menu bar'],show:'Show',
   zones:['MacBook Pro · This Mac','Mac Studio · Remote'],win:'1top — This Mac',live:'Live',
-  head:['Sessions','Usage','Token map','Account limits'],meta:['6 sessions · 2 computers','Last hour · by session','4 accounts'],
-  th:['Session','AI tool · model','App · computer','Status','Tokens · 1h','CPU'],status:['Idle','Working','Paused'],hl:['Where it runs','What it uses'],
-  win6:['24h','12h','5h','1h','30m','10m'],span:['last 24 hours','last 12 hours','last 5 hours','last hour','last 30 minutes','last 10 minutes'],
-  ago:['24h ago','12h ago','5h ago','1h ago','30m ago','10m ago'],now:'now',unit:s=>`tokens · ${s}`,rate:'tok/s · 60-second average',
-  five:'5-hour',week:'Weekly',reset:s=>`resets in ${s}`,who:['Personal','Work'],
-  stats:['tokens · 1h','tok/s','working'],sessions:'Sessions',full:'Open full dashboard',toast:'Cursor brought forward on MacBook Pro',apps:['Finder','Cursor'],menus:[['File','Edit','View','Go','Window','Help'],CURSOR_MENUS],clock:['Mon Oct 26','9:41 AM'],
-  desc:['Frontend','Backend','Docs refresh','Notes','iOS client','Data jobs'],
-  resets:[['2h 08m','2d 4h'],['2h 15m','3d 0h'],['2h 30m','4d 0h'],['2h 45m','5d 0h']]},
- ko:{label:'1top 동작 개요 애니메이션입니다. 여러 앱과 컴퓨터에 흩어진 에이전트 세션이 하나의 대시보드로 모이고, 실행 위치와 기간별 토큰 사용량, 토큰 맵, 계정 한도, 메뉴 막대 패널을 차례로 보여줍니다.',
-  cap:['AI 에이전트는 여러 앱·터미널·컴퓨터에서 동시에 돌아갑니다.','1top이 모든 세션을 한 화면으로 모읍니다.','무엇이, 어디서, 얼마나 쓰는지 바로 보입니다.','기간을 바꾸면 모든 수치가 함께 바뀝니다.','토큰 맵으로 사용량이 어디에 쓰였는지 봅니다.','구독마다 5시간·주간 한도를 나란히 봅니다.','메뉴 막대에서 원하는 세션으로 바로 돌아갑니다.'],
-  ch:['세션','사용량','토큰 맵','한도','메뉴 막대'],show:'보기',
+  head:['Sessions','Token flow','Usage map','Weekly limits'],meta:['6 sessions · 2 computers','Last hour · by session','4 accounts · last hour'],
+  th:['Session','AI tool · model','App · computer','Status','Weekly % · 1h','Tokens · 1h'],status:['Idle','Working','Paused'],hl:['Where it runs','Share of the weekly limit'],
+  win6:['10m','30m','1h','5h','12h','24h'],ago:['10m ago','30m ago','1h ago','5h ago','12h ago','24h ago'],span:['last 10 minutes','last 30 minutes','last hour','last 5 hours','last 12 hours','last 24 hours'],
+  now:'now',unit:s=>`tokens · ${s}`,rate:'tok/s · 60-second average',kids:n=>`${n} sub`,none:'Not reported',
+  used:'/ 100% used',left:v=>`${v}% left`,inc:'Last hour',burn:v=>`${v}%/h`,avg:v=>`avg ${v}%/h`,who:['Personal','Work'],
+  toast:'Cursor brought forward on MacBook Pro',apps:['Finder','Cursor'],menus:[['File','Edit','View','Go','Window','Help'],CURSOR_MENUS],clock:['Mon Oct 26','9:41 AM'],
+  desc:['Frontend','Backend','Docs refresh','Research notes','Mobile app','Design system']},
+ ko:{label:'1top 동작 개요 애니메이션입니다. 여러 앱과 컴퓨터에 흩어진 에이전트 세션이 하나의 대시보드로 모이고, 세션마다 실행 위치와 주간 한도 사용량, 기간별 토큰 흐름, 사용량 맵, 계정별 주간 한도, 메뉴 막대 패널을 차례로 보여 줍니다.',
+  cap:['AI 에이전트는 여러 앱·터미널·컴퓨터에서 동시에 돌아갑니다.','1top이 모든 세션을 한 화면으로 모읍니다.','어디서 돌고, 주간 한도를 얼마나 쓰는지 바로 보입니다.','기간을 바꾸면 토큰 흐름과 모든 수치가 함께 바뀝니다.','사용량 맵으로 어느 세션이 많이 썼는지 봅니다.','구독마다 주간 한도를 몇 % 썼는지 봅니다.','메뉴 막대에서 한도와 세션을 바로 확인합니다.'],
+  ch:['세션','사용량','사용량 맵','주간 한도','메뉴 막대'],show:'보기',
   zones:['MacBook Pro · 이 Mac','Mac Studio · 원격'],win:'1top — 이 Mac',live:'실시간',
-  head:['세션','사용량','토큰 맵','계정 한도'],meta:['세션 6개 · 컴퓨터 2대','최근 1시간 · 세션별','계정 4개'],
-  th:['세션','AI 도구 · 모델','앱 · 컴퓨터','상태','토큰 · 1시간','CPU'],status:['대기 중','작업 중','일시정지'],hl:['어디서 실행 중인지','얼마나 쓰는지'],
-  win6:['24시간','12시간','5시간','1시간','30분','10분'],span:['최근 24시간','최근 12시간','최근 5시간','최근 1시간','최근 30분','최근 10분'],
-  ago:['24시간 전','12시간 전','5시간 전','1시간 전','30분 전','10분 전'],now:'현재',unit:s=>`토큰 · ${s}`,rate:'tok/s · 최근 60초 평균',
-  five:'5시간',week:'주간',reset:s=>`${s} 후 초기화`,who:['개인','회사'],
-  stats:['토큰 · 1시간','tok/s','작업 중'],sessions:'세션',full:'전체 대시보드',toast:'MacBook Pro에서 Cursor를 앞으로 가져왔습니다',apps:['Finder','Cursor'],menus:[['파일','편집','보기','이동','윈도우','도움말'],CURSOR_MENUS],clock:['10월 26일 (월)','오전 9:41'],
-  desc:['프론트엔드','백엔드','문서 정리','리서치 노트','iOS 앱','데이터 작업'],
-  resets:[['2시간 8분','2일 4시간'],['2시간 15분','3일 0시간'],['2시간 30분','4일 0시간'],['2시간 45분','5일 0시간']]}
+  head:['세션','토큰 흐름','사용량 맵','주간 한도'],meta:['세션 6개 · 컴퓨터 2대','최근 1시간 · 세션별','계정 4개 · 최근 1시간'],
+  th:['세션','AI 도구 · 모델','앱 · 컴퓨터','상태','주간 한도 · 1시간','토큰 · 1시간'],status:['대기 중','작업 중','일시정지'],hl:['어디서 실행 중인지','주간 한도를 얼마나 쓰는지'],
+  win6:['10분','30분','1시간','5시간','12시간','24시간'],ago:['10분 전','30분 전','1시간 전','5시간 전','12시간 전','24시간 전'],span:['최근 10분','최근 30분','최근 1시간','최근 5시간','최근 12시간','최근 24시간'],
+  now:'현재',unit:s=>`토큰 · ${s}`,rate:'tok/s · 최근 60초 평균',kids:n=>`하위 ${n}`,none:'보고 없음',
+  used:'/ 100% 사용',left:v=>`${v}% 남음`,inc:'최근 1시간',burn:v=>`${v}%/시간`,avg:v=>`평균 ${v}%/시간`,who:['개인','회사'],
+  toast:'MacBook Pro에서 Cursor를 앞으로 가져왔습니다',apps:['Finder','Cursor'],menus:[['파일','편집','보기','이동','윈도우','도움말'],CURSOR_MENUS],clock:['10월 26일 (월)','오전 9:41'],
+  desc:['프론트엔드','백엔드','문서 정리','리서치 노트','모바일 앱','디자인 시스템']}
 };
 
-const TOOL={claude:['Claude Code','#ec9a6d'],codex:['Codex','#82edc6'],glm:['GLM','#b69cff']};
+// Tool identities match the app palette (AgentPalette.swift); the light tone is for text on dark tiles.
+const TOOL={claude:['Claude Code','#bd8965','#e3b796'],codex:['Codex','#378d76','#72d1b0'],glm:['GLM','#7c86bd','#aeb6ee']};
 const PCS=['MacBook Pro','Mac Studio'];
+// Example data shared with the v5.0.0 product films: tokens in thousands over the last hour,
+// eq = estimated share of the account's weekly limit in that hour, burn = current %/h.
 const SESS=[
- {id:'website',tool:'claude',model:'sonnet-4.6',app:'Cursor',pc:0,st:1,tok:51.6,cpu:'10.8%'},
- {id:'api-service',tool:'codex',model:'gpt-5.4',app:'Terminal',pc:0,st:1,tok:59.4,cpu:'14.8%'},
- {id:'docs',tool:'glm',model:'glm-5',app:'iTerm',pc:1,st:1,tok:38.2,cpu:'6.1%'},
- {id:'research',tool:'codex',model:'gpt-5.4',app:'Aside',pc:0,st:0,tok:67.2,cpu:'—'},
- {id:'mobile',tool:'claude',model:'sonnet-4.6',app:'Orca',pc:1,st:1,tok:22.9,cpu:'9.4%'},
- {id:'pipeline',tool:'codex',model:'gpt-5.4',app:'VS Code',pc:1,st:2,tok:14,cpu:'3.2%'}];
-const SUM=SESS.reduce((a,s)=>a+s.tok,0),TOTAL=[3040,1770,759.6,SUM,151.9,63.3],SPAN=[24,12,5,1,.5,1/6];
-const ACCT=[{tool:'claude',plan:'Max',who:0,v:[27,61]},{tool:'codex',plan:'Pro',who:0,v:[41,72]},{tool:'claude',plan:'Team',who:1,v:[15,35]},{tool:'codex',plan:'Business',who:1,v:[11,48]}];
-const PICK=[[10.45,0],[11.25,2],[12.05,3]];
+ {id:'website',tool:'claude',model:'opus-5-5',eff:'xhigh',app:'Cursor',pc:0,st:1,tok:7940,eq:.76,burn:1.2},
+ {id:'api-service',tool:'codex',model:'gpt-6-astra',eff:'ultra',app:'Orca',pc:0,st:1,tok:5780,eq:1.19,burn:1.07,kids:3},
+ {id:'docs',tool:'glm',model:'glm-5.3',eff:'high',app:'VS Code',pc:1,st:1,tok:2490,eq:null},
+ {id:'research',tool:'codex',model:'gpt-6-astra',eff:'high',app:'Aside',pc:0,st:0,tok:3120,eq:.64,burn:0},
+ {id:'mobile-app',tool:'codex',model:'gpt-6-astra',eff:'xhigh',app:'Terminal',pc:1,st:1,tok:1610,eq:.32,burn:.34},
+ {id:'design-system',tool:'claude',model:'sonnet-5-5',eff:'high',app:'iTerm',pc:1,st:2,tok:980,eq:.17,burn:0}];
+// Periods in the app's order: 10m, 30m, 1h, 5h, 12h, 24h.
+const SUM=SESS.reduce((a,s)=>a+s.tok,0),TOTAL=[3910,11240,SUM,98600,214500,388200],SPAN=[1/6,.5,1,5,12,24],HOUR=2;
+const ACCT=[{tool:'claude',plan:'Max',who:0,week:34,inc:.89,burn:.92},{tool:'codex',plan:'Pro',who:0,week:61,inc:1.87,burn:1.93},{tool:'claude',plan:'Team',who:1,week:18,inc:.17,burn:.18},{tool:'codex',plan:'Business',who:1,week:27,inc:.37,burn:.38}];
+const PICK=[[10.45,5],[11.25,3],[12.05,HOUR]];
 // Brand mark: the waveform.path symbol traced from site/public/brand/v1.1.0/mark.png.
 const MARK='M401.0 0.0 L394.5 1.5 L387.0 6.0 L381.8 12.5 L378.8 22.0 L340.5 465.5 L339.5 464.5 L338.8 461.2 L306.5 174.2 L304.5 168.0 L300.0 161.2 L293.2 156.2 L286.5 154.0 L276.2 154.0 L267.8 157.2 L263.8 160.2 L260.2 164.2 L256.0 173.5 L216.8 436.2 L215.5 440.2 L214.8 439.2 L182.5 284.2 L179.0 277.2 L174.0 272.0 L168.8 269.0 L160.8 267.0 L150.8 268.0 L144.0 271.0 L138.0 276.2 L134.0 282.8 L109.0 381.2 L107.2 384.8 L25.0 384.8 L19.0 386.0 L10.5 390.8 L4.2 397.8 L0.8 406.0 L0.0 416.0 L2.0 423.5 L6.2 430.5 L10.5 434.8 L14.8 437.5 L24.0 440.5 L126.0 440.8 L132.2 439.8 L137.2 438.0 L141.8 435.5 L147.0 430.8 L150.5 425.0 L154.8 411.2 L155.8 410.8 L195.0 596.8 L199.0 604.2 L201.8 607.2 L206.2 610.2 L214.0 613.2 L225.0 613.5 L231.5 611.5 L237.8 607.8 L242.5 601.8 L244.5 596.5 L275.8 387.8 L277.2 382.0 L278.0 383.8 L318.0 739.0 L321.0 747.0 L324.5 751.8 L328.8 755.2 L333.0 757.5 L339.0 759.2 L347.8 759.2 L356.2 756.2 L363.0 750.8 L367.2 743.2 L368.8 736.0 L403.2 338.8 L404.5 333.2 L405.2 334.5 L440.5 737.8 L443.8 747.5 L449.0 753.8 L457.0 758.2 L463.0 759.5 L467.8 759.5 L475.8 757.5 L482.0 753.8 L488.0 746.5 L491.0 737.8 L531.0 382.8 L531.5 382.2 L533.0 387.5 L564.2 595.5 L567.5 603.5 L571.8 608.2 L579.5 612.5 L585.2 613.8 L595.2 613.2 L602.2 610.5 L606.2 608.0 L609.5 604.8 L613.8 597.0 L653.2 408.8 L655.0 410.2 L659.0 422.8 L662.2 428.0 L666.5 432.8 L670.5 435.8 L676.5 438.8 L686.0 440.8 L780.5 440.8 L786.2 439.8 L795.0 435.5 L801.8 428.8 L805.8 420.5 L806.8 410.8 L804.8 402.2 L799.8 394.2 L793.2 388.8 L785.0 385.2 L701.5 384.5 L699.0 377.0 L676.5 288.0 L673.8 280.2 L669.5 274.2 L663.0 269.2 L654.8 266.5 L647.8 266.2 L640.8 268.0 L635.5 271.0 L630.5 276.0 L627.0 282.8 L594.0 439.5 L593.2 440.2 L592.0 436.2 L552.8 173.2 L548.8 164.5 L542.5 158.2 L533.2 154.2 L523.0 154.0 L514.5 157.0 L508.0 162.5 L504.2 168.8 L502.2 176.2 L470.0 461.2 L469.2 464.5 L468.2 465.5 L430.2 21.5 L429.0 16.5 L426.8 11.8 L424.0 8.0 L420.0 4.5 L411.0 0.5Z';
-const FIELDS=['dot','name','desc','tool','model','app','pc','status','tok','cpu','wave','pct','open','card'],RIGHT=new Set(['tok','cpu','wave','open']);
+const FIELDS=['dot','name','desc','tool','model','app','pc','status','eq','burn','tok','wave','pct','open','card'],RIGHT=new Set(['eq','burn','tok','wave','open']);
+// The closing panel is the shipping native view (v5.0.0 recording at 2x); positions below are fractions of that image.
+const PANEL_IMG='/media/v5.0.0/menu-panel.png',PANEL_ASPECT=1092/1572,OPEN=[.868,.703],HIT=[.051,.667,.898,.068];
 
 const WIDE={W:1280,H:800,n:0,zones:[[40,40,540,600],[700,40,540,600]],chip:[290,88],at:[[80,118],[230,268],[750,150],[90,420],[910,300],[760,452]],
  mark:[640,340],win:[40,36,1200,640],head:[72,98],meta:1208,row:[56,186,1168,64,70],
- th:[[80,158],[366,158],[616,158],[856,158],[1076,158,1],[1196,158,1]],thD:[816,158],hl:[[604,146,232,468],[946,146,272,468]],
- compact:k=>[800,186+k*62,400,54],seg:[72,156,84,44],big:[72,224],unit:[72,330],rate:[752,332],chart:[72,380,680,200],
- tree:[68,160,1144,492],card:k=>[68+(k%2)*586,160+(k>>1)*258,558,234],icon:960,mbh:32,sys:[34,66,95,124],menuN:9,date:1,panel:[770,42,380,596],host:[60,112,520,436],cur:[640,560],toast:[320,48]};
+ th:[[80,158],[366,158],[596,158],[816,158],[1014,158,1],[1200,158,1]],thD:[816,158],hl:[[584,146,232,468],[880,146,146,468]],
+ compact:k=>[800,186+k*62,400,54],seg:[72,156,84,44],big:[72,224],unit:[72,330],rate:[752,332],chart:[72,380,680,200],leg:[72,622],
+ tree:[68,160,1144,492],card:k=>[68+(k%2)*586,160+(k>>1)*258,558,234],icon:960,mbh:32,sys:[34,66,95,124],menuN:9,date:1,panel:[752,34,600*PANEL_ASPECT,600],host:[60,112,520,436],cur:[640,560],toast:[320,48]};
 const NARROW={W:640,H:700,n:1,zones:[[20,24,600,280],[20,396,600,280]],chip:[270,86],at:[[40,72],[330,108],[40,446],[60,206],[330,486],[60,578]],
  mark:[320,350],win:[16,20,608,612],head:[44,80],meta:596,row:[28,160,584,70,74],
  th:[[46,134],[296,134],null,null,[594,134,1],null],thD:null,hl:[[30,124,232,488],[462,124,150,488]],
- compact:k=>[28+(k%2)*300,446+(k>>1)*60,284,52],seg:[44,124,88,42],big:[44,180],unit:[44,264],rate:[596,266],chart:[44,304,552,118],
- tree:[28,124,584,496],card:k=>[28,124+k*124,584,114],icon:430,mbh:40,sys:[38,72,0,102],menuN:2,date:0,panel:[240,50,380,596],host:[-150,116,360,430],cur:[330,560],toast:[320,636]};
+ compact:k=>[28+(k%2)*300,446+(k>>1)*60,284,52],seg:[44,124,88,42],big:[44,180],unit:[44,264],rate:[596,266],chart:[44,304,552,118],leg:null,
+ tree:[28,124,584,496],card:k=>[28,124+k*124,584,114],icon:430,mbh:40,sys:[38,72,0,102],menuN:2,date:0,panel:[430-298*PANEL_ASPECT,42,596*PANEL_ASPECT,596],host:[-150,116,360,430],cur:[330,560],toast:[320,636]};
 
 function rate(h,dx){
  const a=f=>clamp(1.5-f*dx*4/6.283),g=(c,w,k)=>k*Math.exp(-(((h-c)/w)**2));
  return .42+.13*Math.sin(h*.34+1)+.09*Math.sin(h*1.7)+.07*a(5.3)*Math.sin(h*5.3+2)+.05*a(23)*Math.sin(h*23+.4)+.04*a(61)*Math.sin(h*61+1.3)+.03*a(173)*Math.sin(h*173+2.1)+.025*a(611)*Math.sin(h*611)+g(20.5,.7,.5)+g(23.4,.3,.38)+g(9,1.3,.3)+g(23.9,.06,.25);
 }
+// Each bar stacks Codex, Claude Code and GLM; their shares drift slowly over the day.
+const share=h=>{const x=.44+.08*Math.sin(h*.9+.5)+.04*Math.sin(h*7.1),c=.36+.07*Math.sin(h*1.3+2)+.03*Math.sin(h*11.3+1);return [x,c,Math.max(.04,1-x-c)]};
 const YMAX=SPAN.map(d=>{let m=0;for(let j=0;j<=400;j++)m=Math.max(m,rate(24-d+(d+.4)*j/400,d/140));return m*1.18});
+
+// The last hour of an account's weekly percentage: small uneven steps from week-inc up to week.
+function weekLine(a,k){
+ const n=13,w=[...Array(n-1)].map((_,j)=>.35+(1+Math.sin(j*1.9+k*2.3))**2),tw=w.reduce((s,v)=>s+v,0),lo=a.week-a.inc*1.12,hi=a.week+a.inc*.08;
+ let v=a.week-a.inc,pts=[[0,v]];w.forEach((x,j)=>{v+=a.inc*x/tw;pts.push([(j+1)*240/(n-1),v])});
+ const y=v=>(56-(v-lo)/(hi-lo)*50).toFixed(1),line=pts.map(([x,v],j)=>(j?'L':'M')+x.toFixed(1)+' '+y(v)).join('');
+ return {line,area:line+'L240 60L0 60Z'};
+}
 
 function squarify(vals,[x,y,w,h]){
  const total=vals.reduce((a,v)=>a+v.v,0),k=w*h/total,out=[];
@@ -85,13 +99,13 @@ function squarify(vals,[x,y,w,h]){
  return out.map(([x,y,w,h])=>[x+4,y+4,w-8,h-8]);
 }
 
-const pickAt=t=>{let a=3,b=3,s=-1;for(const [ts,k] of PICK)if(t>=ts){a=b;b=k;s=ts}return {a,b,p:s<0?1:io3(seg(t,s,s+.55))}};
-const tokAt=(i,t)=>{const s=SESS[i];if(t<9.6)return s.st?s.tok*(.9+.1*io3(seg(t,0,9.6))):s.tok;const w=pickAt(t);return s.tok*lerp(TOTAL[w.a],TOTAL[w.b],w.p)/SUM+(t>19.2&&s.st===1?(t-19.2)*.06:0)};
+const pickAt=t=>{let a=HOUR,b=HOUR,s=-1;for(const [ts,k] of PICK)if(t>=ts){a=b;b=k;s=ts}return {a,b,p:s<0?1:io3(seg(t,s,s+.55))}};
+const tokAt=(i,t)=>{const s=SESS[i];if(t<9.6)return s.st?s.tok*(.9+.1*io3(seg(t,0,9.6))):s.tok;const w=pickAt(t);return s.tok*lerp(TOTAL[w.a],TOTAL[w.b],w.p)/SUM+(t>19.2&&s.st===1?(t-19.2)*6:0)};
 
 export function mountHeroMotion(root,{lang='en',capture=false}={}){
  const S=COPY[lang]||COPY.en,ver=Math.random().toString(36).slice(2,7);
- const card=i=>{const a=ACCT[i],[tn,c]=TOOL[a.tool];return `<div class="hm-f f-card" style="--c:${c}"><div class="cd-h"><i></i>${tn}<em>${a.plan}</em><span>${S.who[a.who]}</span></div><div class="cd-bs">${[S.five,S.week].map((l,k)=>`<div class="cd-b" ${a.tool==='codex'&&a.plan==='Pro'&&k===0?'hidden':''}><label>${l}</label><strong>0%</strong><div class="tr"><s style="background:${a.v[k]>=70?'#e7bd77':k?'#8caeff':'#82edc6'}"></s></div><small>${S.reset(S.resets[i][k])}</small></div>`).join('')}</div></div>`};
- const item=(s,i)=>{const [tn,c]=TOOL[s.tool];return `<div class="hm-item" style="--c:${c}"><i class="hm-f f-dot"></i><b class="hm-f f-name">${s.id}</b><span class="hm-f f-desc">${S.desc[i]}</span><span class="hm-f f-tool">${tn}</span><span class="hm-f f-model">${s.model}</span><span class="hm-f f-app">${s.app}</span><span class="hm-f f-pc">${PCS[s.pc]}</span><span class="hm-f f-status s${s.st}">${S.status[s.st]}</span><span class="hm-f r f-tok"></span><span class="hm-f r f-cpu">${s.cpu}</span><span class="hm-f r f-wave">${'<i></i>'.repeat(5)}</span><span class="hm-f f-pct">${(s.tok/SUM*100).toFixed(1)}%</span><span class="hm-f r f-open">↗</span>${i<4?card(i):''}</div>`};
+ const card=i=>{const a=ACCT[i],[tn,c,l]=TOOL[a.tool],g=weekLine(a,i);return `<div class="hm-f f-card" style="--c:${c};--l:${l}"><div class="cd-h"><i></i>${tn}<em>${a.plan}</em><span>${S.who[a.who]}</span></div><div class="cd-w"><strong>0%</strong><small>${S.used}</small><span>${S.left(100-a.week)}</span></div><div class="cd-t"><s></s></div><div class="cd-i"><span>${S.inc} <b>+${a.inc.toFixed(2)}%</b></span><span>${S.avg(a.burn.toFixed(2))}</span></div><svg class="cd-g" viewBox="0 0 240 60" preserveAspectRatio="none" aria-hidden="true"><path class="ga" d="${g.area}"/><path class="gl" d="${g.line}" pathLength="1" stroke-dasharray="1 1"/></svg></div>`};
+ const item=(s,i)=>{const [tn,c,l]=TOOL[s.tool];return `<div class="hm-item" style="--c:${c};--l:${l}"><i class="hm-f f-dot"></i><b class="hm-f f-name">${s.id}${s.kids?`<u>${S.kids(s.kids)}</u>`:''}</b><span class="hm-f f-desc">${S.desc[i]}</span><span class="hm-f f-tool">${tn}</span><span class="hm-f f-model">${s.model}<em>${s.eff}</em></span><span class="hm-f f-app">${s.app}</span><span class="hm-f f-pc">${PCS[s.pc]}</span><span class="hm-f f-status s${s.st}">${S.status[s.st]}</span><span class="hm-f r f-eq${s.eq==null?' none':''}">${s.eq==null?'—':'≈'+s.eq.toFixed(2)+'%'}</span><span class="hm-f r f-burn">${s.eq==null?S.none:S.burn(s.burn)}</span><span class="hm-f r f-tok"></span><span class="hm-f r f-wave">${'<i></i>'.repeat(5)}</span><span class="hm-f f-pct">${(s.tok/SUM*100).toFixed(1)}%</span><span class="hm-f r f-open">↗</span>${i<4?card(i):''}</div>`};
  const mark=(w,h,inner='')=>`<svg width="${w}" height="${h}" viewBox="0 0 806.8 759.5" aria-hidden="true">${inner}<path d="${MARK}"/></svg>`;
  root.classList.add('hm');root.classList.toggle('hm--capture',capture);root.setAttribute('role','group');root.setAttribute('aria-label',S.label);
  root.innerHTML=`<div class="hm-stage"><div class="hm-canvas" aria-hidden="true"><div class="hm-grid"></div><div class="hm-a hm-glow g1"></div><div class="hm-a hm-glow g2"></div><div class="hm-world"><div class="hm-a hm-desk"></div>
@@ -101,10 +115,11 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
   <div class="hm-a hm-win"><div class="tb"><i></i><i></i><i></i><b>${S.win}</b><em>${S.live}</em></div></div>
   ${S.head.map(h=>`<div class="hm-a hm-head">${h}</div>`).join('')}${S.meta.map(m=>`<div class="hm-a hm-meta">${m}</div>`).join('')}
   ${S.th.map((h,k)=>`<div class="hm-a hm-th${k>3?' r':''}">${h}</div>`).join('')}
-  <div class="hm-a hm-seg"><i class="pill"></i>${S.win6.map(w=>`<span>${w}</span>`).join('')}</div><div class="hm-a hm-bars">${'<i></i>'.repeat(36)}</div><div class="hm-a hm-big"></div><div class="hm-a hm-unit"></div><div class="hm-a hm-rate"><b>560</b> ${S.rate}</div>
-  <svg class="hm-a hm-chart"><defs><linearGradient id="hma${ver}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#82edc6" stop-opacity=".32"/><stop offset="1" stop-color="#82edc6" stop-opacity="0"/></linearGradient><clipPath id="hmc${ver}"><rect x="-10" y="-20" height="400" width="0"/></clipPath></defs><line class="gl"/><line class="gl"/><line class="gl"/><g clip-path="url(#hmc${ver})"><path class="ar" fill="url(#hma${ver})"/><path class="ln"/><circle class="nd" r="6" fill="#82edc6"/><circle class="nr" r="6" fill="none" stroke="#82edc6" stroke-width="2"/></g><text class="t0"></text><text class="t1" text-anchor="end">${S.now}</text></svg>
-  <div class="hm-a hm-host"><div class="tb"><i></i><i></i><i></i><b>website — Cursor</b></div><div class="bd"><div class="tree">${[70,52,84,60,46,72].map(w=>`<i style="width:${w}%"></i>`).join('')}</div><div class="code">${[[38,'#8caeff'],[62,0],[54,0],[30,'#ec9a6d'],[72,0],[48,'#82edc6'],[66,0],[40,0],[58,'#b69cff'],[34,0]].map(([w,c])=>`<i style="width:${w}%;${c?`background:${c}55`:''}"></i>`).join('')}</div></div><div class="term"><b>Claude Code</b> › Build the landing page<br><em>●</em> Working · 51.6k tokens</div></div>
-  <div class="hm-a hm-panel"><img class="hm-native-panel" src="/media/v4.10.0/menu-panel.png" alt=""><svg class="ar" viewBox="0 0 24 11" aria-hidden="true"><path d="M0 11C5.5 11 8.6 1.2 12 1.2S18.5 11 24 11"/></svg><div class="ph">${mark(24,23)}1top<span class="hm-live">${S.live} · ${PCS[0]}</span></div><div class="ps"><div><b class="p0"></b><small>${S.stats[0]}</small></div><div><b class="p1"></b><small>${S.stats[1]}</small></div><div><b>4</b><small>${S.stats[2]}</small></div></div><div class="pl">${S.sessions}</div><div class="pf"><span>${S.full}</span><kbd>⌘O</kbd></div></div>
+  <div class="hm-a hm-seg"><i class="pill"></i>${S.win6.map(w=>`<span>${w}</span>`).join('')}</div><div class="hm-a hm-bars">${'<i><b></b><b></b><b></b></i>'.repeat(36)}</div><div class="hm-a hm-big"></div><div class="hm-a hm-unit"></div><div class="hm-a hm-rate"><b>6.1k</b> ${S.rate}</div>
+  <svg class="hm-a hm-chart"><line class="gl"/><line class="gl"/><line class="gl"/><text class="t0"></text><text class="t1" text-anchor="end">${S.now}</text></svg>
+  <div class="hm-a hm-leg">${['codex','claude','glm'].map(k=>`<span style="--c:${TOOL[k][1]}">${TOOL[k][0]}</span>`).join('')}</div>
+  <div class="hm-a hm-host"><div class="tb"><i></i><i></i><i></i><b>website — Cursor</b></div><div class="bd"><div class="tree">${[70,52,84,60,46,72].map(w=>`<i style="width:${w}%"></i>`).join('')}</div><div class="code">${[[38,'#9ab9ff'],[62,0],[54,0],[30,'#bd8965'],[72,0],[48,'#378d76'],[66,0],[40,0],[58,'#7c86bd'],[34,0]].map(([w,c])=>`<i style="width:${w}%;${c?`background:${c}66`:''}"></i>`).join('')}</div></div><div class="term"><b>Claude Code</b> › Build the landing page<br><em>●</em> Working · ${fmt(SESS[0].tok)} tokens</div></div>
+  <div class="hm-a hm-panel"><img class="hm-native-panel" src="${PANEL_IMG}" alt=""><i class="hm-rowhit"></i></div>
   ${SESS.map(item).join('')}
   ${S.hl.map(h=>`<div class="hm-a hm-hl"><span>${h}</span></div>`).join('')}
   <div class="hm-a hm-mb">${S.apps.map((a,k)=>`<div class="lf"><i class="ap"></i><b>${a}</b>${S.menus[k].map(m=>`<span>${m}</span>`).join('')}</div>`).join('')}<i class="press"></i><i class="ic bt"></i><svg class="ic wf" viewBox="0 0 24 18" aria-hidden="true"><path d="M2 6.5a14.5 14.5 0 0 1 20 0M5.2 9.9a9.8 9.8 0 0 1 13.6 0M8.4 13.2a5.2 5.2 0 0 1 7.2 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.7" fill="currentColor"/></svg><svg class="ic sp" viewBox="0 0 18 18" aria-hidden="true"><circle cx="7.4" cy="7.4" r="5.6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M11.6 11.6l4.8 4.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><svg class="ic cc" viewBox="0 0 20 17" aria-hidden="true"><rect x="1" y="1.2" width="18" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="15.8" cy="4.2" r="1.8" fill="currentColor"/><rect x="1" y="9.8" width="18" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="4.2" cy="12.8" r="1.8" fill="currentColor"/></svg><time><span>${S.clock[0]}</span>${S.clock[1]}</time></div>
@@ -117,10 +132,10 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
  const q=s=>root.querySelector(s),qa=s=>[...root.querySelectorAll(s)];
  const E={stage:q('.hm-stage'),canvas:q('.hm-canvas'),world:q('.hm-world'),g1:q('.g1'),g2:q('.g2'),zones:qa('.hm-zone'),wires:q('.hm-wires'),paths:qa('.hm-wires path'),dots:qa('.hm-wires circle'),
   halo:q('.hm-halo'),win:q('.hm-win'),tb:q('.hm-win .tb'),heads:qa('.hm-head'),metas:qa('.hm-meta'),th:qa('.hm-th'),hl:qa('.hm-hl'),seg:q('.hm-seg'),pill:q('.hm-seg .pill'),segs:qa('.hm-seg span'),
-  chartBars:q('.hm-bars'),bars:qa('.hm-bars i'),big:q('.hm-big'),unit:q('.hm-unit'),rate:q('.hm-rate'),rateN:q('.hm-rate b'),chart:q('.hm-chart'),gl:qa('.hm-chart .gl'),ar:q('.hm-chart .ar'),ln:q('.hm-chart .ln'),nd:q('.hm-chart .nd'),nr:q('.hm-chart .nr'),clip:q(`#hmc${ver} rect`),t0:q('.hm-chart .t0'),t1:q('.hm-chart .t1'),
-  desk:q('.hm-desk'),host:q('.hm-host'),panel:q('.hm-panel'),arrow:q('.hm-panel .ar'),apps:qa('.hm-mb .lf'),p0:q('.hm-panel .p0'),p1:q('.hm-panel .p1'),mb:q('.hm-mb'),press:q('.hm-mb .press'),mark:q('.hm-mark'),mpath:q('.hm-mark path'),mclip:q(`#hmk${ver} rect`),
+  chartBars:q('.hm-bars'),bars:qa('.hm-bars i').map(b=>[...b.children]),big:q('.hm-big'),unit:q('.hm-unit'),rate:q('.hm-rate'),rateN:q('.hm-rate b'),chart:q('.hm-chart'),gl:qa('.hm-chart .gl'),t0:q('.hm-chart .t0'),t1:q('.hm-chart .t1'),leg:q('.hm-leg'),
+  desk:q('.hm-desk'),host:q('.hm-host'),panel:q('.hm-panel'),rowhit:q('.hm-rowhit'),apps:qa('.hm-mb .lf'),mb:q('.hm-mb'),press:q('.hm-mb .press'),mark:q('.hm-mark'),mpath:q('.hm-mark path'),mclip:q(`#hmk${ver} rect`),
   ripple:q('.hm-ripple'),toast:q('.hm-toast').parentNode,cursor:q('.hm-cursor'),cap:q('.hm-cap'),capBg:q('.hm-cap>i'),caps:qa('.hm-cap span'),chs:qa('.hm-ch button'),fills:qa('.hm-ch b')};
- const IT=qa('.hm-item').map(el=>{const f={};for(const k of FIELDS)f[k]=el.querySelector('.f-'+k);return {el,f,bars:[...el.querySelectorAll('.f-wave i')],strong:[...el.querySelectorAll('.cd-b strong')],fill:[...el.querySelectorAll('.cd-b s')]}});
+ const IT=qa('.hm-item').map(el=>{const f={};for(const k of FIELDS)f[k]=el.querySelector('.f-'+k);return {el,f,bars:[...el.querySelectorAll('.f-wave i')],strong:el.querySelector('.cd-w strong'),fill:el.querySelector('.cd-t s'),line:el.querySelector('.cd-g .gl'),area:el.querySelector('.cd-g .ga'),inc:el.querySelector('.cd-i')}});
 
  const css=(el,p,v)=>{const c=el._c||(el._c={});if(c[p]!==v){el.style[p]=v;c[p]=v}};
  const put=(el,x,y,s=1,o=1)=>{const op=o<.002?0:o>.998?1:+o.toFixed(3);css(el,'opacity',String(op));css(el,'visibility',op?'visible':'hidden');if(op)css(el,'transform',`translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0)${s!==1?` scale(${s.toFixed(4)})`:''}`)};
@@ -135,25 +150,24 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
   if(m==='chip'){const [w,h]=L.chip,[x,y]=L.at[i],e=out3(seg(t,.25+i*.09,1.05+i*.09)),fy=7*Math.sin((t/5+i*.17)*6.283),fx=4*Math.sin((t/7+i*.29)*6.283);
    return {r:[x+fx,y+fy+(1-e)*26,w,h],o:e,rad:16,bg:[17,21,26,1],bd:lerpA([255,255,255,.09],[130,237,198,.75],flash(i,t)),f:{dot:[18,25,1,1],tool:[36,15,1.04,1],app:[18,53,.9,.72],tok:[18,53,.95,1],wave:[18,18,1,1]}}}
   if(m==='row'){const [x,y,w,h,g]=L.row;
-   return {r:[x,y+i*g,w,h],o:1,rad:12,bg:[19,23,28,1],bd:[255,255,255,.05],f:L.n?{name:[18,12,1.04,1],app:[18,41,.88,.75],dot:[250,19,1,1],tool:[268,12,1,1],model:[268,41,1,1],tok:[18,12,1.06,1],cpu:[18,42,.9,1]}
-    :{name:[24,10,1,1],desc:[24,36,1,1],dot:[310,27,1,1],tool:[328,10,1,1],model:[328,36,1,1],app:[560,10,1,1],pc:[560,36,1,1],status:[800,16,1,1],tok:[148,11,1.04,1],cpu:[28,12,1,1]}}}
+   return {r:[x,y+i*g,w,h],o:1,rad:12,bg:[19,23,28,1],bd:[255,255,255,.05],f:L.n?{name:[18,12,1.04,1],app:[18,41,.88,.75],dot:[250,19,1,1],tool:[268,12,1,1],model:[268,41,1,1],eq:[18,12,1.06,1],tok:[18,42,.9,.8]}
+    :{name:[24,10,1,1],desc:[24,36,1,1],dot:[292,27,1,1],tool:[310,10,1,1],model:[310,36,1,1],app:[540,10,1,1],pc:[540,36,1,1],status:[760,16,1,1],eq:[210,9,1,1],burn:[210,38,1,1],tok:[24,20,1.04,1]}}}
   if(m==='compact'){const r=L.compact(i),c=r[3]/2;return {r,o:1,rad:12,bg:[21,25,30,1],bd:[255,255,255,.08],f:{dot:[16,c-5,1,1],name:[34,c-12,.95,1],tok:[16,c-12,.95,1]}}}
   if(m==='tile'){const r=TREE[i],c=hex(TOOL[s.tool][1]),roomy=r[3]>150&&r[2]>170;
-   return {r,o:1,rad:14,bg:[...lerpA([14,17,21],c,.17),1],bd:[...c,.5],f:{name:[18,16,1.04,1],pct:[18,46,r[2]<220?.8:1,1],...(r[2]>190?{tok:[16,18,.88,.75]}:{}),...(roomy?{dot:[18,r[3]-30,1,1],tool:[36,r[3]-39,.85,.8]}:{})}}}
+   return {r,o:1,rad:14,bg:[...lerpA([14,17,21],c,.2),1],bd:[...c,.62],f:{name:[18,16,1.04,1,(r[2]-30)/1.04],pct:[18,46,r[2]<130?.6:r[2]<220?.8:1,1],...(r[2]>190?{tok:[16,18,.88,.75]}:{}),...(roomy?{dot:[18,r[3]-30,1,1],tool:[36,r[3]-39,.85,.8]}:{})}}}
   if(i>3)return gone(lay(i,'tile',t));
   if(m==='card')return {r:L.card(i),o:1,rad:16,bg:[19,23,28,1],bd:[255,255,255,.09],f:{card:[0,0,1,1]}};
-  if(m==='tuck'){const [x,y,w,h]=L.card(i),k=.55,ax=L.icon,ay=L.mbh/2;return {r:[ax+(x-ax)*k,ay+(y-ay)*k,w*k,h*k],o:0,rad:16*k,bg:[19,23,28,1],bd:[255,255,255,.09],f:{card:[0,0,k,0]}}}
-  const P=L.panel,hit=i?0:seg(t,21.38,21.5);
-  return {r:[P[0]+12,P[1]+222+i*66-(m==='pop'?8:0),P[2]-24,58],o:m==='prow'?1:0,rad:12,bg:lerpA([22,26,31,1],[24,44,38,1],hit),bd:lerpA([255,255,255,.05],[130,237,198,.75],hit),f:{dot:[16,24,1,1],name:[34,9,1,1],app:[34,33,.84,.7],tok:[54,17,.95,1],open:[12,14,1,1],card:[0,0,(P[2]-24)/L.card(i)[2],0]}};
+  // Account cards shrink into the menu-bar icon; the panel that opens there shows the same accounts.
+  const [x,y,w,h]=L.card(i),k=.55,ax=L.icon,ay=L.mbh/2;return {r:[ax+(x-ax)*k,ay+(y-ay)*k,w*k,h*k],o:0,rad:16*k,bg:[19,23,28,1],bd:[255,255,255,.09],f:{card:[0,0,k,0]}};
  }
  function mix(A,B,p){
   const f={};
-  for(const k in A.f){const a=A.f[k],b=B.f[k];f[k]=b?[lerp(a[0],b[0],p),lerp(a[1],b[1],p),lerp(a[2],b[2],p),lerp(a[3],b[3],p)]:[a[0],a[1],a[2],a[3]*(1-seg(p,0,k==='card'?.22:.4))]}
+  for(const k in A.f){const a=A.f[k],b=B.f[k];f[k]=b?[lerp(a[0],b[0],p),lerp(a[1],b[1],p),lerp(a[2],b[2],p),lerp(a[3],b[3],p),p<.5?a[4]:b[4]]:[a[0],a[1],a[2],a[3]*(1-seg(p,0,k==='card'?.22:.4))]}
   for(const k in B.f)if(!A.f[k]){const b=B.f[k];f[k]=[b[0],b[1],b[2],b[3]*seg(p,k==='card'?.45:.6,1)]}
   return {r:lerpA(A.r,B.r,p),o:lerp(A.o,B.o,p),rad:lerp(A.rad,B.rad,p),bg:lerpA(A.bg,B.bg,p),bd:lerpA(A.bd,B.bd,p),f};
  }
-  // [mode, start, duration, stagger per item]; the popover rows open and close together.
- const MODES=[['chip',0,0],['row',4.6,1],['compact',9.6,.8],['tile',13.1,.85],['card',16,.8],['tuck',19.3,.45,.02],['pop',20.5,.01,0],['prow',20.52,.22,0],['shut',21.8,.16,0]];
+ // [mode, start, duration, stagger per item]
+ const MODES=[['chip',0,0],['row',4.6,1],['compact',9.6,.8],['tile',13.1,.85],['card',16,.8],['tuck',19.3,.45,.02]];
  function itemAt(i,t){
   const at=j=>MODES[j][1]+i*(MODES[j][3]??.055);let k=0;for(let j=1;j<MODES.length;j++)if(t>=at(j))k=j;
   const B=lay(i,MODES[k][0],t);if(!k)return B;
@@ -163,7 +177,7 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
  function drawItem(it,st){
   const [x,y,w,h]=st.r;put(it.el,x,y,1,st.o);if(st.o<.002)return;
   size(it.el,w,h);css(it.el,'borderRadius',st.rad.toFixed(1)+'px');css(it.el,'background',rgba(st.bg));css(it.el,'borderColor',rgba(st.bd));
-  for(const k of FIELDS){const fe=it.f[k];if(!fe)continue;const v=st.f[k];if(!v){put(fe,0,0,1,0);continue}put(fe,RIGHT.has(k)?-v[0]:v[0],v[1],v[2],v[3])}
+  for(const k of FIELDS){const fe=it.f[k];if(!fe)continue;const v=st.f[k];if(!v){put(fe,0,0,1,0);continue}put(fe,RIGHT.has(k)?-v[0]:v[0],v[1],v[2],v[3]);if(k==='name')css(fe,'maxWidth',v[4]?v[4].toFixed(0)+'px':'none')}
  }
 
  function applyLayout(next){
@@ -179,8 +193,8 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
   E.t0.setAttribute('x',0);E.t0.setAttribute('y',ch+26);E.t1.setAttribute('x',cw);E.t1.setAttribute('y',ch+26);
   size(E.desk,W,H);size(E.mb,W,L.mbh);E.apps.forEach(g=>g.querySelectorAll('span').forEach((s,k)=>{s.style.display=k<L.menuN?'':'none'}));
   E.press.style.left=L.icon+'px';E.mb.querySelectorAll('.ic').forEach((el,k)=>{el.style.display=L.sys[k]?'':'none';el.style.left=L.icon+L.sys[k]+'px'});E.mb.querySelector('time span').style.display=L.date?'':'none';
-  E.arrow.style.left=L.icon-L.panel[0]-12+'px';
-  size(E.panel,L.panel[2],L.panel[3]);size(E.host,L.host[2],L.host[3]);IT.slice(0,4).forEach((it,i)=>{const c=L.card(i);size(it.f.card,c[2],c[3])});
+  const P=L.panel;size(E.panel,P[2],P[3]);css(E.rowhit,'left',(HIT[0]*100)+'%');css(E.rowhit,'top',(HIT[1]*100)+'%');css(E.rowhit,'width',(HIT[2]*100)+'%');css(E.rowhit,'height',(HIT[3]*100)+'%');
+  size(E.host,L.host[2],L.host[3]);IT.slice(0,4).forEach((it,i)=>{const c=L.card(i);size(it.f.card,c[2],c[3])});
   fit();
  }
  function fit(){const w=root.clientWidth||L.W;css(E.canvas,'transform',`scale(${(w/L.W).toFixed(5)})`);css(E.stage,'aspectRatio',`${L.W}/${L.H}`);if(capture)css(q('.hm-hud'),'zoom',(w/L.W).toFixed(4));measureCaps()}
@@ -215,8 +229,7 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
   {const rise=out3(seg(t,3.1,3.75)),live=1+.05*Math.sin(t*5.2)*(1-dock);E.mclip.setAttribute('width',(890*io3(seg(t,3.05,3.6))).toFixed(1));E.mpath.setAttribute('transform',`translate(0 ${(412*(1-(.2+.8*rise)*live)).toFixed(2)}) scale(1 ${((.2+.8*rise)*live).toFixed(4)})`);css(E.mpath,'fill',rgba([...lerpA([110,204,168],[255,255,255],mbar),1]))}
   const ho=out3(seg(t,3.2,3.8))*(1-seg(t,4.5,5));put(E.halo,mx,my,.85+.15*ho+.03*Math.sin(t*3),ho);
 
-  // Window frame grows out of the mark and later folds into the menu-bar icon.
-  // It shrinks toward the menu-bar icon together with the account cards while the desktop shows through.
+  // The window grows out of the mark and later shrinks toward the menu-bar icon with the account cards while the desktop shows through.
   const grow=expo(seg(t,4.75,5.55)),fold=io3(seg(t,19.3,19.75)),ax=L.icon,ay=L.mbh/2;
   const wr=lerpA(lerpA([mx-90,my-60,180,120],Wr,grow),[ax+(Wr[0]-ax)*.55,ay+(Wr[1]-ay)*.55,Wr[2]*.55,Wr[3]*.55],fold);
   put(E.win,wr[0],wr[1],1,out3(seg(t,4.75,5))*(1-seg(t,19.3,19.7)));size(E.win,wr[2],wr[3]);css(E.tb,'opacity',(seg(t,5.1,5.5)*(1-seg(t,19.3,19.55))).toFixed(3));
@@ -228,34 +241,35 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
    else put(el,p[2]?0:p[0],p[1],1,fade(t,5.45,9.75,.4,.3))});
   E.hl.forEach((el,k)=>{const [x,y,w,h]=L.hl[k],o=k?fade(t,7.95,9.5,.3,.3):fade(t,6.35,7.95,.3,.3);put(el,x,y+(1-o)*6,1,o);size(el,w,h)});
 
-  for(let i=0;i<6;i++){const it=IT[i];const state=itemAt(i,t);if(t>=20.3)state.o=0;drawItem(it,state);txt(it.f.tok,fmt(tokAt(i,t)));
+  for(let i=0;i<6;i++){const it=IT[i];drawItem(it,itemAt(i,t));txt(it.f.tok,fmt(tokAt(i,t)));
    if(t<5.8)it.bars.forEach((b,k)=>css(b,'height',(SESS[i].st===1?6+12*Math.abs(Math.sin(t*(5+i*.7)+k*1.3+i)):SESS[i].st?5:3).toFixed(1)+'px'));
-   if(i<4&&t>15.9&&t<23.6){const p=out3(seg(t,16.7+i*.12,17.7+i*.12));ACCT[i].v.forEach((v,k)=>{txt(it.strong[k],Math.round(v*p)+'%');css(it.fill[k],'width',(v*p).toFixed(2)+'%')})}}
+   // Weekly cards count up to the reported percentage while the last hour's line draws in.
+   if(i<4&&t>15.9&&t<20){const a=ACCT[i],p=out3(seg(t,16.7+i*.12,17.7+i*.12)),q=io3(seg(t,16.9+i*.12,18.1+i*.12));txt(it.strong,Math.round(a.week*p)+'%');css(it.fill,'width',(a.week*p).toFixed(2)+'%');
+    css(it.line,'strokeDashoffset',(1-q).toFixed(4));css(it.area,'opacity',(q*.9).toFixed(3));css(it.inc,'opacity',seg(t,17.4+i*.12,17.8+i*.12).toFixed(3))}}
 
-  // Usage scene: the selected window drives the big number, chart span and every row.
+  // Usage scene: the selected window drives the big number, the stacked token flow and every row.
   const uo=fade(t,9.95,13.2,.5,.35);
   if(uo>0){
    const w=pickAt(t),tot=lerp(TOTAL[w.a],TOTAL[w.b],w.p),[sx,sy,sw,sh]=L.seg;
    put(E.seg,sx,sy+(1-uo)*10,1,uo);size(E.seg,sw*6+8+10,sh);css(E.pill,'transform',`translateX(${(4+lerp(w.a,w.b,w.p)*(sw+2)).toFixed(2)}px)`);
    E.segs.forEach((s,k)=>css(s,'color',k===w.b?'#e9fbf4':'#8a9199'));
    put(E.big,L.big[0],L.big[1]+(1-uo)*14,1,uo);txt(E.big,fmt(tot));put(E.unit,L.unit[0],L.unit[1]+(1-uo)*14,1,uo);txt(E.unit,S.unit(S.span[w.b]));
-   put(E.rate,0,L.rate[1]+(1-uo)*14,1,uo*seg(t,10.3,10.8));txt(E.rateN,String(560+Math.round(14*Math.sin(t*2.3))));
-   const [cx,cy,cw,ch]=L.chart,D=Math.exp(lerp(Math.log(SPAN[w.a]),Math.log(SPAN[w.b]),w.p)),ym=lerp(YMAX[w.a],YMAX[w.b],w.p),he=24+t/60,N=140;
-   put(E.chart,cx,cy+(1-uo)*14,1,uo);put(E.chartBars,cx,cy+(1-uo)*14,1,uo);size(E.chartBars,cw,ch);E.bars.forEach((bar,j)=>css(bar,'height',(Math.min(1,rate(he-D+D*j/35,D/36)/ym)*94).toFixed(2)+'%'));let dd='',ly=0;
-   for(let j=0;j<=N;j++){const v=rate(he-D+D*j/N,D/N);ly=ch-Math.min(1,v/ym)*ch*.94;dd+=(j?'L':'M')+(cw*j/N).toFixed(1)+' '+ly.toFixed(1)}
-   E.ln.setAttribute('d',dd);E.ar.setAttribute('d',dd+`L${cw} ${ch}L0 ${ch}Z`);E.clip.setAttribute('width',((cw+20)*out3(seg(t,10.05,10.9))).toFixed(1));
-   E.nd.setAttribute('cx',cw);E.nd.setAttribute('cy',ly.toFixed(1));E.nr.setAttribute('cx',cw);E.nr.setAttribute('cy',ly.toFixed(1));const ring=(t*1.2)%1;E.nr.setAttribute('r',(6+14*ring).toFixed(1));css(E.nr,'opacity',(1-ring).toFixed(3));
+   put(E.rate,0,L.rate[1]+(1-uo)*14,1,uo*seg(t,10.3,10.8));txt(E.rateN,((6100+180*Math.sin(t*2.3))/1000).toFixed(1)+'k');
+   const [cx,cy,cw,ch]=L.chart,D=Math.exp(lerp(Math.log(SPAN[w.a]),Math.log(SPAN[w.b]),w.p)),ym=lerp(YMAX[w.a],YMAX[w.b],w.p),he=24+t/60;
+   put(E.chart,cx,cy+(1-uo)*14,1,uo);put(E.chartBars,cx,cy+(1-uo)*14,1,uo);size(E.chartBars,cw,ch);
+   E.bars.forEach((b,j)=>{const h=he-D+D*j/35,v=Math.min(1,rate(h,D/36)/ym)*94*out3(seg(t,10.05+j*.018,10.45+j*.018)),sh=share(h);b.forEach((x,k)=>css(x,'height',(v*sh[k]).toFixed(2)+'%'))});
+   if(L.leg)put(E.leg,L.leg[0],L.leg[1]+(1-uo)*14,1,uo*seg(t,10.5,10.9));else put(E.leg,0,0,1,0);
    txt(E.t0,S.ago[w.b]);
-  }else[E.seg,E.big,E.unit,E.rate,E.chart,E.chartBars].forEach(el=>put(el,0,0,1,0));
+  }else[E.seg,E.big,E.unit,E.rate,E.chart,E.chartBars,E.leg].forEach(el=>put(el,0,0,1,0));
 
-  // Desktop: the wallpaper and menu bar appear, the pointer clicks the 1top icon, its popover opens under it,
-  // and picking a session closes the popover and brings Cursor forward (the menu bar switches from Finder to Cursor).
-  const P=L.panel,ix=L.icon-2,iy=L.mbh/2-2,tx=P[0]+P[2]*.845,ty=P[1]+P[3]*.585;
+  // Desktop: the wallpaper and menu bar appear, the pointer clicks the 1top icon, its panel opens under it,
+  // and opening a session closes the panel and brings Cursor forward (the menu bar switches from Finder to Cursor).
+  const P=L.panel,ix=L.icon-2,iy=L.mbh/2-2,tx=P[0]+P[2]*OPEN[0],ty=P[1]+P[3]*OPEN[1];
   put(E.desk,0,0,1,io3(seg(t,19.3,19.8)));
   const mo=io3(seg(t,19.3,19.75)),sw=seg(t,21.74,21.86);put(E.mb,0,lerp(-12,0,mo),1,mo);css(E.apps[0],'opacity',(1-sw).toFixed(3));css(E.apps[1],'opacity',sw.toFixed(3));
   css(E.press,'opacity',(seg(t,20.5,20.56)*(1-seg(t,21.8,21.95))).toFixed(3));
   const po=out3(seg(t,20.52,20.74))*(1-io3(seg(t,21.8,21.96)));put(E.panel,P[0],P[1]-8*(1-out3(seg(t,20.52,20.74))),1,po);
-  if(po>0){txt(E.p0,fmt(SUM+(t-19.2)*.2));txt(E.p1,String(560+Math.round(14*Math.sin(t*2.3))))}
+  css(E.rowhit,'opacity',seg(t,21.36,21.5).toFixed(3));
   const lit=out3(seg(t,21.74,21.95)),hb=Math.sin(Math.PI*seg(t,21.74,22.3));
   const hi=out3(seg(t,19.55,20));put(E.host,L.host[0],L.host[1]+(1-hi)*10,1+.012*hb,hi);E.host.classList.toggle('lit',lit>.5);
   css(E.host,'borderColor',rgba(lerpA([38,43,49,1],[130,237,198,.7],lit*(1-seg(t,22.6,23.2)))));css(E.host,'boxShadow',`0 30px 70px -24px rgba(0,0,0,.7),0 0 ${(40*lit).toFixed(0)}px -10px rgba(130,237,198,${(.35*lit).toFixed(3)})`);

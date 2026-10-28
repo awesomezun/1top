@@ -1,0 +1,14 @@
+{
+  "version": "2.6.0",
+  "asset": "cover.png",
+  "purpose": "1top.si Open Graph and social sharing image",
+  "generator": "Codex CLI built-in image_gen background plate + code-drawn usage share tiles and IBM Plex Sans type",
+  "predecessor": "site/public/og/v2.5.0/cover.png",
+  "source": "docs/design/og-image_v2.6.0/og-M2-usage-tiles_v2.6.0.png",
+  "width": 1672,
+  "height": 878,
+  "bytes": 401310,
+  "sha256": "16b05c63f56f305109f02587131cbe561a4688e18e361cace7daed8755c665d1",
+  "change": "Same card as v2.5.0 with the lockup closer to the headline (gap 177px to 107px) and a taller usage share tile map (852x600).",
+  "privacy": "Example sessions and shares from the app demo recording; not usage claims."
+}

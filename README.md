@@ -74,22 +74,22 @@ Windows v3.8.0 adds Microsoft Store MSIX packaging. Store registration and certi
 
 | Platform | File | Notes |
 | --- | --- | --- |
-| macOS (Apple Silicon) | [1top-3.6.0-macos-arm64.dmg](https://github.com/awesomezun/1top/releases/download/v3.6.0/1top-3.6.0-macos-arm64.dmg) | Ad-hoc signature; Developer ID signing and notarization pending. SHA-256 `48a2cd8bdd05c010a51a36e0385d14fac730cc2eb514b82e32528b5779c7c2c2` |
+| macOS (Apple Silicon) | [1top-3.19.3-macos-arm64.dmg](https://github.com/awesomezun/1top/releases/download/v3.19.3/1top-3.19.3-macos-arm64.dmg) | Ad-hoc signature; Developer ID signing and notarization pending. SHA-256 `3f551f0612a3d5ef023cc46527ca318f5e4af9e56b8be68434b440cfba87626c` |
 | Windows x64 | Microsoft Store · in preparation | MSIX packaging; publication requires account verification and Store certification. |
 | Android | [1top-1.5.0-android.apk](https://github.com/awesomezun/1top/releases/download/mobile-v1.5.0/1top-1.5.0-android.apk) | Signed preview APK. SHA-256 `db4ba91ac0bb91bd0e1686b54432db14388993a092d35215f18cba6790d777c9` |
 | iOS | — | Native build ready; TestFlight/App Store distribution pending |
 
-All releases: [v3.6.0](https://github.com/awesomezun/1top/releases/tag/v3.6.0) · [mobile-v1.5.0](https://github.com/awesomezun/1top/releases/tag/mobile-v1.5.0). Preview downloads are not production-signed installer acceptance evidence.
+All releases: [v3.19.3](https://github.com/awesomezun/1top/releases/tag/v3.19.3) · [mobile-v1.5.0](https://github.com/awesomezun/1top/releases/tag/mobile-v1.5.0). Preview downloads are not production-signed installer acceptance evidence.
 
 ## Using 1top
 
-The default flow is **open 1top → desktop dashboard**. Click the menu-bar icon for a compact summary or account limits; use **Open full dashboard** for the standalone desktop window. Local monitoring is free and requires no login or cloud relay. Keep 1top running in the menu bar. Optional **Open at login** starts it after you sign in to macOS.
+The default flow is **open 1top → desktop dashboard**. Click the menu-bar icon for the compact dashboard and account limits; use **Open full dashboard** for the standalone desktop window. Local monitoring is free and requires no login or cloud relay. Keep 1top running in the menu bar. Optional **Open at login** starts it after you sign in to macOS.
 
 Remote access is optional. Managed access currently requires a server-issued grant; public device enrollment and public paid signup are closed. Google sign-in alone does not create remote access. A previously linked operator device keeps its existing connection. Customer-owned cloud setup is planned; there is no automated provisioning flow yet. See [service policy](docs/service-policy_v1.0.0.md).
 
 A browser login cannot inspect or control arbitrary local processes. The companion provides that local connection. Nothing is installed on a phone just to view the dashboard.
 
-**v3.6.0:** session message inboxes keep explicit remote messages and their replies together. Busy verified terminals wait for an idle turn; unrelated conversation logs remain local. See [release notes](docs/release-notes_v3.6.0.md).
+**v3.19.3:** edit dashboard panels and table columns, compare selected-period usage and hourly burn-rate gauges, and switch themes or languages. Session controls and message inboxes remain available. See [release notes](docs/release-notes_v3.19.3.md).
 
 ## What you can see
 

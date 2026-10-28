@@ -58,3 +58,21 @@ body:not(.in-app) header:has(+ .ambient-grid){border-bottom-color:transparent}
 @media(min-width:1393px){.product-hero:before{mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent)}}
 
 .download-options .download-main:disabled{opacity:.65;cursor:default;color:#a8b8c5;background:#1d2b37;border-color:#405668;box-shadow:none}
+
+/* v5.0.0: films follow the v3.17 interface — overview, weekly limits, usage map, then one unified menu-bar panel beside its copy. */
+.product-index a:nth-child(2) i{background:var(--amber)}.product-index a:nth-child(3) i{background:var(--blue)}.product-index a:nth-child(4) i{background:#b7a6ff}
+.weekly-film{margin-top:85px;scroll-margin-top:30px}.weekly-film .film-number{color:var(--amber)}
+.menu-film{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,430px);gap:72px;align-items:center;margin-top:90px;padding:44px 48px;border:1px solid #8aa4bf23;border-radius:14px;background:radial-gradient(ellipse at 85% 0,#608fff14,transparent 55%),#0e131acc;scroll-margin-top:30px}
+.menu-film .film-heading{display:block;margin:0}
+.menu-film .film-number{color:#b7a6ff}
+.menu-film .film-heading h2{font-size:38px;margin-bottom:20px}
+.menu-film .film-heading>p{max-width:460px}
+.menu-points{list-style:none;margin:26px 0 0;padding:0;display:grid;gap:12px;font-size:14px;color:#c2ccd6}
+.menu-points li{display:flex;gap:12px;align-items:baseline}
+.menu-points li:before{content:'';flex:none;width:6px;height:6px;border-radius:2px;background:var(--mint);translate:0 -2px}
+.menu-film .film-caption{margin-top:28px;justify-content:flex-start}
+.menu-film .compact-surface{width:100%;max-width:430px;justify-self:end}
+.menu-film .compact-surface .product-film{max-width:none}
+@media(max-width:1000px){.menu-film{grid-template-columns:1fr;gap:36px;padding:32px 28px}.menu-film .compact-surface{justify-self:center}}
+@media(max-width:760px){.weekly-film{margin-top:60px}.menu-film{margin-top:60px;padding:24px 18px}.menu-film .film-heading h2{font-size:30px}.menu-points{font-size:13px}}
+.hero-description,.film-heading>p,.menu-points{word-break:keep-all}
