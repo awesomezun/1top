@@ -57,7 +57,8 @@ function updateRangeControls(){
  document.querySelectorAll('.range-buttons').forEach(el=>{
   const heading=el.closest('.range-toolbar').querySelector('[data-range-label]');
   if(!el.querySelector('.duration-slider')){
-   el.innerHTML='<div class="range-slider-row"><div class="range-scale"><input class="duration-slider" type="range" min="0" max="18" step="1" aria-label="사용 기간"><div class="range-ticks" aria-hidden="true"><span style="left:0%">10분</span><span style="left:16.6667%">1시간</span><span style="left:33.3333%">5시간</span><span style="left:50%">1일</span><span style="left:66.6667%">1주일</span><span style="left:77.7778%">1개월</span><span style="left:100%">전체</span></div></div></div>';
+   el.innerHTML='<div class="range-slider-row"><div class="range-scale"><input class="duration-slider" type="range" min="0" max="18" step="1" aria-label="사용 기간"><div class="range-ticks"><button type="button" data-range-stop="0" style="left:0%">10분</button><button type="button" data-range-stop="3" style="left:16.6667%">1시간</button><button type="button" data-range-stop="6" style="left:33.3333%">5시간</button><button type="button" data-range-stop="9" style="left:50%">1일</button><button type="button" data-range-stop="12" style="left:66.6667%">1주일</button><button type="button" data-range-stop="14" style="left:77.7778%">1개월</button><button type="button" data-range-stop="18" style="left:100%">전체</button></div></div></div>';
+   el.querySelectorAll('[data-range-stop]').forEach(button=>button.onclick=()=>{selectPeriod(OneTopRanges.fromPosition(button.dataset.rangeStop));updateRangeControls();});
    const slider=el.querySelector('.duration-slider');
    slider.oninput=()=>{slider.dataset.sliding='true';const key=OneTopRanges.fromPosition(slider.value);heading.textContent=rangeCaption(key);slider.setAttribute('aria-valuetext',OneTopRanges.label(key,OneTopI18n.language));slider.style.setProperty('--position',Number(slider.value)/Number(slider.max)*100+'%');};
    slider.onchange=()=>{delete slider.dataset.sliding;selectPeriod(OneTopRanges.fromPosition(slider.value));};
@@ -97,7 +98,7 @@ function render(){
  $('lastUpdated').textContent=`마지막 수집 ${time(data.updated)} · 토큰 변화 수집 시작 ${new Date(data.started*1000).toLocaleDateString(OneTopI18n.locale())} ${time(data.started)}`;
  $('notice').hidden=!data.error;
  $('notice').textContent=data.error?'일부 데이터 수집이 지연되고 있습니다. 마지막으로 확인한 수치를 표시합니다.':'';
- renderPeriods();renderWeekly();renderSessionSummary();renderHost();renderTable();renderMaps();renderQuotas();renderSystem();renderBenchmark();renderOperations();
+ renderPeriods();renderFleetSpeed();renderWeekly();renderSessionSummary();renderHost();renderTable();renderMaps();renderQuotas();renderSystem();renderBenchmark();renderOperations();
  if(selectedId&&$('detailDialog').open)renderDetail(selectedId);
  drawCharts();
 }
@@ -112,6 +113,25 @@ function renderSessionSummary(){
   const note=current?`${OneTopWeekly.percent(n)} 사용 · 주간 한도 100% 기준`:OneTopWeekly.valid(n)?`마지막 보고 ${OneTopWeekly.percent(n)} · 최신 보고 대기`:'주간 사용량 보고 대기';
   return `<button class="session-account ${known?(current?'':'is-last-report'):'is-pending'}" data-summary-view="accounts" style="--account-color:${colors[q.kind]||'#8d9ba8'}" title="${esc(kindName(q.kind)+' · '+label+'\n'+note)}"><i></i><span class="session-account-identity"><b>${esc(kindName(q.kind))}</b><small>${esc(shortLabel)}</small></span><strong>${known?OneTopWeekly.percent(n)+(current?'':'<small>마지막 보고</small>'):'보고 대기'}</strong>${track(n)}</button>`;
  }).join('')||'<button class="session-accounts-empty" data-summary-view="accounts">계정 연결 · 사용량 보고 대기 ↗</button>';
+}
+let speedScale={key:null,max:1,lower:0,since:0};
+function renderFleetSpeed(){
+ const s=OneTopSpeed.measure(data,selectedPeriod),next=OneTopSpeed.niceMax(s.rate),now=Date.now();
+ if(speedScale.key!==selectedPeriod||next>speedScale.max)speedScale={key:selectedPeriod,max:next,lower:0,since:0};
+ else if(next<speedScale.max&&s.rate<speedScale.max*.4){if(speedScale.lower!==next){speedScale.lower=next;speedScale.since=now;}else if(now-speedScale.since>30000)speedScale.max=next;}
+ else speedScale.lower=0;
+ $('fleetSpeedValue').textContent=fmt(s.rate);
+ $('fleetSpeedTotal').textContent=rangeCaption(selectedPeriod)+' · '+OneTopI18n.t('총')+' '+fmt(s.tokens)+' tokens';
+ $('fleetSpeedScope').textContent=OneTopI18n.t('컴퓨터')+' '+(s.computers===s.expected?s.computers:s.computers+'/'+s.expected);
+ $('fleetSpeedScope').title=OneTopI18n.t(s.partial?'확인된 기록 기준':'연결된 모든 AI 사용량');
+ $('fleetSpeedValue').title=OneTopI18n.t('선택 기간 평균');
+ const band=$('fleetSpeedBand'),lit=s.rate===null?0:Math.round(s.rate/speedScale.max*40);
+ if(!band.children.length)band.innerHTML='<i></i>'.repeat(40);
+ [...band.children].forEach((segment,i)=>segment.classList.toggle('lit',i<lit));
+ band.setAttribute('aria-label',fmt(s.rate)+' tokens/s');
+ band.setAttribute('aria-valuenow',s.rate===null?'0':s.rate);
+ band.setAttribute('aria-valuemax',speedScale.max);
+ $('fleetSpeedMax').textContent=fmt(speedScale.max)+' tokens/s';
 }
 function renderHost(){
  const h=data.system?.host;if(!h)return;

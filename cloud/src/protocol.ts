@@ -13,6 +13,7 @@ export interface AccountQuota {
   windows:Array<{label:string;pct:number|null;reset:number}>;
 }
 export interface DeviceSnapshot {
+  speed_periods?: SpeedPeriod[];
   account_quotas:AccountQuota[];
   updated: number; recording_started: number; sessions: AgentSession[]; applications: Array<{name:string;evidence:string}>;
   host: { cpu: number | null; used_memory: number; total_memory: number; cores: number };
@@ -27,6 +28,21 @@ const number = (v: unknown, max = Number.MAX_SAFE_INTEGER): number | null =>
   typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max ? v : null;
 const vector = (v: unknown): number[] | null => Array.isArray(v) && v.length === 4 && v.every(x => number(x) !== null) ? v : null;
 const KEYS = ['24h','12h','5h','1h','30m','10m'];
+export interface SpeedPeriod {key:string;seconds:number;tokens:number;known:boolean;partial:boolean}
+export const SPEED_SECONDS:Record<string,number>=Object.fromEntries([
+  ['10m',600],['30m',1800],['1h',3600],['5h',18000],['12h',43200],['24h',86400],
+  ...[900,7200,10800,21600,172800,259200,604800,1209600,2592000,7776000,15552000,31536000].map(n=>['custom:'+n,n])
+]);
+export function speedPeriods(value:unknown):SpeedPeriod[]{
+  if(!Array.isArray(value))return [];
+  const rows=new Map<string,SpeedPeriod>();
+  for(const p of value.slice(0,19)){
+    if(!p||!(p.key==='all'||p.key in SPEED_SECONDS)||number(p.tokens)===null||number(p.seconds)===null||p.seconds<=0)continue;
+    if(p.key!=='all'&&p.seconds!==SPEED_SECONDS[p.key])continue;
+    rows.set(p.key,{key:p.key,seconds:p.seconds,tokens:p.tokens,known:p.known===true,partial:p.partial===true});
+  }
+  return [...rows.values()];
+}
 // Construct an allowlisted object. Prompt bodies, paths, command arguments,
 // provider credentials and arbitrary client fields never enter cloud storage.
 export function snapshot(value: any): DeviceSnapshot {
@@ -45,6 +61,7 @@ export function snapshot(value: any): DeviceSnapshot {
   });
   if (new Set(sessions.map(s=>s.id)).size!==sessions.length) throw new Error('Duplicate session identity');
   return {
+    speed_periods:speedPeriods(value.speed_periods),
     updated:number(value.updated)||0,recording_started:number(value.recording_started)||0,
     sessions,version:text(value.version,30),
     account_quotas:Array.isArray(value.account_quotas)?value.account_quotas.slice(0,24).map((q:any)=>({

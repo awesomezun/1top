@@ -37,6 +37,7 @@ def main():
     threading.Thread(target=collector.loop,daemon=True).start()
     threading.Thread(target=server.serve_forever,daemon=True).start()
     bridge=CloudLink(collector,server.controller,DATA,relay=args.relay)
+    server.bridge=bridge
     from .updates import UpdateMonitor
     server.updates=UpdateMonitor()
     threading.Thread(target=server.updates.run,args=(bridge.stop,),daemon=True).start()

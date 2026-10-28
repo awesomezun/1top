@@ -3,20 +3,21 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import weekly from '../agent/onetop/dist/weekly.js';
 import ranges from '../agent/onetop/dist/ranges.js';
+import speed from '../agent/onetop/dist/speed.js';
 
 // Execute the real renderer with a small DOM seam. No network or session action runs.
 const html=fs.readFileSync(new URL('../agent/onetop/dist/index.html',import.meta.url),'utf8');
 const source=fs.readFileSync(new URL('../agent/onetop/dist/app.js',import.meta.url),'utf8');
 const nodes=Object.fromEntries([...html.matchAll(/\bid="([^"]+)"/g)].map(([,id])=>[id,{
- value:'',innerHTML:'',dataset:{},addEventListener(){},querySelectorAll(){return [];},
+ value:'',innerHTML:'',dataset:{},children:[],setAttribute(){},addEventListener(){},querySelectorAll(){return [];},
  classList:{add(){},remove(){},toggle(){}}
 }]));
 const context=vm.createContext({
  document:{getElementById:id=>nodes[id]||null,querySelectorAll:()=>[],querySelector:()=>null,addEventListener(){}},
  window:{addEventListener(){}},fetch:()=>new Promise(()=>{}),setInterval(){},setTimeout(){},clearTimeout(){},
- AbortSignal,URL,Date,OneTopWeekly:weekly,OneTopRanges:ranges,
+ AbortSignal,URL,Date,OneTopWeekly:weekly,OneTopRanges:ranges,OneTopSpeed:speed,
  OneTopDashboard:{init(){},afterTable(){},rateCell:(rate)=>JSON.stringify({rate}),interacting:false,validPeriod:()=>true,state:{period:'1h'},rememberPeriod(){}},
- OneTopI18n:{locale:()=> 'ko-KR'}
+ OneTopI18n:{locale:()=> 'ko-KR',t:s=>s,language:'ko'}
 });
 vm.runInContext(source,context);
 vm.runInContext(`data={ready:true,updated:Date.now()/1000,account_quotas:[],period_usage:{windows:[{key:'1h',label:'1시간',seconds:3600}]}};`,context);

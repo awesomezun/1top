@@ -106,6 +106,12 @@ async function handle(req:Request,env:Env):Promise<Response>{
    if(!inserted)return json({error:'Device limit reached. Remove a computer before connecting another.'},409);
    return json({device_id:id,device_token:token,relay_url:url.origin.replace(/^http/,'ws')+'/api/device/socket'});
  }
+ if(path==='/api/device/usage'&&req.method==='GET'){
+   const d=await device(req,env);if(!d)return json({error:'Device authentication required'},401);
+   await requireHostedAccess(env.DB,d.user_id);
+   if(!await limit(env.DB,'usage:'+d.id,12))return json({error:'Refresh limit reached'},429);
+   return hub(env,d.user_id).fetch('https://hub/usage?exclude='+encodeURIComponent(d.id));
+ }
  if(path==='/api/device/socket'){
    const d=await device(req,env);if(!d)return json({error:'Device authentication required'},401);
    const access=await requireHostedAccess(env.DB,d.user_id);

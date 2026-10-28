@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import {reconcileSubscription,checkout} from './billing';
-import { snapshot, action, text, mailboxRows, type DeviceSnapshot } from './protocol';
+import { snapshot, action, text, mailboxRows, SPEED_SECONDS, type DeviceSnapshot } from './protocol';
 export interface Env { DB:D1Database; HUBS:DurableObjectNamespace<AccountHub>; FIREBASE_PROJECT_ID:string; WEB_ORIGINS:string; WEB_URL:string; PAIRING_ENABLED?:string; BILLING_ENABLED?:string; STRIPE_SECRET_KEY?:string; STRIPE_WEBHOOK_SECRET?:string; STRIPE_PRICE_ID?:string; PLAN_MAX_DEVICES?:string; DEPLOYMENT_MODE?:string; OWNER_USER_ID?:string; }
 type Attachment = {role:'device'|'browser';id:string;expires:number;name?:string;platform?:string;allow_control?:boolean;
   mailbox_at?:number;mailbox?:{request_id:string;device_id:string;session_id:string;expires:number}};
@@ -15,6 +15,17 @@ export class AccountHub extends DurableObject<Env> {
   }
   async fetch(request:Request):Promise<Response> {
     const u=new URL(request.url),path=u.pathname;
+    if(path==='/usage'&&request.method==='GET'){
+      const records=await this.ctx.storage.list<StoredDevice>({prefix:'snapshot:'});
+      const devices=[...records.values()].filter(d=>d.id!==u.searchParams.get('exclude')).map(d=>{
+        const current=this.ctx.getWebSockets('device:'+d.id).some(ws=>ws.readyState===1&&(ws.deserializeAttachment() as Attachment).expires>Date.now());
+        const periods=d.snapshot.speed_periods?.length?d.snapshot.speed_periods:d.snapshot.periods.map(p=>({
+          key:p.key,seconds:SPEED_SECONDS[p.key],tokens:p.tokens.reduce((a,b)=>a+b,0),
+          known:d.snapshot.sessions.some(s=>s.tokens!==null)||p.tokens.some(n=>n>0),partial:p.partial}));
+        return {id:d.id,received:d.received,online:current&&Date.now()-d.received<90000,periods};
+      });
+      return json({devices});
+    }
     if(path==='/billing/checkout'&&request.method==='POST'){
       const {uid}=await request.json() as {uid:string};
       if(typeof uid!=='string'||!uid||uid.length>128)return json({error:'Invalid account'},400);

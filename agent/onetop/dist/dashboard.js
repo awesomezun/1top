@@ -4,15 +4,15 @@ window.OneTopDashboard=(()=>{
  const key='onetop.dashboard.v1',ids=['session','model','status','period','total','rate','cpu','memory','controls'];
  const defaults={session:210,model:145,status:85,period:110,total:95,rate:120,cpu:65,memory:75,controls:155};
  const minima={session:120,model:100,status:75,period:95,total:85,rate:120,cpu:65,memory:75,controls:150};
- const panels=['summary','flow','map','sessions','shared'];
- const state={theme:'dark',lang:'ko',period:'1h',columns:[...ids],widths:{...defaults},panels:[...panels],spans:{summary:12,flow:6,map:6,sessions:12,shared:12},heights:{}};
+ const panels=['summary','speed','flow','map','sessions','shared'];
+ const state={theme:'dark',lang:'ko',period:'1h',columns:[...ids],widths:{...defaults},panels:[...panels],spans:{summary:12,speed:12,flow:6,map:6,sessions:12,shared:12},heights:{}};
  let hooks={},editing=false,dragging=false,frame,initialized=false;
  let gaugeScale={scope:null,max:1,lower:null,since:0};
  const list=(v,allowed)=>Array.isArray(v)&&v.length===allowed.length&&new Set(v).size===allowed.length&&v.every(x=>allowed.includes(x));
  function validPeriod(value){if(['10m','30m','1h','5h','12h','24h','all'].includes(value))return true;if(!/^custom:[0-9]{1,13}$/.test(value))return false;const n=Number(value.split(':')[1]);return Number.isSafeInteger(n)&&n>=600&&n%60===0&&n<=8e12;}
  try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved){
   for(const [k,values] of Object.entries({theme:['dark','light'],lang:['ko','en','zh']}))if(values.includes(saved[k]))state[k]=saved[k];
-  if(list(saved.columns,ids))state.columns=saved.columns;if(list(saved.panels,panels))state.panels=saved.panels;
+  if(list(saved.columns,ids))state.columns=saved.columns;if(list(saved.panels,panels))state.panels=saved.panels;else if(list(saved.panels,panels.filter(p=>p!=='speed'))){state.panels=[...saved.panels];state.panels.splice(state.panels.indexOf('summary')+1,0,'speed');}
   if(validPeriod(saved.period))state.period=saved.period;
   if(saved.rangeScale==='fixed-v1')state.rangeScale=saved.rangeScale;
   for(const id of ids)if(Number.isFinite(saved.widths?.[id]))state.widths[id]=Math.max(minima[id],Math.min(700,saved.widths[id]));
@@ -34,7 +34,7 @@ window.OneTopDashboard=(()=>{
  function panelSetup(){
   const root=document.getElementById('sessionsView'),range=root.querySelector('.range-toolbar');root.prepend(range);
   const grid=document.createElement('div');grid.id='dashboardGrid';range.after(grid);
-  const elements={summary:document.getElementById('sessionSummary'),flow:root.querySelector('.token-flow-panel'),map:root.querySelector('.session-map-panel'),sessions:root.querySelector('.session-panel'),shared:root.querySelector('.shared-backend-panel')};
+  const elements={summary:document.getElementById('sessionSummary'),speed:document.getElementById('fleetSpeed'),flow:root.querySelector('.token-flow-panel'),map:root.querySelector('.session-map-panel'),sessions:root.querySelector('.session-panel'),shared:root.querySelector('.shared-backend-panel')};
   for(const id of panels){const panel=elements[id];panel.dataset.panel=id;grid.append(panel);
    const tools=document.createElement('div');tools.className='panel-edit-tools';tools.innerHTML=`<button type="button" draggable="true" class="panel-drag" data-panel-drag="${id}" aria-label="패널 이동">⠿ <span>패널 이동</span></button><div><button type="button" data-span="6">50%</button><button type="button" data-span="12">100%</button></div>`;
    panel.prepend(tools);const resize=document.createElement('button');resize.type='button';resize.className='panel-resize';resize.setAttribute('aria-label','패널 크기 조절');panel.append(resize);

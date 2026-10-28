@@ -99,6 +99,7 @@ class CloudLink:
         self.config_file=data_dir/'device.json';self.receipt_file=data_dir/'remote-receipts.json'
         self.stop=threading.Event();self.action_lock=threading.Lock();self.ws=None
         self.status='Not connected'
+        self.workspace_usage={'devices':[], 'updated':0}
         try:self.config=json.loads(self.config_file.read_text())
         except (OSError,ValueError):self.config=None
         saved=(self.config or {}).get('relay',RELAY)
@@ -189,7 +190,9 @@ class CloudLink:
                         with self.collector.lock:state=self.collector.snapshot
                         if state.get('ready'):
                             payload=export_snapshot(self.controller.decorate(state))
+                            payload['speed_periods']=self.collector.speed_for_cloud(state)
                             self.ws.send(json.dumps({'type':'snapshot','data':payload},ensure_ascii=False))
+                            self.read_workspace_usage()
                         last=time.monotonic()
                     try:
                         raw=self.ws.recv()
@@ -212,3 +215,20 @@ class CloudLink:
                     except Exception:pass
             if self.stop.wait(delay):break
             delay=min(60,delay*2+secrets.randbelow(3))
+
+    def read_workspace_usage(self):
+        # The existing paired device credential reads numerical totals only.
+        # Network failure never replaces the local collector's measurements.
+        if time.time()-getattr(self,'workspace_checked',0)<15:
+            return
+        self.workspace_checked=time.time()
+        try:
+            req=urllib.request.Request(self.relay+'/api/device/usage',
+                headers={'Authorization':'Bearer '+self.config['device_token'],
+                         'User-Agent':'1top/'+__version__})
+            with urllib.request.build_opener(NoRedirect(),urllib.request.HTTPSHandler(context=SSL)).open(req,timeout=3) as response:
+                value=json.loads(response.read(128000))
+            if isinstance(value.get('devices'),list):
+                self.workspace_usage={'devices':value['devices'][:25], 'updated':time.time()}
+        except Exception:
+            pass

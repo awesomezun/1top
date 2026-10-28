@@ -309,6 +309,17 @@ class Collector:
             self.range_cache[key] = result
             return result
 
+    def speed_for_cloud(self, snapshot):
+        from .fleet_usage import speed_windows
+        with self.range_lock:
+            cached = getattr(self, 'speed_cache', None)
+            if cached and 0 <= snapshot['updated'] - cached[0] < 30:
+                return cached[1]
+            with closing(sqlite3.connect((DATA/'monitor.sqlite').as_uri() + '?mode=ro', uri=True, timeout=5)) as db:
+                rows = speed_windows(db, snapshot)
+            self.speed_cache = (snapshot['updated'], rows)
+            return rows
+
     def processes(self):
         rows = {}
         for line in run(['ps','-axo','pid=,ppid=,tty=,rss=,pcpu=,lstart=,comm=']).splitlines():
@@ -800,11 +811,14 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 with self.server.collector.lock:snapshot=self.server.collector.snapshot
             snapshot=self.server.controller.decorate(snapshot)
+            bridge = getattr(self.server, 'bridge', None)
+            if bridge:
+                snapshot = {**snapshot, 'workspace_usage': bridge.workspace_usage}
             data=json.dumps({**snapshot,'action_token':self.server.action_token},ensure_ascii=False).encode()
             mime='application/json; charset=utf-8'
         elif route=='/api/updates':
             self.json_response(200,getattr(self.server,'updates',None).value if getattr(self.server,'updates',None) else {});return
-        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/ranges.js','/weekly.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js'):
+        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/ranges.js','/speed.js','/weekly.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js'):
             name='index.html' if route=='/' else route[1:]
             data=(BASE/'dist'/name).read_bytes()
             mime={'html':'text/html','js':'application/javascript','css':'text/css','json':'application/json'}[name.rsplit('.',1)[1]]+'; charset=utf-8'

@@ -107,6 +107,22 @@ try:
         checks.append('legacy 154-minute selection migrates once to the nearest fixed stop')
         assert page.locator('[data-rate-unit]').count()==0
         assert all('%/시간' in v for v in page.locator('.burn-gauge small').all_text_contents())
+        assert page.locator('#fleetSpeed').is_visible()
+        assert page.locator('#fleetSpeedValue').inner_text()!='—'
+        assert page.locator('#fleetSpeedBand i').count()==40
+        before_speed=page.locator('#fleetSpeedValue').inner_text()
+        page.locator('#providers [data-provider]').first.click()
+        assert page.locator('#fleetSpeedValue').inner_text()==before_speed
+        page.locator('#providers [data-provider][aria-pressed=true]').click()
+        # Migrate saved layouts without resetting their panel order or dimensions.
+        old_order=['map','summary','sessions','flow','shared']
+        page.evaluate('(order)=>{const k="onetop.dashboard.v1",s=JSON.parse(localStorage.getItem(k));s.panels=order;s.heights.flow=350;localStorage.setItem(k,JSON.stringify(s))}',old_order)
+        page.reload();page.locator('#fleetSpeedValue').wait_for()
+        assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==['map','summary','speed','sessions','flow','shared']
+        assert page.locator('[data-panel=flow]').evaluate('(e)=>e.style.minHeight')=='350px'
+        # Restore normal test layout before existing drag and resize scenarios.
+        page.evaluate('const k="onetop.dashboard.v1",s=JSON.parse(localStorage.getItem(k));s.panels=["summary","speed","flow","map","sessions","shared"];delete s.heights.flow;localStorage.setItem(k,JSON.stringify(s))')
+        page.reload();page.locator('#fleetSpeedValue').wait_for()
         slider=page.locator('#sessionsView .duration-slider')
         def assert_range_geometry(view='sessions'):
             positions=page.locator(f'#{view}View .duration-slider').evaluate('''slider=>{
@@ -127,11 +143,11 @@ try:
         assert_range_geometry()
         def select_stop(position):
             slider.evaluate("(el,n)=>{el.value=n;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}",position)
-        select_stop(6)
+        page.locator('#sessionsView [data-range-stop="6"]').click()
         page.wait_for_function("document.getElementById('periodColumn').textContent.includes('5시간')")
         assert slider.is_visible()
-        assert page.locator('.duration-value,.range-buttons button,.range-presets').count()==0
-        assert page.locator('#sessionsView .range-ticks span').all_text_contents()==['10분','1시간','5시간','1일','1주일','1개월','전체']
+        assert page.locator('.duration-value,.range-presets').count()==0
+        assert page.locator('#sessionsView .range-ticks button').all_text_contents()==['10분','1시간','5시간','1일','1주일','1개월','전체']
         assert slider.get_attribute('max')=='18' and slider.get_attribute('step')=='1'
         assert page.locator('#rangeDialog,[data-custom-range],#rangeUnits').count()==0
         page.evaluate('window.qaSlider=document.querySelector("#sessionsView .duration-slider")')
@@ -155,7 +171,7 @@ try:
         chart_before=page.locator('#tokenChart').evaluate('(c)=>c.toDataURL()')
         panel_y=page.locator('#sessionsView .token-flow-panel').bounding_box()['y']
         try:
-            select_stop(12)
+            page.locator('#sessionsView [data-range-stop="12"]').click()
             assert range_started.wait(3)
             assert not page.locator('#notice').is_visible()
             assert page.locator('#tokenChart').is_visible()
@@ -178,15 +194,15 @@ try:
         select_stop(17)
         page.wait_for_function("document.getElementById('periodColumn').textContent.includes('1년')")
         assert range_requests[-1]=='custom:31536000'
-        slider.focus();slider.press('End')
+        page.locator('#sessionsView [data-range-stop="18"]').focus();page.keyboard.press('Enter')
         page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='전체 기록'")
         page.wait_for_function("document.getElementById('periodColumn').textContent.includes('전체 기록')")
         assert range_requests[-1]=='all'
-        slider.press('Home')
+        page.locator('#sessionsView [data-range-stop="0"]').click()
         page.wait_for_function("document.getElementById('periodColumn').textContent.includes('10분')")
         select_stop(6)
         page.wait_for_function("document.getElementById('periodColumn').textContent.includes('5시간')")
-        checks.append('one period label, live drag preview survives polling, no duplicate input, week/year/all-history selection and detail-page synchronization')
+        checks.append('clickable duration ticks and keyboard activation; one global speed panel, filter-independent totals and preserved saved layouts; live drag preview and synchronized detail periods')
         header=page.locator('th[data-column="memory"] .column-label')
         header.focus();page.keyboard.press('ArrowLeft');page.keyboard.press('Shift+ArrowRight')
         order=page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')
@@ -233,14 +249,14 @@ try:
             page.wait_for_function('!document.documentElement.dataset.preferenceTransition')
         page.locator('[data-theme-switch]').click()
         page.wait_for_function("document.getAnimations().some(a=>a.effect?.pseudoElement==='::view-transition-new(root)'&&a.playState==='running')")
-        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.22.4.png'))
+        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.23.0.png'))
         finish_transition();assert page.locator('html').get_attribute('data-theme')=='light'
         pref_x=page.locator('[data-theme-switch]').bounding_box()['x']
         page.locator('[data-language="en"]').click()
         page.wait_for_function("[...document.querySelectorAll('canvas')].some(c=>c.style.viewTransitionName==='onetop-matrix')")
         page.wait_for_timeout(240)
         assert page.evaluate("[...document.querySelectorAll('canvas')].filter(c=>c.style.viewTransitionName==='onetop-matrix').some(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0))")
-        page.screenshot(path=str(ROOT/'build/language-reveal-v3.22.4.png'))
+        page.screenshot(path=str(ROOT/'build/language-reveal-v3.23.0.png'))
         finish_transition();assert page.locator('#pageTitle').inner_text()=='Dashboard'
         assert_range_geometry()
         assert abs(page.locator('[data-theme-switch]').bounding_box()['x']-pref_x)<1
@@ -277,16 +293,16 @@ try:
         assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order
         assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==panel_order
         checks.append('preferences and layout survive reload')
-        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.22.4.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.23.0.png'),full_page=False)
         page.locator('[data-theme-switch]').click()
         finish_transition()
-        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.22.4.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.23.0.png'),full_page=False)
         page.locator('[data-language="en"]').click();finish_transition()
         for width in (1100,768,390):
             page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
             assert_range_geometry()
             if not page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'):
-                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.22.4.png'))
+                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.23.0.png'))
                 print(page.locator('body *').evaluate_all('(xs)=>xs.filter(e=>e.getBoundingClientRect().right>innerWidth+1&&!e.closest("[hidden],.table-scroll")).map(e=>({tag:e.tagName,id:e.id,cls:e.className,right:e.getBoundingClientRect().right})).slice(0,30)'),flush=True)
                 raise AssertionError(width)
         checks.append('1100px, 768px and mobile layout')
@@ -294,9 +310,9 @@ try:
         page.evaluate('localStorage.removeItem("onetop.dashboard.v1")')
         page.set_viewport_size({'width':1440,'height':1100});page.reload()
         page.locator('#sessionsBody tr').first.wait_for();page.wait_for_timeout(300)
-        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.22.4.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.23.0.png'),full_page=False)
         assert not errors,errors
-        (ROOT/'build/dashboard-browser-v3.22.4.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
+        (ROOT/'build/dashboard-browser-v3.23.0.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
         print(json.dumps({'checks':checks,'errors':errors},ensure_ascii=False))
         browser.close()
 finally:
