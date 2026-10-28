@@ -581,7 +581,9 @@ class Collector:
                                             (s['kind'] for s in sessions if s['tokens'] is not None))
         account_quotas=self.accounts.snapshot(now)
         weekly_usage.record(self.db,account_quotas,now)
-        weekly,estimates=weekly_usage.snapshot(self.db,account_quotas,now)
+        weekly,estimates=weekly_usage.snapshot(self.db,account_quotas,now,
+            bindings={s['id']:s['account_binding'][0] for s in sessions if s.get('account_binding')},
+            recording_started=self.started)
         self.db.commit()
         for s in sessions:
             binding=s.pop('account_binding',None)

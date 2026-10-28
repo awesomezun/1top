@@ -127,7 +127,7 @@ struct QuickDashboard: View {
                 }
             }.frame(height: 3).padding(.vertical, 2)
             HStack(spacing: 4) {
-                Text(p?.used_pp.map { "+" + DesktopFormat.quota($0).replacingOccurrences(of: "%", with: "%p") + (p?.partial == true ? " · 일부" : "") } ?? (q.stale ? "한도 조회 대기" : "다음 보고 대기"))
+                Text(p?.used_pp.map { "+" + DesktopFormat.quota($0).replacingOccurrences(of: "%", with: "%p") + (p?.partial == true ? " · \(Int((p?.observed_seconds ?? 0)/60))분 관측" : "") } ?? (q.stale ? "한도 조회 대기" : "다음 보고 대기"))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
                 Text(q.stale ? q.statusLabel : "남음 " + DesktopFormat.quota(w?.pct.map { max(0,100-$0) }))
@@ -137,7 +137,7 @@ struct QuickDashboard: View {
             .help("\(q.account_label)\n주간 한도 100% 중 사용 · \(q.note)\n선택 기간의 한도 증가량. 새 기록부터 계산하며 다른 계정과 합산하지 않습니다.")
     }
     private var weeklyExplanation: String {
-        "계정의 주간 한도 증가량을 같은 구간의 세션 토큰 비중으로 배분한 추정입니다. 캐시·모델별 가중치 미반영 · 다른 기기의 사용이 섞일 수 있음 · 다른 계정끼리 합산하지 않음"
+        "선택 기간의 보고 토큰을 관측한 계정별 한도 변화율로 환산합니다. 실제 차감량이 아닙니다. 모델·캐시·다른 기기 사용에 따라 오차가 생깁니다. 과거 미귀속 토큰은 현재 계정 기준으로 환산합니다."
     }
     private var usageTrend: some View {
         let trend = DesktopUsageTrend(events: model.snapshot?.events, period: model.selectedPeriod, end: model.snapshot?.updated ?? model.now.timeIntervalSince1970)
@@ -310,9 +310,9 @@ struct QuickDashboard: View {
             VStack(alignment: .trailing, spacing: 1) {
                 Text(tokensMode ? DesktopFormat.number(DesktopFormat.total(s.tokens == nil ? nil : (s.usage?.windows?[model.selectedPeriod] ?? nil))) : (s.usage?.weekly_estimate?[model.selectedPeriod].map { "≈" + DesktopFormat.quota($0.used_pp) } ?? (DesktopFormat.number(DesktopFormat.total(s.usage?.windows?[model.selectedPeriod] ?? nil)) + " tok")))
                     .font(.plex(size: 14, weight: .medium)).monospacedDigit()
-                Text(!tokensMode ? (s.usage?.weekly_estimate?[model.selectedPeriod].map { $0.partial ? "추정 · 일부 구간" : "추정" } ?? (s.usage?.weekly_account == nil ? "계정 연결 필요" : "다음 한도 보고 대기")) : s.state == "working" ? "\(DesktopFormat.number(s.tokens == nil ? nil : s.usage?.rate)) tok/s" : s.stateLabel)
+                Text(!tokensMode ? (s.usage?.weekly_estimate?[model.selectedPeriod].map { $0.scopeLabel } ?? (s.usage?.weekly_account == nil ? "계정 연결 필요" : "환산 기준 수집 중")) : s.state == "working" ? "\(DesktopFormat.number(s.tokens == nil ? nil : s.usage?.rate)) tok/s" : s.stateLabel)
                     .font(.plex(size: 11)).foregroundStyle(s.state == "working" ? panelAccent : .secondary).monospacedDigit()
-            }.fixedSize().help(tokensMode ? "선택한 기간 누적 토큰 · 최근 60초 평균 소비 · \(s.stateLabel)" : weeklyExplanation)
+            }.fixedSize().help(tokensMode ? "선택한 기간 누적 토큰 · 최근 60초 평균 소비 · \(s.stateLabel)" : weeklyExplanation + "\n" + (s.usage?.weekly_estimate?[model.selectedPeriod]?.calculationLabel ?? ""))
             Button { control("focus", s) } label: { Image(systemName: "arrow.up.right").font(.plex(size: 14)) }
                 .buttonStyle(.plain).frame(width: 22, height: 30).disabled(!model.fresh || model.busy || !s.allows("focus"))
                 .accessibilityLabel("\(s.project ?? s.kind) · \(s.terminalName) 바로가기")

@@ -56,6 +56,13 @@ import CoreGraphics
         precondition(quotaSnapshot.sessions?[0].usage?.weekly_estimate?["1h"]?.used_pp == 0.75)
         precondition(DesktopFormat.quota(nil) == "—" && DesktopFormat.quota(0) == "0%")
         precondition(DesktopFormat.quota(0.001) == "<0.01%" && DesktopFormat.quota(0.75) == "0.75%")
+        let estimateData = """
+        {"used_pp":3.3333,"account_id":"a","partial":false,"basis":"calibrated_token_equivalent","tokens":10000000,"calibration":{"tokens":3000000,"used_pp":1,"seconds":240,"confidence":"early"}}
+        """.data(using:.utf8)!
+        let estimate = try JSONDecoder().decode(WeeklyEstimate.self, from:estimateData)
+        precondition(estimate.scopeLabel == "환산 추정 · 초기")
+        precondition(estimate.calculationLabel.contains("10.00M tokens"))
+        precondition(estimate.calculationLabel.contains("4분 관측"))
         print("Desktop model checks passed: nullable usage, freshness, accounts, safe capabilities, no offline actions.")
     }
 }

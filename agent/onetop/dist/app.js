@@ -42,7 +42,7 @@ function renderPeriods(){
  $('periodCards').innerHTML=p.windows.map(w=>{const v=periodVector(w);if(usageUnit==='weekly')return `<button class="period-card ${w.key===selectedPeriod?'selected':''}" data-period="${w.key}" aria-pressed="${w.key===selectedPeriod}">${w.label}</button>`;return `<button class="period-card ${w.key===selectedPeriod?'selected':''}" data-period="${w.key}" aria-pressed="${w.key===selectedPeriod}" title="${v?exact(total(v))+' tokens':'수집된 사용량 보고 없음'}"><span class="period-label">최근 ${w.label}</span><b>${fmt(total(v))}<small> tokens</small></b><span class="period-output">${v?'출력 '+fmt(v[3]):'사용량 미확인'}</span><span class="period-recording ${w.partial?'partial':''}">${w.partial?'일부 기록 · '+recordedDuration(w.observed_seconds):'기록된 보고량'}</span></button>`;}).join('');
  if(focus)document.querySelector(`[data-period="${focus}"]`)?.focus({preventScroll:true});
  $('periodCoverage').textContent='수집 시작 '+new Date(p.recording_started*1000).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})+' · 수집 전·미확인 세션 사용량 제외';
- const w=periodMeta();if(w){$('periodColumn').textContent='최근 '+w.label+(usageUnit==='weekly'?' · 주간 한도 추정':' 누적');$('range').value=String(w.seconds/60);$('tokenChartTitle').textContent='최근 '+w.label+' 토큰 흐름';}
+ const w=periodMeta();if(w){$('periodColumn').textContent='최근 '+w.label+(usageUnit==='weekly'?' · 주간 한도 환산':' 누적');$('range').value=String(w.seconds/60);$('tokenChartTitle').textContent='최근 '+w.label+' 토큰 흐름';}
 }
 function render(){
  if(!data?.ready)return;
@@ -218,7 +218,7 @@ function sessionWeeklyCell(s,pv,period){
  if(usageUnit==='tokens')return `<strong>${fmt(total(pv))}</strong><span class="cell-sub">${pv?'출력 '+fmt(pv[3]):'미확인'}${period?.partial?' · 일부 기록':''}</span>`;
  const e=s.usage?.weekly_estimate?.[selectedPeriod],q=data.account_quotas?.find(q=>q.id===(e?.account_id||s.usage?.weekly_account));
  const label=q?`${kindName(q.kind)} · ${q.account_label}`:'';
- return `<strong title="${esc(label+'\n'+OneTopWeekly.explanation)}">${e?OneTopWeekly.estimate(e):fmt(total(pv))+(pv?' tokens':'')}</strong><span class="cell-sub">${e?'추정'+(e.partial?' · 일부 구간':''):s.tokens==null?'토큰 보고 필요':OneTopWeekly.pending(s.usage?.weekly_account,q,total(pv))}</span>${e?`<span class="cell-sub">${fmt(total(pv))} tokens</span>`:''}`;
+ return `<strong title="${esc(label+'\n'+OneTopWeekly.explanation+'\n'+OneTopWeekly.basis(e))}">${e?OneTopWeekly.estimate(e):fmt(total(pv))+(pv?' tokens':'')}</strong><span class="cell-sub">${e?OneTopWeekly.scope(e):s.tokens==null?'토큰 보고 필요':OneTopWeekly.pending(s.usage?.weekly_account,q,total(pv))}</span>${e?`<span class="cell-sub">${fmt(e.tokens)} tokens 기준</span><span class="cell-sub" title="${esc(OneTopWeekly.basis(e))}">기준 ${OneTopWeekly.duration(e.calibration?.seconds||0)} 관측</span>`:''}`;
 }
 function renderWeekly(){
  const mode=usageUnit==='weekly';$('summary').hidden=mode;$('weeklyOverview').hidden=!mode;
@@ -226,13 +226,13 @@ function renderWeekly(){
  if(!mode){$('periodUnitsNote').textContent='요청 입력·캐시·출력 합계 · 미보고 사용량 제외';return;}
  const rows=(data.account_quotas||[]).filter(q=>provider==='all'||q.kind===provider);
  const periodLabel=periodMeta()?.label||selectedPeriod;
- $('periodScope').textContent='계정별 실제 증가량과 세션별 추정치를 같은 기간으로 봅니다.';
- $('periodCoverage').textContent='세션별 %는 추정 · 다른 계정끼리 합산하지 않음';
- $('periodUnitsNote').textContent='다른 기기 사용량·제공자 반올림에 따라 차이 발생';
+ $('periodScope').textContent='선택 기간의 보고 토큰을 현재 계정의 주간 한도 비율로 환산합니다.';
+ $('periodCoverage').textContent='세션 % = 보고 토큰 × 관측한 계정별 환산율 · 실제 차감량 아님';
+ $('periodUnitsNote').textContent='모델·캐시·다른 기기 사용에 따라 오차 발생';
  $('weeklyOverview').innerHTML=rows.map(q=>{
   const w=OneTopWeekly.weekly(q),n=w?.pct,valid=OneTopWeekly.valid(n),a=data.weekly_usage?.accounts.find(a=>a.id===q.id),p=a?.periods[selectedPeriod];
   const current=valid&&!q.stale,delta=OneTopWeekly.valid(p?.used_pp),status=current?'제공자 보고':q.updated?'마지막 보고':'확인 필요';
-  return `<article class="weekly-card ${current?'':'is-stale'}" style="--quota-color:${colors[q.kind]||'#8d9ba8'}"><div class="weekly-card-heading"><b>${dot(q.kind)}${esc(kindName(q.kind))}</b><span>${esc(q.plan||'')} · ${status}</span></div><p class="weekly-account" title="${esc(q.account_label)}">${esc(q.account_label)}</p><div class="weekly-value"><strong>${valid?OneTopWeekly.percent(n):'—'}</strong><span>/ 100% 사용</span><b>${current?OneTopWeekly.percent(Math.max(0,100-n))+' 남음':''}</b></div><div class="track"><i style="width:${valid?Math.min(100,n):0}%;background:var(--quota-color)"></i></div><div class="weekly-period"><span>최근 ${periodLabel}</span><strong>${delta?'+'+OneTopWeekly.number(p.used_pp)+'%p':q.stale?'조회 필요':'다음 보고 대기'}</strong><span>${delta?(p.partial?'일부 구간':'관측 증가량'):'한도 변화 기록 중'}</span></div><div class="weekly-chart" data-weekly-chart="${esc(q.id)}"></div><p class="weekly-note">${q.stale?esc(q.note):w?.reset?new Date(w.reset*1000).toLocaleString('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화 · '+ago(q.updated)+' 확인':'주간 한도 확인 중'}</p></article>`;
+  return `<article class="weekly-card ${current?'':'is-stale'}" style="--quota-color:${colors[q.kind]||'#8d9ba8'}"><div class="weekly-card-heading"><b>${dot(q.kind)}${esc(kindName(q.kind))}</b><span>${esc(q.plan||'')} · ${status}</span></div><p class="weekly-account" title="${esc(q.account_label)}">${esc(q.account_label)}</p><div class="weekly-value"><strong>${valid?OneTopWeekly.percent(n):'—'}</strong><span>/ 100% 사용</span><b>${current?OneTopWeekly.percent(Math.max(0,100-n))+' 남음':''}</b></div><div class="track"><i style="width:${valid?Math.min(100,n):0}%;background:var(--quota-color)"></i></div><div class="weekly-period"><span>최근 ${periodLabel}</span><strong>${delta?'+'+OneTopWeekly.number(p.used_pp)+'%p':q.stale?'조회 필요':'다음 보고 대기'}</strong><span>${delta?(p.partial?'중 '+OneTopWeekly.duration(p.observed_seconds)+' 관측':'관측 증가량'):'한도 변화 기록 중'}</span></div><div class="weekly-chart" data-weekly-chart="${esc(q.id)}"></div><p class="weekly-note">${q.stale?esc(q.note):w?.reset?new Date(w.reset*1000).toLocaleString('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화 · '+ago(q.updated)+' 확인':'주간 한도 확인 중'}</p></article>`;
  }).join('')||'<div class="empty">계정을 연결하면 제공자가 보고한 주간 사용률이 표시됩니다. 아래 계정 한도에서 계정을 추가하세요.</div>';
  for(const el of document.querySelectorAll('[data-weekly-chart]')){
   const a=data.weekly_usage?.accounts.find(a=>a.id===el.dataset.weeklyChart),points=(a?.history||[]).filter(p=>p[0]>=data.updated-(periodMeta()?.seconds||3600));

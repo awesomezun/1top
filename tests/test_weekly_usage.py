@@ -107,3 +107,53 @@ class WeeklyUsageTests(unittest.TestCase):
         self.point(self.now-120,0,reset=self.now+1300)
         self.assertEqual(self.period()['used_pp'],0)
         self.assertTrue(self.period()['partial'])
+
+    def test_selected_period_tokens_drive_equivalent_not_old_observed_share(self):
+        self.point(self.now-240,26);self.point(self.now-120,27)
+        self.event(self.now-180,'calibration',3000000)
+        self.event(self.now-500,'target',10000000,None)
+        self.event(self.now-4000,'target',47000000,None)
+        self.event(self.now-90000,'target',230000000,None)  # lifetime-only history
+        _,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex'}],self.now,
+                            bindings={'target':'a'},recording_started=self.now-172800)
+        short,long=shares['target']['30m'],shares['target']['24h']
+        self.assertEqual(short['tokens'],10000000)
+        self.assertEqual(long['tokens'],57000000)
+        self.assertAlmostEqual(short['used_pp'],10/3,places=4)
+        self.assertEqual(long['used_pp'],19)
+        self.assertAlmostEqual(long['used_pp']/short['used_pp'],5.7,places=3)
+        self.assertEqual(short['basis'],'calibrated_token_equivalent')
+        self.assertEqual(long['inferred_account_tokens'],57000000)
+        self.assertFalse(long['partial'])
+        self.assertEqual(self.db.execute("SELECT count(*) FROM events WHERE sid='target' AND account IS NULL").fetchone()[0],3)
+
+    def test_zero_quota_movement_is_not_zero_conversion_rate(self):
+        self.point(self.now-240,26);self.point(self.now-120,26)
+        self.event(self.now-180,'s',3000000)
+        self.assertEqual(self.period()['used_pp'],0)
+        self.assertIsNone(self.result()[0]['accounts'][0]['calibration'])
+        self.assertEqual(self.result()[1],{})
+
+    def test_calibration_includes_zero_movement_intervals(self):
+        self.point(self.now-360,20);self.point(self.now-240,22);self.point(self.now-120,22)
+        self.event(self.now-300,'s',2000000);self.event(self.now-180,'s',2000000)
+        c=self.result()[0]['accounts'][0]['calibration']
+        self.assertEqual(c['tokens'],4000000)
+        self.assertEqual(c['used_pp'],2)
+        self.assertAlmostEqual(c['pp_per_token'],.0000005)
+
+    def test_calibration_rejects_partial_account_token_coverage(self):
+        self.point(self.now-240,20);self.point(self.now-120,22)
+        self.event(self.now-180,'s',100)
+        self.event(self.now-190,'unknown',100,None)
+        self.assertIsNone(self.result()[0]['accounts'][0]['calibration'])
+
+    def test_stale_account_does_not_produce_new_equivalent(self):
+        self.point(self.now-240,20);self.point(self.now-120,22);self.event(self.now-180,'s',100)
+        result,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex','stale':True}],self.now)
+        self.assertIsNone(result['accounts'][0]['calibration']);self.assertEqual(shares,{})
+
+    def test_calibration_does_not_borrow_another_accounts_rate(self):
+        self.point(self.now-240,20);self.point(self.now-120,22);self.event(self.now-180,'s',100)
+        _,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex'},{'id':'b','kind':'Codex'}],self.now,bindings={'s':'b'})
+        self.assertEqual(shares,{})

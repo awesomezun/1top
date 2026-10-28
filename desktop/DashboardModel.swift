@@ -71,6 +71,17 @@ struct DesktopSession: Decodable, Identifiable {
 }
 struct WeeklyEstimate: Decodable {
     var used_pp: Double; var account_id: String; var partial: Bool
+    var basis: String?; var tokens: Double?; var calibration: Calibration?
+    struct Calibration: Decodable {
+        var tokens: Double; var used_pp: Double; var seconds: Double; var confidence: String
+    }
+    var scopeLabel: String {
+        "환산 추정" + (calibration?.confidence == "early" ? " · 초기" : "") + (partial ? " · 일부 토큰" : "")
+    }
+    var calculationLabel: String {
+        guard let calibration, let tokens else { return "환산 기준 미확인" }
+        return "선택 기간 \(DesktopFormat.number(tokens)) tokens × (\(DesktopFormat.quota(calibration.used_pp))p ÷ \(DesktopFormat.number(calibration.tokens)) tokens)\n기준 \(Int(calibration.seconds / 60))분 관측 · 현재 계정 기준 환산"
+    }
 }
 struct WeeklyUsage: Decodable {
     var accounts: [Account]

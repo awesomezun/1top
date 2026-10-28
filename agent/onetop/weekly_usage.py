@@ -58,7 +58,7 @@ def interval(before, after):
     return None,True
 
 
-def snapshot(db, quotas, now):
+def snapshot(db, quotas, now, bindings=None, recording_started=None):
     history=collections.defaultdict(list)
     for account,t,pct,reset in db.execute(
             'SELECT account,t,pct,reset FROM weekly_samples WHERE t>=? AND t<=? ORDER BY t',
@@ -66,14 +66,20 @@ def snapshot(db, quotas, now):
         history[account].append((t,pct,reset))
     # Only newly attributed events participate. Old, unbound history is never reassigned.
     columns={r[1] for r in db.execute('PRAGMA table_info(events)')}
-    events=collections.defaultdict(list)
+    events=collections.defaultdict(list);session_events=collections.defaultdict(list)
+    unbound=collections.defaultdict(list)
     if 'account' in columns:
-        for account,sid,t,total in db.execute('''SELECT account,sid,t,fresh+cached+written+output
-                FROM events WHERE account IS NOT NULL AND t>? AND t<=? ORDER BY t''',(now-86400-FRESH,now)):
-            if valid_number(total) and total>0:events[account].append((t,sid,total))
+        for account,sid,kind,t,total in db.execute('''SELECT account,sid,kind,t,fresh+cached+written+output
+                FROM events WHERE t>? AND t<=? ORDER BY t''',(now-86400-FRESH,now)):
+            if valid_number(total) and total>0:
+                session_events[sid].append((t,account,kind,total))
+                if account:events[account].append((t,sid,total))
+                else:unbound[kind].append(t)
     session_accounts=collections.defaultdict(set)
     for account,rows in events.items():
         for _,sid,_ in rows:session_accounts[sid].add(account)
+    if bindings is None:
+        bindings={sid:next(iter(accounts)) for sid,accounts in session_accounts.items() if len(accounts)==1}
     result=[];shares=collections.defaultdict(dict)
     for quota in quotas:
         account=quota['id'];points=history[account];observations=[];event_index=0
@@ -86,6 +92,29 @@ def snapshot(db, quotas, now):
             # Give the log collector time to receive reports; do not allocate incomplete tails.
             settled=t1<=now-10
             observations.append((t0,t1,delta,uncertain,weights if settled and t1-t0<=FRESH else {}))
+        # Calibrate an account-specific token equivalent, then apply it to the
+        # selected period's reported tokens. Never reuse a short observed share
+        # as if it represented all tokens in a longer selected period.
+        current_reset=points[-1][2] if points else None
+        eligible=[]
+        for index,o in enumerate(observations):
+            t0,t1,delta,uncertain,weights=o
+            same_cycle=(current_reset is not None and abs(points[index][2]-current_reset)<=60
+                        and abs(points[index+1][2]-current_reset)<=60)
+            missing=any(t0<t<=t1 for t in unbound[quota['kind']])
+            if same_cycle and not uncertain and delta is not None and weights and not missing:
+                eligible.append(o)
+        calibration_tokens=sum(sum(o[4].values()) for o in eligible)
+        calibration_pp=sum(o[2] for o in eligible)
+        calibration_seconds=sum(o[1]-o[0] for o in eligible)
+        # No quota movement is not evidence of a zero token-to-quota conversion.
+        usable=(calibration_tokens>0 and calibration_pp>=1 and calibration_seconds>=120
+                and not quota.get('stale',False) and points and now-points[-1][0]<=FRESH)
+        calibration=({'tokens':calibration_tokens,'used_pp':round(calibration_pp,4),
+                      'seconds':calibration_seconds,'from':eligible[0][0],'to':eligible[-1][1],
+                      'pp_per_token':calibration_pp/calibration_tokens,
+                      'confidence':'early' if calibration_seconds<600 or calibration_pp<3 else 'limited'}
+                     if usable else None)
         periods={}
         for key,_,seconds in WINDOWS:
             start=now-seconds
@@ -103,16 +132,27 @@ def snapshot(db, quotas, now):
                 for sid,tokens in weights.items():allocation[sid]+=delta*tokens/total
             periods[key]={'used_pp':round(value,4) if value is not None else None,
                           'partial':partial,'observed_seconds':covered,
-                          'unattributed_pp':round(unattributed,4),'sample_count':len(chunks)+1 if chunks else len(points)}
-            for sid,value in allocation.items():
-                if len(session_accounts[sid])!=1:continue
-                shares[sid][key]={'used_pp':round(value,4),'account_id':account,
-                                 'partial':partial,'basis':'observed_token_share',
-                                 'observed_seconds':covered}
+                          'unattributed_pp':round(unattributed,4),
+                          'observed_from':chunks[0][0] if chunks else None,
+                          'observed_to':chunks[-1][1] if chunks else None,'sample_count':len(chunks)+1 if chunks else len(points)}
+            if calibration:
+                for sid,bound_account in bindings.items():
+                    if bound_account!=account or (session_accounts[sid] and session_accounts[sid]!={account}):continue
+                    rows=[r for r in session_events[sid] if start<r[0]<=now and r[2]==quota['kind']]
+                    tokens=sum(r[3] for r in rows)
+                    if not rows:continue
+                    inferred_tokens=sum(r[3] for r in rows if r[1] is None)
+                    value=tokens*calibration['pp_per_token']
+                    if not math.isfinite(value):continue
+                    shares[sid][key]={'used_pp':round(value,4),'account_id':account,
+                                     'basis':'calibrated_token_equivalent','tokens':tokens,
+                                     'partial':(recording_started if recording_started is not None else now)>start,
+                                     'period_seconds':seconds,'calibration':calibration,
+                                     'inferred_account_tokens':inferred_tokens}
         # Bound the chart independently of how long the collector has run.
         step=max(1,math.ceil(len(points)/95))
         chart=points[::step]
         if points and chart[-1]!=points[-1]:chart.append(points[-1])
-        result.append({'id':account,'kind':quota['kind'],'periods':periods,
+        result.append({'id':account,'kind':quota['kind'],'periods':periods,'calibration':calibration,
                        'history':[[t,p] for t,p,_ in chart]})
     return {'accounts':result,'basis':'provider_weekly_percentage','as_of':now},dict(shares)
