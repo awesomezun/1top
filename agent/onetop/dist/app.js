@@ -35,7 +35,7 @@ function actions(s){
 }
 function selectView(next){view=next;$('pageTitle').textContent=({sessions:'대시보드',maps:'사용량 맵',accounts:'계정 한도',operations:'활동',system:'컴퓨터 리소스',benchmark:'측정 정보'})[next];for(const v of ['sessions','accounts','maps','operations','system','benchmark'])$(v+'View').hidden=v!==view;document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));requestAnimationFrame(()=>{drawCharts();renderMaps();drawWeeklyCharts();});}
 function periodMeta(){return data?.period_usage?.windows.find(w=>w.key===selectedPeriod);}
-function periodCaption(w=periodMeta()){return w?.key==='all'?'전체 기록':'최근 '+(w?.label||selectedPeriod);}
+function periodCaption(w=periodMeta()){return w?.key==='all'?'전체 기록':'최근 '+(w&&customPeriod(w.key)?OneTopRanges.label(w.key,OneTopI18n.language||'ko'):w?.label||selectedPeriod);}
 const customPeriod=key=>key==='all'||key.startsWith('custom:');
 function periodVector(w){const p=data.period_usage;return provider==='all'?(p.known_kinds.length?w.tokens:null):p.known_kinds.includes(provider)?(w.by_kind[provider]||[0,0,0,0]):null;}
 function recordedDuration(seconds){const m=Math.floor(seconds/60);return m<1?'1분 미만':m<60?m+'분':Math.floor(m/60)+'시간'+(m%60?' '+m%60+'분':'');}
@@ -46,13 +46,13 @@ function selectPeriod(key){
  else render();
 }
 function updateRangeControls(){
- const lang=OneTopI18n.language||'ko',max=OneTopRanges.maximum(data.updated,data.history_started,selectedPeriod);
+ const lang=OneTopI18n.language||'ko',max=OneTopRanges.stops.length-1;
  document.querySelectorAll('.range-buttons').forEach(el=>{
   if(!el.querySelector('.range-presets')){
-   el.innerHTML='<div class="range-presets"></div><div class="range-slider-row"><span class="range-edge">10분</span><input class="duration-slider" type="range" min="0" max="1000" step="1" aria-label="사용 기간"><span class="range-edge">전체 기록</span><input class="duration-value" type="text" aria-label="기간 직접 입력" spellcheck="false" autocomplete="off"></div>';
+   el.innerHTML='<div class="range-presets"></div><div class="range-slider-row"><span class="range-edge">10분</span><input class="duration-slider" type="range" min="0" max="18" step="1" aria-label="사용 기간"><span class="range-edge">전체 기록</span><input class="duration-value" type="text" aria-label="기간 직접 입력" spellcheck="false" autocomplete="off"></div>';
    const slider=el.querySelector('.duration-slider'),input=el.querySelector('.duration-value');
-   slider.oninput=()=>{slider.dataset.sliding='true';const key=OneTopRanges.fromPosition(slider.value,Number(slider.dataset.maximum));input.value=OneTopRanges.label(key,OneTopI18n.language);slider.setAttribute('aria-valuetext',input.value);slider.style.setProperty('--position',slider.value/10+'%');};
-   slider.onchange=()=>{delete slider.dataset.sliding;selectPeriod(OneTopRanges.fromPosition(slider.value,Number(slider.dataset.maximum)));};
+   slider.oninput=()=>{slider.dataset.sliding='true';const key=OneTopRanges.fromPosition(slider.value);input.value=OneTopRanges.label(key,OneTopI18n.language);slider.setAttribute('aria-valuetext',input.value);slider.style.setProperty('--position',Number(slider.value)/Number(slider.max)*100+'%');};
+   slider.onchange=()=>{delete slider.dataset.sliding;selectPeriod(OneTopRanges.fromPosition(slider.value));};
    slider.onpointercancel=()=>{delete slider.dataset.sliding;updateRangeControls();};
    input.onfocus=()=>input.select();
    input.oninput=()=>input.setCustomValidity('');
@@ -65,7 +65,7 @@ function updateRangeControls(){
   }
   const slider=el.querySelector('.duration-slider'),input=el.querySelector('.duration-value');
   if(slider.dataset.sliding)return;
-  slider.dataset.maximum=max;slider.value=OneTopRanges.position(selectedPeriod,max);slider.setAttribute('aria-valuetext',OneTopRanges.label(selectedPeriod,lang));slider.style.setProperty('--position',slider.value/10+'%');
+  slider.max=max;slider.value=OneTopRanges.position(selectedPeriod);slider.setAttribute('aria-valuetext',OneTopRanges.label(selectedPeriod,lang));slider.style.setProperty('--position',Number(slider.value)/Number(slider.max)*100+'%');
   if(document.activeElement!==input){input.value=OneTopRanges.label(selectedPeriod,lang);input.setCustomValidity('');}
  });
 }

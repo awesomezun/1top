@@ -102,6 +102,7 @@ try:
         slider=page.locator('#sessionsView .duration-slider')
         value=page.locator('#sessionsView .duration-value')
         assert slider.is_visible() and value.is_visible()
+        assert slider.get_attribute('max')=='18' and slider.get_attribute('step')=='1'
         assert page.locator('#rangeDialog,[data-custom-range],#rangeUnits').count()==0
         page.evaluate('window.qaSlider=document.querySelector("#sessionsView .duration-slider")')
         box=slider.bounding_box();before=len(range_requests)
@@ -111,10 +112,14 @@ try:
         assert len(range_requests)==before
         assert page.evaluate('window.qaSlider===document.querySelector("#sessionsView .duration-slider")')
         preview=value.input_value()
+        assert preview in ['10분','15분','30분','1시간','2시간','3시간','5시간','6시간','12시간','24시간','2일','3일','1주','2주','1개월','3개월','6개월','1년','전체 기록']
         page.mouse.up()
         page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent.includes(document.querySelector('#sessionsView .duration-value').value)")
         assert len(range_requests)>before
         assert value.input_value()==preview
+        slider.focus();slider.press('Home');slider.press('ArrowRight')
+        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 15분'")
+        assert value.input_value()=='15분'
         value.fill('9분');value.press('Enter')
         assert not value.evaluate('(e)=>e.checkValidity()')
         value.fill('36시간');value.press('Enter')
@@ -123,10 +128,10 @@ try:
         assert value.get_attribute('max') is None
         page.reload();page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 36시간'")
         value.fill('7일');value.press('Enter')
-        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 7일'")
+        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 1주'")
         assert range_requests[-1]=='custom:604800'
         value.fill('3650일');value.press('Enter')
-        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 3650일'")
+        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 10년'")
         assert range_requests[-1]=='custom:315360000'
         slider.focus();slider.press('End')
         page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='전체 기록'")
@@ -135,7 +140,7 @@ try:
         page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 10분'")
         page.locator('#sessionsView [data-range="5h"]').click()
         page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 5시간'")
-        checks.append('inline slider previews through polling and commits on release; direct 36h/7d/3650d, all history, minimum, reload and presets')
+        checks.append('fixed-stop slider previews through polling, one-step keyboard movement and commits on release; direct 36h/7d/3650d, all history, minimum, reload and presets')
         header=page.locator('th[data-column="memory"] .column-label')
         header.focus();page.keyboard.press('ArrowLeft');page.keyboard.press('Shift+ArrowRight')
         order=page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')
@@ -182,14 +187,14 @@ try:
             page.wait_for_function('!document.documentElement.dataset.preferenceTransition')
         page.locator('[data-theme-switch]').click()
         page.wait_for_function("document.getAnimations().some(a=>a.effect?.pseudoElement==='::view-transition-new(root)'&&a.playState==='running')")
-        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.21.0.png'))
+        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.21.1.png'))
         finish_transition();assert page.locator('html').get_attribute('data-theme')=='light'
         pref_x=page.locator('[data-theme-switch]').bounding_box()['x']
         page.locator('[data-language="en"]').click()
         page.wait_for_function("[...document.querySelectorAll('canvas')].some(c=>c.style.viewTransitionName==='onetop-matrix')")
         page.wait_for_timeout(240)
         assert page.evaluate("[...document.querySelectorAll('canvas')].filter(c=>c.style.viewTransitionName==='onetop-matrix').some(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0))")
-        page.screenshot(path=str(ROOT/'build/language-reveal-v3.21.0.png'))
+        page.screenshot(path=str(ROOT/'build/language-reveal-v3.21.1.png'))
         finish_transition();assert page.locator('#pageTitle').inner_text()=='Dashboard'
         assert abs(page.locator('[data-theme-switch]').bounding_box()['x']-pref_x)<1
         assert 'Weekly limit' in page.locator('#periodColumn').inner_text()
@@ -224,24 +229,24 @@ try:
         assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order
         assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==panel_order
         checks.append('preferences and layout survive reload')
-        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.21.0.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.21.1.png'),full_page=False)
         page.locator('[data-theme-switch]').click()
         finish_transition()
-        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.21.0.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.21.1.png'),full_page=False)
         page.locator('[data-language="en"]').click();finish_transition()
         for width in (1100,768,390):
             page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
             if not page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'):
-                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.21.0.png'))
+                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.21.1.png'))
                 print(page.locator('body *').evaluate_all('(xs)=>xs.filter(e=>e.getBoundingClientRect().right>innerWidth+1&&!e.closest("[hidden],.table-scroll")).map(e=>({tag:e.tagName,id:e.id,cls:e.className,right:e.getBoundingClientRect().right})).slice(0,30)'),flush=True)
                 raise AssertionError(width)
         checks.append('1100px, 768px and mobile layout')
         page.evaluate('localStorage.removeItem("onetop.dashboard.v1")')
         page.set_viewport_size({'width':1440,'height':1100});page.reload()
         page.locator('#sessionsBody tr').first.wait_for();page.wait_for_timeout(300)
-        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.21.0.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.21.1.png'),full_page=False)
         assert not errors,errors
-        (ROOT/'build/dashboard-browser-v3.21.0.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
+        (ROOT/'build/dashboard-browser-v3.21.1.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
         print(json.dumps({'checks':checks,'errors':errors},ensure_ascii=False))
         browser.close()
 finally:
