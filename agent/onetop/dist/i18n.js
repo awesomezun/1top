@@ -6,6 +6,7 @@ window.OneTopI18n=(()=>{
  ];
  entries.push(['세션 사용량 기간','Session time range','会话用量时段'],['계정별 주간 사용량 요약','Weekly account usage','每周账户用量'],['현재 세션 사용량 비율 맵','Current session usage map','当前会话用量分布'],['세션 사용량 표시 단위','Session usage unit','会话用量单位'],['AI 모델 필터','AI model filter','AI 模型筛选'],['세션 상태 필터','Session status filter','会话状态筛选'],['세션 정렬','Session order','会话排序'],['컴퓨터 리소스 요약','Computer resources summary','电脑资源概览'],['전체 컴퓨터 CPU 사용률','Whole-computer CPU usage','整台电脑 CPU 用量']);
  entries.push(['기간 지정','Custom range','自定义时段'],['최소 10분 · 상한 없음','At least 10 minutes · No upper limit','至少 10 分钟 · 无上限'],['기간 단위','Duration unit','时长单位'],['일','Days','天'],['전체 기록','All history','全部记录'],['적용','Apply','应用'],['10분 이상의 유효한 기간을 입력하세요.','Enter a valid duration of at least 10 minutes.','请输入至少 10 分钟的有效时长。'],['기간을 불러오는 중…','Loading time range…','正在加载时段…']);
+ entries.push(['사용 기간','Time range','使用时段'],['기간 직접 입력','Enter duration','直接输入时长'],['기간 입력 예: 30분, 36시간, 7일','Try 30m, 36h or 7d','例如 30分钟、36小时、7天']);
  entries.push(['좌우로 끌어 열 너비 조절','Drag left or right to resize column','左右拖动以调整列宽']);
  const dictionary=new Map(entries.map(([ko,en,zh])=>[ko,{en,zh}]));
  function t(value){

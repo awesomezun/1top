@@ -99,33 +99,43 @@ try:
         assert all('%/시간' in v for v in page.locator('.burn-gauge small').all_text_contents())
         page.locator('#sessionsView [data-range="5h"]').click()
         assert '5시간' in page.locator('#periodColumn').inner_text()
-        page.evaluate('window.qaRangeButton=document.querySelector("#sessionsView [data-custom-range]")')
+        slider=page.locator('#sessionsView .duration-slider')
+        value=page.locator('#sessionsView .duration-value')
+        assert slider.is_visible() and value.is_visible()
+        assert page.locator('#rangeDialog,[data-custom-range],#rangeUnits').count()==0
+        page.evaluate('window.qaSlider=document.querySelector("#sessionsView .duration-slider")')
+        box=slider.bounding_box();before=len(range_requests)
+        page.mouse.move(box['x']+box['width']*.35,box['y']+box['height']/2);page.mouse.down()
+        page.mouse.move(box['x']+box['width']*.62,box['y']+box['height']/2,steps=12)
         page.wait_for_timeout(3300)
-        assert page.evaluate('window.qaRangeButton===document.querySelector("#sessionsView [data-custom-range]")')
-        checks.append('hourly burn rate and stable period controls across polling')
-        page.locator('#sessionsView [data-custom-range]').click()
-        page.locator('#rangeAmount').fill('9')
-        page.locator('[data-duration-unit="60"]').click()
-        page.locator('#rangeForm [type=submit]').click()
-        assert page.locator('#rangeError').is_visible()
-        page.locator('#rangeAmount').fill('36')
-        page.locator('[data-duration-unit="3600"]').click()
-        page.locator('#rangeForm [type=submit]').click()
+        assert len(range_requests)==before
+        assert page.evaluate('window.qaSlider===document.querySelector("#sessionsView .duration-slider")')
+        preview=value.input_value()
+        page.mouse.up()
+        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent.includes(document.querySelector('#sessionsView .duration-value').value)")
+        assert len(range_requests)>before
+        assert value.input_value()==preview
+        value.fill('9분');value.press('Enter')
+        assert not value.evaluate('(e)=>e.checkValidity()')
+        value.fill('36시간');value.press('Enter')
         page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 36시간'")
         assert range_requests[-1]=='custom:129600'
-        assert page.locator('#rangeAmount').get_attribute('max') is None
+        assert value.get_attribute('max') is None
         page.reload();page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 36시간'")
-        page.locator('#sessionsView [data-custom-range]').click()
-        page.locator('#rangeAmount').fill('7');page.locator('[data-duration-unit="86400"]').click()
-        page.locator('#rangeForm [type=submit]').click()
+        value.fill('7일');value.press('Enter')
         page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 7일'")
         assert range_requests[-1]=='custom:604800'
-        page.locator('#sessionsView [data-custom-range]').click();page.locator('#allHistory').click()
+        value.fill('3650일');value.press('Enter')
+        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 3650일'")
+        assert range_requests[-1]=='custom:315360000'
+        slider.focus();slider.press('End')
         page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='전체 기록'")
         assert range_requests[-1]=='all'
+        slider.press('Home')
+        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 10분'")
         page.locator('#sessionsView [data-range="5h"]').click()
         page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 5시간'")
-        checks.append('custom 36 hours, 7 days, all history, minimum validation, persistence and preset restoration')
+        checks.append('inline slider previews through polling and commits on release; direct 36h/7d/3650d, all history, minimum, reload and presets')
         header=page.locator('th[data-column="memory"] .column-label')
         header.focus();page.keyboard.press('ArrowLeft');page.keyboard.press('Shift+ArrowRight')
         order=page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')
@@ -172,14 +182,14 @@ try:
             page.wait_for_function('!document.documentElement.dataset.preferenceTransition')
         page.locator('[data-theme-switch]').click()
         page.wait_for_function("document.getAnimations().some(a=>a.effect?.pseudoElement==='::view-transition-new(root)'&&a.playState==='running')")
-        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.20.3.png'))
+        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.21.0.png'))
         finish_transition();assert page.locator('html').get_attribute('data-theme')=='light'
         pref_x=page.locator('[data-theme-switch]').bounding_box()['x']
         page.locator('[data-language="en"]').click()
         page.wait_for_function("[...document.querySelectorAll('canvas')].some(c=>c.style.viewTransitionName==='onetop-matrix')")
         page.wait_for_timeout(240)
         assert page.evaluate("[...document.querySelectorAll('canvas')].filter(c=>c.style.viewTransitionName==='onetop-matrix').some(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0))")
-        page.screenshot(path=str(ROOT/'build/language-reveal-v3.20.3.png'))
+        page.screenshot(path=str(ROOT/'build/language-reveal-v3.21.0.png'))
         finish_transition();assert page.locator('#pageTitle').inner_text()=='Dashboard'
         assert abs(page.locator('[data-theme-switch]').bounding_box()['x']-pref_x)<1
         assert 'Weekly limit' in page.locator('#periodColumn').inner_text()
@@ -214,24 +224,24 @@ try:
         assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order
         assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==panel_order
         checks.append('preferences and layout survive reload')
-        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.20.3.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.21.0.png'),full_page=False)
         page.locator('[data-theme-switch]').click()
         finish_transition()
-        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.20.3.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.21.0.png'),full_page=False)
         page.locator('[data-language="en"]').click();finish_transition()
         for width in (1100,768,390):
             page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
             if not page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'):
-                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.20.3.png'))
+                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.21.0.png'))
                 print(page.locator('body *').evaluate_all('(xs)=>xs.filter(e=>e.getBoundingClientRect().right>innerWidth+1&&!e.closest("[hidden],.table-scroll")).map(e=>({tag:e.tagName,id:e.id,cls:e.className,right:e.getBoundingClientRect().right})).slice(0,30)'),flush=True)
                 raise AssertionError(width)
         checks.append('1100px, 768px and mobile layout')
         page.evaluate('localStorage.removeItem("onetop.dashboard.v1")')
         page.set_viewport_size({'width':1440,'height':1100});page.reload()
         page.locator('#sessionsBody tr').first.wait_for();page.wait_for_timeout(300)
-        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.20.3.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.21.0.png'),full_page=False)
         assert not errors,errors
-        (ROOT/'build/dashboard-browser-v3.20.3.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
+        (ROOT/'build/dashboard-browser-v3.21.0.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
         print(json.dumps({'checks':checks,'errors':errors},ensure_ascii=False))
         browser.close()
 finally:

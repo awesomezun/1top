@@ -45,13 +45,29 @@ function selectPeriod(key){
  if(customPeriod(key)||data?.chart_range){$('notice').hidden=false;$('notice').textContent=OneTopI18n.t('기간을 불러오는 중…');refresh();}
  else render();
 }
-let durationUnit=3600;
-function openRange(){
- const seconds=Number(selectedPeriod.split(':')[1]);
- durationUnit=seconds&&seconds%86400===0?86400:seconds&&seconds%3600!==0?60:3600;
- $('rangeAmount').value=seconds?seconds/durationUnit:36;
- document.querySelectorAll('[data-duration-unit]').forEach(b=>b.setAttribute('aria-pressed',Number(b.dataset.durationUnit)===durationUnit));
- $('rangeError').hidden=true;$('rangeDialog').showModal();$('rangeAmount').focus();$('rangeAmount').select();
+function updateRangeControls(){
+ const lang=OneTopI18n.language||'ko',max=OneTopRanges.maximum(data.updated,data.history_started,selectedPeriod);
+ document.querySelectorAll('.range-buttons').forEach(el=>{
+  if(!el.querySelector('.range-presets')){
+   el.innerHTML='<div class="range-presets"></div><div class="range-slider-row"><span class="range-edge">10분</span><input class="duration-slider" type="range" min="0" max="1000" step="1" aria-label="사용 기간"><span class="range-edge">전체 기록</span><input class="duration-value" type="text" aria-label="기간 직접 입력" spellcheck="false" autocomplete="off"></div>';
+   const slider=el.querySelector('.duration-slider'),input=el.querySelector('.duration-value');
+   slider.oninput=()=>{slider.dataset.sliding='true';const key=OneTopRanges.fromPosition(slider.value,Number(slider.dataset.maximum));input.value=OneTopRanges.label(key,OneTopI18n.language);slider.setAttribute('aria-valuetext',input.value);slider.style.setProperty('--position',slider.value/10+'%');};
+   slider.onchange=()=>{delete slider.dataset.sliding;selectPeriod(OneTopRanges.fromPosition(slider.value,Number(slider.dataset.maximum)));};
+   slider.onpointercancel=()=>{delete slider.dataset.sliding;updateRangeControls();};
+   input.onfocus=()=>input.select();
+   input.oninput=()=>input.setCustomValidity('');
+   input.onchange=()=>{const key=OneTopRanges.parse(input.value);if(!key){input.setCustomValidity(OneTopI18n.t('기간 입력 예: 30분, 36시간, 7일'));input.reportValidity();return;}input.setCustomValidity('');selectPeriod(key);};
+   input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();input.onchange();if(input.checkValidity())input.blur();}else if(e.key==='Escape'){input.value=OneTopRanges.label(selectedPeriod,OneTopI18n.language);input.setCustomValidity('');input.blur();}};
+  }
+  const presets=el.querySelector('.range-presets');
+  for(const w of data.period_usage.windows.filter(w=>!customPeriod(w.key)).sort((a,b)=>a.seconds-b.seconds)){
+   let b=presets.querySelector('[data-range="'+w.key+'"]');if(!b){b=document.createElement('button');b.dataset.range=w.key;presets.append(b);}b.textContent=w.label;b.setAttribute('aria-pressed',String(w.key===selectedPeriod));
+  }
+  const slider=el.querySelector('.duration-slider'),input=el.querySelector('.duration-value');
+  if(slider.dataset.sliding)return;
+  slider.dataset.maximum=max;slider.value=OneTopRanges.position(selectedPeriod,max);slider.setAttribute('aria-valuetext',OneTopRanges.label(selectedPeriod,lang));slider.style.setProperty('--position',slider.value/10+'%');
+  if(document.activeElement!==input){input.value=OneTopRanges.label(selectedPeriod,lang);input.setCustomValidity('');}
+ });
 }
 function renderPeriods(){
  const p=data.period_usage;if(!p)return;
@@ -62,10 +78,7 @@ function renderPeriods(){
  $('periodCards').innerHTML=p.windows.map(w=>{const v=periodVector(w);return `<button class="period-card ${w.key===selectedPeriod?'selected':''}" data-period="${w.key}" aria-pressed="${w.key===selectedPeriod}" title="${v?exact(total(v))+' tokens':'수집된 사용량 보고 없음'}"><span class="period-label">최근 ${w.label}</span><b>${fmt(total(v))}<small> tokens</small></b><span class="period-output">${v?'출력 '+fmt(v[3]):'사용량 미확인'}</span></button>`;}).join('');
  if(focus)document.querySelector(`[data-period="${focus}"]`)?.focus({preventScroll:true});
  $('periodCoverage').textContent='기록된 사용량 · 미보고 사용량 제외';
- const buttons=p.windows.filter(w=>!customPeriod(w.key)).sort((a,b)=>a.seconds-b.seconds).map(w=>`<button data-range="${w.key}" aria-pressed="${w.key===selectedPeriod}">${w.label}</button>`).join('')+`<button data-custom-range="" aria-pressed="${customPeriod(selectedPeriod)}">${customPeriod(selectedPeriod)?esc(periodMeta()?.label||'기간 지정'):'기간 지정'}</button>`;
- const rangeFocus=document.activeElement?.dataset.range,rangeContainer=document.activeElement?.closest('.range-buttons');
- document.querySelectorAll('.range-buttons').forEach(el=>{if(el.innerHTML!==buttons)el.innerHTML=buttons;});
- if(rangeFocus&&rangeContainer)rangeContainer.querySelector(`[data-range="${rangeFocus}"]`)?.focus({preventScroll:true});
+ updateRangeControls();
  const w=periodMeta();if(w){$('periodColumn').textContent=periodCaption(w)+(usageUnit==='weekly'?' · 주간 한도 %':' 누적');$('sessionPeriodTitle').textContent=periodCaption(w);}
 }
 
@@ -221,11 +234,8 @@ $('providers').onclick=e=>{const b=e.target.closest('[data-provider]');if(!b)ret
 $('hostApps').onclick=e=>{const b=e.target.closest('[data-app-filter]');if(!b)return;const selected=$('search').value.toLocaleLowerCase()===b.dataset.appFilter.toLocaleLowerCase();selectView('sessions');$('search').value=selected?'':b.dataset.appFilter;render();};
 $('modelFilter').onchange=renderTable;
 $('clearFilter').onclick=()=>{provider='all';render();};$('search').oninput=renderTable;$('stateFilter').onchange=renderTable;$('sort').onchange=renderTable;
-document.querySelectorAll('.range-buttons').forEach(el=>el.onclick=e=>{if(e.target.closest('[data-custom-range]')){openRange();return;}const b=e.target.closest('[data-range]');if(b)selectPeriod(b.dataset.range);});
-$('rangeUnits').onclick=e=>{const b=e.target.closest('[data-duration-unit]');if(!b)return;durationUnit=Number(b.dataset.durationUnit);document.querySelectorAll('[data-duration-unit]').forEach(x=>x.setAttribute('aria-pressed',x===b));};
-$('cancelRange').onclick=()=>$('rangeDialog').close();
-$('allHistory').onclick=()=>{$('rangeDialog').close();selectPeriod('all');};
-$('rangeForm').onsubmit=e=>{e.preventDefault();const seconds=Math.floor(Number($('rangeAmount').value)*durationUnit/60)*60,key='custom:'+seconds;if(!OneTopDashboard.validPeriod(key)){$('rangeError').hidden=false;$('rangeError').textContent=OneTopI18n.t('10분 이상의 유효한 기간을 입력하세요.');return;}$('rangeDialog').close();selectPeriod(key);};
+document.querySelectorAll('.range-buttons').forEach(el=>el.onclick=e=>{const b=e.target.closest('[data-range]');if(b)selectPeriod(b.dataset.range);});
+
 $('usageMode').onclick=e=>{const b=e.target.closest('[data-unit]');if(b){usageUnit=b.dataset.unit;render();}};
 $('periodCards').onclick=e=>{const b=e.target.closest('[data-period]');if(b)selectPeriod(b.dataset.period);};
 function openDetail(e){if(e.target.closest('button'))return;const r=e.target.closest('[data-session]');if(!r)return;selectedId=r.dataset.session;renderDetail(selectedId);if(!$('detailDialog').open)$('detailDialog').show();document.body.classList.add('inspecting');drawCharts();}

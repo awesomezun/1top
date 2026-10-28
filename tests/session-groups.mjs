@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import weekly from '../agent/onetop/dist/weekly.js';
+import ranges from '../agent/onetop/dist/ranges.js';
 
 // Execute the real renderer with a small DOM seam. No network or session action runs.
 const html=fs.readFileSync(new URL('../agent/onetop/dist/index.html',import.meta.url),'utf8');
@@ -13,7 +14,7 @@ const nodes=Object.fromEntries([...html.matchAll(/\bid="([^"]+)"/g)].map(([,id])
 const context=vm.createContext({
  document:{getElementById:id=>nodes[id]||null,querySelectorAll:()=>[],querySelector:()=>null,addEventListener(){}},
  window:{addEventListener(){}},fetch:()=>new Promise(()=>{}),setInterval(){},setTimeout(){},clearTimeout(){},
- AbortSignal,URL,Date,OneTopWeekly:weekly,
+ AbortSignal,URL,Date,OneTopWeekly:weekly,OneTopRanges:ranges,
  OneTopDashboard:{init(){},afterTable(){},rateCell:(rate)=>JSON.stringify({rate}),interacting:false,validPeriod:()=>true,state:{period:'1h'},rememberPeriod(){}},
  OneTopI18n:{locale:()=> 'ko-KR'}
 });
