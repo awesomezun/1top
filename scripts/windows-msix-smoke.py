@@ -98,6 +98,7 @@ try:
         else:
             raise RuntimeError(f'MSIX activated PID {ui_pid} but no completed dashboard report for {name}')
         result = json.loads(report.read_text(encoding='utf-8'))
+        assert 'smoke_failure' not in result, result
         assert result['package_identity'] == package['PackageFullName'], result
         assert result['maps'] and result['ready'] and result['dataReady'], result
         assert result['connection'] == '실시간 연결' and result['render_error'] is None, result

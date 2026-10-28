@@ -133,6 +133,7 @@ def desktop(launcher):
         if not report:
             return
         try:
+            result, state, match = {}, {}, {}
             for _ in range(240):
                 result = window.evaluate_js('({title:document.title,ready:!!document.querySelector("#sessionsBody"),maps:!!document.querySelector("[data-view=maps]"),dataReady:typeof data!=="undefined"&&data?.ready===true,renderedVersion:typeof data!=="undefined"?data?.version:null})')
                 state = local_json(port, '/api/state') or {}
@@ -176,6 +177,16 @@ def desktop(launcher):
                     Path(report).write_text(json.dumps(result), encoding='utf-8')
                     return
                 time.sleep(.25)
+            # Preserve the last observed state when a CI fixture never becomes
+            # ready, instead of silently exiting without the promised report.
+            Path(report).write_text(json.dumps({
+                'smoke_failure': 'Dashboard or fixture did not become ready',
+                'ui': result, 'collector_ready': state.get('ready'),
+                'collector_version': state.get('version'),
+                'session_count': len(state.get('sessions', [])),
+                'fixture_tokens': match.get('tokens'),
+                'fixture_period_tokens': match.get('usage', {}).get('windows', {}).get('1h'),
+            }), encoding='utf-8')
         finally:
             quit_app()
 
