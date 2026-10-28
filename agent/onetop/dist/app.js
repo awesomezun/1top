@@ -48,7 +48,7 @@ function recordedDuration(seconds){const m=Math.floor(seconds/60);return m<1?'1�
 function selectPeriod(key){
  if(!OneTopDashboard.validPeriod(key))return;
  selectedPeriod=key;OneTopDashboard.rememberPeriod(key);
- if(customPeriod(key)||data?.chart_range){$('notice').hidden=false;$('notice').textContent=OneTopI18n.t('기간을 불러오는 중…');refresh();}
+ if(customPeriod(key)||data?.chart_range)refresh();
  else render();
 }
 function rangeCaption(key){return OneTopI18n.t(key==='all'?'전체 기록':'최근 '+OneTopRanges.label(key,OneTopI18n.language||'ko'));}
@@ -95,9 +95,8 @@ function render(){
  $('tableSubtitle').textContent=scoped.some(s=>s.children_count)?`상위 세션 ${scoped.length}개 · 하위 ${scoped.reduce((n,s)=>n+(s.children_count||0),0)}개 묶음`:`${scoped.filter(s=>s.orca_terminal).length}개 터미널 연결`;
  $('filterStrip').hidden=provider==='all';$('filterName').textContent=provider==='all'?'':kindName(provider)+' 세션';
  $('lastUpdated').textContent=`마지막 수집 ${time(data.updated)} · 토큰 변화 수집 시작 ${new Date(data.started*1000).toLocaleDateString(OneTopI18n.locale())} ${time(data.started)}`;
- const loading=data.sessions.filter(s=>s.loading).length;
- $('notice').hidden=!data.error&&!loading;
- $('notice').textContent=data.error?'일부 데이터 수집이 지연되고 있습니다. 마지막으로 확인한 수치를 표시합니다.':`${loading}개 세션의 누적 기록을 읽고 있습니다. 수치가 준비되면 자동으로 갱신됩니다.`;
+ $('notice').hidden=!data.error;
+ $('notice').textContent=data.error?'일부 데이터 수집이 지연되고 있습니다. 마지막으로 확인한 수치를 표시합니다.':'';
  renderPeriods();renderWeekly();renderSessionSummary();renderHost();renderTable();renderMaps();renderQuotas();renderSystem();renderBenchmark();renderOperations();
  if(selectedId&&$('detailDialog').open)renderDetail(selectedId);
  drawCharts();

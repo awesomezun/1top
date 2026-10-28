@@ -22,6 +22,9 @@ with urllib.request.urlopen('http://127.0.0.1:18766/api/state') as response:
 snapshot['action_token'] = 'presentation-test-only'
 calls = []
 range_requests = []
+held_period = None
+range_started = threading.Event()
+range_release = threading.Event()
 history = sqlite3.connect(':memory:',check_same_thread=False)
 history.executescript('''CREATE TABLE events(t REAL,sid TEXT,kind TEXT,fresh INTEGER,cached INTEGER,written INTEGER,output INTEGER,account TEXT);
     CREATE TABLE weekly_samples(account TEXT,kind TEXT,t REAL,pct REAL,reset REAL);''')
@@ -41,6 +44,9 @@ class Preview(BaseHTTPRequestHandler):
             period=parse_qs(urlsplit(self.path).query).get('period',[None])[0]
             if period:
                 range_requests.append(period)
+                if period == held_period:
+                    range_started.set()
+                    range_release.wait(10)
                 result=extend_snapshot(history,{**snapshot,'history_started':snapshot['updated']-7*86400},period)
             else: result=snapshot
             body, mime = json.dumps(result).encode(), 'application/json'
@@ -107,8 +113,9 @@ try:
                 const heading=slider.closest('.range-toolbar').querySelector('[data-range-label]');
                 const positions=Array.from({length:Number(slider.max)+1},(_,i)=>{
                     slider.value=i;slider.dispatchEvent(new Event('input',{bubbles:true}));
-                    const r=slider.getBoundingClientRect();
-                    return {x:r.x,y:r.y,width:r.width,label:heading.textContent,fits:heading.scrollWidth<=heading.clientWidth};
+                    const r=slider.getBoundingClientRect(),text=document.createRange();text.selectNodeContents(heading);
+                    const gap=slider.closest('.range-buttons').getBoundingClientRect().left-text.getBoundingClientRect().right;
+                    return {x:r.x,y:r.y,width:r.width,label:heading.textContent,fits:heading.scrollWidth<=heading.clientWidth,compact:innerWidth<=640||(gap>=0&&gap<=13&&heading.clientWidth<=100)};
                 });
                 slider.dispatchEvent(new Event('pointercancel'));
                 return positions;
@@ -116,6 +123,7 @@ try:
             for axis in ['x','y','width']:
                 assert max(p[axis] for p in positions)-min(p[axis] for p in positions)<0.1,(view,axis,positions)
             assert all(p['fits'] for p in positions),(view,positions)
+            assert all(p['compact'] for p in positions),(view,positions)
         assert_range_geometry()
         def select_stop(position):
             slider.evaluate("(el,n)=>{el.value=n;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}",position)
@@ -142,8 +150,22 @@ try:
         assert len(range_requests)>before
         slider.focus();slider.press('Home');slider.press('ArrowRight')
         page.wait_for_function("document.getElementById('periodColumn').textContent.includes('15분')")
-        select_stop(12)
+        # Keep the existing chart and panel positions while a period response is pending.
+        held_period='custom:604800'
+        chart_before=page.locator('#tokenChart').evaluate('(c)=>c.toDataURL()')
+        panel_y=page.locator('#sessionsView .token-flow-panel').bounding_box()['y']
+        try:
+            select_stop(12)
+            assert range_started.wait(3)
+            assert not page.locator('#notice').is_visible()
+            assert page.locator('#tokenChart').is_visible()
+            assert page.locator('#tokenChart').evaluate('(c)=>c.toDataURL()')==chart_before
+            assert abs(page.locator('#sessionsView .token-flow-panel').bounding_box()['y']-panel_y)<0.1
+        finally:
+            held_period=None
+            range_release.set()
         page.wait_for_function("document.getElementById('periodColumn').textContent.includes('1주')")
+        checks.append('pending period requests retain the graph without a loading banner or vertical layout shift')
         assert range_requests[-1]=='custom:604800'
         page.reload();page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 1주'")
         # Every detail page keeps the same single period label after removing the input.
@@ -211,14 +233,14 @@ try:
             page.wait_for_function('!document.documentElement.dataset.preferenceTransition')
         page.locator('[data-theme-switch]').click()
         page.wait_for_function("document.getAnimations().some(a=>a.effect?.pseudoElement==='::view-transition-new(root)'&&a.playState==='running')")
-        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.22.3.png'))
+        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.22.4.png'))
         finish_transition();assert page.locator('html').get_attribute('data-theme')=='light'
         pref_x=page.locator('[data-theme-switch]').bounding_box()['x']
         page.locator('[data-language="en"]').click()
         page.wait_for_function("[...document.querySelectorAll('canvas')].some(c=>c.style.viewTransitionName==='onetop-matrix')")
         page.wait_for_timeout(240)
         assert page.evaluate("[...document.querySelectorAll('canvas')].filter(c=>c.style.viewTransitionName==='onetop-matrix').some(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0))")
-        page.screenshot(path=str(ROOT/'build/language-reveal-v3.22.3.png'))
+        page.screenshot(path=str(ROOT/'build/language-reveal-v3.22.4.png'))
         finish_transition();assert page.locator('#pageTitle').inner_text()=='Dashboard'
         assert_range_geometry()
         assert abs(page.locator('[data-theme-switch]').bounding_box()['x']-pref_x)<1
@@ -255,16 +277,16 @@ try:
         assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order
         assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==panel_order
         checks.append('preferences and layout survive reload')
-        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.22.3.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.22.4.png'),full_page=False)
         page.locator('[data-theme-switch]').click()
         finish_transition()
-        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.22.3.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.22.4.png'),full_page=False)
         page.locator('[data-language="en"]').click();finish_transition()
         for width in (1100,768,390):
             page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
             assert_range_geometry()
             if not page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'):
-                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.22.3.png'))
+                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.22.4.png'))
                 print(page.locator('body *').evaluate_all('(xs)=>xs.filter(e=>e.getBoundingClientRect().right>innerWidth+1&&!e.closest("[hidden],.table-scroll")).map(e=>({tag:e.tagName,id:e.id,cls:e.className,right:e.getBoundingClientRect().right})).slice(0,30)'),flush=True)
                 raise AssertionError(width)
         checks.append('1100px, 768px and mobile layout')
@@ -272,9 +294,9 @@ try:
         page.evaluate('localStorage.removeItem("onetop.dashboard.v1")')
         page.set_viewport_size({'width':1440,'height':1100});page.reload()
         page.locator('#sessionsBody tr').first.wait_for();page.wait_for_timeout(300)
-        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.22.3.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.22.4.png'),full_page=False)
         assert not errors,errors
-        (ROOT/'build/dashboard-browser-v3.22.3.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
+        (ROOT/'build/dashboard-browser-v3.22.4.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
         print(json.dumps({'checks':checks,'errors':errors},ensure_ascii=False))
         browser.close()
 finally:
