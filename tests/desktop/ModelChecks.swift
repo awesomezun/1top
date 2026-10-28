@@ -43,6 +43,15 @@ import CoreGraphics
         precondition(trend.reported && trend.bins.count == 10)
         precondition(trend.bins.first?.tokens == 10 && trend.bins.last?.tokens == 8)
         precondition(trend.bins.reduce(0) { $0 + $1.tokens } == 18)
+        precondition(trend.bins.first?.tokensByKind["unknown"] == 10)
+        let colouredEvents = try JSONDecoder().decode(DesktopSnapshot.self, from:
+            """
+            {"ready":true,"events":[{"t":100,"n":30,"kind":"Claude"},{"t":110,"n":70,"kind":"Codex"},{"t":120,"n":5}]}
+            """.data(using:.utf8)!).events
+        let colouredTrend = DesktopUsageTrend(events:colouredEvents,period:"10m",end:599)
+        precondition(colouredTrend.bins[1].tokens == 100)
+        precondition(colouredTrend.bins[1].tokensByKind == ["Claude":30,"Codex":70])
+        precondition(colouredTrend.bins[2].tokensByKind == ["unknown":5])
         precondition(!DesktopUsageTrend(events:nil,period:"1h",end:599).reported)
         for period in ["10m","30m","1h","5h","12h","24h"] {
             let chart=DesktopUsageTrend(events:events,period:period,end:599)
@@ -63,6 +72,94 @@ import CoreGraphics
         precondition(estimate.scopeLabel == "환산 추정 · 초기")
         precondition(estimate.calculationLabel.contains("10.00M tokens"))
         precondition(estimate.calculationLabel.contains("4분 관측"))
-        print("Desktop model checks passed: nullable usage, freshness, accounts, safe capabilities, no offline actions.")
+
+        // Ten percentage points observed over 30 minutes means 20 pp/hour,
+        // even if the user selected a partially recorded 5-hour period.
+        let partialPeriod = WeeklyUsage.Period(used_pp:10, partial:true, observed_seconds:1800)
+        precondition(partialPeriod.burnPerHour == 20)
+        precondition(WeeklyUsage.Period(used_pp:10, partial:false, observed_seconds:18000).burnPerHour == 2)
+        precondition(WeeklyUsage.Period(used_pp:0, partial:true, observed_seconds:120).burnPerHour == 0)
+        for seconds in [0.0, 119.9, -1, Double.nan, Double.infinity] {
+            precondition(WeeklyUsage.Period(used_pp:1, partial:true, observed_seconds:seconds).burnPerHour == nil)
+        }
+        for delta: Double? in [nil, -1, .nan, .infinity, .greatestFiniteMagnitude] {
+            precondition(WeeklyUsage.Period(used_pp:delta, partial:true, observed_seconds:120).burnPerHour == nil)
+        }
+
+        // 1 pp / 3M tokens at 1,000 tokens/s converts to 1.2 pp/hour.
+        precondition(abs(estimate.burnPerHour(tokensPerSecond:1000)! - 1.2) < 0.000001)
+        precondition(estimate.burnPerHour(tokensPerSecond:0) == 0)
+        for rate: Double? in [nil, -1, .nan, .infinity] {
+            precondition(estimate.burnPerHour(tokensPerSecond:rate) == nil)
+        }
+        var invalidEstimate = estimate
+        invalidEstimate.calibration = nil
+        precondition(invalidEstimate.burnPerHour(tokensPerSecond:0) == nil)
+        invalidEstimate = estimate; invalidEstimate.basis = nil
+        precondition(invalidEstimate.burnPerHour(tokensPerSecond:1000) == nil)
+        for denominator in [0.0, -1, Double.nan, Double.infinity] {
+            invalidEstimate = estimate; invalidEstimate.calibration?.tokens = denominator
+            precondition(invalidEstimate.burnPerHour(tokensPerSecond:1000) == nil)
+        }
+        for delta in [0.0, -1, Double.nan, Double.infinity] {
+            invalidEstimate = estimate; invalidEstimate.calibration?.used_pp = delta
+            precondition(invalidEstimate.burnPerHour(tokensPerSecond:1000) == nil)
+        }
+        for seconds in [119.9, Double.nan, Double.infinity] {
+            invalidEstimate = estimate; invalidEstimate.calibration?.seconds = seconds
+            precondition(invalidEstimate.burnPerHour(tokensPerSecond:1000) == nil)
+        }
+        invalidEstimate = estimate; invalidEstimate.calibration?.tokens = 1
+        precondition(invalidEstimate.burnPerHour(tokensPerSecond:.greatestFiniteMagnitude) == nil)
+        var ratedUsage = DesktopSession.Usage(rate:1000, weekly_estimate:["5h":estimate], weekly_account:"a")
+        precondition(abs(ratedUsage.weeklyBurnPerHour(period:"5h")! - 1.2) < 0.000001)
+        precondition(ratedUsage.weeklyBurnPerHour(period:"24h") == nil)
+        ratedUsage.weekly_account = "b"
+        precondition(ratedUsage.weeklyBurnPerHour(period:"5h") == nil)
+        ratedUsage.weekly_account = nil
+        precondition(ratedUsage.weeklyBurnPerHour(period:"5h") == nil)
+
+        precondition(DesktopFormat.burnRate(1.25) == "1.25%p/시간")
+        precondition(DesktopFormat.burnRate(0) == "0%p/시간")
+        precondition(DesktopFormat.burnRate(0.001) == "<0.01%p/시간")
+        precondition(DesktopFormat.burnRate(nil) == "—" && DesktopFormat.burnRate(.nan) == "—")
+        precondition(DesktopFormat.duration(59) == "1분 미만")
+        precondition(DesktopFormat.duration(1740) == "29분")
+        precondition(DesktopFormat.duration(3600) == "1시간")
+        precondition(DesktopFormat.duration(3660) == "1시간 1분")
+        precondition(DesktopFormat.duration(nil) == "—" && DesktopFormat.duration(.infinity) == "—")
+        let historyData = """
+        {"accounts":[{"id":"a","periods":{},"history":[[180,20],[300,22],[420,22],[540,23]]},{"id":"b","periods":{},"history":[[300,10],[420,15]]},{"id":"old","periods":{}}]}
+        """.data(using:.utf8)!
+        let histories = try JSONDecoder().decode(WeeklyUsage.self, from:historyData)
+        precondition(histories.accounts[2].history == nil)
+        let weeklyTrend = DesktopWeeklyUsageTrend(history:histories.accounts[0].history, period:"10m", end:600)
+        precondition(weeklyTrend.reported && weeklyTrend.total == 3 && weeklyTrend.observedSeconds == 360)
+        precondition(weeklyTrend.bins.filter { $0.usedPP == nil }.count == 7)
+        precondition(weeklyTrend.bins.contains { $0.usedPP == 0 })
+        precondition(weeklyTrend.observedFrom == 180 && weeklyTrend.observedTo == 540)
+        let otherAccount = DesktopWeeklyUsageTrend(history:histories.accounts[1].history, period:"10m", end:600)
+        precondition(otherAccount.total == 5 && weeklyTrend.total == 3) // no account sum
+        precondition(!DesktopWeeklyUsageTrend(history:nil, period:"10m", end:600).reported)
+        precondition(!DesktopWeeklyUsageTrend(history:[[300,10]], period:"10m", end:600).reported)
+        let resetTrend = DesktopWeeklyUsageTrend(history:[[180,98],[300,1],[420,2]], period:"10m", end:600)
+        precondition(resetTrend.total == 1 && resetTrend.observedSeconds == 120)
+        let gapTrend = DesktopWeeklyUsageTrend(history:[[10,1],[400,8],[520,9]], period:"10m", end:600)
+        precondition(gapTrend.total == 1 && gapTrend.observedSeconds == 120)
+        let boundaryTrend = DesktopWeeklyUsageTrend(history:[[-100,1],[100,8],[220,9],[700,10]], period:"10m", end:600)
+        precondition(boundaryTrend.total == 1 && boundaryTrend.observedSeconds == 120)
+        let invalidTrend = DesktopWeeklyUsageTrend(history:[[100,1],[200,.nan],[300,3],[400,5]], period:"10m", end:600)
+        precondition(invalidTrend.total == 2 && invalidTrend.observedSeconds == 100)
+        let shortTrend = DesktopWeeklyUsageTrend(history:[[550,20],[580,20]], period:"10m", end:600)
+        precondition(shortTrend.reported && shortTrend.total == 0 && shortTrend.observedSeconds == 30)
+        let fullFlow = (0..<240).map { i in [Double(i * 120),Double((i + 1) * 120),0.1] }
+        let thinnedHistory = (0...80).map { i in [Double(i * 360),10 + Double(i) * 0.3] }
+        let fullTrend = DesktopWeeklyUsageTrend(history:thinnedHistory,flow:fullFlow,period:"24h",end:28800)
+        precondition(abs(fullTrend.total - 24) < 0.000001 && fullTrend.observedSeconds == 28800)
+        precondition(!DesktopWeeklyUsageTrend(history:thinnedHistory,period:"24h",end:28800).reported)
+        precondition(!DesktopWeeklyUsageTrend(history:[[0,1],[120,2]],flow:[],period:"10m",end:600).reported)
+        let flowBoundary = DesktopWeeklyUsageTrend(history:nil,flow:[[-10,110,3],[110,230,0],[230,600,4],[230,350,1]],period:"10m",end:600)
+        precondition(flowBoundary.total == 1 && flowBoundary.observedSeconds == 240)
+        print("Desktop model checks passed: nullable usage, freshness, accounts, observed and estimated burn rates, safe capabilities, no offline actions.")
     }
 }

@@ -157,3 +157,25 @@ class WeeklyUsageTests(unittest.TestCase):
         self.point(self.now-240,20);self.point(self.now-120,22);self.event(self.now-180,'s',100)
         _,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex'},{'id':'b','kind':'Codex'}],self.now,bindings={'s':'b'})
         self.assertEqual(shares,{})
+
+    def test_flow_keeps_original_intervals_when_history_is_thinned(self):
+        for i in range(241):
+            self.point(self.now-28800+i*120,10+i/10)
+        account=self.result()[0]['accounts'][0]
+        self.assertLessEqual(len(account['history']),96)
+        self.assertEqual(len(account['flow']),240)
+        self.assertTrue(all(t1-t0==120 for t0,t1,_ in account['flow']))
+        self.assertAlmostEqual(sum(delta for _,_,delta in account['flow']),24)
+        self.assertEqual(account['flow'][0][0],self.now-28800)
+        self.assertEqual(account['flow'][-1][1],self.now)
+
+    def test_flow_excludes_reset_gap_and_correction_but_preserves_zero(self):
+        self.point(self.now-1000,98,reset=self.now-800)
+        self.point(self.now-880,99,reset=self.now-800)
+        self.point(self.now-760,1)
+        self.point(self.now-640,1)
+        self.point(self.now-100,2)
+        self.point(self.now-40,1)
+        self.assertEqual(self.result()[0]['accounts'][0]['flow'],[
+            [self.now-1000,self.now-880,1],
+            [self.now-760,self.now-640,0]])

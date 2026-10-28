@@ -15,17 +15,16 @@ struct CompactTokenMap: View {
     }
     var body: some View {
         let data = report
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("현재 세션 사용량").font(.plex(size: 12, weight: .medium))
+                Text("사용량 비중").font(.plex(size: 12, weight: .medium))
                 Spacer()
-                Text("\(DesktopFormat.number(data.total)) tokens").font(.plex(size: 11)).foregroundStyle(.secondary).monospacedDigit()
-                Image(systemName: "info.circle").font(.system(size: 11)).foregroundStyle(.secondary)
+                Image(systemName: "info.circle").font(.system(size: 12)).foregroundStyle(.secondary)
                     .help("선택한 기간 · 현재 연결된 세션만 비교\n보고 \(data.reported) · 미보고 \(data.unknown) · 0 사용량 \(data.zero) · 캐시 포함\n작은 영역은 마우스를 올리거나 눌러 확인하세요.")
             }
             if data.tiles.isEmpty {
                 Text(data.reported == 0 ? "이 기간의 사용량 보고가 없습니다" : "이 기간의 보고된 사용량은 0입니다")
-                    .font(.plex(size: 12)).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 68)
+                    .font(.plex(size: 12)).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 64)
                     .background(Color.white.opacity(0.025), in: RoundedRectangle(cornerRadius: 6))
             } else {
                 GeometryReader { geometry in
@@ -33,19 +32,19 @@ struct CompactTokenMap: View {
                         ForEach(data.layout(in: CGRect(origin: .zero, size: geometry.size))) { item in
                             let width = max(0, item.rect.width - 2), height = max(0, item.rect.height - 2)
                             let tint = palette[item.colorIndex % palette.count]
-                            let font = NSFont(name: "IBMPlexSansKR-SemiBold", size: 11) ?? .systemFont(ofSize: 11)
+                            let font = NSFont(name: "IBMPlexSansKR-SemiBold", size: 12) ?? .systemFont(ofSize: 11)
                             let titleWidth = (item.tile.title as NSString).size(withAttributes: [.font:font]).width
                             Button { selected = item.tile } label: {
                                 ZStack(alignment: .topLeading) {
                                     RoundedRectangle(cornerRadius: 4).fill(tint.opacity(hoveredID == item.id ? 0.32 : 0.17))
-                                    if width >= 64 && height >= 42 {
+                                    if width >= 64 && height >= 48 {
                                         VStack(alignment: .leading, spacing: 3) {
-                                            if titleWidth <= width - 14 { Text(item.tile.title).font(.plex(size: 11, weight: .semibold)).fixedSize() }
+                                            if titleWidth <= width - 14 { Text(item.tile.title).font(.plex(size: 12, weight: .semibold)).fixedSize() }
                                             Text(DesktopFormat.number(item.tile.value)).font(.plex(size: 12, weight: .medium)).monospacedDigit().foregroundStyle(tint)
                                         }.padding(7)
                                     } else if width >= 38 && height >= 24 {
                                         Text("\(Int((item.tile.value / data.total * 100).rounded()))%")
-                                            .font(.plex(size: 11, weight: .medium)).foregroundStyle(tint).padding(5)
+                                            .font(.plex(size: 12, weight: .medium)).foregroundStyle(tint).padding(5)
                                     }
                                 }.frame(width: width, height: height).contentShape(Rectangle())
                                     .overlay(RoundedRectangle(cornerRadius: 4).stroke(tint.opacity(0.55), lineWidth: 0.7))
@@ -54,23 +53,17 @@ struct CompactTokenMap: View {
                                 .help(details(item.tile, data.total)).accessibilityLabel(details(item.tile, data.total))
                         }
                     }
-                }.frame(height: 68)
+                }.frame(height: 64)
             }
-            Group {
-                if let tile = data.tiles.first(where: { $0.id == hoveredID }) {
-                    Text("\(tile.title) · \(DesktopFormat.number(tile.value)) · \(String(format: "%.1f", tile.value / data.total * 100))%")
-                } else {
-                    Text("캐시 포함 · 작은 영역에 마우스를 올려 확인")
-                }
-            }.font(.plex(size: 11)).foregroundStyle(.secondary).lineLimit(1).frame(height: 15, alignment: .leading)
-        }.padding(.horizontal, 18).padding(.bottom, 6)
+            Text("\(DesktopFormat.number(data.total)) tokens").font(.plex(size: 12)).foregroundStyle(.secondary).monospacedDigit()
+        }
             .popover(item: $selected, arrowEdge: .bottom) { original in
                 let current = data.tiles.first { $0.id == original.id } ?? original
                 VStack(alignment: .leading, spacing: 8) {
                     Text(current.title).font(.plex(size: 15, weight: .semibold))
                     Text("\(current.value.formatted(.number.precision(.fractionLength(0)))) tokens").font(.plex(size: 17, weight: .semibold)).monospacedDigit()
                     Text(current.detail).font(.plex(size: 12)).foregroundStyle(.secondary)
-                    if !model.fresh { Text("마지막 수신 기록").font(.plex(size: 11)).foregroundStyle(.orange) }
+                    if !model.fresh { Text("마지막 수신 기록").font(.plex(size: 12)).foregroundStyle(.orange) }
                 }.padding(18).frame(width: 290, alignment: .leading).fixedSize(horizontal: false, vertical: true)
             }
     }

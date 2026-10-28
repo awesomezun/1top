@@ -15,6 +15,7 @@ struct DesktopSnapshot: Decodable {
     var weekly_usage: WeeklyUsage?
     struct UsageEvent: Decodable {
         var t: Double; var n: Double?
+        var kind: String?
         var fresh: Double?; var cached: Double?; var written: Double?; var output: Double?
         var total: Double { n ?? ((fresh ?? 0) + (cached ?? 0) + (written ?? 0) + (output ?? 0)) }
     }
@@ -44,7 +45,16 @@ struct DesktopSession: Decodable, Identifiable {
     var status: String?; var display_status: String?; var tokens: [Double]?
     var usage: Usage?; var resources: Resources?; var orca_terminal: Terminal?
     var location: Location?; var control_key: String?; var input_verified: Bool?
-    struct Usage: Decodable { var rate: Double?; var windows: [String: [Double]?]?; var weekly_estimate: [String: WeeklyEstimate]?; var weekly_account: String? }
+    struct Usage: Decodable {
+        var rate: Double?; var windows: [String: [Double]?]?
+        var weekly_estimate: [String: WeeklyEstimate]?; var weekly_account: String?
+        func weeklyBurnPerHour(period: String) -> Double? {
+            guard let estimate = weekly_estimate?[period],
+                  let weekly_account, !weekly_account.isEmpty,
+                  estimate.account_id == weekly_account else { return nil }
+            return estimate.burnPerHour(tokensPerSecond: rate)
+        }
+    }
     struct Resources: Decodable { var cpu: Double?; var rss: Double? }
     struct Terminal: Decodable { var title: String? }
     struct Location: Decodable { var app: String?; var app_path: String?; var terminal: String? }
@@ -75,6 +85,16 @@ struct WeeklyEstimate: Decodable {
     struct Calibration: Decodable {
         var tokens: Double; var used_pp: Double; var seconds: Double; var confidence: String
     }
+    // A recent-token-rate equivalent, not a forecast of future account deductions.
+    func burnPerHour(tokensPerSecond: Double?) -> Double? {
+        guard basis == "calibrated_token_equivalent", let calibration,
+              calibration.tokens.isFinite, calibration.tokens > 0,
+              calibration.used_pp.isFinite, calibration.used_pp > 0,
+              calibration.seconds.isFinite, calibration.seconds >= 120,
+              let tokensPerSecond, tokensPerSecond.isFinite, tokensPerSecond >= 0 else { return nil }
+        let value = tokensPerSecond * (calibration.used_pp / calibration.tokens) * 3600
+        return value.isFinite ? value : nil
+    }
     var scopeLabel: String {
         "환산 추정" + (calibration?.confidence == "early" ? " · 초기" : "") + (partial ? " · 일부 토큰" : "")
     }
@@ -87,9 +107,18 @@ struct WeeklyUsage: Decodable {
     var accounts: [Account]
     struct Account: Decodable, Identifiable {
         var id: String; var periods: [String: Period]
+        var history: [[Double]]?
+        var flow: [[Double]]?
     }
     struct Period: Decodable {
         var used_pp: Double?; var partial: Bool; var observed_seconds: Double
+        // Partial periods use their observed duration, never the requested window length.
+        var burnPerHour: Double? {
+            guard let used_pp, used_pp.isFinite, used_pp >= 0,
+                  observed_seconds.isFinite, observed_seconds >= 120 else { return nil }
+            let value = (used_pp / observed_seconds) * 3600
+            return value.isFinite ? value : nil
+        }
     }
 }
 
@@ -108,11 +137,24 @@ enum DesktopFormat {
     }
     static func percent(_ value: Double?) -> String { value.map { String(format: "%.0f%%", $0) } ?? "—" }
     static func total(_ tokens: [Double]?) -> Double? { tokens?.reduce(0, +) }
+    static func burnRate(_ value: Double?) -> String {
+        guard let value, value.isFinite, value >= 0 else { return "—" }
+        return quota(value) + "p/시간"
+    }
+    static func duration(_ seconds: Double?) -> String {
+        guard let seconds, seconds.isFinite, seconds >= 0,
+              seconds < Double(Int.max) / 2 else { return "—" }
+        let minutes = Int(seconds / 60)
+        if minutes == 0 { return "1분 미만" }
+        if minutes < 60 { return "\(minutes)분" }
+        return minutes % 60 == 0 ? "\(minutes / 60)시간" : "\(minutes / 60)시간 \(minutes % 60)분"
+    }
 }
 
 struct DesktopUsageTrend {
     struct Bin: Identifiable {
         var id: Int; var start: Double; var end: Double; var tokens: Double
+        var tokensByKind: [String: Double] = [:]
     }
     var bins: [Bin]
     var reported: Bool
@@ -125,6 +167,58 @@ struct DesktopUsageTrend {
         reported = events != nil
         for event in events ?? [] where event.t.isFinite && event.total.isFinite && event.total >= 0 && event.t >= start && event.t < finish {
             let index = min(count-1, Int((event.t-start)/step)); bins[index].tokens += event.total
+            let kind = event.kind.flatMap { $0.isEmpty ? nil : $0 } ?? "unknown"
+            bins[index].tokensByKind[kind, default: 0] += event.total
+        }
+    }
+}
+
+struct DesktopWeeklyUsageTrend {
+    struct Bin: Identifiable {
+        var id: Int; var start: Double; var end: Double
+        // nil means no eligible report, not zero consumption.
+        var usedPP: Double?
+    }
+    var bins: [Bin]
+    var observedSeconds: Double
+    var observedFrom: Double?
+    var observedTo: Double?
+    var total: Double { bins.compactMap(\.usedPP).reduce(0, +) }
+    var reported: Bool { observedSeconds > 0 }
+
+    init(history: [[Double]]?, flow: [[Double]]? = nil, period: String, end: Double) {
+        let seconds: Double = ["10m":600, "30m":1800, "1h":3600, "5h":18000, "12h":43200, "24h":86400][period] ?? 3600
+        let finish = end.isFinite ? end : 0, start = finish - seconds
+        let count = min(36, Int(seconds / 60)), step = seconds / Double(count)
+        bins = (0..<count).map { Bin(id:$0, start:start + Double($0)*step, end:start + Double($0+1)*step) }
+        observedSeconds = 0
+        var intervals = flow ?? []
+        if flow == nil {
+            // Legacy payloads lack reset-aware intervals. Never fall back when
+            // an explicit empty flow says the server rejected every interval.
+            let points = history ?? []
+            intervals = zip(points, points.dropFirst()).compactMap { before, after in
+                guard before.count >= 2, after.count >= 2,
+                      before[1].isFinite, after[1].isFinite,
+                      (0...100).contains(before[1]), (0...100).contains(after[1]) else { return nil }
+                return [before[0], after[0], after[1] - before[1]]
+            }
+        }
+        var previousEnd: Double?
+        for interval in intervals {
+            guard interval.count >= 3 else { continue }
+            let t0 = interval[0], t1 = interval[1], delta = interval[2]
+            guard t0.isFinite, t1.isFinite, delta.isFinite,
+                  t0 >= start, t1 <= finish, t1 > t0, t1 - t0 <= 300,
+                  (0...100).contains(delta), t0 >= (previousEnd ?? t0) else { continue }
+            // Place changes at report time. Do not interpolate a rounded provider
+            // update over earlier bins or invent values across resets and gaps.
+            let index = min(count - 1, max(0, Int((t1 - start) / step)))
+            bins[index].usedPP = (bins[index].usedPP ?? 0) + delta
+            observedSeconds += t1 - t0
+            observedFrom = min(observedFrom ?? t0, t0)
+            observedTo = max(observedTo ?? t1, t1)
+            previousEnd = t1
         }
     }
 }

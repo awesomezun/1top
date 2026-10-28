@@ -153,6 +153,12 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
         step=max(1,math.ceil(len(points)/95))
         chart=points[::step]
         if points and chart[-1]!=points[-1]:chart.append(points[-1])
+        # Flow needs original adjacent samples: thinning the cumulative chart
+        # creates artificial >5-minute gaps and drops valid long-window changes.
+        # Keep reset-aware intervals separately, including observed zero changes.
+        flow=[[t0,t1,delta] for t0,t1,delta,uncertain,_ in observations
+              if not uncertain and valid_number(delta) and delta>=0
+              and now-86400<=t0<t1<=now and t1-t0<=FRESH]
         result.append({'id':account,'kind':quota['kind'],'periods':periods,'calibration':calibration,
-                       'history':[[t,p] for t,p,_ in chart]})
+                       'history':[[t,p] for t,p,_ in chart],'flow':flow})
     return {'accounts':result,'basis':'provider_weekly_percentage','as_of':now},dict(shares)

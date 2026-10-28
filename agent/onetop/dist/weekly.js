@@ -11,6 +11,19 @@
  const duration=s=>s<60?'1분 미만':s<3600?Math.floor(s/60)+'분':Math.floor(s/3600)+'시간 '+Math.floor(s%3600/60)+'분';
  const scope=e=>e?.basis==='calibrated_token_equivalent'?'환산 추정'+(e.calibration?.confidence==='early'?' · 초기 기준':'')+(e.partial?' · 일부 토큰':''):'관측 구간 추정';
  const basis=e=>e?.calibration?`${duration(e.calibration.seconds)} 기준 · ${number(e.calibration.used_pp)}%p / ${Math.round(e.calibration.tokens).toLocaleString('ko-KR')} tokens`:'';
- const api={valid,number,percent,estimate,weekly,pending,explanation,duration,scope,basis};
+ // Partial periods must use the observed duration, never the selected window length.
+ const accountBurn=(period,quota)=>{
+  if(!quota||quota.stale!==false||!valid(period?.used_pp)||!valid(period?.observed_seconds)||period.observed_seconds<120)return null;
+  const rate=period.used_pp/period.observed_seconds*3600;
+  return valid(rate)?rate:null;
+ };
+ const sessionBurn=(estimate,tokensPerSecond,quota)=>{
+  const c=estimate?.calibration;
+  if(!quota||quota.stale!==false||estimate?.account_id!==quota.id||estimate?.basis!=='calibrated_token_equivalent'||!valid(tokensPerSecond)||!valid(c?.tokens)||c.tokens<=0||!valid(c?.used_pp)||c.used_pp<=0||!valid(c?.seconds)||c.seconds<120)return null;
+  const rate=tokensPerSecond*(c.used_pp/c.tokens)*3600;
+  return valid(rate)?rate:null;
+ };
+ const burn=value=>valid(value)?number(value)+'%p/시간':'—';
+ const api={valid,number,percent,estimate,weekly,pending,explanation,duration,scope,basis,accountBurn,sessionBurn,burn};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.OneTopWeekly=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
