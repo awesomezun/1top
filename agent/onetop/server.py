@@ -25,6 +25,7 @@ from . import __version__
 from .context_usage import request_context, stored_context
 from .platform_support import data_directory
 from .hierarchy import codex_metadata, annotate as annotate_hierarchy, group_sessions
+from .effort import codex_level, backfill_codex, apply_statusline
 
 BASE = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -145,7 +146,8 @@ class Ledger:
     def __init__(self, kind, state=None):
         self.s = state or {'kind': kind, 'offset': 0, 'inode': None, 'total': ZERO[:],
                            'seen': {}, 'models': [], 'last_usage': 0, 'model': '',
-                           'status': 'unknown', 'status_at': 0, 'known': False}
+                           'status': 'unknown', 'status_at': 0, 'known': False,
+                           'effort_schema': 1}
 
     def consume(self, d):
         s = self.s
@@ -156,6 +158,12 @@ class Ledger:
                 if p.get('model') and p['model']!=s['model']:
                     s.update(context_usage=None,request_input=None,context_size=None)
                 s['model'] = p.get('model') or s['model']
+                s['model_at'] = t
+                s['effort_schema'] = 1
+                # This turn is authoritative. An absent level must not retain
+                # an earlier turn/model's level or the CLI launch default.
+                s['effort'] = codex_level(p)
+                s['effort_updated'] = t if s['effort'] else None
             if d.get('type') == 'event_msg':
                 typ = p.get('type')
                 statuses = {'task_started': 'working', 'task_complete': 'idle',
@@ -222,6 +230,7 @@ class Ledger:
             if ctx is not None:s.update(context_usage=ctx,context_at=t,context_mid=mid)
         if model:
             s['model'] = model
+            s['model_at'] = t
             if model not in s['models']:
                 s['models'].append(model)
         if sum(delta):
@@ -474,6 +483,7 @@ class Collector:
             tracker = self.trackers[path] = Ledger(spec['kind'])
             s = tracker.s
         s['inode'] = st.st_ino
+        effort_migrated = backfill_codex(s, path) if spec['kind'] == 'Codex' else False
         if s['offset']==0 and spec['kind']=='Codex' and st.st_size>16*1024*1024:
             # Codex already reports authoritative cumulative totals; no need to reread gigabytes.
             with open(path,'rb') as f:
@@ -502,11 +512,22 @@ class Collector:
                         except (ValueError, TypeError, KeyError):
                             pass
                 s['offset'] = f.tell()
+        if start < st.st_size or effort_migrated:
             self.db.execute('INSERT OR REPLACE INTO trackers VALUES (?,?)',(path,json.dumps(s,separators=(',',':'))))
         spec['loading'] = s['offset'] < st.st_size
         spec['progress'] = round(100*s['offset']/max(1,st.st_size))
         spec['tokens'] = s['total'] if s['known'] and not spec['loading'] else None
         spec['model'] = s['model'] or spec.get('configured_model','')
+        spec['model_updated'] = s.get('model_at', s.get('last_usage', 0))
+        if spec['kind'] == 'Codex':
+            for key in ('effort', 'effort_source', 'effort_updated'):
+                spec.pop(key, None)
+            if s.get('effort'):
+                spec.update(effort=s['effort'], effort_source='codex_turn_context',
+                            effort_updated=s.get('effort_updated'))
+        elif spec['kind'] == 'Aside' and spec['model'] != spec.get('effort_model'):
+            for key in ('effort', 'effort_source', 'effort_updated'):
+                spec.pop(key, None)
         spec['models'] = s.get('models',[])
         spec['last_usage'] = s['last_usage']
         spec['request_input'] = s.get('request_input')
@@ -569,6 +590,8 @@ class Collector:
             if s['path']:
                 try:self.read_tracker(s)
                 except OSError:s['note']='세션 기록을 읽을 수 없습니다.'
+            if s['kind'] in ('Claude', 'GLM'):
+                apply_statusline(s, now)
             # Registry states are reported, not inferred from CPU or a refreshing terminal clock.
             if s['status'] not in ('working','idle','waiting','interrupted'):
                 s['status']='unknown'
@@ -594,6 +617,7 @@ class Collector:
         periods,session_periods=window_usage(self.db,now,self.started,
                                             (s['kind'] for s in sessions if s['tokens'] is not None))
         account_quotas=self.accounts.snapshot(now)
+        weekly_usage.restore_claude_last_report(self.db,account_quotas,now)
         weekly_usage.record(self.db,account_quotas,now)
         weekly,estimates=weekly_usage.snapshot(self.db,account_quotas,now,
             bindings={s['id']:s['account_binding'][0] for s in sessions if s.get('account_binding')},

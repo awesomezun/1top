@@ -54,6 +54,42 @@ class WeeklyUsageTests(unittest.TestCase):
     def test_downward_correction_is_not_negative_spend(self):
         self.point(self.now-240,24);self.point(self.now-120,20)
         self.assertIsNone(self.period()['used_pp'])
+    def test_same_cycle_overshoot_is_reconciled_without_raising_latest_or_rewriting_raw(self):
+        self.point(self.now-360,4);self.point(self.now-240,5);self.point(self.now-120,4)
+        self.event(self.now-300,'s',100);self.event(self.now-180,'s',100)
+        result,shares=self.result();account=result['accounts'][0]
+        self.assertEqual([point[1] for point in account['usage_points']],[4,4])
+        self.assertEqual(account['periods']['1h']['used_pp'],0)
+        self.assertTrue(account['periods']['1h']['partial']);self.assertEqual(account['flow'],[])
+        self.assertIsNone(account['calibration']);self.assertEqual(shares,{})
+        self.assertEqual(account['history_quality']['excluded_samples'],1)
+        self.assertEqual([row[0] for row in self.db.execute('SELECT pct FROM weekly_samples ORDER BY t')],[4,5,4])
+    def test_reconciliation_restarts_calibration_after_correction_only(self):
+        for offset,pct in [(-600,3),(-480,4),(-360,5),(-240,4),(-120,5)]:self.point(self.now+offset,pct)
+        for offset in (-540,-420,-300,-180):self.event(self.now+offset,'s',100)
+        account=self.result()[0]['accounts'][0]
+        self.assertEqual([point[1] for point in account['usage_points']],[3,4,4,5])
+        self.assertEqual(account['periods']['1h']['used_pp'],2)
+        self.assertEqual(account['calibration']['from'],self.now-240)
+        self.assertEqual(account['calibration']['used_pp'],1)
+        self.assertEqual(account['calibration']['tokens'],100)
+    def test_reconciliation_partial_reduction_is_net_change_not_sum_of_positive_spikes(self):
+        self.point(self.now-360,4);self.point(self.now-240,6);self.point(self.now-120,5)
+        account=self.result()[0]['accounts'][0]
+        self.assertEqual([point[1] for point in account['usage_points']],[4,5])
+        self.assertEqual(account['periods']['1h']['used_pp'],1)
+        self.assertIsNone(account['calibration'])
+    def test_reconciliation_does_not_import_a_baseline_outside_the_selected_window(self):
+        self.point(self.now-720,4);self.point(self.now-500,5);self.point(self.now-120,4)
+        self.assertIsNone(self.period('10m')['used_pp'])
+    def test_reconciliation_preserves_real_reset_and_isolates_accounts(self):
+        self.point(self.now-360,98,reset=self.now-300);self.point(self.now-240,2)
+        self.point(self.now-360,4,'b');self.point(self.now-240,5,'b');self.point(self.now-120,4,'b')
+        result,_=self.result(('a','b'));a,b=result['accounts']
+        self.assertEqual([point[1] for point in a['usage_points']],[98,2])
+        self.assertEqual(a['periods']['1h']['used_pp'],2)
+        self.assertFalse(a['history_quality']['reconciled'])
+        self.assertEqual([point[1] for point in b['usage_points']],[4,4])
     def test_accounts_are_not_summed_and_switched_sessions_are_omitted(self):
         for account,delta in [('a',2),('b',4)]:
             self.point(self.now-240,10,account);self.point(self.now-120,10+delta,account)
@@ -70,6 +106,95 @@ class WeeklyUsageTests(unittest.TestCase):
         self.assertEqual(self.db.execute('SELECT count(*) FROM weekly_samples').fetchone()[0],0)
         w.record(self.db,[base,base],self.now)
         self.assertEqual(self.db.execute('SELECT count(*) FROM weekly_samples').fetchone()[0],1)
+    def test_claude_history_restores_missing_weekly_without_fresh_calibration(self):
+        self.db.execute('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',('claude:a','Claude',self.now-120,12,self.now+1000))
+        row={'id':'claude:a','kind':'Claude','updated':0,'stale':True,
+             'windows':[{'label':'5H','pct':None,'reset':0},{'label':'주간','pct':None,'reset':0}]}
+        w.restore_claude_last_report(self.db,[row],self.now)
+        self.assertEqual(row['windows'][1]['pct'],12);self.assertIsNone(row['windows'][0]['pct'])
+        self.assertTrue(row['stale']);self.assertEqual(row['status'],'last_report')
+        self.assertEqual(row['source'],'historical_provider_report');self.assertEqual(row['updated'],self.now-120)
+        with patch.object(w,'valid_number',wraps=w.valid_number) as valid:
+            w.record(self.db,[row],self.now)
+            valid.assert_not_called()
+        self.assertEqual(self.db.execute('SELECT count(*) FROM weekly_samples').fetchone()[0],1)
+    def test_claude_history_does_not_cross_accounts_or_replace_known_reports(self):
+        self.db.execute('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',('claude:a','Claude',self.now-120,12,self.now+1000))
+        rows=[{'id':'claude:b','kind':'Claude','updated':0,'windows':[]},
+              {'id':'claude:a','kind':'Codex','updated':0,'windows':[]},
+              {'id':'claude:a','kind':'Claude','updated':0,'windows':[{'label':'주간','pct':0,'reset':self.now+1000}]},
+              {'id':'claude:a','kind':'Claude','updated':self.now-60,'windows':[]}]
+        import copy
+        before=copy.deepcopy(rows);w.restore_claude_last_report(self.db,rows,self.now)
+        self.assertEqual(rows,before)
+    def test_claude_history_never_resurrects_expired_or_different_cycles(self):
+        self.db.execute('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',('claude:a','Claude',self.now-120,12,self.now+1000))
+        for reset in (self.now-1,self.now+5000):
+            row={'id':'claude:a','kind':'Claude','updated':0,'windows':[{'label':'주간','pct':None,'reset':reset}]}
+            w.restore_claude_last_report(self.db,[row],self.now)
+            self.assertIsNone(row['windows'][0]['pct']);self.assertEqual(row['updated'],0)
+        self.db.execute('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',('claude:a','Claude',self.now-60,15,self.now-1))
+        row={'id':'claude:a','kind':'Claude','updated':0,'windows':[]}
+        w.restore_claude_last_report(self.db,[row],self.now)
+        self.assertEqual(row['windows'],[])
+    def test_initial_claude_report_with_other_account_cycle_discards_all_windows(self):
+        self.db.execute('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',('claude:a','Claude',self.now-120,4,self.now+1000))
+        row={'id':'claude:a','kind':'Claude','updated':self.now,'source':'claude_statusline',
+             'verified_activity':False,'stale':True,'windows':[
+                 {'label':'5H','pct':5,'reset':self.now+200},
+                 {'label':'주간','pct':6,'reset':self.now+5000}]}
+        w.restore_claude_last_report(self.db,[row],self.now)
+        self.assertIsNone(row['windows'][0]['pct']);self.assertEqual(row['windows'][0]['reset'],0)
+        self.assertEqual(row['windows'][1],{'label':'주간','pct':4,'reset':self.now+1000})
+        self.assertEqual(row['updated'],self.now-120);self.assertTrue(row['stale'])
+        self.assertEqual(row['source'],'historical_provider_report')
+    def test_initial_claude_report_cannot_reduce_verified_usage_in_same_cycle(self):
+        self.db.execute('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',('claude:a','Claude',self.now-120,4,self.now+1000))
+        for used in (0,3):
+            row={'id':'claude:a','kind':'Claude','updated':self.now,'source':'claude_statusline',
+                 'verified_activity':False,'stale':True,'windows':[
+                     {'label':'5H','pct':5,'reset':self.now+200},
+                     {'label':'주간','pct':used,'reset':self.now+1000}]}
+            w.restore_claude_last_report(self.db,[row],self.now)
+            self.assertEqual([value['pct'] for value in row['windows']],[5,4])
+            self.assertEqual(row['updated'],self.now-120)
+    def test_initial_claude_report_without_weekly_cycle_does_not_preserve_five_hour(self):
+        self.db.execute('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',('claude:a','Claude',self.now-120,4,self.now+1000))
+        row={'id':'claude:a','kind':'Claude','updated':self.now,'source':'claude_statusline',
+             'verified_activity':False,'stale':True,'windows':[{'label':'5H','pct':5,'reset':self.now+200}]}
+        w.restore_claude_last_report(self.db,[row],self.now)
+        self.assertEqual([value['pct'] for value in row['windows']],[None,4])
+    def test_initial_claude_increase_with_matching_cycle_stays_stale(self):
+        self.db.execute('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',('claude:a','Claude',self.now-120,4,self.now+1000))
+        row={'id':'claude:a','kind':'Claude','updated':self.now,'source':'claude_statusline',
+             'verified_activity':False,'stale':True,'windows':[{'label':'주간','pct':5,'reset':self.now+1000}]}
+        w.restore_claude_last_report(self.db,[row],self.now);w.record(self.db,[row],self.now)
+        self.assertEqual(row['windows'][0]['pct'],5);self.assertTrue(row['stale'])
+        self.assertEqual(self.db.execute('SELECT count(*) FROM weekly_samples').fetchone()[0],1)
+    def test_claude_api_activity_does_not_validate_a_conflicting_account_cycle(self):
+        self.db.execute('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',('claude:a','Claude',self.now-120,4,self.now+1000))
+        row={'id':'claude:a','kind':'Claude','updated':self.now,'source':'claude_statusline',
+             'verified_activity':True,'stale':False,'windows':[
+                 {'label':'5H','pct':6,'reset':self.now+200},
+                 {'label':'주간','pct':13,'reset':self.now+5000}]}
+        w.restore_claude_last_report(self.db,[row],self.now);w.record(self.db,[row],self.now)
+        self.assertEqual([value['pct'] for value in row['windows']],[None,4])
+        self.assertTrue(row['stale']);self.assertNotIn('verified_activity',row)
+        self.assertEqual(self.db.execute('SELECT count(*) FROM weekly_samples').fetchone()[0],1)
+    def test_verified_claude_same_cycle_updates_and_expired_cycle_rollover_are_allowed(self):
+        self.db.execute('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',('claude:a','Claude',self.now-120,4,self.now+1000))
+        import copy
+        for used in (3,5):
+            row={'id':'claude:a','kind':'Claude','updated':self.now,'source':'claude_statusline',
+                 'verified_activity':True,'stale':False,'windows':[{'label':'주간','pct':used,'reset':self.now+1000}]}
+            before=copy.deepcopy(row);w.restore_claude_last_report(self.db,[row],self.now)
+            self.assertEqual(row,before)
+        self.db.execute('DELETE FROM weekly_samples')
+        self.db.execute('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',('claude:a','Claude',self.now-120,99,self.now-1))
+        row={'id':'claude:a','kind':'Claude','updated':self.now,'source':'claude_statusline',
+             'verified_activity':True,'stale':False,'windows':[{'label':'주간','pct':1,'reset':self.now+5000}]}
+        before=copy.deepcopy(row);w.restore_claude_last_report(self.db,[row],self.now)
+        self.assertEqual(row,before)
     def test_binding_requires_kind_path_and_observation_time(self):
         roots={Path('/profiles/a'):('a','Codex',100),Path('/profiles/a/nested'):('b','Codex',200)}
         binding=w.account_for({'kind':'Codex','path':'/profiles/a/nested/sessions/a.jsonl'},roots)
@@ -180,7 +305,7 @@ class WeeklyUsageTests(unittest.TestCase):
             [self.now-1000,self.now-880,1],
             [self.now-760,self.now-640,0]])
 
-    def test_increase_chart_keeps_gap_and_reset_endpoints_without_changing_period_total(self):
+    def test_increase_chart_keeps_reset_but_reconciles_correction_before_period_total(self):
         self.point(self.now-1200,98,reset=self.now-1000)
         self.point(self.now-900,2)
         self.point(self.now-120,6)
@@ -188,7 +313,8 @@ class WeeklyUsageTests(unittest.TestCase):
         account=self.result()[0]['accounts'][0]
         intervals=account['increase_intervals']
         self.assertEqual(intervals[0],[self.now-1200,self.now-900,2,True])
-        self.assertEqual(intervals[1],[self.now-900,self.now-120,4,False])
-        self.assertIsNone(intervals[2][2])
+        self.assertEqual(intervals[1],[self.now-900,self.now-60,3,True])
+        self.assertEqual(len(intervals),2)
+        self.assertEqual(account['periods']['1h']['used_pp'],5)
         self.assertEqual(sum(x[2] for x in intervals if x[2] is not None),account['periods']['1h']['used_pp'])
         self.assertEqual(account['flow'],[])

@@ -79,26 +79,27 @@ class ClaudeRefreshTests(unittest.TestCase):
             with self.assertRaises(CredentialError):refresh_managed(self.root)
             request.assert_not_called()
 
-    def test_expired_account_is_refreshed_before_usage_query(self):
-        with patch('onetop.claude_profiles.refresh_request',return_value=self.response),patch('onetop.accounts.claude_usage',return_value={'seven_day':{'utilization':18}}) as usage:
+    def test_sampling_never_refreshes_or_queries_claude_credentials(self):
+        with patch('onetop.accounts.refresh_managed') as refresh,patch('onetop.accounts.claude_usage') as usage,patch('onetop.accounts.claude_credentials') as credentials:
             row=AccountQuotaSampler().claude(self.root,time.time())
-        usage.assert_called_once_with('renewed-access')
-        self.assertFalse(row['stale']);self.assertEqual(row['windows'][1]['pct'],18)
+        refresh.assert_not_called();usage.assert_not_called();credentials.assert_not_called()
+        self.assertTrue(row['stale']);self.assertEqual(row['status'],'report_pending')
 
     def test_failure_reason_and_last_success_survive_without_zero_fabrication(self):
         sampler=AccountQuotaSampler();key=identity('Claude','a','org')
         sampler.cached[key]={'updated':10,'windows':[{'label':'주간','pct':18,'reset':time.time()+300}]}
         with patch('onetop.accounts.refresh_managed',side_effect=CredentialError('login_required')) as refresh:
             row=sampler.claude(self.root,100);sampler.claude(self.root,200)
-        refresh.assert_called_once()
-        self.assertEqual(row['status'],'login_required');self.assertTrue(row['stale'])
+        refresh.assert_not_called()
+        self.assertEqual(row['status'],'report_pending');self.assertTrue(row['stale'])
         self.assertEqual(row['windows'][0]['pct'],18)
         self.assertNotIn('old-refresh',json.dumps(row))
 
-    def test_locked_keychain_is_not_misreported_as_missing_login(self):
-        with patch('onetop.accounts.claude_credentials',side_effect=CredentialError('credential_store_unavailable')):
+    def test_locked_keychain_is_not_touched_by_statusline_sampling(self):
+        with patch('onetop.accounts.claude_credentials',side_effect=CredentialError('credential_store_unavailable')) as credentials:
             row=AccountQuotaSampler().claude(self.root,time.time())
-        self.assertEqual(row['status'],'credential_store_unavailable')
+        credentials.assert_not_called()
+        self.assertEqual(row['status'],'report_pending')
         self.assertTrue(all(w['pct'] is None for w in row['windows']))
 
     def test_keychain_refresh_keeps_secrets_out_of_subprocess_arguments(self):

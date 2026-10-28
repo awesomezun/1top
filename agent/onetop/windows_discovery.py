@@ -92,6 +92,7 @@ def discover(collector):
         spec = {'id':sid or f'cli-{pid}-{row["birth"]}', 'kind':kind, 'cwd':cwd,
                 'title':reg.get('name') or Path(cwd).name or kind, 'pid':pid, 'pids':[pid],
                 'path':str(path) if path else None, 'configured_model':model,
+                'config_dir':str(root) if kind in ('Claude', 'GLM') else '',
                 'status':registry_status(reg), 'status_at':0, 'connected':True,
                 'process_only':path is None, 'process_started':started, 'process_birth':row['birth'],
                 'location':context(pid, rows), 'input_verified':False, 'terminal_match':'unavailable',

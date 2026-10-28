@@ -24,6 +24,24 @@
   return valid(rate)?rate:null;
  };
  const burn=value=>valid(value)?number(value)+'%/시간':'—';
+ // Connect actual reported usage as one ordinary line, including reset drops.
+ // Keep one known point before the boundary for clipping, without adding values.
+ const quotaTrend=(account,start,end)=>{
+  const result={segments:[],gaps:[],min:null,max:null,last:null,hasData:false};
+  if(!valid(start)||!valid(end)||end<=start)return result;
+  const source=Array.isArray(account?.usage_points)?account.usage_points:account?.history;
+  const points=(Array.isArray(source)?source:[]).filter(p=>Array.isArray(p)&&valid(p[0])&&p[0]<=end&&valid(p[1])&&p[1]<=100).slice().sort((a,b)=>a[0]-b[0]);
+  const first=points.findIndex(p=>p[0]>=start);
+  if(first<0)return result;
+  const segment=[];
+  for(const [t,value] of points.slice(Math.max(0,first-1))){
+   if(segment.length&&t<=segment[segment.length-1].t)continue;
+   segment.push({t,value});
+  }
+  result.segments=[segment];result.hasData=true;result.last=segment[segment.length-1];
+  result.min=Math.min(...segment.map(p=>p.value));result.max=Math.max(...segment.map(p=>p.value));
+  return result;
+ };
  // Cumulative increase within the selection, not the account's absolute allowance.
  // A boundary-crossing interval is omitted: quota changes cannot be apportioned
  // accurately by elapsed time. Unknown gaps break the line, retaining known totals.
@@ -69,6 +87,6 @@
   result.partial=!result.hasData||uncertainTiming||result.observedSeconds<end-start-1e-6;
   return result;
  };
- const api={valid,number,percent,estimate,weekly,pending,explanation,duration,scope,basis,accountBurn,sessionBurn,burn,increaseTrend};
+ const api={valid,number,percent,estimate,weekly,pending,explanation,duration,scope,basis,accountBurn,sessionBurn,burn,increaseTrend,quotaTrend};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.OneTopWeekly=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

@@ -48,6 +48,49 @@ def record(db, quotas, now):
     db.execute('DELETE FROM weekly_samples WHERE t<?',(now-RETENTION,))
 
 
+def restore_claude_last_report(db, quotas, now):
+    """Validate initial CLI reports and preserve verified Claude history as stale."""
+    for quota in quotas:
+        if quota.get('kind')!='Claude' or not quota.get('id'):continue
+        windows=quota.get('windows') or []
+        weekly=next((value for value in windows if value.get('label')=='주간'),{})
+        value=weekly.get('pct');reset=weekly.get('reset')
+        statusline=quota.get('source')=='claude_statusline'
+        initial=statusline and quota.get('verified_activity') is not True
+        if not statusline:
+            if valid_number(value) and 0<=value<=100:continue
+            # An explicit reset invalidates the old cycle even when no new value arrived.
+            if valid_number(reset) and reset>0 and reset<=now:continue
+        previous=db.execute('''SELECT t,pct,reset FROM weekly_samples
+            WHERE account=? AND kind='Claude' AND t>=? AND t<=? ORDER BY t DESC LIMIT 1''',
+            (quota['id'],now-RETENTION,now)).fetchone()
+        if not previous:continue
+        reported,previous_value,previous_reset=previous
+        if not all(valid_number(v) for v in previous) or not 0<=previous_value<=100 or previous_reset<=now:continue
+        same_cycle=valid_number(reset) and reset>now and abs(reset-previous_reset)<=60
+        conflicting_cycle=statusline and valid_number(reset) and reset>0 and abs(reset-previous_reset)>60
+        if initial or conflicting_cycle:
+            # Existing CLI processes may retain another account's login in memory.
+            # Their first callback cannot establish identity from current profile metadata.
+            quota.update(stale=True,status='last_report',note='Claude Code 마지막 보고값 · 다음 응답에서 갱신')
+            if not same_cycle:
+                windows=[{'label':item.get('label'),'pct':None,'reset':0} for item in windows]
+                weekly=next((item for item in windows if item.get('label')=='주간'),{})
+            elif valid_number(value) and previous_value<=value<=100:
+                continue
+        else:
+            if valid_number(value) and 0<=value<=100:continue
+            if valid_number(reset) and reset>0 and reset<=now:continue
+            if valid_number(quota.get('updated')) and quota['updated']>reported:continue
+            if valid_number(reset) and reset>0 and abs(reset-previous_reset)>60:continue
+        restored={'label':'주간','pct':previous_value,'reset':previous_reset}
+        quota['windows']=[restored if item.get('label')=='주간' else item for item in windows]
+        if not weekly:quota['windows'].append(restored)
+        quota.update(updated=reported,stale=True,status='last_report',source='historical_provider_report',
+                     note='Claude Code 마지막 보고값 · 다음 응답에서 갱신')
+        quota.pop('verified_activity',None)
+
+
 def interval(before, after):
     """Same-window differences; a reset loses unobserved spend near the boundary."""
     t0,p0,r0=before;t1,p1,r1=after
@@ -56,6 +99,21 @@ def interval(before, after):
     if p0==p1==0 and r0>t1 and r1>t1:return 0,True
     if r1>r0 and t0<r0<=t1:return p1,True
     return None,True
+
+
+def reconciled_history(points):
+    """Keep raw storage intact; reconcile same-cycle overshoots to newer reports."""
+    retained=[];corrections=[];excluded=0;start=0
+    for index in range(1,len(points)+1):
+        if index<len(points) and abs(points[index][2]-points[index-1][2])<=60:continue
+        cycle=points[start:index];ceiling=None;clean=[]
+        corrections.extend(after[0] for before,after in zip(cycle,cycle[1:]) if after[1]<before[1])
+        for point in reversed(cycle):
+            if ceiling is not None and point[1]>ceiling:
+                excluded+=1;continue
+            clean.append(point);ceiling=point[1]
+        retained.extend(reversed(clean));start=index
+    return retained,corrections,excluded
 
 
 def snapshot(db, quotas, now, bindings=None, recording_started=None):
@@ -82,9 +140,10 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
         bindings={sid:next(iter(accounts)) for sid,accounts in session_accounts.items() if len(accounts)==1}
     result=[];shares=collections.defaultdict(dict)
     for quota in quotas:
-        account=quota['id'];points=history[account];observations=[];event_index=0
+        account=quota['id'];points,corrections,excluded=reconciled_history(history[account]);observations=[];event_index=0
         for before,after in zip(points,points[1:]):
             t0,t1=before[0],after[0];delta,uncertain=interval(before,after)
+            if any(t0<corrected<=t1 for corrected in corrections):uncertain=True
             weights=collections.Counter()
             while event_index<len(events[account]) and events[account][event_index][0]<=t1:
                 t,sid,tokens=events[account][event_index];event_index+=1
@@ -102,7 +161,8 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
             same_cycle=(current_reset is not None and abs(points[index][2]-current_reset)<=60
                         and abs(points[index+1][2]-current_reset)<=60)
             missing=any(t0<t<=t1 for t in unbound[quota['kind']])
-            if same_cycle and not uncertain and delta is not None and weights and not missing:
+            after_correction=not corrections or t0>=corrections[-1]
+            if same_cycle and after_correction and not uncertain and delta is not None and weights and not missing:
                 eligible.append(o)
         calibration_tokens=sum(sum(o[4].values()) for o in eligible)
         calibration_pp=sum(o[2] for o in eligible)
@@ -161,6 +221,9 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
               and now-86400<=t0<t1<=now and t1-t0<=FRESH]
         result.append({'id':account,'kind':quota['kind'],'periods':periods,'calibration':calibration,
                        'history':[[t,p] for t,p,_ in chart],'flow':flow,
+                       'usage_points':[[t,p,r] for t,p,r in points],
+                       'history_quality':{'reconciled':bool(corrections),'excluded_samples':excluded,
+                                          'correction_count':len(corrections),'last_correction':corrections[-1] if corrections else None},
                        'increase_intervals':[[t0,t1,delta,uncertain] for t0,t1,delta,uncertain,_ in observations
                                              if now-86400<=t0<t1<=now]})
     return {'accounts':result,'basis':'provider_weekly_percentage','as_of':now},dict(shares)

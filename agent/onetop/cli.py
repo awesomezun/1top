@@ -5,13 +5,19 @@ from .platform_support import lock_instance
 
 def main():
     parser=argparse.ArgumentParser(prog='1top',description='Your AI agents, across apps and computers.')
-    parser.add_argument('command',nargs='?',choices=['run','connect','local','version'],default='run')
+    parser.add_argument('command',nargs='?',choices=['run','connect','local','version','statusline'],default='run')
+    parser.add_argument('--config',help='Local statusline wrapper specification (statusline only)')
     parser.add_argument('--port',type=int,default=18766)
     parser.add_argument('--headless',action='store_true')
     parser.add_argument('--relay',help='Explicit HTTPS origin of your own relay (connect only)')
     args=parser.parse_args()
     if args.relay and args.command!='connect':parser.error('--relay requires connect')
     if args.command=='version':print(__version__);return
+    if args.command=='statusline':
+        if not args.config:parser.error('statusline requires --config')
+        from .claude_statusline import run
+        sys.exit(run(args.config))
+    if args.config:parser.error('--config requires statusline')
     if platform.system() not in ('Darwin','Windows'):
         print('This release supports macOS and Windows.',file=sys.stderr);sys.exit(2)
     from .server import Collector,Handler,DATA

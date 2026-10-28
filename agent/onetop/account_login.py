@@ -4,6 +4,8 @@ Only a user-initiated, CSRF-guarded local request can launch this flow. Scripts
 contain no credentials. A separate profile leaves existing CLI sessions alone.
 """
 import os
+import json
+import sys
 import base64
 import re
 import shlex
@@ -43,6 +45,30 @@ def login_script(kind, cli, profile):
     return '#!/bin/sh\numask 077\ncd '+shlex.quote(str(profile))+'\n'+shlex.join(command)+'\n'
 
 
+def statusline_command(spec):
+    args = [sys.executable]
+    if not getattr(sys, 'frozen', False):
+        args += ['-m', 'onetop.cli']
+    args += ['statusline', '--config', str(spec)]
+    return subprocess.list2cmdline(args) if os.name == 'nt' else shlex.join(args)
+
+
+def install_new_claude_statusline(profile):
+    """Initialize only a newly created, empty 1top-owned account profile."""
+    profile = Path(profile).resolve()
+    if any(profile.iterdir()):
+        raise FileExistsError('New profile is not empty')
+    spec = profile/'1top-statusline.json'
+    values = [(spec, {'profile': str(profile), 'original_command': '',
+                     'report_directory': str(Path(data_directory()).resolve()/'claude-statusline')}),
+              (profile/'settings.json', {'statusLine': {'type': 'command',
+                                                       'command': statusline_command(spec)}})]
+    for path, value in values:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, 'w') as stream:
+            json.dump(value, stream, separators=(',', ':'))
+
+
 class AccountLogin:
     def __init__(self, directory=None):
         self.directory = directory or managed_profiles_dir()
@@ -74,6 +100,7 @@ class AccountLogin:
             profile = parent/str(uuid.uuid4())
             profile.mkdir(mode=0o700)
             try:
+                if kind == 'Claude':install_new_claude_statusline(profile)
                 if os.name=='nt':
                     quote=lambda x:"'"+str(x).replace("'","''")+"'"
                     key='CLAUDE_CONFIG_DIR' if kind=='Claude' else 'CODEX_HOME'

@@ -246,16 +246,26 @@ struct QuickDashboard: View {
                 }
                 HStack(spacing: 4) {
                     Text(s.kind == "Aside" ? (s.model ?? "앱 내부 세션") : s.kind == "Claude" ? "Claude Code" : s.kind).foregroundStyle(AgentPalette.color(s.kind))
+                    if let effort = s.reportedEffort {
+                        Text("· " + effort).foregroundStyle(.secondary).lineLimit(1).layoutPriority(1)
+                            .help("현재 effort · " + effort)
+                    }
                     Text("· " + s.locationLabel).foregroundStyle(.secondary)
                 }.font(.plex(size: 13)).lineLimit(1)
             }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
-                .help("\(s.project ?? s.kind)\n\(s.locationLabel) · \(s.model ?? s.kind)\n\(s.groupStateLabel)" + (s.title.map { "\n" + $0 } ?? ""))
+                .help("\(s.project ?? s.kind)\n\(s.locationLabel) · \(s.model ?? s.kind)" +
+                      (s.reportedEffort.map { " · effort " + $0 } ?? "") + "\n\(s.groupStateLabel)" + (s.title.map { "\n" + $0 } ?? ""))
             VStack(alignment: .trailing, spacing: 1) {
                 Text(tokensMode ? DesktopFormat.number(DesktopFormat.total(s.tokens == nil ? nil : (s.usage?.windows?[model.selectedPeriod] ?? nil))) : (s.usage?.weekly_estimate?[model.selectedPeriod].map { "≈" + DesktopFormat.quota($0.used_pp) } ?? (DesktopFormat.number(DesktopFormat.total(s.usage?.windows?[model.selectedPeriod] ?? nil)) + " tok")))
                     .font(.plex(size: 15, weight: .medium)).monospacedDigit()
-                Text(tokensMode ? "\(DesktopFormat.number(model.fresh ? s.usage?.rate : nil)) tok/s" : burn.map { "≈" + DesktopFormat.burnRate($0) } ?? pending)
-                    .font(.plex(size: 12)).foregroundStyle(.secondary).monospacedDigit()
-            }.fixedSize().help(tokensMode ? "선택 기간의 누적 토큰 · 최근 60초 평균 소비" : weeklyExplanation + "\n최근 60초 토큰 속도로 환산한 시간당 소진 추정입니다.\n" + (s.usage?.weekly_estimate?[model.selectedPeriod]?.calculationLabel ?? ""))
+                if tokensMode {
+                    Text("\(DesktopFormat.number(model.fresh ? s.usage?.rate : nil)) tok/s")
+                        .font(.plex(size: 12)).foregroundStyle(.secondary).monospacedDigit()
+                } else if let burn {
+                    Text(DesktopFormat.burnRate(burn))
+                        .font(.plex(size: 12)).foregroundStyle(.secondary).monospacedDigit()
+                }
+            }.fixedSize().help(tokensMode ? "선택 기간의 누적 토큰 · 최근 60초 평균 소비" : weeklyExplanation + "\n최근 60초 토큰 속도로 환산한 시간당 소진 추정입니다.\n" + (s.usage?.weekly_estimate?[model.selectedPeriod]?.calculationLabel ?? "") + (burn == nil ? "\n" + pending : ""))
             Button { control("focus", s) } label: { Image(systemName: "arrow.up.right").font(.plex(size: 14)) }
                 .buttonStyle(.plain).frame(width: 22, height: 30).disabled(!model.fresh || model.busy || !s.allows("focus"))
                 .accessibilityLabel("\(s.project ?? s.kind) · \(s.terminalName) 바로가기")

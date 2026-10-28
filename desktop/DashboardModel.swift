@@ -43,6 +43,7 @@ struct DesktopSnapshot: Decodable {
 }
 struct DesktopSession: Decodable, Identifiable {
     var id: String; var kind: String; var project: String?; var title: String?; var model: String?
+    var effort: String?
     var status: String?; var display_status: String?; var tokens: [Double]?
     var usage: Usage?; var resources: Resources?; var orca_terminal: Terminal?
     var location: Location?; var control_key: String?; var input_verified: Bool?
@@ -62,6 +63,10 @@ struct DesktopSession: Decodable, Identifiable {
     struct Terminal: Decodable { var title: String? }
     struct Location: Decodable { var app: String?; var app_path: String?; var terminal: String? }
     var state: String { display_status ?? status ?? "unknown" }
+    var reportedEffort: String? {
+        guard let value = effort?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        return value
+    }
     var isWorkingGroup: Bool { state == "working" || (children_working ?? 0) > 0 }
     var groupStateLabel: String {
         (children_working ?? 0) > 0 ? "\(stateLabel) · 하위 \(children_working ?? 0)개 작업 중" : stateLabel
@@ -312,6 +317,9 @@ final class DashboardModel: ObservableObject {
     private let session: URLSession
     private var fetching = false
     private var task: URLSessionDataTask?
+    private var sessionSortAmounts: [String: Double] = [:]
+    private var sessionSortUpdated: Double?
+    private var sessionSortPeriod: String?
     var onUpdate: (() -> Void)?
     init(baseURL: URL) {
         self.baseURL = baseURL
@@ -334,12 +342,30 @@ final class DashboardModel: ObservableObject {
         return DesktopFormat.total(window?.tokens)
     }
     var sortedSessions: [DesktopSession] {
-        let ranks = ["working":0, "waiting":1, "resuming":2, "paused":3, "interrupted":4, "unknown":5, "idle":6]
-        return sessions.sorted {
-            let a = $0.isWorkingGroup ? 0 : ranks[$0.state] ?? 5
-            let b = $1.isWorkingGroup ? 0 : ranks[$1.state] ?? 5
+        let ranks = ["working":0, "waiting":1, "resuming":1, "paused":2, "interrupted":2, "unknown":2, "idle":2]
+        let rows = sessions, timestamp = now.timeIntervalSince1970
+        // Hold within-tier order for one minute. Activity changes still move a
+        // group immediately; changing the selected period refreshes its amounts.
+        if sessionSortPeriod != selectedPeriod || sessionSortUpdated == nil ||
+            timestamp - (sessionSortUpdated ?? timestamp) >= 60 || timestamp < (sessionSortUpdated ?? timestamp) {
+            sessionSortAmounts = [:]; sessionSortPeriod = selectedPeriod; sessionSortUpdated = timestamp
+        }
+        let ids = Set(rows.map(\.id))
+        sessionSortAmounts = sessionSortAmounts.filter { ids.contains($0.key) }
+        for row in rows where sessionSortAmounts[row.id] == nil {
+            let values = row.usage?.windows?[selectedPeriod] ?? nil
+            let amount = values.flatMap { values -> Double? in
+                guard !values.isEmpty, values.allSatisfy({ $0.isFinite && $0 >= 0 }) else { return nil }
+                let total = values.reduce(0, +)
+                return total.isFinite ? total : nil
+            }
+            sessionSortAmounts[row.id] = amount ?? -1
+        }
+        return rows.sorted {
+            let a = $0.isWorkingGroup ? 0 : ranks[$0.state] ?? 2
+            let b = $1.isWorkingGroup ? 0 : ranks[$1.state] ?? 2
             if a != b { return a < b }
-            let ar = $0.usage?.rate ?? 0, br = $1.usage?.rate ?? 0
+            let ar = sessionSortAmounts[$0.id] ?? -1, br = sessionSortAmounts[$1.id] ?? -1
             if ar != br { return ar > br }
             return $0.id < $1.id
         }
@@ -422,6 +448,8 @@ struct AccountQuota: Decodable, Identifiable {
     var statusLabel: String {
         if !stale { return "확인됨" }
         switch status {
+        case "last_report": return "마지막 보고"
+        case "report_pending": return "보고 대기"
         case "login_required", "login_expired": return "재로그인 필요"
         case "refresh_pending": return "갱신 중"
         case "rate_limited": return "조회 제한"
