@@ -117,7 +117,12 @@ class Controller:
                     elif s.get('status') in ('idle','interrupted'):s['display_status']='paused'
                 sessions.append(s)
             if changed:self.save_state()
-            return {**snapshot,'sessions':sessions,'actions':list(self.audit[-20:]),'resume_prompt':RESUME_PROMPT}
+            result = {**snapshot,'sessions':sessions,'actions':list(self.audit[-20:]),'resume_prompt':RESUME_PROMPT}
+            if 'root_sessions' in snapshot:
+                decorated = {s['id']: s for s in sessions}
+                result['root_sessions'] = [{**s, 'display_status': decorated.get(s['id'], {}).get('display_status', s.get('status', 'unknown'))}
+                                           for s in snapshot['root_sessions']]
+            return result
 
     def resolve(self,sid,key):
         if sid.startswith('aside:'):

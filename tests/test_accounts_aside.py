@@ -12,13 +12,14 @@ class AccountTests(unittest.TestCase):
         from types import SimpleNamespace
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);(root/'.credentials.json').write_text(json.dumps({'claudeAiOauth':{'accessToken':'expired-file','expiresAt':1}}))
-            reply=SimpleNamespace(returncode=0,stdout=json.dumps({'claudeAiOauth':{'accessToken':'current-keychain','expiresAt':9999999999999}}))
-            with patch('onetop.accounts.os.name','posix'),patch('onetop.accounts.os.uname',return_value=SimpleNamespace(sysname='Darwin')),patch('onetop.accounts.subprocess.run',return_value=reply):
+            reply={'claudeAiOauth':{'accessToken':'current-keychain','expiresAt':9999999999999}}
+            with patch('onetop.accounts.keychain_document',return_value=reply):
                 self.assertEqual(claude_credentials(root)['accessToken'],'current-keychain')
     def test_keychain_unavailable_preserves_file_fallback(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);(root/'.credentials.json').write_text(json.dumps({'claudeAiOauth':{'accessToken':'file-login'}}))
-            with patch('onetop.accounts.subprocess.run',side_effect=OSError):
+            from onetop.claude_profiles import CredentialError
+            with patch('onetop.accounts.keychain_document',side_effect=CredentialError('credential_store_unavailable')):
                 self.assertEqual(claude_credentials(root)['accessToken'],'file-login')
     def test_primary_does_not_imply_five_hours(self):
         rows,plan=codex_windows({'rateLimits':{'planType':'pro','primary':{'windowDurationMins':10080,'usedPercent':95,'resetsAt':900}}},100)

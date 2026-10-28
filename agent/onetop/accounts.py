@@ -23,7 +23,7 @@ from pathlib import Path
 import certifi
 import psutil
 from .account_login import managed_profiles_dir
-from .claude_profiles import CredentialError, keychain_document, refresh_managed
+from .claude_profiles import CredentialError, keychain_document, refresh_managed, managed
 
 
 def read_json(path):
@@ -191,7 +191,8 @@ def claude_credentials(root):
     # .credentials.json may remain on disk long after that token has expired.
     try:value=keychain_document(root)
     except CredentialError:
-        if fallback and (not fallback.get('expiresAt') or timestamp(fallback['expiresAt'])>time.time()):return fallback
+        if fallback and (not fallback.get('expiresAt') or timestamp(fallback['expiresAt'])>time.time()
+                         or (managed(root) and fallback.get('refreshToken'))):return fallback
         raise
     current=value.get('claudeAiOauth') if value else None
     if isinstance(current,dict) and current.get('accessToken'):return current

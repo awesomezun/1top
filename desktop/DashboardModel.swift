@@ -7,6 +7,7 @@ struct DesktopSnapshot: Decodable {
     var updated: Double?
     var error: String?
     var sessions: [DesktopSession]?
+    var root_sessions: [DesktopSession]?
     var period_usage: PeriodUsage?
     var system: SystemUsage?
     var action_token: String?
@@ -45,6 +46,8 @@ struct DesktopSession: Decodable, Identifiable {
     var status: String?; var display_status: String?; var tokens: [Double]?
     var usage: Usage?; var resources: Resources?; var orca_terminal: Terminal?
     var location: Location?; var control_key: String?; var input_verified: Bool?
+    var children_count: Int?; var children_working: Int?; var children_ids: [String]?
+    var group_usage_partial: Bool?
     struct Usage: Decodable {
         var rate: Double?; var windows: [String: [Double]?]?
         var weekly_estimate: [String: WeeklyEstimate]?; var weekly_account: String?
@@ -59,6 +62,10 @@ struct DesktopSession: Decodable, Identifiable {
     struct Terminal: Decodable { var title: String? }
     struct Location: Decodable { var app: String?; var app_path: String?; var terminal: String? }
     var state: String { display_status ?? status ?? "unknown" }
+    var isWorkingGroup: Bool { state == "working" || (children_working ?? 0) > 0 }
+    var groupStateLabel: String {
+        (children_working ?? 0) > 0 ? "\(stateLabel) · 하위 \(children_working ?? 0)개 작업 중" : stateLabel
+    }
     var terminalName: String { orca_terminal?.title ?? location?.app ?? "실행 위치 미확인" }
     var locationLabel: String { orca_terminal != nil ? "Orca · \(terminalName)" : terminalName }
     var stateLabel: String {
@@ -100,7 +107,7 @@ struct WeeklyEstimate: Decodable {
     }
     var calculationLabel: String {
         guard let calibration, let tokens else { return "환산 기준 미확인" }
-        return "선택 기간 \(DesktopFormat.number(tokens)) tokens × (\(DesktopFormat.quota(calibration.used_pp))p ÷ \(DesktopFormat.number(calibration.tokens)) tokens)\n기준 \(Int(calibration.seconds / 60))분 관측 · 현재 계정 기준 환산"
+        return "선택 기간 \(DesktopFormat.number(tokens)) tokens × (\(DesktopFormat.quota(calibration.used_pp)) ÷ \(DesktopFormat.number(calibration.tokens)) tokens)\n기준 \(Int(calibration.seconds / 60))분 관측 · 현재 계정 기준 환산"
     }
 }
 struct WeeklyUsage: Decodable {
@@ -139,7 +146,7 @@ enum DesktopFormat {
     static func total(_ tokens: [Double]?) -> Double? { tokens?.reduce(0, +) }
     static func burnRate(_ value: Double?) -> String {
         guard let value, value.isFinite, value >= 0 else { return "—" }
-        return quota(value) + "p/시간"
+        return quota(value) + "/시간"
     }
     static func duration(_ seconds: Double?) -> String {
         guard let seconds, seconds.isFinite, seconds >= 0,
@@ -313,9 +320,9 @@ final class DashboardModel: ObservableObject {
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         self.session = URLSession(configuration: config)
     }
-    var sessions: [DesktopSession] { snapshot?.sessions ?? [] }
+    var sessions: [DesktopSession] { snapshot?.root_sessions ?? snapshot?.sessions ?? [] }
     var fresh: Bool { connected && snapshot?.isFresh(at: now) == true }
-    var working: Int { sessions.filter { $0.state == "working" }.count }
+    var working: Int { sessions.filter(\.isWorkingGroup).count }
     var knownCount: Int { sessions.filter { $0.tokens != nil }.count }
     var rate: Double? {
         let reported = sessions.compactMap { $0.tokens != nil ? $0.usage?.rate : nil }
@@ -329,7 +336,8 @@ final class DashboardModel: ObservableObject {
     var sortedSessions: [DesktopSession] {
         let ranks = ["working":0, "waiting":1, "resuming":2, "paused":3, "interrupted":4, "unknown":5, "idle":6]
         return sessions.sorted {
-            let a = ranks[$0.state] ?? 5, b = ranks[$1.state] ?? 5
+            let a = $0.isWorkingGroup ? 0 : ranks[$0.state] ?? 5
+            let b = $1.isWorkingGroup ? 0 : ranks[$1.state] ?? 5
             if a != b { return a < b }
             let ar = $0.usage?.rate ?? 0, br = $1.usage?.rate ?? 0
             if ar != br { return ar > br }

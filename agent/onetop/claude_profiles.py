@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import ssl
-import subprocess
 import tempfile
 import time
 import unicodedata
@@ -30,49 +29,117 @@ def service_name(root):
     return 'Claude Code-credentials' + suffix
 
 
+def _keychain_query_names(read=True):
+    # Both reads and refresh writes must fail rather than request authorization.
+    keys = [('kSecClass', 'kSecClassGenericPassword'),
+            ('kSecUseAuthenticationUI', 'kSecUseAuthenticationUIFail')]
+    if read:
+        keys += [('kSecMatchLimit', 'kSecMatchLimitOne'),
+                 ('kSecReturnData', 'kCFBooleanTrue')]
+    return keys
+
+
+def _keychain_operation(root, document=None):
+    """Access one existing item without UI, shell arguments, or ACL changes."""
+    sec = ctypes.CDLL('/System/Library/Frameworks/Security.framework/Security')
+    # Legacy login-keychain items can ignore kSecUseAuthenticationUIFail. This
+    # switch belongs to this collector process, not the OS or an item's ACL.
+    # Never restore TRUE: concurrent profile jobs must all remain noninteractive.
+    setter = sec.SecKeychainSetUserInteractionAllowed
+    setter.argtypes = [ctypes.c_ubyte]
+    setter.restype = ctypes.c_int32
+    if setter(False):
+        raise CredentialError('credential_store_unavailable')
+    return _keychain_noninteractive_operation(sec, root, document)
+
+
+def _keychain_noninteractive_operation(sec, root, document):
+    cf = ctypes.CDLL('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
+    cf.CFStringCreateWithCString.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_uint32]
+    cf.CFStringCreateWithCString.restype = ctypes.c_void_p
+    cf.CFDictionaryCreate.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p),
+                                    ctypes.POINTER(ctypes.c_void_p), ctypes.c_long,
+                                    ctypes.c_void_p, ctypes.c_void_p]
+    cf.CFDictionaryCreate.restype = ctypes.c_void_p
+    cf.CFDataCreate.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_long]
+    cf.CFDataCreate.restype = ctypes.c_void_p
+    cf.CFDataGetLength.argtypes = [ctypes.c_void_p]
+    cf.CFDataGetLength.restype = ctypes.c_long
+    cf.CFDataGetBytePtr.argtypes = [ctypes.c_void_p]
+    cf.CFDataGetBytePtr.restype = ctypes.c_void_p
+    cf.CFGetTypeID.argtypes = [ctypes.c_void_p]
+    cf.CFGetTypeID.restype = ctypes.c_ulong
+    cf.CFDataGetTypeID.restype = ctypes.c_ulong
+    cf.CFRelease.argtypes = [ctypes.c_void_p]
+    sec.SecItemCopyMatching.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
+    sec.SecItemCopyMatching.restype = ctypes.c_int32
+    sec.SecItemUpdate.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    sec.SecItemUpdate.restype = ctypes.c_int32
+    owned = []
+
+    def constant(name):
+        return ctypes.c_void_p.in_dll(cf if name.startswith('kCF') else sec, name).value
+
+    def own(value):
+        if not value:raise CredentialError('credential_store_unavailable')
+        owned.append(value)
+        return value
+
+    def string(value):
+        return own(cf.CFStringCreateWithCString(None, value.encode(), 0x08000100))
+
+    def dictionary(pairs):
+        keys = (ctypes.c_void_p * len(pairs))(*(constant(key) for key, _ in pairs))
+        values = (ctypes.c_void_p * len(pairs))(*(value for _, value in pairs))
+        key_callbacks = ctypes.addressof(ctypes.c_byte.in_dll(cf, 'kCFTypeDictionaryKeyCallBacks'))
+        value_callbacks = ctypes.addressof(ctypes.c_byte.in_dll(cf, 'kCFTypeDictionaryValueCallBacks'))
+        return own(cf.CFDictionaryCreate(None, keys, values, len(pairs), key_callbacks, value_callbacks))
+
+    try:
+        pairs = [(key, constant(value)) for key, value in _keychain_query_names(document is None)]
+        pairs += [('kSecAttrService', string(service_name(root))),
+                  ('kSecAttrAccount', string(getpass.getuser()))]
+        query = dictionary(pairs)
+        if document is not None:
+            encoded = json.dumps(document, separators=(',', ':')).encode()
+            if len(encoded) > 128 * 1024:raise CredentialError('credential_store_unavailable')
+            value = own(cf.CFDataCreate(None, encoded, len(encoded)))
+            status = sec.SecItemUpdate(query, dictionary([('kSecValueData', value)]))
+            if status:raise CredentialError('credential_store_unavailable')
+            return None
+        value = ctypes.c_void_p()
+        status = sec.SecItemCopyMatching(query, ctypes.byref(value))
+        if status == -25300:return None  # errSecItemNotFound
+        if status:raise CredentialError('credential_store_unavailable')
+        own(value.value)
+        if cf.CFGetTypeID(value) != cf.CFDataGetTypeID():
+            raise CredentialError('credential_store_unavailable')
+        size = cf.CFDataGetLength(value)
+        if not 0 < size <= 128 * 1024:raise CredentialError('credential_store_unavailable')
+        return ctypes.string_at(cf.CFDataGetBytePtr(value), size)
+    finally:
+        for value in reversed(owned):cf.CFRelease(value)
+
+
 def keychain_document(root):
     if os.name == 'nt' or os.uname().sysname != 'Darwin':
         return None
     try:
-        result = subprocess.run(['/usr/bin/security', 'find-generic-password', '-a',
-            getpass.getuser(), '-w', '-s', service_name(root)], capture_output=True, text=True, timeout=3)
-        if result.returncode == 44:return None  # errSecItemNotFound
-        if result.returncode or len(result.stdout) > 128*1024:
-            raise CredentialError('credential_store_unavailable')
-        value = json.loads(result.stdout)
+        encoded = _keychain_operation(root)
+        if encoded is None:return None
+        value = json.loads(encoded)
         if isinstance(value, dict) and isinstance(value.get('claudeAiOauth'), dict):
             return value
-    except (ValueError, OSError, subprocess.SubprocessError):
+    except (ValueError, OSError, TypeError, AttributeError):
         raise CredentialError('credential_store_unavailable') from None
     return None
 
 
 def save_keychain(root, document):
-    # Call Security.framework directly: tokens never enter argv, a shell, or logs.
-    sec = ctypes.CDLL('/System/Library/Frameworks/Security.framework/Security')
-    cf = ctypes.CDLL('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
-    find = sec.SecKeychainFindGenericPassword
-    find.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_char_p,
-                    ctypes.c_uint32, ctypes.c_char_p, ctypes.POINTER(ctypes.c_uint32),
-                    ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_void_p)]
-    find.restype = ctypes.c_int32
-    modify = sec.SecKeychainItemModifyAttributesAndData
-    modify.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_char_p]
-    modify.restype = ctypes.c_int32
-    sec.SecKeychainItemFreeContent.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-    cf.CFRelease.argtypes = [ctypes.c_void_p]
-    service, account = service_name(root).encode(), getpass.getuser().encode()
-    size, data, item = ctypes.c_uint32(), ctypes.c_void_p(), ctypes.c_void_p()
-    if find(None, len(service), service, len(account), account,
-            ctypes.byref(size), ctypes.byref(data), ctypes.byref(item)):
-        raise CredentialError('credential_store_unavailable')
     try:
-        encoded = json.dumps(document, separators=(',', ':')).encode()
-        if modify(item, None, len(encoded), encoded):
-            raise CredentialError('credential_store_unavailable')
-    finally:
-        sec.SecKeychainItemFreeContent(None, data)
-        cf.CFRelease(item)
+        _keychain_operation(root, document)
+    except (ValueError, OSError, TypeError, AttributeError):
+        raise CredentialError('credential_store_unavailable') from None
 
 
 def managed(root):
@@ -156,7 +223,12 @@ def refresh_managed(root, now=None):
                    'expiresAt': int((time.time() + result['expires_in'])*1000)}
         if isinstance(result.get('scope'), str):
             renewed['scopes'] = result['scope'].split()
-        document = keychain_document(root)
+        try:document = keychain_document(root)
+        except CredentialError:
+            # Continue only an existing, matching managed file login. Do not
+            # create a plaintext copy of a Keychain-only login.
+            if read_json(root/'.credentials.json').get('claudeAiOauth') != current:raise
+            document = None
         if document is not None:
             document['claudeAiOauth'] = renewed
             save_keychain(root, document)

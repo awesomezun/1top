@@ -86,14 +86,17 @@ class EnrollmentTests(unittest.TestCase):
             self.assertIn(('Codex',profile),profile_roots(Path(d)/'home'))
 
     def test_keychain_lookup_is_scoped_and_never_enumerates(self):
-        with tempfile.TemporaryDirectory() as d, patch('onetop.accounts.subprocess.run') as run:
+        from onetop.claude_profiles import keychain_document, service_name
+        with tempfile.TemporaryDirectory() as d, patch('onetop.claude_profiles._keychain_operation') as query, patch('subprocess.run') as run:
             root=Path(d)
-            run.return_value=subprocess.CompletedProcess([],0,json.dumps({'claudeAiOauth':{'accessToken':'private'}}),'')
-            self.assertEqual(claude_credentials(root)['accessToken'],'private')
-            args=run.call_args.args[0]
-            self.assertEqual(args[-1],'Claude Code-credentials-'+hashlib.sha256(str(root).encode()).hexdigest()[:8])
-            self.assertIn('find-generic-password',args)
+            query.return_value=json.dumps({'claudeAiOauth':{'accessToken':'private'}}).encode()
+            with patch('onetop.claude_profiles.os.name','posix'), patch('onetop.claude_profiles.os.uname') as uname:
+                uname.return_value.sysname='Darwin'
+                self.assertEqual(keychain_document(root)['claudeAiOauth']['accessToken'],'private')
+            self.assertEqual(service_name(root),'Claude Code-credentials-'+hashlib.sha256(str(root).encode()).hexdigest()[:8])
+            query.assert_called_once_with(root)
+            run.assert_not_called()
 
     def test_missing_keychain_stays_unknown(self):
-        with tempfile.TemporaryDirectory() as d, patch('onetop.accounts.subprocess.run',return_value=subprocess.CompletedProcess([],44,'','')):
+        with tempfile.TemporaryDirectory() as d, patch('onetop.accounts.keychain_document',return_value=None):
             self.assertEqual(claude_credentials(Path(d)),{})

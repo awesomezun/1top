@@ -24,6 +24,7 @@ from .discovery import inventory, context, applications, orca_executable, regist
 from . import __version__
 from .context_usage import request_context, stored_context
 from .platform_support import data_directory
+from .hierarchy import codex_metadata, annotate as annotate_hierarchy, group_sessions
 
 BASE = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -105,10 +106,17 @@ def pane_thread_name(title, cwd):
     if not title.endswith(suffix):return None
     name=title[:-len(suffix)]
     # Codex decorates the stable thread name with a Braille activity spinner.
-    return re.sub(r'^[\u2800-\u28ff]\s+', '', name)
+    name = re.sub(r'^[\u2800-\u28ff]\s+', '', name)
+    # Codex adds this exact attention prefix while the stable thread name stays
+    # unchanged. Strip the decoration, not an arbitrary pipe-delimited prefix.
+    return re.sub(r'^\[\s*[.!]\s*\] Action Required \| ', '', name)
 
 
 def bind_terminal(spec, metadata, terminals, pane_titles, specs):
+    if spec.get('is_subagent'):
+        spec.update(pids=[], orca_terminal=None, terminal_match='unverified',
+                    terminal_note='하위 에이전트 · 부모 세션의 실행 위치에서 확인')
+        return
     pids=spec['pids']
     source='프로세스의 Orca 터미널 ID'
     if spec['kind']=='Codex' and not spec.get('process_only'):
@@ -243,6 +251,7 @@ class Collector:
         self.last_error = None
         self.resources = None
         self.shared_roots = []
+        self.session_metadata = {}
 
     def initialize(self):
         DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -384,6 +393,11 @@ class Collector:
                           'status':'unknown', 'status_at':0, 'connected':True,
                           'source':'Codex 백엔드가 열고 있는 세션 기록',
                           'note':'여러 CLI가 한 백엔드를 공유할 수 있습니다. 세션 수와 CLI 프로세스 수는 다를 수 있습니다.'})
+            cache_key = (path, r[0])
+            if cache_key not in self.session_metadata:
+                self.session_metadata[cache_key] = codex_metadata(path, r[0])
+            specs[-1].update(self.session_metadata[cache_key])
+        self.session_metadata = {key: value for key, value in self.session_metadata.items() if key[0] in open_logs}
         try:
             r = json.loads(run([orca_executable(),'terminal','list','--json'],timeout=5))['result']
             self.terminals=r.get('terminals',[])
@@ -445,7 +459,7 @@ class Collector:
             specs[-1]['process_started']=process_start(pid)
             if specs[-1]['process_started']:specs[-1]['control_key']=target_key(specs[-1])
             counts[row['kind']]+=1
-        self.specs, self.process_counts = specs, dict(counts)
+        self.specs, self.process_counts = annotate_hierarchy(specs), dict(counts)
         self.discovery_at = time.time()
 
     def read_tracker(self, spec):
@@ -599,7 +613,9 @@ class Collector:
                                    for key,_,_ in WINDOWS}}
         if self.resources is None:self.resources=ResourceSampler()
         system=self.resources.sample(sessions,self.shared_roots)
+        roots = group_sessions(sessions)
         result={'ready':True,'version':__version__,'updated':now,'started':self.started,'sessions':sessions,
+                'root_sessions':roots,
                 'events':events,'recent':recent,'period_usage':periods,'quotas':quotas,'process_counts':self.process_counts,
                 'orca_terminals':self.terminal_count,'error':None,'poll_seconds':3,
                 'applications':getattr(self,'apps',[]),'system':system,'operations':self.operations.sample(sessions),

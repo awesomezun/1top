@@ -119,9 +119,9 @@ import CoreGraphics
         ratedUsage.weekly_account = nil
         precondition(ratedUsage.weeklyBurnPerHour(period:"5h") == nil)
 
-        precondition(DesktopFormat.burnRate(1.25) == "1.25%p/시간")
-        precondition(DesktopFormat.burnRate(0) == "0%p/시간")
-        precondition(DesktopFormat.burnRate(0.001) == "<0.01%p/시간")
+        precondition(DesktopFormat.burnRate(1.25) == "1.25%/시간")
+        precondition(DesktopFormat.burnRate(0) == "0%/시간")
+        precondition(DesktopFormat.burnRate(0.001) == "<0.01%/시간")
         precondition(DesktopFormat.burnRate(nil) == "—" && DesktopFormat.burnRate(.nan) == "—")
         precondition(DesktopFormat.duration(59) == "1분 미만")
         precondition(DesktopFormat.duration(1740) == "29분")
@@ -160,6 +160,25 @@ import CoreGraphics
         precondition(!DesktopWeeklyUsageTrend(history:[[0,1],[120,2]],flow:[],period:"10m",end:600).reported)
         let flowBoundary = DesktopWeeklyUsageTrend(history:nil,flow:[[-10,110,3],[110,230,0],[230,600,4],[230,350,1]],period:"10m",end:600)
         precondition(flowBoundary.total == 1 && flowBoundary.observedSeconds == 240)
+        // A root owns controls; descendants contribute usage exactly once.
+  let raw = """
+  {"ready":true,"updated":100,"sessions":[{"id":"p","kind":"Codex","status":"idle","tokens":[10,0,0,0]},{"id":"c","kind":"Codex","status":"working","tokens":[15,0,0,0]}],"root_sessions":[{"id":"other","kind":"Codex","status":"idle"},{"id":"p","kind":"Codex","status":"idle","control_key":"key","orca_terminal":{"title":"Terminal"},"tokens":[25,0,0,0],"usage":{"rate":5,"windows":{"1h":[25,0,0,0]}},"children_count":1,"children_working":1,"children_ids":["c"],"group_usage_partial":true}]}
+  """.data(using:.utf8)!
+  let groupedSnapshot = try JSONDecoder().decode(DesktopSnapshot.self,from:raw)
+  let groupedModel = DashboardModel(baseURL:URL(string:"http://127.0.0.1:18899")!)
+  groupedModel.snapshot = groupedSnapshot
+  precondition(groupedModel.sessions.count == 2 && groupedModel.working == 1)
+  precondition(groupedModel.sortedSessions.first?.id == "p")
+  precondition(DesktopUsageMap(sessions:groupedModel.sessions,period:"1h").total == 25)
+  let parent = groupedModel.sessions.first { $0.id == "p" }!
+  precondition(parent.state == "idle" && parent.isWorkingGroup)
+  precondition(!parent.allows("pause") && parent.allows("terminate"))
+  precondition(parent.children_ids == ["c"] && parent.group_usage_partial == true)
+  groupedModel.snapshot?.root_sessions = nil
+  precondition(groupedModel.sessions.count == 2 && groupedModel.sessions.last?.id == "c")
+  groupedModel.snapshot?.root_sessions = []
+  precondition(groupedModel.sessions.isEmpty && groupedModel.working == 0)
+
         print("Desktop model checks passed: nullable usage, freshness, accounts, observed and estimated burn rates, safe capabilities, no offline actions.")
     }
 }

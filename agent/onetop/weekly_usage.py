@@ -160,5 +160,7 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
               if not uncertain and valid_number(delta) and delta>=0
               and now-86400<=t0<t1<=now and t1-t0<=FRESH]
         result.append({'id':account,'kind':quota['kind'],'periods':periods,'calibration':calibration,
-                       'history':[[t,p] for t,p,_ in chart],'flow':flow})
+                       'history':[[t,p] for t,p,_ in chart],'flow':flow,
+                       'increase_intervals':[[t0,t1,delta,uncertain] for t0,t1,delta,uncertain,_ in observations
+                                             if now-86400<=t0<t1<=now]})
     return {'accounts':result,'basis':'provider_weekly_percentage','as_of':now},dict(shares)

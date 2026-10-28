@@ -38,3 +38,13 @@
 .chart-periods button[aria-pressed=true]{background:#253f37;color:#99ddc3}
 .chart-periods button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(max-width:700px){.chart-periods{width:100%;gap:2px}.chart-periods button{flex:1;min-width:0;padding:8px 3px;font-size:13px}.token-flow-panel .chart-wrap{height:160px}.token-flow-panel .panel-heading{padding-inline:12px}.token-flow-panel .chart-foot{padding-inline:12px}}
+
+/* v3.15.0: sessions first; account usage has its own view. */
+.range-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}.range-toolbar h2{font-size:18px;white-space:nowrap}
+.session-visuals{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;margin-bottom:22px}.session-visuals>.panel{margin:0;min-width:0}.session-visuals .panel-heading{padding:16px 20px}.session-visuals .chart-wrap{height:235px}.session-visuals .chart-foot{min-height:34px;padding-top:2px}.session-map-panel .map-surface{height:247px;margin:0 12px 12px}.session-map-panel #sessionMapTotal{font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}.session-map-panel .map-tile-detail{display:none}.session-map-panel .map-tile{padding:10px}.session-map-panel .map-tiny{padding:0}
+.session-panel>.panel-heading{flex-wrap:wrap}.session-panel .usage-mode{margin-left:auto}.session-panel .toolbar{flex-basis:100%}.session-panel .search{flex:1}.session-panel .search input{width:100%}
+#accountsView .weekly-overview{grid-template-columns:repeat(2,minmax(0,1fr))}#accountsView .weekly-card{padding:20px}#accountsView .weekly-chart{height:110px;margin-top:16px}#accountsView .weekly-period{margin-bottom:4px;font-size:14px}#accountsView .weekly-period>span:last-child{font-size:13px;margin-left:auto}#accountsView .weekly-note{margin-top:10px}#accountsView .summary{margin:20px 0}
+@media(max-width:1050px){.session-visuals{grid-template-columns:1fr}.session-visuals .chart-wrap{height:190px}.session-map-panel .map-surface{height:220px}}
+@media(max-width:640px){.range-toolbar{flex-wrap:wrap;gap:10px}.range-toolbar .range-buttons{width:100%}.session-panel>.panel-heading{flex-direction:row}.session-panel .usage-mode{margin-left:0}.session-visuals .panel-heading{flex-direction:row;padding-inline:14px}#accountsView .weekly-overview{grid-template-columns:1fr}#accountsView .weekly-card{padding:16px}}
+
+.children-toggle{font-size:12px;padding:2px 7px;color:#a9bdcf;margin:5px 0;background:#202831;border-color:#35424e}.subagent-row{background:#101318}.subagent-row td:first-child{padding-left:36px!important}.subagent-row .cell-primary{font-size:13px;color:var(--muted)}

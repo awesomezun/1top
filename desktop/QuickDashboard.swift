@@ -4,7 +4,7 @@ import SwiftUI
 private let panelBackground = Color(red: 0.055, green: 0.063, blue: 0.075)
 private let panelAccent = Color(red: 0.43, green: 0.80, blue: 0.66)
 struct QuickDashboard: View {
-    static let panelSize = NSSize(width: 480, height: 740)
+    static let panelSize = NSSize(width: 520, height: 760)
     @ObservedObject var model: DashboardModel
     @State private var hoveredSession: String?
     @State private var selectedAccount: AccountQuota?
@@ -18,9 +18,9 @@ struct QuickDashboard: View {
             header
             Divider()
             summary
-            HStack(alignment: .top, spacing: 12) {
-                CompactUsageFlow(model: model).frame(width: 284)
-                CompactTokenMap(model: model).frame(maxWidth: .infinity)
+            VStack(spacing: 8) {
+                CompactUsageFlow(model: model)
+                CompactTokenMap(model: model)
             }.padding(.horizontal, 18).padding(.bottom, 8)
             sessionList
             if let message = model.message {
@@ -88,7 +88,7 @@ struct QuickDashboard: View {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
                         ForEach(rows) { q in weeklyCard(q) }
                     }
-                }.frame(height: rows.count > 2 ? 138 : 66)
+                }.frame(height: rows.count > 2 ? 102 : 48)
             }
         }
     }
@@ -106,22 +106,16 @@ struct QuickDashboard: View {
                     Spacer(minLength: 0)
                     Text(DesktopFormat.quota(w?.pct)).font(.plex(size: 20, weight: .semibold)).monospacedDigit().fixedSize()
                 }
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     Text(q.account_label).font(.plex(size: 12)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 0)
+                    Text(q.stale ? q.statusLabel : rate == nil ? "속도 수집 중" : DesktopFormat.burnRate(rate))
+                        .font(.plex(size: 12, weight: .medium)).foregroundStyle(q.stale ? Color.orange : color).fixedSize()
                 }
-                HStack(spacing: 4) {
-                    Text(q.stale ? q.statusLabel : rate == nil ? "소진 속도 수집 중" : DesktopFormat.burnRate(rate))
-                        .font(.plex(size: 12, weight: .medium)).foregroundStyle(q.stale ? Color.orange : color).lineLimit(1)
-                    Spacer(minLength: 0)
-                    if let seconds = p?.observed_seconds, rate != nil {
-                        Text(DesktopFormat.duration(seconds) + " 관측").font(.plex(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                }
-            }.padding(.horizontal, 8).frame(height: 66).frame(maxWidth: .infinity)
+            }.padding(.horizontal, 8).frame(height: 48).frame(maxWidth: .infinity)
                 .background(color.opacity(0.065), in: RoundedRectangle(cornerRadius: 7))
         }.buttonStyle(.plain).accessibilityLabel("\(q.kind == "Claude" ? "Claude Code" : q.kind) \(q.account_label) 한도 상세")
-            .help("\(q.account_label)\n주간 한도 100% 중 사용 · \(q.note)\n속도: 관측된 한도 증가분 ÷ 실제 관측 시간. 1%p/시간은 주간 한도의 1%를 한 시간에 소진한 평균입니다.\n클릭하면 5시간 한도와 초기화 시각을 확인합니다.")
+            .help("\(q.account_label)\n주간 한도 100% 중 사용 · \(q.note)\n속도: 관측된 한도 증가분 ÷ 실제 관측 시간. 1%/시간은 주간 한도의 1%를 한 시간에 소진한 평균입니다.\n클릭하면 5시간 한도와 초기화 시각을 확인합니다.")
     }
     private var weeklyExplanation: String {
         "선택 기간의 보고 토큰을 관측한 계정별 한도 변화율로 환산합니다. 실제 차감량이 아닙니다. 모델·캐시·다른 기기 사용에 따라 오차가 생깁니다. 과거 미귀속 토큰은 현재 계정 기준으로 환산합니다."
@@ -239,18 +233,23 @@ struct QuickDashboard: View {
         let burn = model.fresh && quota?.stale == false ? s.usage?.weeklyBurnPerHour(period: model.selectedPeriod) : nil
         let pending = !model.fresh ? "마지막 기록" : quota?.stale == true ? (quota?.statusLabel ?? "한도 조회 대기") : s.usage?.weekly_account == nil ? "계정 연결 필요" : "환산 기준 수집 중"
         return HStack(alignment: .center, spacing: 8) {
-            Circle().fill(s.state == "working" ? panelAccent : s.state == "waiting" ? Color.orange : Color.gray.opacity(0.5))
-                .frame(width: 5, height: 5).help(s.stateLabel).accessibilityLabel(s.stateLabel)
+            Circle().fill(s.isWorkingGroup ? panelAccent : s.state == "waiting" ? Color.orange : Color.gray.opacity(0.5))
+                .frame(width: 5, height: 5).help(s.groupStateLabel).accessibilityLabel(s.groupStateLabel)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
                     Text(s.project ?? s.kind).font(.plex(size: 15, weight: .semibold)).lineLimit(1)
+                    if let count = s.children_count, count > 0 {
+                        Text("하위 \(count)").font(.plex(size: 12)).foregroundStyle(.secondary).fixedSize()
+                            .help("하위 \(count)개 세션의 사용량을 포함합니다. 제어 버튼은 상위 세션에 적용됩니다." +
+                                  (s.group_usage_partial == true ? " 일부 하위 세션의 토큰은 미보고 상태입니다." : ""))
+                    }
                 }
                 HStack(spacing: 4) {
                     Text(s.kind == "Aside" ? (s.model ?? "앱 내부 세션") : s.kind == "Claude" ? "Claude Code" : s.kind).foregroundStyle(AgentPalette.color(s.kind))
                     Text("· " + s.locationLabel).foregroundStyle(.secondary)
                 }.font(.plex(size: 13)).lineLimit(1)
             }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
-                .help("\(s.project ?? s.kind)\n\(s.locationLabel) · \(s.model ?? s.kind)\n\(s.stateLabel)" + (s.title.map { "\n" + $0 } ?? ""))
+                .help("\(s.project ?? s.kind)\n\(s.locationLabel) · \(s.model ?? s.kind)\n\(s.groupStateLabel)" + (s.title.map { "\n" + $0 } ?? ""))
             VStack(alignment: .trailing, spacing: 1) {
                 Text(tokensMode ? DesktopFormat.number(DesktopFormat.total(s.tokens == nil ? nil : (s.usage?.windows?[model.selectedPeriod] ?? nil))) : (s.usage?.weekly_estimate?[model.selectedPeriod].map { "≈" + DesktopFormat.quota($0.used_pp) } ?? (DesktopFormat.number(DesktopFormat.total(s.usage?.windows?[model.selectedPeriod] ?? nil)) + " tok")))
                     .font(.plex(size: 15, weight: .medium)).monospacedDigit()

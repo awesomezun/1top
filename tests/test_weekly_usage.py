@@ -179,3 +179,16 @@ class WeeklyUsageTests(unittest.TestCase):
         self.assertEqual(self.result()[0]['accounts'][0]['flow'],[
             [self.now-1000,self.now-880,1],
             [self.now-760,self.now-640,0]])
+
+    def test_increase_chart_keeps_gap_and_reset_endpoints_without_changing_period_total(self):
+        self.point(self.now-1200,98,reset=self.now-1000)
+        self.point(self.now-900,2)
+        self.point(self.now-120,6)
+        self.point(self.now-60,5)
+        account=self.result()[0]['accounts'][0]
+        intervals=account['increase_intervals']
+        self.assertEqual(intervals[0],[self.now-1200,self.now-900,2,True])
+        self.assertEqual(intervals[1],[self.now-900,self.now-120,4,False])
+        self.assertIsNone(intervals[2][2])
+        self.assertEqual(sum(x[2] for x in intervals if x[2] is not None),account['periods']['1h']['used_pp'])
+        self.assertEqual(account['flow'],[])

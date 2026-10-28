@@ -29,6 +29,19 @@ class TerminalTests(unittest.TestCase):
         self.assertEqual(other['orca_terminal']['title'],'Goal')
         self.assertEqual(self.spec['pids'],[1]);self.assertEqual(other['pids'],[2])
 
+    def test_attention_decoration_keeps_exact_name_match(self):
+        for marker in ('.', '!'):
+            spec = {**self.spec, 'pids': [1, 2]}
+            bind_terminal(spec,self.meta,self.tabs,{'%1':f'[ {marker} ] Action Required | Slides | p'},[spec])
+            self.assertEqual(spec['pids'],[1])
+            self.assertEqual(spec['orca_terminal']['handle'],'a')
+
+    def test_subagent_never_gets_parent_process_controls_from_matching_name(self):
+        self.spec['is_subagent']=True
+        bind_terminal(self.spec,self.meta,self.tabs,self.panes,[self.spec])
+        self.assertEqual(self.spec['pids'],[])
+        self.assertIsNone(self.spec['orca_terminal'])
+
     def test_duplicate_thread_names_are_not_guessed(self):
         specs=[self.spec,{**self.spec,'id':'two'}]
         bind_terminal(self.spec,self.meta,self.tabs,self.panes,specs)
