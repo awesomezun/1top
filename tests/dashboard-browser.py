@@ -95,6 +95,11 @@ try:
         assert not page.locator('td[data-column="period"] .burn-gauge').count()
         assert not page.locator('.session-panel .panel-foot').is_visible()
         checks.append('preserved controls, separate period/rate, RAM percent')
+        page.evaluate("const k='onetop.dashboard.v1',s=JSON.parse(localStorage.getItem(k));s.period='custom:9240';delete s.rangeScale;localStorage.setItem(k,JSON.stringify(s))")
+        page.reload()
+        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 3시간'")
+        assert page.locator('#sessionsView .duration-value').input_value()=='3시간'
+        checks.append('legacy 154-minute selection migrates once to the nearest fixed stop')
         assert page.locator('[data-rate-unit]').count()==0
         assert all('%/시간' in v for v in page.locator('.burn-gauge small').all_text_contents())
         page.locator('#sessionsView [data-range="5h"]').click()
@@ -187,14 +192,14 @@ try:
             page.wait_for_function('!document.documentElement.dataset.preferenceTransition')
         page.locator('[data-theme-switch]').click()
         page.wait_for_function("document.getAnimations().some(a=>a.effect?.pseudoElement==='::view-transition-new(root)'&&a.playState==='running')")
-        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.21.1.png'))
+        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.21.2.png'))
         finish_transition();assert page.locator('html').get_attribute('data-theme')=='light'
         pref_x=page.locator('[data-theme-switch]').bounding_box()['x']
         page.locator('[data-language="en"]').click()
         page.wait_for_function("[...document.querySelectorAll('canvas')].some(c=>c.style.viewTransitionName==='onetop-matrix')")
         page.wait_for_timeout(240)
         assert page.evaluate("[...document.querySelectorAll('canvas')].filter(c=>c.style.viewTransitionName==='onetop-matrix').some(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0))")
-        page.screenshot(path=str(ROOT/'build/language-reveal-v3.21.1.png'))
+        page.screenshot(path=str(ROOT/'build/language-reveal-v3.21.2.png'))
         finish_transition();assert page.locator('#pageTitle').inner_text()=='Dashboard'
         assert abs(page.locator('[data-theme-switch]').bounding_box()['x']-pref_x)<1
         assert 'Weekly limit' in page.locator('#periodColumn').inner_text()
@@ -229,24 +234,24 @@ try:
         assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order
         assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==panel_order
         checks.append('preferences and layout survive reload')
-        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.21.1.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.21.2.png'),full_page=False)
         page.locator('[data-theme-switch]').click()
         finish_transition()
-        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.21.1.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.21.2.png'),full_page=False)
         page.locator('[data-language="en"]').click();finish_transition()
         for width in (1100,768,390):
             page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
             if not page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'):
-                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.21.1.png'))
+                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.21.2.png'))
                 print(page.locator('body *').evaluate_all('(xs)=>xs.filter(e=>e.getBoundingClientRect().right>innerWidth+1&&!e.closest("[hidden],.table-scroll")).map(e=>({tag:e.tagName,id:e.id,cls:e.className,right:e.getBoundingClientRect().right})).slice(0,30)'),flush=True)
                 raise AssertionError(width)
         checks.append('1100px, 768px and mobile layout')
         page.evaluate('localStorage.removeItem("onetop.dashboard.v1")')
         page.set_viewport_size({'width':1440,'height':1100});page.reload()
         page.locator('#sessionsBody tr').first.wait_for();page.wait_for_timeout(300)
-        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.21.1.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.21.2.png'),full_page=False)
         assert not errors,errors
-        (ROOT/'build/dashboard-browser-v3.21.1.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
+        (ROOT/'build/dashboard-browser-v3.21.2.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
         print(json.dumps({'checks':checks,'errors':errors},ensure_ascii=False))
         browser.close()
 finally:

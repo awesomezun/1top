@@ -14,6 +14,7 @@ window.OneTopDashboard=(()=>{
   for(const [k,values] of Object.entries({theme:['dark','light'],lang:['ko','en','zh']}))if(values.includes(saved[k]))state[k]=saved[k];
   if(list(saved.columns,ids))state.columns=saved.columns;if(list(saved.panels,panels))state.panels=saved.panels;
   if(validPeriod(saved.period))state.period=saved.period;
+  if(saved.rangeScale==='fixed-v1')state.rangeScale=saved.rangeScale;
   for(const id of ids)if(Number.isFinite(saved.widths?.[id]))state.widths[id]=Math.max(minima[id],Math.min(700,saved.widths[id]));
   for(const id of panels){if(Number.isInteger(saved.spans?.[id]))state.spans[id]=Math.max(id==='summary'?6:3,Math.min(12,saved.spans[id]));if(Number.isFinite(saved.heights?.[id]))state.heights[id]=Math.max(150,Math.min(1200,saved.heights[id]));}
  }}catch{}

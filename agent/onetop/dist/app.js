@@ -3,6 +3,12 @@ const $=id=>document.getElementById(id),kinds=['Claude','Codex','GLM','Antigravi
 const colors={Claude:'#bd8965',Codex:'#378d76',GLM:'#7c86bd',Antigravity:'#619db9',Aside:'#a99bdb'};
 const labels={working:'작업 중',waiting:'확인 필요',idle:'대기 중',unknown:'미확인',interrupted:'중단됨',paused:'일시정지',resuming:'재개 요청 중'};
 let data=null,provider='all',view='sessions',selectedId=null,busy=false,actionBusy=false,pendingAction=null,toastTimer,benchmark=null,selectedPeriod=OneTopDashboard.state.period,usageUnit='weekly',mapGroup='session';
+// Upgrade selections saved by the former continuous slider once; keep explicit
+// text entries made with the new control on subsequent reloads.
+if(OneTopDashboard.state.rangeScale!=='fixed-v1'){
+ selectedPeriod=OneTopRanges.fromPosition(OneTopRanges.position(selectedPeriod));
+ OneTopDashboard.state.rangeScale='fixed-v1';OneTopDashboard.rememberPeriod(selectedPeriod);
+}
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>n==null?'—':n>=1e9?(n/1e9).toFixed(2)+'B':n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':Number(n.toFixed(1)).toLocaleString(OneTopI18n.locale());
 const bytes=n=>n==null?'—':n>=2**30?(n/2**30).toFixed(1)+' GB':n>=2**20?(n/2**20).toFixed(0)+' MB':n>=1024?(n/1024).toFixed(1)+' KB':Math.round(n)+' B';
