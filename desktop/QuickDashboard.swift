@@ -235,6 +235,11 @@ struct QuickDashboard: View {
         let burn = model.fresh && estimate?.permitsBurnRate(for: quota, at: model.now.timeIntervalSince1970) == true
             ? s.usage?.weeklyBurnPerHour(period: model.selectedPeriod) : nil
         let pending = !model.fresh ? "마지막 기록" : quota?.stale == true ? (quota?.statusLabel ?? "한도 조회 대기") : s.usage?.weekly_account == nil ? "계정 연결 필요" : "환산 기준 수집 중"
+        var modelLabel = "\(s.locationLabel) · \(s.model ?? s.kind)"
+        if let effort = s.reportedEffort { modelLabel += " · effort \(effort)" }
+        var helpLines = [s.project ?? s.kind, modelLabel, s.groupStateLabel]
+        if let title = s.title { helpLines.append(title) }
+        let sessionHelp = helpLines.joined(separator: "\n")
         return HStack(alignment: .center, spacing: 8) {
             Circle().fill(s.isWorkingGroup ? panelAccent : s.state == "waiting" ? Color.orange : Color.gray.opacity(0.5))
                 .frame(width: 5, height: 5).help(s.groupStateLabel).accessibilityLabel(s.groupStateLabel)
@@ -256,8 +261,7 @@ struct QuickDashboard: View {
                     Text("· " + s.locationLabel).foregroundStyle(.secondary)
                 }.font(.plex(size: 13)).lineLimit(1)
             }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
-                .help("\(s.project ?? s.kind)\n\(s.locationLabel) · \(s.model ?? s.kind)" +
-                      (s.reportedEffort.map { " · effort " + $0 } ?? "") + "\n\(s.groupStateLabel)" + (s.title.map { "\n" + $0 } ?? ""))
+                .help(sessionHelp)
             VStack(alignment: .trailing, spacing: 1) {
                 Text(tokensMode ? DesktopFormat.number(DesktopFormat.total(s.tokens == nil ? nil : (s.usage?.windows?[model.selectedPeriod] ?? nil))) : (s.usage?.weekly_estimate?[model.selectedPeriod].map { "≈" + DesktopFormat.quota($0.used_pp) } ?? (DesktopFormat.number(DesktopFormat.total(s.usage?.windows?[model.selectedPeriod] ?? nil)) + " tok")))
                     .font(.plex(size: 15, weight: .medium)).monospacedDigit()
