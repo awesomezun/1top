@@ -1,4 +1,9 @@
 /* v3.19: compact digital cluster, editable layout, and persistent display preferences. */
+/* Same circular theme reveal and live language-character ring as GitReels. */
+::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
+::view-transition-new(root){z-index:2}
+::view-transition-group(onetop-matrix),::view-transition-old(onetop-matrix),::view-transition-new(onetop-matrix){animation:none}
+::view-transition-group(onetop-matrix){z-index:3}
 :root{--bg:#0d1012;--rail:#0c0f11;--panel:#151a1e;--raised:#222b31;--line:#2b343b;--ink:#e8edef;--muted:#a0adb6;--dim:#8b98a2;--accent:#69bda1;--green:#69bda1}
 :root[data-theme=light]{color-scheme:light;--bg:#f4f5f5;--rail:#f1f3f4;--panel:#fff;--raised:#e4eaed;--line:#d5dee2;--ink:#19262b;--muted:#536773;--dim:#607480;--accent:#287c65;--green:#287c65;--red:#a94747}
 button:hover:not(:disabled){background:var(--raised)}

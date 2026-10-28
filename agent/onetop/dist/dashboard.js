@@ -24,8 +24,8 @@ window.OneTopDashboard=(()=>{
  function prefs(){
   const toolbar=document.getElementById('dashboardPreferences');if(!toolbar)return;
   toolbar.innerHTML=`<button class="theme-switch" type="button" aria-label="${t(state.theme==='dark'?'화이트 모드':'다크 모드')}" title="${t(state.theme==='dark'?'화이트 모드':'다크 모드')}" data-theme-switch>${state.theme==='dark'?'☀':'☾'}</button><div class="pref-segment" role="group" aria-label="${t('언어')}">${[['en','EN'],['ko','한'],['zh','中']].map(([v,n])=>`<button type="button" data-language="${v}" lang="${v}" aria-pressed="${state.lang===v}">${n}</button>`).join('')}</div><button class="edit-dashboard" type="button" aria-pressed="${editing}" id="editDashboard">${editing?'Done':'Edit'}</button>`;
-  toolbar.querySelector('[data-theme-switch]').onclick=()=>{state.theme=state.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=state.theme;document.documentElement.style.colorScheme=state.theme;save();prefs();queueDraw();};
-  toolbar.querySelectorAll('[data-language]').forEach(b=>b.onclick=()=>{state.lang=b.dataset.language;save();window.OneTopI18n.setLanguage(state.lang);prefs();hooks.refresh?.();afterTable();});
+  toolbar.querySelector('[data-theme-switch]').onclick=e=>window.OneTopEffects.reveal(e.currentTarget,()=>{state.theme=state.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=state.theme;document.documentElement.style.colorScheme=state.theme;save();prefs();hooks.layout?.();drawGauges();});
+  toolbar.querySelectorAll('[data-language]').forEach(b=>b.onclick=()=>{const next=b.dataset.language;if(next===state.lang&&!window.OneTopEffects.running)return;window.OneTopEffects.reveal(b,()=>{state.lang=next;save();window.OneTopI18n.setLanguage(state.lang);prefs();hooks.refresh?.();afterTable();},next);});
   document.getElementById('editDashboard').onclick=()=>{editing=!editing;document.getElementById('dashboardGrid').classList.toggle('editing',editing);prefs();queueDraw();};
  }
  function panelSetup(){

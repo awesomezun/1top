@@ -100,10 +100,31 @@ try:
         page.locator('#editDashboard').click()
         assert not page.locator('[data-panel="flow"] .panel-drag').is_visible()
         checks.append('Edit-gated panel move and resize')
-        page.locator('[data-theme-switch]').click();assert page.locator('html').get_attribute('data-theme')=='light'
+        def finish_transition():
+            page.wait_for_function('!document.documentElement.dataset.preferenceTransition')
+        page.locator('[data-theme-switch]').click()
+        page.wait_for_function("document.getAnimations().some(a=>a.effect?.pseudoElement==='::view-transition-new(root)'&&a.playState==='running')")
+        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.19.1.png'))
+        finish_transition();assert page.locator('html').get_attribute('data-theme')=='light'
+        page.locator('[data-language="en"]').click()
+        page.wait_for_function("[...document.querySelectorAll('canvas')].some(c=>c.style.viewTransitionName==='onetop-matrix')")
+        page.wait_for_timeout(240)
+        assert page.evaluate("[...document.querySelectorAll('canvas')].filter(c=>c.style.viewTransitionName==='onetop-matrix').some(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0))")
+        page.screenshot(path=str(ROOT/'build/language-reveal-v3.19.1.png'))
+        finish_transition();assert page.locator('#pageTitle').inner_text()=='Dashboard'
+        assert 'Weekly limit' in page.locator('#periodColumn').inner_text()
+        assert page.locator('#search').get_attribute('placeholder')=='Search terminal, project or model'
+        page.locator('[data-language="zh"]').click();finish_transition();assert page.locator('#pageTitle').inner_text()=='仪表盘'
+        page.locator('[data-language="ko"]').click();finish_transition();assert page.locator('#pageTitle').inner_text()=='대시보드'
+        page.evaluate("for(const lang of ['en','zh','ko'])document.querySelector('[data-language='+lang+']').click()")
+        finish_transition();assert page.locator('#pageTitle').inner_text()=='대시보드'
+        assert page.locator('canvas[style*="onetop-matrix"]').count()==0
+        page.emulate_media(reduced_motion='reduce')
         page.locator('[data-language="en"]').click();assert page.locator('#pageTitle').inner_text()=='Dashboard'
-        page.locator('[data-language="zh"]').click();assert page.locator('#pageTitle').inner_text()=='仪表盘'
-        page.locator('[data-language="ko"]').click();assert page.locator('#pageTitle').inner_text()=='대시보드'
+        assert page.locator('html').get_attribute('data-preference-transition') is None
+        page.locator('[data-language="ko"]').click()
+        page.emulate_media(reduced_motion='no-preference')
+        checks.append('circular theme reveal, rendered matrix language ring, rapid picks and reduced motion')
         assert page.locator('.brand-wordmark').evaluate('(e)=>getComputedStyle(e).color')=='rgb(25, 38, 43)'
         checks.append('light, dark, Korean, English and Chinese')
         rename=page.locator('[data-rename]').first
@@ -120,11 +141,11 @@ try:
         assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order
         assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==panel_order
         checks.append('preferences and layout survive reload')
-        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.19.0.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.19.1.png'),full_page=False)
         page.locator('[data-theme-switch]').click()
-        page.wait_for_timeout(300)
-        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.19.0.png'),full_page=False)
-        page.locator('[data-language="en"]').click();page.wait_for_timeout(200)
+        finish_transition()
+        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.19.1.png'),full_page=False)
+        page.locator('[data-language="en"]').click();finish_transition()
         for width in (1100,768,390):
             page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
             assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),width
@@ -132,9 +153,9 @@ try:
         page.evaluate('localStorage.removeItem("onetop.dashboard.v1")')
         page.set_viewport_size({'width':1440,'height':1100});page.reload()
         page.locator('#sessionsBody tr').first.wait_for();page.wait_for_timeout(300)
-        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.19.0.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.19.1.png'),full_page=False)
         assert not errors,errors
-        (ROOT/'build/dashboard-browser-v3.19.0.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
+        (ROOT/'build/dashboard-browser-v3.19.1.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
         print(json.dumps({'checks':checks,'errors':errors},ensure_ascii=False))
         browser.close()
 finally:
