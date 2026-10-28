@@ -68,14 +68,18 @@ class Preview(BaseHTTPRequestHandler):
         self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(body)
 
 
-server=ThreadingHTTPServer(('127.0.0.1',0),Preview)
+class PreviewServer(ThreadingHTTPServer):
+    # Match the app server: reloads request all scripts and styles together.
+    request_queue_size=64
+
+server=PreviewServer(('127.0.0.1',0),Preview)
 threading.Thread(target=server.serve_forever,daemon=True).start()
 checks=[];errors=[]
 try:
     with sync_playwright() as p:
         browser=p.chromium.launch()
         page=browser.new_page(viewport={'width':1440,'height':1100},color_scheme='dark')
-        page.on('pageerror',lambda e:errors.append(str(e)))
+        page.on('pageerror',lambda e:(errors.append(str(e)),print('Browser error:',str(e),flush=True)))
         page.goto(f'http://127.0.0.1:{server.server_port}')
         page.locator('#sessionsBody tr').first.wait_for()
         page.wait_for_timeout(250)
@@ -101,8 +105,7 @@ try:
         assert not page.locator('td[data-column="period"] .burn-gauge').count()
         assert not page.locator('.session-panel .panel-foot').is_visible()
         checks.append('preserved controls, separate period/rate, RAM percent')
-        page.evaluate("const k='onetop.dashboard.v1',s=JSON.parse(localStorage.getItem(k));s.period='custom:9240';delete s.rangeScale;localStorage.setItem(k,JSON.stringify(s))")
-        page.reload()
+        page.evaluate("const k='onetop.dashboard.v1',s=JSON.parse(localStorage.getItem(k));s.period='custom:9240';delete s.rangeScale;localStorage.setItem(k,JSON.stringify(s));location.reload()")
         page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 3시간'")
         checks.append('legacy 154-minute selection migrates once to the nearest fixed stop')
         assert page.locator('[data-rate-unit]').count()==0
@@ -114,7 +117,9 @@ try:
         assert page.locator('#fleetSpeedTotal').count()==0
         assert page.locator('#fleetSpeedBand').evaluate('(c)=>Math.abs(Number(c.getAttribute("aria-valuenow"))-OneTopSpeed.measure(data,selectedPeriod).rate*3600)<.001')
         assert page.locator('#fleetSpeedBand').evaluate('(c)=>c.getContext("2d").getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0)')
-        assert page.locator('#sessionsView .range-buttons').evaluate('(e)=>Math.abs(e.getBoundingClientRect().right-e.closest(".range-toolbar").getBoundingClientRect().right)<1')
+        assert page.locator('#fleetSpeedTitle').inner_text()=='토큰 사용 속도'
+        assert page.locator('#sessionsView .range-toolbar').evaluate('(e)=>Math.abs(e.getBoundingClientRect().left-document.querySelector("#fleetSpeed").getBoundingClientRect().left)<1')
+        assert page.locator('#sessionsView .range-buttons').evaluate('(e)=>getComputedStyle(e).borderTopWidth==="0px"')
         before_speed=page.locator('#fleetSpeedValue').inner_text()
         page.locator('#providers [data-provider]').first.click()
         assert page.locator('#fleetSpeedValue').inner_text()==before_speed
@@ -122,12 +127,12 @@ try:
         # Migrate saved layouts without resetting their panel order or dimensions.
         old_order=['map','summary','sessions','flow','shared']
         page.evaluate('(order)=>{const k="onetop.dashboard.v1",s=JSON.parse(localStorage.getItem(k));s.panels=order;s.heights.flow=350;localStorage.setItem(k,JSON.stringify(s))}',old_order)
-        page.reload();page.locator('#fleetSpeedValue').wait_for()
+        page.reload();page.locator('#dashboardGrid>[data-panel]').first.wait_for()
         assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==['map','summary','speed','sessions','flow','shared']
         assert page.locator('[data-panel=flow]').evaluate('(e)=>e.style.minHeight')=='350px'
         # Restore normal test layout before existing drag and resize scenarios.
         page.evaluate('const k="onetop.dashboard.v1",s=JSON.parse(localStorage.getItem(k));s.panels=["summary","speed","flow","map","sessions","shared"];delete s.heights.flow;localStorage.setItem(k,JSON.stringify(s))')
-        page.reload();page.locator('#fleetSpeedValue').wait_for()
+        page.reload();page.locator('#dashboardGrid>[data-panel]').first.wait_for()
         slider=page.locator('#sessionsView .duration-slider')
         def assert_range_geometry(view='sessions'):
             positions=page.locator(f'#{view}View .duration-slider').evaluate('''slider=>{
@@ -254,14 +259,14 @@ try:
             page.wait_for_function('!document.documentElement.dataset.preferenceTransition')
         page.locator('[data-theme-switch]').click()
         page.wait_for_function("document.getAnimations().some(a=>a.effect?.pseudoElement==='::view-transition-new(root)'&&a.playState==='running')")
-        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.24.0.png'))
+        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.25.0.png'))
         finish_transition();assert page.locator('html').get_attribute('data-theme')=='light'
         pref_x=page.locator('[data-theme-switch]').bounding_box()['x']
         page.locator('[data-language="en"]').click()
         page.wait_for_function("[...document.querySelectorAll('canvas')].some(c=>c.style.viewTransitionName==='onetop-matrix')")
         page.wait_for_timeout(240)
         assert page.evaluate("[...document.querySelectorAll('canvas')].filter(c=>c.style.viewTransitionName==='onetop-matrix').some(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0))")
-        page.screenshot(path=str(ROOT/'build/language-reveal-v3.24.0.png'))
+        page.screenshot(path=str(ROOT/'build/language-reveal-v3.25.0.png'))
         finish_transition();assert page.locator('#pageTitle').inner_text()=='Dashboard'
         assert_range_geometry()
         assert abs(page.locator('[data-theme-switch]').bounding_box()['x']-pref_x)<1
@@ -299,16 +304,16 @@ try:
         assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order
         assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==panel_order
         checks.append('preferences and layout survive reload')
-        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.24.0.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.25.0.png'),full_page=False)
         page.locator('[data-theme-switch]').click()
         finish_transition()
-        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.24.0.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.25.0.png'),full_page=False)
         page.locator('[data-language="en"]').click();finish_transition()
         for width in (1100,768,390):
             page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
             assert_range_geometry()
             if not page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'):
-                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.24.0.png'))
+                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.25.0.png'))
                 print(page.locator('body *').evaluate_all('(xs)=>xs.filter(e=>e.getBoundingClientRect().right>innerWidth+1&&!e.closest("[hidden],.table-scroll")).map(e=>({tag:e.tagName,id:e.id,cls:e.className,right:e.getBoundingClientRect().right})).slice(0,30)'),flush=True)
                 raise AssertionError(width)
         checks.append('1100px, 768px and mobile layout')
@@ -316,9 +321,9 @@ try:
         page.evaluate('localStorage.removeItem("onetop.dashboard.v1")')
         page.set_viewport_size({'width':1440,'height':1100});page.reload()
         page.locator('#sessionsBody tr').first.wait_for();page.wait_for_timeout(300)
-        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.24.0.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.25.0.png'),full_page=False)
         assert not errors,errors
-        (ROOT/'build/dashboard-browser-v3.24.0.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
+        (ROOT/'build/dashboard-browser-v3.25.0.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
         print(json.dumps({'checks':checks,'errors':errors},ensure_ascii=False))
         browser.close()
 finally:

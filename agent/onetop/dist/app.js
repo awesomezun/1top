@@ -137,15 +137,22 @@ function drawFleetSpeed(){
  const {width:w,height:h}=canvas.getBoundingClientRect();if(!w||!h)return;
  const dpr=devicePixelRatio||1,c=canvas.getContext('2d'),css=getComputedStyle(document.documentElement),accent=css.getPropertyValue('--accent'),line=css.getPropertyValue('--line'),muted=css.getPropertyValue('--muted');
  canvas.width=w*dpr;canvas.height=h*dpr;c.scale(dpr,dpr);
- const left=8,right=w-8,y=30,span=right-left,max=Number(canvas.dataset.max)||1,rate=canvas.dataset.rate===''?null:Number(canvas.dataset.rate),position=left+span*Math.min(1,(rate||0)/max);
- c.lineCap='round';c.lineWidth=4;c.strokeStyle=line;c.beginPath();c.moveTo(left,y);c.lineTo(right,y);c.stroke();
- if(rate>0){c.strokeStyle=accent;c.beginPath();c.moveTo(left,y);c.lineTo(position,y);c.stroke();}
+ const x=w/2,y=h-24,r=Math.min(w/2-18,h-40),max=Number(canvas.dataset.max)||1,rate=canvas.dataset.rate===''?null:Number(canvas.dataset.rate),fraction=Math.min(1,(rate||0)/max);
+ const point=(angle,radius)=>[x+Math.cos(angle)*radius,y+Math.sin(angle)*radius];
+ // Compact tachometer arc: its sweep reads as a gauge, not a draggable slider.
+ c.lineCap='round';c.lineWidth=6;c.strokeStyle=line;c.beginPath();c.arc(x,y,r,Math.PI,2*Math.PI);c.stroke();
+ if(rate>0){c.strokeStyle=accent;c.beginPath();c.arc(x,y,r,Math.PI,Math.PI*(1+fraction));c.stroke();}
  c.lineCap='butt';c.lineWidth=1;
- const major=w<300?2:4,steps=major*5;
- for(let i=0;i<=steps;i++){const x=left+span*i/steps,big=i%5===0;c.strokeStyle=i/steps<=(rate||0)/max?accent:line;c.beginPath();c.moveTo(x,y+(big?12:13));c.lineTo(x,y+(big?22:18));c.stroke();}
- c.font='11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';c.fillStyle=muted;
- for(let i=0;i<=major;i++){c.textAlign=i===0?'left':i===major?'right':'center';c.fillText(fmt(max*i/major),left+span*i/major,h-2);}
- if(rate!==null){c.strokeStyle=accent;c.lineWidth=1.5;c.beginPath();c.moveTo(position,y-13);c.lineTo(position,y+7);c.stroke();c.fillStyle=accent;c.beginPath();c.arc(position,y,4,0,Math.PI*2);c.fill();}
+ for(let i=0;i<=30;i++){
+  const angle=Math.PI*(1+i/30),big=i%5===0,from=point(angle,r+8),to=point(angle,r+(big?16:12));
+  c.strokeStyle=i/30<=fraction&&rate!==null?accent:line;c.beginPath();c.moveTo(...from);c.lineTo(...to);c.stroke();
+ }
+ c.font='11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';c.fillStyle=muted;c.textBaseline='middle';
+ c.textAlign='center';c.fillText(fmt(max/2),x,y-r+25);c.fillText('0',x-r,y+17);c.fillText(fmt(max),x+r,y+17);
+ if(rate!==null){
+  const angle=Math.PI*(1+fraction),from=point(angle,r-12),to=point(angle,r+6);
+  c.strokeStyle=accent;c.lineWidth=2;c.beginPath();c.moveTo(...from);c.lineTo(...to);c.stroke();
+ }
 }
 
 function renderHost(){
