@@ -9,6 +9,7 @@ struct QuickDashboard: View {
     @State private var hoveredSession: String?
     @State private var selectedAccount: AccountQuota?
     @AppStorage("weeklyTokensMode") private var tokensMode = false
+    @AppStorage("dashboardTheme") private var dashboardTheme = "dark"
     var openDashboard: () -> Void; var openBrowser: () -> Void
     var remoteOptions: () -> Void; var connectRemote: () -> Void
     var toggleLogin: () -> Void; var restart: () -> Void; var quit: () -> Void
@@ -42,10 +43,10 @@ struct QuickDashboard: View {
                     .buttonStyle(.plain).help("브라우저에서 열기").accessibilityLabel("브라우저에서 열기")
             }.padding(.horizontal, 18).padding(.vertical, 10)
         }.frame(width: Self.panelSize.width, height: Self.panelSize.height)
-            .background(panelBackground).preferredColorScheme(.dark).font(.plex(size: 14))
+            .background(dashboardTheme == "light" ? Color(nsColor: .windowBackgroundColor) : panelBackground).preferredColorScheme(dashboardTheme == "light" ? .light : .dark).font(.plex(size: 14))
             .popover(item: $selectedAccount, arrowEdge: .bottom) { original in
                 let current = model.snapshot?.account_quotas?.first { $0.id == original.id } ?? original
-                compactQuota(current).padding(12).frame(width: 370).preferredColorScheme(.dark)
+                compactQuota(current).padding(12).frame(width: 370).preferredColorScheme(dashboardTheme == "light" ? .light : .dark)
             }
     }
     private var summary: some View {

@@ -1,0 +1,141 @@
+"""Presentation regression checks against a read-only live snapshot and mocked mutations.
+
+Run with system Python (Playwright installed). Never forwards control POSTs to real sessions.
+"""
+import json
+from pathlib import Path
+import threading
+import time
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from playwright.sync_api import sync_playwright
+
+ROOT = Path(__file__).resolve().parents[1]
+DIST = ROOT / 'agent/onetop/dist'
+with urllib.request.urlopen('http://127.0.0.1:18766/api/state') as response:
+    snapshot = json.load(response)
+snapshot['action_token'] = 'presentation-test-only'
+calls = []
+
+
+class Preview(BaseHTTPRequestHandler):
+    def log_message(self, *_): pass
+    def do_GET(self):
+        route = self.path.split('?', 1)[0]
+        if route == '/api/state':
+            snapshot['updated'] = time.time()
+            body, mime = json.dumps(snapshot).encode(), 'application/json'
+        elif route == '/api/updates': body, mime = b'{}', 'application/json'
+        else:
+            path = (DIST / ('index.html' if route == '/' else route.lstrip('/'))).resolve()
+            if not path.is_relative_to(DIST) or not path.is_file(): self.send_error(404); return
+            body = path.read_bytes()
+            mime = {'.html':'text/html','.js':'application/javascript','.css':'text/css','.png':'image/png','.woff2':'font/woff2','.json':'application/json'}.get(path.suffix,'application/octet-stream')
+        self.send_response(200); self.send_header('Content-Type',mime); self.end_headers(); self.wfile.write(body)
+    def do_POST(self):
+        payload=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        calls.append(payload)
+        if payload.get('action') == 'rename':
+            for key in ('sessions','root_sessions'):
+                for session in snapshot.get(key,[]):
+                    if session['id']==payload['session_id']: session['orca_terminal']['title']=payload['title']
+        body=json.dumps({'ok':True,'message':'QA only','title':payload.get('title')}).encode()
+        self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(body)
+
+
+server=ThreadingHTTPServer(('127.0.0.1',0),Preview)
+threading.Thread(target=server.serve_forever,daemon=True).start()
+checks=[];errors=[]
+try:
+    with sync_playwright() as p:
+        browser=p.chromium.launch()
+        page=browser.new_page(viewport={'width':1440,'height':1100},color_scheme='dark')
+        page.on('pageerror',lambda e:errors.append(str(e)))
+        page.goto(f'http://127.0.0.1:{server.server_port}')
+        page.locator('#sessionsBody tr').first.wait_for()
+        page.wait_for_timeout(250)
+        size=page.locator('.sessions-table').evaluate('(e)=>({table:e.scrollWidth,parent:e.parentElement.clientWidth,cols:[...e.querySelectorAll("col")].map(c=>c.style.width)})')
+        assert size['table']<=size['parent']+1,size
+        assert page.locator('#pageTitle').inner_text()=='대시보드'
+        assert page.locator('.session-actions [data-action]').count()>0
+        assert page.locator('#sessionsBody td[data-column="memory"]').all_text_contents()
+        assert all('%' in v or v.strip()=='—' for v in page.locator('#sessionsBody td[data-column="memory"]').all_text_contents())
+        assert not page.locator('td[data-column="period"] .burn-gauge').count()
+        assert not page.locator('.session-panel .panel-foot').is_visible()
+        checks.append('preserved controls, separate period/rate, RAM percent')
+        page.locator('[data-rate-unit="minute"]').click()
+        assert page.locator('[data-rate-unit="minute"]').get_attribute('aria-pressed')=='true'
+        page.locator('#sessionsView [data-range="5h"]').click()
+        assert '5시간' in page.locator('#periodColumn').inner_text()
+        checks.append('rate unit and selected period')
+        header=page.locator('th[data-column="memory"] .column-label')
+        header.focus();page.keyboard.press('ArrowLeft');page.keyboard.press('Shift+ArrowRight')
+        order=page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')
+        assert order.index('memory')<order.index('cpu')
+        width=page.locator('col[data-column="memory"]').evaluate('(e)=>parseFloat(e.style.width)')
+        page.wait_for_timeout(3300)
+        assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order
+        assert page.locator('col[data-column="memory"]').evaluate('(e)=>parseFloat(e.style.width)')==width
+        checks.append('column order and width survive polling')
+        # Exercise mouse interactions as well as the accessible keyboard controls.
+        page.locator('th[data-column="model"] .column-label').drag_to(page.locator('th[data-column="status"] .column-label'))
+        order=page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')
+        assert order.index('model')>order.index('status')
+        handle=page.locator('th[data-column="memory"] .column-resize').bounding_box()
+        page.mouse.move(handle['x']+handle['width']/2,handle['y']+20);page.mouse.down()
+        page.mouse.move(handle['x']+handle['width']/2+20,handle['y']+20);page.mouse.up()
+        assert page.locator('col[data-column="memory"]').evaluate('(e)=>parseFloat(e.style.width)')==width+20
+        checks.append('mouse column drag and resize')
+        assert not page.locator('[data-panel="flow"] .panel-drag').is_visible()
+        page.locator('#editDashboard').click()
+        move=page.locator('[data-panel="map"] .panel-drag');move.focus();page.keyboard.press('ArrowLeft')
+        panel_order=page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')
+        assert panel_order.index('map')<panel_order.index('flow')
+        resize=page.locator('[data-panel="flow"] .panel-resize');resize.focus();page.keyboard.press('ArrowDown')
+        assert 'min-height:' in page.locator('[data-panel="flow"]').get_attribute('style')
+        table_resize=page.locator('[data-panel="sessions"] .panel-resize');table_resize.focus();page.keyboard.press('ArrowUp')
+        assert page.locator('[data-panel="sessions"]').evaluate('(e)=>!!e.style.height')
+        assert page.locator('[data-panel="sessions"] .table-scroll').evaluate('(e)=>e.scrollHeight>e.clientHeight')
+        page.locator('[data-panel="sessions"] .panel-heading').scroll_into_view_if_needed()
+        page.locator('#editDashboard').click()
+        assert not page.locator('[data-panel="flow"] .panel-drag').is_visible()
+        checks.append('Edit-gated panel move and resize')
+        page.locator('[data-theme-switch]').click();assert page.locator('html').get_attribute('data-theme')=='light'
+        page.locator('[data-language="en"]').click();assert page.locator('#pageTitle').inner_text()=='Dashboard'
+        page.locator('[data-language="zh"]').click();assert page.locator('#pageTitle').inner_text()=='仪表盘'
+        page.locator('[data-language="ko"]').click();assert page.locator('#pageTitle').inner_text()=='대시보드'
+        assert page.locator('.brand-wordmark').evaluate('(e)=>getComputedStyle(e).color')=='rgb(25, 38, 43)'
+        checks.append('light, dark, Korean, English and Chinese')
+        rename=page.locator('[data-rename]').first
+        if rename.count():
+            rename.click();page.locator('#renameTitle').fill('QA 제목 $(not-a-command)')
+            page.locator('#saveRename').click();page.wait_for_timeout(300)
+            assert calls[-1]['action']=='rename' and calls[-1]['title']=='QA 제목 $(not-a-command)'
+            assert not page.locator('#renameDialog').is_visible()
+            checks.append('rename uses guarded action payload; no real mutation')
+        page.reload();page.locator('#sessionsBody tr').first.wait_for();page.wait_for_timeout(300)
+        assert '5시간' in page.locator('#periodColumn').inner_text()
+        assert page.locator('html').get_attribute('data-theme')=='light'
+        assert page.locator('[data-rate-unit="minute"]').get_attribute('aria-pressed')=='true'
+        assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order
+        assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==panel_order
+        checks.append('preferences and layout survive reload')
+        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.19.0.png'),full_page=False)
+        page.locator('[data-theme-switch]').click()
+        page.wait_for_timeout(300)
+        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.19.0.png'),full_page=False)
+        page.locator('[data-language="en"]').click();page.wait_for_timeout(200)
+        for width in (1100,768,390):
+            page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
+            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),width
+        checks.append('1100px, 768px and mobile layout')
+        page.evaluate('localStorage.removeItem("onetop.dashboard.v1")')
+        page.set_viewport_size({'width':1440,'height':1100});page.reload()
+        page.locator('#sessionsBody tr').first.wait_for();page.wait_for_timeout(300)
+        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.19.0.png'),full_page=False)
+        assert not errors,errors
+        (ROOT/'build/dashboard-browser-v3.19.0.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
+        print(json.dumps({'checks':checks,'errors':errors},ensure_ascii=False))
+        browser.close()
+finally:
+    server.shutdown();server.server_close()

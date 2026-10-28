@@ -57,6 +57,12 @@ def instruction_text(value):
     return value
 
 
+def terminal_title(value):
+    if not isinstance(value, str) or not value.strip() or len(value.strip()) > 80 or any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ActionError('터미널 제목은 제어 문자 없이 1–80자로 입력하세요.', 400)
+    return value.strip()
+
+
 def accepts_instruction(spec):
     if not spec.get('control_key'):return False
     state=spec.get('status','unknown')
@@ -206,18 +212,34 @@ class Controller:
 
     def execute(self,payload):
         action=payload.get('action');sid=payload.get('session_id');key=payload.get('control_key');rid=payload.get('request_id')
-        if action not in ('focus','interrupt','pause','resume','terminate','prompt','message') or not all(isinstance(x,str) and x for x in (sid,key,rid)):
+        if action not in ('focus','interrupt','pause','resume','terminate','prompt','message','rename') or not all(isinstance(x,str) and x for x in (sid,key,rid)):
             raise ActionError('잘못된 동작 요청입니다.',400)
         prompt=instruction_text(payload.get('prompt')) if action in ('prompt','message') else None
+        title=terminal_title(payload.get('title')) if action=='rename' else None
         if not self.lock.acquire(blocking=False):raise ActionError('이전 동작을 처리 중입니다. 잠시 후 다시 시도하세요.')
         try:
-            request=(action,sid,key,hashlib.sha256(prompt.encode()).hexdigest() if prompt is not None else None)
+            content=title if action=='rename' else prompt
+            request=(action,sid,key,hashlib.sha256(content.encode()).hexdigest() if content is not None else None)
             if rid in self.receipts:
                 previous,result=self.receipts[rid]
                 if previous!=request:raise ActionError('요청 ID가 이미 사용되었습니다.')
                 if not (payload.get('_dispatch_queued') is True and result.get('queued')):return result
             spec=self.resolve(sid,key);terminal=spec.get('orca_terminal')
-            if action in ('prompt','message'):
+            if action=='rename':
+                if not terminal or not terminal.get('handle'):
+                    raise ActionError('제목을 변경할 Orca 터미널 연결을 확인할 수 없습니다.')
+                self.orca('rename','--terminal',terminal['handle'],'--title',title)
+                # Publish the confirmed metadata immediately; re-discover on the next tick.
+                with self.collector.lock:
+                    for row in (*self.collector.snapshot.get('sessions', []),
+                                *self.collector.snapshot.get('root_sessions', []),
+                                *getattr(self.collector, 'specs', [])):
+                        current = row.get('orca_terminal') or {}
+                        if (current.get('handle'), current.get('incarnationId')) == (terminal['handle'], terminal.get('incarnationId')):
+                            row['orca_terminal'] = {**current, 'title': title}
+                    self.collector.discovery_at = 0
+                result={'message':f'터미널 제목을 {title}(으)로 변경했습니다.','title':title}
+            elif action in ('prompt','message'):
                 current={**spec,'status':self.status(spec)}
                 with self.state_lock:mark=self.paused.get(sid)
                 if mark and mark['key']==key and mark['phase']=='resuming':

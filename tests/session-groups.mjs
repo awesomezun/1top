@@ -13,7 +13,9 @@ const nodes=Object.fromEntries([...html.matchAll(/\bid="([^"]+)"/g)].map(([,id])
 const context=vm.createContext({
  document:{getElementById:id=>nodes[id]||null,querySelectorAll:()=>[],querySelector:()=>null,addEventListener(){}},
  window:{addEventListener(){}},fetch:()=>new Promise(()=>{}),setInterval(){},setTimeout(){},clearTimeout(){},
- AbortSignal,URL,Date,OneTopWeekly:weekly
+ AbortSignal,URL,Date,OneTopWeekly:weekly,
+ OneTopDashboard:{init(){},afterTable(){},rateCell:(rate)=>JSON.stringify({rate}),interacting:false,state:{period:'1h'},rememberPeriod(){}},
+ OneTopI18n:{locale:()=> 'ko-KR'}
 });
 vm.runInContext(source,context);
 vm.runInContext(`data={ready:true,updated:Date.now()/1000,account_quotas:[],period_usage:{windows:[{key:'1h',label:'1시간',seconds:3600}]}};`,context);
@@ -186,17 +188,18 @@ vm.runInContext(`
 `,context);
 const visibleText=markup=>markup.replace(/\s(?:title|aria-label)="[^"]*"/g,'').replace(/<[^>]*>/g,'');
 const compactCell=vm.runInContext('sessionWeeklyCell(compactSession,[100,0,0,0],null)',context);
-assert.equal(visibleText(compactCell),'≈17.7%21.6%/시간');
-assert.equal((compactCell.match(/class="cell-sub"/g)||[]).length,1);
-assert.match(compactCell,/title="[^"]*60초 평균/); // Explanation remains available only on hover.
+assert.equal(visibleText(compactCell),'≈17.7%');
+assert.equal((compactCell.match(/class="cell-sub"/g)||[]).length,0);
+assert.equal(JSON.parse(vm.runInContext('sessionBurnCell(compactSession)',context)).rate,21.6);
 const tokenFallback=vm.runInContext('sessionWeeklyCell({tokens:[100,0,0,0],usage:{}},[100,0,0,0],null)',context);
 assert.equal(visibleText(tokenFallback),'100 tokens');
 const unknownCell=vm.runInContext('sessionWeeklyCell({tokens:null,usage:{}},null,null)',context);
-assert.equal(visibleText(unknownCell),'—보고 대기');
+assert.equal(visibleText(unknownCell),'—');
 vm.runInContext('data.account_quotas[0].stale=true',context);
 assert.equal(visibleText(vm.runInContext('sessionWeeklyCell(compactSession,[100,0,0,0],null)',context)),'≈17.7%');
+assert.equal(JSON.parse(vm.runInContext('sessionBurnCell(compactSession)',context)).rate,null);
 assert.doesNotMatch(source,/주간 한도 환산/);
-console.log('Compact weekly cell: percentage and hourly rate only; explanation stays in hover, missing estimates use tokens once.');
+console.log('Period usage and burn rate stay in separate columns; stale rates are unknown, missing estimates use tokens once.');
 
 // Exercise real delegated click handlers. Only unrelated render sections are stubbed.
 nodes.modelFilter.options=[{value:'all'}];nodes.search.value='';nodes.stateFilter.value='all';nodes.modelFilter.value='all';

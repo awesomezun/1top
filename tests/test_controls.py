@@ -78,6 +78,32 @@ class ControlTests(unittest.TestCase):
             self.controller.execute(self.request)
             switch.assert_called_once_with('switch','--terminal','terminal-a')
 
+    def test_rename_only_changes_verified_terminal_metadata(self):
+        self.request.update(action='rename',title='  1top 모니터링  ')
+        other=copy.deepcopy(self.spec);other['orca_terminal']['incarnationId']='different'
+        self.controller.collector.snapshot={'sessions':[copy.deepcopy(self.spec), other]}
+        with patch.object(self.controller,'orca',return_value={}) as command, patch('onetop.controls.terminate_pid') as kill:
+            result=self.controller.execute(self.request)
+            command.assert_called_once_with('rename','--terminal','terminal-a','--title','1top 모니터링')
+            self.assertEqual(result['title'],'1top 모니터링')
+            self.assertEqual(self.controller.collector.snapshot['sessions'][0]['orca_terminal']['title'],'1top 모니터링')
+            self.assertEqual(other['orca_terminal']['title'],'Test')
+            self.assertEqual(self.controller.execute(self.request),result)
+            self.assertEqual(command.call_count,1)
+            kill.assert_not_called()
+            with self.assertRaises(ActionError):self.controller.execute({**self.request,'title':'Different'})
+
+    def test_rename_rejects_invalid_names_and_missing_or_stale_connection(self):
+        self.request['action']='rename'
+        with patch.object(self.controller,'orca') as command:
+            for name in ('','   ','x'*81,'title\nnext','title\x1b',None,123):
+                with self.assertRaises(ActionError):self.controller.execute({**self.request,'title':name})
+            self.spec['orca_terminal']=None
+            self.spec['control_key']=target_key(self.spec)
+            with self.assertRaises(ActionError):self.controller.execute({**self.request,'title':'valid'})
+            with self.assertRaises(ActionError):self.controller.execute({**self.request,'title':'valid','control_key':self.spec['control_key']})
+            command.assert_not_called()
+
     def test_real_sigterm_only_to_isolated_child_and_stale_start_rejected(self):
         child=subprocess.Popen(['/bin/sleep','30'])
         try:
