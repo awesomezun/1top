@@ -143,11 +143,11 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
     }
     func makeWindow() {
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1380, height: 880), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        w.title = "1top — 이 Mac"; w.subtitle = "로컬 워크스페이스"; w.minSize = NSSize(width: 1040, height: 680)
+        w.title = "1top — 이 Mac"; w.minSize = NSSize(width: 1040, height: 680)
         w.isReleasedWhenClosed = false; w.delegate = self; w.backgroundColor = NSColor(calibratedWhite: 0.055, alpha: 1)
         w.appearance = NSAppearance(named: .darkAqua); w.center(); w.setFrameAutosaveName("1top.desktop.v2")
-        let toolbar = NSToolbar(identifier: "1top.toolbar"); toolbar.delegate = self; toolbar.displayMode = .iconAndLabel
-        w.toolbar = toolbar; w.toolbarStyle = .unified
+        let toolbar = NSToolbar(identifier: "1top.toolbar"); toolbar.delegate = self; toolbar.displayMode = .iconOnly
+        w.toolbar = toolbar; w.toolbarStyle = .unifiedCompact
         let config = WKWebViewConfiguration(); config.websiteDataStore = testing ? .nonPersistent() : .default()
         // No privileged native bridge. The renderer uses the existing guarded HTTP controls.
         let web = WKWebView(frame: .zero, configuration: config); web.navigationDelegate = self; web.uiDelegate = self

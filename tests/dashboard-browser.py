@@ -58,6 +58,11 @@ try:
         assert size['table']<=size['parent']+1,size
         assert page.locator('#pageTitle').inner_text()=='대시보드'
         assert page.locator('.workspace').count()==0
+        assert page.locator('#views button').evaluate_all('(xs)=>xs.map(x=>x.dataset.view)')==['sessions','accounts','maps','system','operations','benchmark']
+        assert page.locator('#views [data-view=accounts] span').inner_text()=='계정 한도'
+        assert page.locator('#views [data-view=maps] span').inner_text()=='사용량 맵'
+        menu_x=page.locator('#views button>span').evaluate_all('(xs)=>xs.map(x=>x.getBoundingClientRect().x)')
+        assert max(menu_x)-min(menu_x)<1,menu_x
         assert page.locator('.session-actions [data-action]').count()>0
         assert page.locator('#sessionsBody td[data-column="memory"]').all_text_contents()
         assert all('%' in v or v.strip()=='—' for v in page.locator('#sessionsBody td[data-column="memory"]').all_text_contents())
@@ -83,8 +88,12 @@ try:
         order=page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')
         assert order.index('model')>order.index('status')
         handle=page.locator('th[data-column="memory"] .column-resize').bounding_box()
-        assert page.locator('th[data-column="memory"] .column-resize').inner_text()=='↔'
-        assert page.locator('th[data-column="memory"] .column-resize').evaluate('(e)=>getComputedStyle(e).backgroundColor')!='rgba(0, 0, 0, 0)'
+        grip=page.locator('th[data-column="memory"] .column-resize')
+        assert grip.inner_text()==''
+        assert grip.evaluate('(e)=>getComputedStyle(e).backgroundColor')=='rgba(0, 0, 0, 0)'
+        assert grip.evaluate('(e)=>getComputedStyle(e,"::after").width')=='1px'
+        assert handle['width']>=14
+        assert grip.evaluate('(e)=>getComputedStyle(e,"::after").backgroundColor')!='rgba(0, 0, 0, 0)'
         page.mouse.move(handle['x']+handle['width']/2,handle['y']+20);page.mouse.down()
         page.mouse.move(handle['x']+handle['width']/2+20,handle['y']+20);page.mouse.up()
         assert page.locator('col[data-column="memory"]').evaluate('(e)=>parseFloat(e.style.width)')==width+20
@@ -107,14 +116,14 @@ try:
             page.wait_for_function('!document.documentElement.dataset.preferenceTransition')
         page.locator('[data-theme-switch]').click()
         page.wait_for_function("document.getAnimations().some(a=>a.effect?.pseudoElement==='::view-transition-new(root)'&&a.playState==='running')")
-        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.19.2.png'))
+        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.19.6.png'))
         finish_transition();assert page.locator('html').get_attribute('data-theme')=='light'
         pref_x=page.locator('[data-theme-switch]').bounding_box()['x']
         page.locator('[data-language="en"]').click()
         page.wait_for_function("[...document.querySelectorAll('canvas')].some(c=>c.style.viewTransitionName==='onetop-matrix')")
         page.wait_for_timeout(240)
         assert page.evaluate("[...document.querySelectorAll('canvas')].filter(c=>c.style.viewTransitionName==='onetop-matrix').some(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0))")
-        page.screenshot(path=str(ROOT/'build/language-reveal-v3.19.2.png'))
+        page.screenshot(path=str(ROOT/'build/language-reveal-v3.19.6.png'))
         finish_transition();assert page.locator('#pageTitle').inner_text()=='Dashboard'
         assert abs(page.locator('[data-theme-switch]').bounding_box()['x']-pref_x)<1
         assert 'Weekly limit' in page.locator('#periodColumn').inner_text()
@@ -149,10 +158,10 @@ try:
         assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order
         assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==panel_order
         checks.append('preferences and layout survive reload')
-        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.19.2.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.19.6.png'),full_page=False)
         page.locator('[data-theme-switch]').click()
         finish_transition()
-        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.19.2.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.19.6.png'),full_page=False)
         page.locator('[data-language="en"]').click();finish_transition()
         for width in (1100,768,390):
             page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
@@ -161,9 +170,9 @@ try:
         page.evaluate('localStorage.removeItem("onetop.dashboard.v1")')
         page.set_viewport_size({'width':1440,'height':1100});page.reload()
         page.locator('#sessionsBody tr').first.wait_for();page.wait_for_timeout(300)
-        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.19.2.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.19.6.png'),full_page=False)
         assert not errors,errors
-        (ROOT/'build/dashboard-browser-v3.19.2.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
+        (ROOT/'build/dashboard-browser-v3.19.6.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
         print(json.dumps({'checks':checks,'errors':errors},ensure_ascii=False))
         browser.close()
 finally:

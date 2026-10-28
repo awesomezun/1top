@@ -7,6 +7,7 @@ window.OneTopDashboard=(()=>{
  const panels=['summary','flow','map','sessions','shared'];
  const state={theme:'dark',lang:'ko',period:'1h',columns:[...ids],widths:{...defaults},panels:[...panels],spans:{summary:12,flow:6,map:6,sessions:12,shared:12},heights:{}};
  let hooks={},editing=false,dragging=false,frame,initialized=false;
+ let gaugeScale={scope:null,max:1,lower:null,since:0};
  const list=(v,allowed)=>Array.isArray(v)&&v.length===allowed.length&&new Set(v).size===allowed.length&&v.every(x=>allowed.includes(x));
  try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved){
   for(const [k,values] of Object.entries({theme:['dark','light'],lang:['ko','en','zh']}))if(values.includes(saved[k]))state[k]=saved[k];
@@ -62,7 +63,8 @@ window.OneTopDashboard=(()=>{
    const id=ids[i];th.dataset.column=id;th.draggable=true;
    const content=th.innerHTML;th.replaceChildren();const label=document.createElement('button');label.type='button';label.className='column-label';label.innerHTML=content;
    if(th.id){label.id=th.id;th.removeAttribute('id');}th.append(label);
-   const resize=document.createElement('button');resize.type='button';resize.className='column-resize';resize.setAttribute('aria-label','열 너비 조절');resize.title='좌우로 끌어 열 너비 조절';resize.innerHTML='<span aria-hidden="true">↔</span>';th.append(resize);
+   if(id==='rate'){const scale=document.createElement('span');scale.className='burn-scale';th.append(scale);}
+   const resize=document.createElement('button');resize.type='button';resize.className='column-resize';resize.setAttribute('aria-label','열 너비 조절');resize.title='좌우로 끌어 열 너비 조절';th.append(resize);
    th.ondragstart=e=>{if(e.target.closest('.column-resize')){e.preventDefault();return;}e.dataTransfer.setData('application/onetop-column',id);};th.ondragover=e=>{if([...e.dataTransfer.types].includes('application/onetop-column'))e.preventDefault();};
    th.ondrop=e=>{const from=e.dataTransfer.getData('application/onetop-column');if(!ids.includes(from))return;e.preventDefault();move(state.columns,from,id);afterTable();save();};
    label.onkeydown=e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();const delta=e.key==='ArrowLeft'?-1:1;if(e.shiftKey)state.widths[id]=Math.max(minima[id],Math.min(700,state.widths[id]+delta*10));else{const i=state.columns.indexOf(id);move(state.columns,id,state.columns[Math.max(0,Math.min(ids.length-1,i+delta))]);}afterTable();save();label.focus();};
@@ -78,15 +80,31 @@ window.OneTopDashboard=(()=>{
   applyWidths();drawGauges();window.OneTopI18n?.apply();
  }
  function number(n){const digits=2;return n>0&&n<10**-digits?'<' +(10**-digits):Number(n.toFixed(digits)).toLocaleString(state.lang==='ko'?'ko-KR':state.lang==='zh'?'zh-CN':'en-US');}
+ const rateSuffix=()=>state.lang==='ko'?'%/시간':state.lang==='zh'?'%/小时':'%/h';
  function rateCell(rate,kind,note=''){
   if(!Number.isFinite(rate)||rate<0)return '<span class="unknown-value">—</span>';
-  const suffix=state.lang==='ko'?'%/시간':state.lang==='zh'?'%/小时':'%/h';
+  const suffix=rateSuffix();
   return `<div class="burn-gauge" title="${esc(note)}"><canvas width="96" height="46" data-burn-rate="${rate}" data-kind="${esc(kind)}" role="img" aria-label="${esc(number(rate))}${suffix}"></canvas><strong>${esc(number(rate))}<small>${suffix}</small></strong></div>`;
  }
  function nice(n){if(n<=0)return 1;const power=10**Math.floor(Math.log10(n)),ratio=n/power;return (ratio<=1?1:ratio<=2?2:ratio<=5?5:10)*power;}
+ function sharedGaugeMax(peak,scope){
+  const next=nice(Math.max(1,peak)),now=performance.now();
+  // Expand immediately; shrink only after a sustained drop to avoid polling jitter.
+  if(scope!==gaugeScale.scope||next>gaugeScale.max)gaugeScale={scope,max:next,lower:null,since:0};
+  else if(next<gaugeScale.max&&peak<=gaugeScale.max*.4){
+   if(gaugeScale.lower!==next){gaugeScale.lower=next;gaugeScale.since=now;}
+   else if(now-gaugeScale.since>=30000)gaugeScale={scope,max:next,lower:null,since:0};
+  }else{gaugeScale.lower=null;gaugeScale.since=0;}
+  return gaugeScale.max;
+ }
  function drawGauges(){
-  const canvases=[...document.querySelectorAll('canvas[data-burn-rate]')],max=nice(Math.max(1,...canvases.map(c=>Number(c.dataset.burnRate)))),css=getComputedStyle(document.documentElement);
+  const canvases=[...document.querySelectorAll('canvas[data-burn-rate]')].filter(c=>c.getBoundingClientRect().width>0),label=document.querySelector('.burn-scale');
+  if(!canvases.length){if(label)label.textContent='';return;}
+  const scope=state.period+'|'+canvases.map(c=>c.closest('tr')?.dataset.session||'').sort().join('|');
+  const max=sharedGaugeMax(Math.max(0,...canvases.map(c=>Number(c.dataset.burnRate))),scope),range='0–'+number(max)+rateSuffix(),css=getComputedStyle(document.documentElement);
+  if(label)label.textContent=range;
   for(const c of canvases){const {width:w,height:h}=c.getBoundingClientRect();if(!w||!h)continue;const dpr=devicePixelRatio||1;c.width=w*dpr;c.height=h*dpr;const x=c.getContext('2d');x.scale(dpr,dpr);const cx=w/2,cy=h-11,r=Math.min(29,w/2-13),n=Number(c.dataset.burnRate),a=Math.PI+Math.PI*Math.min(1,n/max),color=c.dataset.kind==='Claude'?'#bd8965':'#378d76';
+   c.dataset.burnMax=String(max);c.setAttribute('aria-label',number(n)+rateSuffix()+' ('+range+')');
    x.lineWidth=5;x.strokeStyle=css.getPropertyValue('--line');x.beginPath();x.arc(cx,cy,r,Math.PI,Math.PI*2);x.stroke();x.strokeStyle=color;x.beginPath();x.arc(cx,cy,r,Math.PI,a);x.stroke();x.lineWidth=1.5;x.beginPath();x.moveTo(cx,cy);x.lineTo(cx+Math.cos(a)*(r-8),cy+Math.sin(a)*(r-8));x.stroke();x.font='11px "IBM Plex Sans",sans-serif';x.fillStyle=css.getPropertyValue('--muted');x.textAlign='left';x.fillText('0',4,h-1);x.textAlign='right';x.fillText(number(max)+'%',w-2,h-1);
   }
  }
