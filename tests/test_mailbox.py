@@ -14,6 +14,13 @@ class MailboxTests(unittest.TestCase):
   with self.path.open('a') as f:f.write(json.dumps(value)+'\n')
  def reply(self,text,role='assistant',typ='text',rid=None):
   return {'type':'assistant','message':{'role':role,'content':[{'type':typ,'text':f'[1top-reply:{rid or self.rid}]{text}[/1top-reply]'}]}}
+ def test_terminal_message_has_only_text_and_one_reply_format_line(self):
+  text='어느 세션인가요?\n터미널 이름을 알려주세요.'
+  envelope=self.box.begin(self.spec,self.rid,text)
+  self.assertEqual(envelope,f'{text}\n\n1top reply: [1top-reply:{self.rid}]...[/1top-reply]')
+  self.append(self.reply('Terminal 2'))
+  row=self.box.read(self.spec)[0]
+  self.assertEqual(row['text'],text);self.assertEqual(row['reply'],'Terminal 2')
  def test_only_correlated_new_visible_reply_leaves_computer(self):
   self.append(self.reply('old private answer'))
   envelope=self.box.begin(self.spec,self.rid,'Where are you?');self.assertIn(self.rid,envelope)

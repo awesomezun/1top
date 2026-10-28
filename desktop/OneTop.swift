@@ -24,7 +24,6 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         if !testing, NSRunningApplication.runningApplications(withBundleIdentifier: "si.1top.companion").contains(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) { NSApp.terminate(nil); return }
         NSApp.setActivationPolicy(.accessory); NSApp.appearance = NSAppearance(named: .darkAqua)
         if !testing { try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]) }
-        OneTopTypography.registerFonts()
         makeMainMenu()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
@@ -157,7 +156,7 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         w.contentView!.addSubview(web)
         NSLayoutConstraint.activate([web.leadingAnchor.constraint(equalTo: w.contentView!.leadingAnchor), web.trailingAnchor.constraint(equalTo: w.contentView!.trailingAnchor), web.topAnchor.constraint(equalTo: w.contentView!.topAnchor), web.bottomAnchor.constraint(equalTo: w.contentView!.bottomAnchor)])
         let label = NSTextField(wrappingLabelWithString: "이 Mac의 대시보드를 여는 중…")
-        label.alignment = .center; label.font = NSFont(name: "IBMPlexSansKR-Regular", size: 17) ?? .systemFont(ofSize: 17); label.textColor = .secondaryLabelColor; label.translatesAutoresizingMaskIntoConstraints = false
+        label.alignment = .center; label.font = NSFont.systemFont(ofSize: 17); label.textColor = .secondaryLabelColor; label.translatesAutoresizingMaskIntoConstraints = false
         w.contentView!.addSubview(label)
         NSLayoutConstraint.activate([label.centerXAnchor.constraint(equalTo: web.centerXAnchor), label.centerYAnchor.constraint(equalTo: web.centerYAnchor), label.widthAnchor.constraint(equalToConstant: 620)])
         window = w; webView = web; loadingLabel = label

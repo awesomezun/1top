@@ -73,6 +73,12 @@ try:
         page.goto(f'http://127.0.0.1:{server.server_port}')
         page.locator('#sessionsBody tr').first.wait_for()
         page.wait_for_timeout(250)
+        page.evaluate('document.fonts.ready')
+        assert 'Plex' not in page.locator('body').evaluate('(e)=>getComputedStyle(e).fontFamily')
+        assert '1top Wordmark' in page.locator('.brand-wordmark').evaluate('(e)=>getComputedStyle(e).fontFamily')
+        assert not page.evaluate('performance.getEntriesByType("resource").some(r=>/\\.(woff2?|ttf)(?:$|\\?)/.test(r.name))')
+        assert page.locator('#views [data-view=sessions]').evaluate('(e)=>getComputedStyle(e).boxShadow')=='none'
+        checks.append('system UI font, preserved logo, no font requests or sidebar accent stripe')
         size=page.locator('.sessions-table').evaluate('(e)=>({table:e.scrollWidth,parent:e.parentElement.clientWidth,cols:[...e.querySelectorAll("col")].map(c=>c.style.width)})')
         assert size['table']<=size['parent']+1,size
         assert page.locator('#pageTitle').inner_text()=='대시보드'
@@ -149,6 +155,7 @@ try:
         checks.append('thin width handles resize without reordering; labels reorder columns')
         assert not page.locator('[data-panel="flow"] .panel-drag').is_visible()
         page.locator('#editDashboard').click()
+        assert all('↔' not in text for text in page.locator('.column-resize,.panel-edit-tools').all_text_contents())
         move=page.locator('[data-panel="map"] .panel-drag');move.focus();page.keyboard.press('ArrowLeft')
         panel_order=page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')
         assert panel_order.index('map')<panel_order.index('flow')
@@ -165,14 +172,14 @@ try:
             page.wait_for_function('!document.documentElement.dataset.preferenceTransition')
         page.locator('[data-theme-switch]').click()
         page.wait_for_function("document.getAnimations().some(a=>a.effect?.pseudoElement==='::view-transition-new(root)'&&a.playState==='running')")
-        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.20.1.png'))
+        page.screenshot(path=str(ROOT/'build/theme-reveal-v3.20.3.png'))
         finish_transition();assert page.locator('html').get_attribute('data-theme')=='light'
         pref_x=page.locator('[data-theme-switch]').bounding_box()['x']
         page.locator('[data-language="en"]').click()
         page.wait_for_function("[...document.querySelectorAll('canvas')].some(c=>c.style.viewTransitionName==='onetop-matrix')")
         page.wait_for_timeout(240)
         assert page.evaluate("[...document.querySelectorAll('canvas')].filter(c=>c.style.viewTransitionName==='onetop-matrix').some(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0))")
-        page.screenshot(path=str(ROOT/'build/language-reveal-v3.20.1.png'))
+        page.screenshot(path=str(ROOT/'build/language-reveal-v3.20.3.png'))
         finish_transition();assert page.locator('#pageTitle').inner_text()=='Dashboard'
         assert abs(page.locator('[data-theme-switch]').bounding_box()['x']-pref_x)<1
         assert 'Weekly limit' in page.locator('#periodColumn').inner_text()
@@ -207,24 +214,24 @@ try:
         assert page.locator('.sessions-table th').evaluate_all('(xs)=>xs.map(x=>x.dataset.column)')==order
         assert page.locator('#dashboardGrid>[data-panel]').evaluate_all('(xs)=>xs.map(x=>x.dataset.panel)')==panel_order
         checks.append('preferences and layout survive reload')
-        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.20.1.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-light-v3.20.3.png'),full_page=False)
         page.locator('[data-theme-switch]').click()
         finish_transition()
-        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.20.1.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.20.3.png'),full_page=False)
         page.locator('[data-language="en"]').click();finish_transition()
         for width in (1100,768,390):
             page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
             if not page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'):
-                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.20.1.png'))
+                page.screenshot(path=str(ROOT/f'build/dashboard-overflow-{width}-v3.20.3.png'))
                 print(page.locator('body *').evaluate_all('(xs)=>xs.filter(e=>e.getBoundingClientRect().right>innerWidth+1&&!e.closest("[hidden],.table-scroll")).map(e=>({tag:e.tagName,id:e.id,cls:e.className,right:e.getBoundingClientRect().right})).slice(0,30)'),flush=True)
                 raise AssertionError(width)
         checks.append('1100px, 768px and mobile layout')
         page.evaluate('localStorage.removeItem("onetop.dashboard.v1")')
         page.set_viewport_size({'width':1440,'height':1100});page.reload()
         page.locator('#sessionsBody tr').first.wait_for();page.wait_for_timeout(300)
-        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.20.1.png'),full_page=False)
+        page.screenshot(path=str(ROOT/'build/dashboard-default-v3.20.3.png'),full_page=False)
         assert not errors,errors
-        (ROOT/'build/dashboard-browser-v3.20.1.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
+        (ROOT/'build/dashboard-browser-v3.20.3.json').write_text(json.dumps({'checks':checks,'errors':errors},indent=2))
         print(json.dumps({'checks':checks,'errors':errors},ensure_ascii=False))
         browser.close()
 finally:

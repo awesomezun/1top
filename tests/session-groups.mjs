@@ -166,19 +166,19 @@ vm.runInContext(`
  data.sessions=[idleHeavy,idleOther,activeCodex,activeClaude,activeChild];data.root_sessions=data.sessions;
  renderTable();
 `,context);
-assert.deepEqual(rowIDs(),['active-claude','child-active-group','active-codex','idle-other','idle-heavy']);
+assert.deepEqual(rowIDs(),['idle-other','idle-heavy','active-claude','child-active-group','active-codex']);
 vm.runInContext(`activeCodex.usage.windows['1h']=[999,0,0,0];renderTable();`,context);
-assert.deepEqual(rowIDs(),['active-claude','child-active-group','active-codex','idle-other','idle-heavy']);
+assert.deepEqual(rowIDs(),['idle-other','idle-heavy','active-claude','child-active-group','active-codex']);
 vm.runInContext(`idleHeavy.status='working';renderTable();`,context);
-assert.deepEqual(rowIDs(),['active-claude','child-active-group','active-codex','idle-heavy','idle-other']);
+assert.deepEqual(rowIDs(),['idle-other','idle-heavy','active-claude','child-active-group','active-codex']);
 vm.runInContext(`activeClaude.status='idle';renderTable();`,context);
-assert.deepEqual(rowIDs(),['child-active-group','active-codex','idle-heavy','active-claude','idle-other']);
+assert.deepEqual(rowIDs(),['idle-other','idle-heavy','active-claude','child-active-group','active-codex']);
 rankingClock+=60000;
 vm.runInContext('renderTable()',context);
-assert.deepEqual(rowIDs(),['idle-heavy','active-codex','child-active-group','idle-other','active-claude']);
+assert.deepEqual(rowIDs(),['idle-other','idle-heavy','active-codex','active-claude','child-active-group']);
 vm.runInContext(`selectedPeriod='30m';renderTable();`,context);
-assert.deepEqual(rowIDs(),['idle-heavy','child-active-group','active-codex','idle-other','active-claude']);
-console.log('Default ordering: working groups before idle, then same-unit period totals; live tier changes preserve 60-second within-tier ranks.');
+assert.deepEqual(rowIDs(),['idle-other','idle-heavy','child-active-group','active-codex','active-claude']);
+console.log('Default ordering: selected-period usage across all statuses; status changes preserve stable 60-second ranks.');
 
 vm.runInContext(`
  selectedPeriod='1h';usageUnit='weekly';
@@ -254,16 +254,16 @@ vm.runInContext(`
 `,context);
 const providerTags=()=>[...nodes.providers.innerHTML.matchAll(/data-provider="([^"]+)"/g)].map(([,kind])=>kind);
 const appTags=()=>[...nodes.hostApps.innerHTML.matchAll(/data-app-filter="([^"]+)"/g)].map(([,app])=>app);
-assert.deepEqual(providerTags(),['Claude','Codex','GLM']); // Neither count-descending nor backend arrival order.
-assert.deepEqual(appTags(),['Zed','Orca','Terminal','Aside']);
+assert.deepEqual(providerTags(),['GLM','Claude','Codex']); // Neither count-descending nor backend arrival order.
+assert.deepEqual(appTags(),['Aside','Zed','Orca','Terminal']);
 assert.match(nodes.providers.innerHTML,/data-provider="Codex"[^>]*>[\s\S]*?<small>2<\/small>/);
 vm.runInContext(`tagCodex.usage.windows['1h']=[5000,0,0,0];render();`,context);
-assert.deepEqual(providerTags(),['Claude','Codex','GLM']); // Same frozen rank as the table.
+assert.deepEqual(providerTags(),['GLM','Claude','Codex']); // Same frozen rank as the table.
 rankingClock+=60000;vm.runInContext('render()',context);
-assert.deepEqual(providerTags(),['Codex','Claude','GLM']);
+assert.deepEqual(providerTags(),['GLM','Codex','Claude']);
 vm.runInContext(`selectedPeriod='30m';render();`,context);
-assert.deepEqual(providerTags(),['Claude','Codex','GLM']);
-assert.deepEqual(appTags(),['Zed','Orca','Terminal','Aside']);
+assert.deepEqual(providerTags(),['GLM','Claude','Codex']);
+assert.deepEqual(appTags(),['Aside','Zed','Orca','Terminal']);
 assert.match(html,/<img class="brand-mark" src="\/brand-mark_v1\.1\.0\.png"/);
 assert.deepEqual(fs.readFileSync(new URL('../agent/onetop/dist/brand-mark_v1.1.0.png',import.meta.url)),fs.readFileSync(new URL('../site/public/brand/v1.1.0/mark.png',import.meta.url)));
 assert.match(css,/\.range-buttons button\{[^}]*font-size:16px/);

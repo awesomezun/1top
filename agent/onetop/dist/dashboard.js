@@ -35,7 +35,7 @@ window.OneTopDashboard=(()=>{
   const grid=document.createElement('div');grid.id='dashboardGrid';range.after(grid);
   const elements={summary:document.getElementById('sessionSummary'),flow:root.querySelector('.token-flow-panel'),map:root.querySelector('.session-map-panel'),sessions:root.querySelector('.session-panel'),shared:root.querySelector('.shared-backend-panel')};
   for(const id of panels){const panel=elements[id];panel.dataset.panel=id;grid.append(panel);
-   const tools=document.createElement('div');tools.className='panel-edit-tools';tools.innerHTML=`<button type="button" draggable="true" class="panel-drag" data-panel-drag="${id}" aria-label="패널 이동">⠿ <span>패널 이동</span></button><div><button type="button" data-span="6">½</button><button type="button" data-span="12">↔</button></div>`;
+   const tools=document.createElement('div');tools.className='panel-edit-tools';tools.innerHTML=`<button type="button" draggable="true" class="panel-drag" data-panel-drag="${id}" aria-label="패널 이동">⠿ <span>패널 이동</span></button><div><button type="button" data-span="6">50%</button><button type="button" data-span="12">100%</button></div>`;
    panel.prepend(tools);const resize=document.createElement('button');resize.type='button';resize.className='panel-resize';resize.setAttribute('aria-label','패널 크기 조절');panel.append(resize);
    tools.querySelectorAll('[data-span]').forEach(b=>b.onclick=()=>{state.spans[id]=Number(b.dataset.span);applyPanels();save();});
    const handle=tools.querySelector('.panel-drag');handle.ondragstart=e=>{if(!editing){e.preventDefault();return;}e.dataTransfer.setData('application/onetop-panel',id);};
@@ -106,7 +106,7 @@ window.OneTopDashboard=(()=>{
   if(label)label.textContent=range;
   for(const c of canvases){const {width:w,height:h}=c.getBoundingClientRect();if(!w||!h)continue;const dpr=devicePixelRatio||1;c.width=w*dpr;c.height=h*dpr;const x=c.getContext('2d');x.scale(dpr,dpr);const cx=w/2,cy=h-11,r=Math.min(29,w/2-13),n=Number(c.dataset.burnRate),a=Math.PI+Math.PI*Math.min(1,n/max),color=c.dataset.kind==='Claude'?'#bd8965':'#378d76';
    c.dataset.burnMax=String(max);c.setAttribute('aria-label',number(n)+rateSuffix()+' ('+range+')');
-   x.lineWidth=5;x.strokeStyle=css.getPropertyValue('--line');x.beginPath();x.arc(cx,cy,r,Math.PI,Math.PI*2);x.stroke();x.strokeStyle=color;x.beginPath();x.arc(cx,cy,r,Math.PI,a);x.stroke();x.lineWidth=1.5;x.beginPath();x.moveTo(cx,cy);x.lineTo(cx+Math.cos(a)*(r-8),cy+Math.sin(a)*(r-8));x.stroke();x.font='11px "IBM Plex Sans",sans-serif';x.fillStyle=css.getPropertyValue('--muted');x.textAlign='left';x.fillText('0',4,h-1);x.textAlign='right';x.fillText(number(max)+'%',w-2,h-1);
+   x.lineWidth=5;x.strokeStyle=css.getPropertyValue('--line');x.beginPath();x.arc(cx,cy,r,Math.PI,Math.PI*2);x.stroke();x.strokeStyle=color;x.beginPath();x.arc(cx,cy,r,Math.PI,a);x.stroke();x.lineWidth=1.5;x.beginPath();x.moveTo(cx,cy);x.lineTo(cx+Math.cos(a)*(r-8),cy+Math.sin(a)*(r-8));x.stroke();x.font='11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';x.fillStyle=css.getPropertyValue('--muted');x.textAlign='left';x.fillText('0',4,h-1);x.textAlign='right';x.fillText(number(max)+'%',w-2,h-1);
   }
  }
  function init(options){hooks=options;window.OneTopI18n?.setLanguage(state.lang);prefs();panelSetup();setupColumns();initialized=true;afterTable();new ResizeObserver(queueDraw).observe(document.getElementById('dashboardGrid'));}

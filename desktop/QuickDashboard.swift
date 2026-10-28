@@ -26,7 +26,7 @@ struct QuickDashboard: View {
             sessionList
             if let message = model.message {
                 HStack(alignment: .top) {
-                    Text(message).font(.plex(size: 12)).foregroundStyle(model.messageIsError ? Color.orange : panelAccent)
+                    Text(message).font(.system(size: 12)).foregroundStyle(model.messageIsError ? Color.orange : panelAccent)
                     Spacer(minLength: 4)
                     Button { model.message = nil } label: { Image(systemName: "xmark") }
                         .buttonStyle(.plain).accessibilityLabel("알림 닫기")
@@ -36,14 +36,14 @@ struct QuickDashboard: View {
             HStack(spacing: 12) {
                 Button(action: openDashboard) {
                     HStack { Image(systemName: "rectangle.inset.filled"); Text("전체 대시보드"); Spacer(); Text("⌘O").foregroundStyle(.secondary) }
-                        .font(.plex(size: 13, weight: .medium)).padding(.horizontal, 12).padding(.vertical, 8)
+                        .font(.system(size: 13, weight: .medium)).padding(.horizontal, 12).padding(.vertical, 8)
                         .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 7))
                 }.buttonStyle(.plain).accessibilityLabel("전체 대시보드 열기")
-                Button(action: openBrowser) { Image(systemName: "safari").font(.plex(size: 17)) }
+                Button(action: openBrowser) { Image(systemName: "safari").font(.system(size: 17)) }
                     .buttonStyle(.plain).help("브라우저에서 열기").accessibilityLabel("브라우저에서 열기")
             }.padding(.horizontal, 18).padding(.vertical, 10)
         }.frame(width: Self.panelSize.width, height: Self.panelSize.height)
-            .background(dashboardTheme == "light" ? Color(nsColor: .windowBackgroundColor) : panelBackground).preferredColorScheme(dashboardTheme == "light" ? .light : .dark).font(.plex(size: 14))
+            .background(dashboardTheme == "light" ? Color(nsColor: .windowBackgroundColor) : panelBackground).preferredColorScheme(dashboardTheme == "light" ? .light : .dark).font(.system(size: 14))
             .popover(item: $selectedAccount, arrowEdge: .bottom) { original in
                 let current = model.snapshot?.account_quotas?.first { $0.id == original.id } ?? original
                 compactQuota(current).padding(12).frame(width: 370).preferredColorScheme(dashboardTheme == "light" ? .light : .dark)
@@ -54,7 +54,7 @@ struct QuickDashboard: View {
             HStack(spacing: 4) {
                 ForEach([("10m", "10분"), ("30m", "30분"), ("1h", "1시간"), ("5h", "5시간"), ("12h", "12시간"), ("24h", "24시간")], id: \.0) { key, title in
                     Button { model.selectedPeriod = key } label: {
-                        Text(title).font(.plex(size: 13, weight: .medium)).frame(maxWidth: .infinity).padding(.vertical, 5)
+                        Text(title).font(.system(size: 13, weight: .medium)).frame(maxWidth: .infinity).padding(.vertical, 5)
                             .foregroundStyle(model.selectedPeriod == key ? panelAccent : Color.secondary)
                             .background(model.selectedPeriod == key ? panelAccent.opacity(0.12) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
                     }.buttonStyle(.plain).accessibilityLabel("최근 \(title)")
@@ -62,8 +62,8 @@ struct QuickDashboard: View {
                 }
             }.accessibilityElement(children: .contain).accessibilityLabel("사용량 기간")
             HStack {
-                Text("주간 한도").font(.plex(size: 13, weight: .semibold))
-                Text("계정별 100%").font(.plex(size: 12)).foregroundStyle(.secondary)
+                Text("주간 한도").font(.system(size: 13, weight: .semibold))
+                Text("계정별 100%").font(.system(size: 12)).foregroundStyle(.secondary)
                 Spacer()
                 Menu {
                     Button("Claude Code 계정 로그인…") { model.addAccount("Claude") }
@@ -83,7 +83,7 @@ struct QuickDashboard: View {
         let rows = model.snapshot?.account_quotas ?? []
         return Group {
             if rows.isEmpty {
-                Text("+ 버튼으로 구독 계정을 연결하세요.").font(.plex(size: 13)).foregroundStyle(.secondary).padding(.vertical, 8)
+                Text("+ 버튼으로 구독 계정을 연결하세요.").font(.system(size: 13)).foregroundStyle(.secondary).padding(.vertical, 8)
             } else {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
@@ -102,16 +102,16 @@ struct QuickDashboard: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Circle().fill(color).frame(width: 5, height: 5)
-                    Text(q.kind == "Claude" ? "Claude Code" : q.kind).font(.plex(size: 13, weight: .semibold)).lineLimit(1)
-                    Text(q.plan ?? "").font(.plex(size: 11)).foregroundStyle(color).lineLimit(1)
+                    Text(q.kind == "Claude" ? "Claude Code" : q.kind).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    Text(q.plan ?? "").font(.system(size: 11)).foregroundStyle(color).lineLimit(1)
                     Spacer(minLength: 0)
-                    Text(DesktopFormat.quota(w?.pct)).font(.plex(size: 20, weight: .semibold)).monospacedDigit().fixedSize()
+                    Text(DesktopFormat.quota(w?.pct)).font(.system(size: 20, weight: .semibold)).monospacedDigit().fixedSize()
                 }
                 HStack(spacing: 6) {
-                    Text(q.account_label).font(.plex(size: 12)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    Text(q.account_label).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 0)
                     Text(q.stale ? q.statusLabel : rate == nil ? "속도 수집 중" : DesktopFormat.burnRate(rate))
-                        .font(.plex(size: 12, weight: .medium)).foregroundStyle(q.stale ? Color.orange : color).fixedSize()
+                        .font(.system(size: 12, weight: .medium)).foregroundStyle(q.stale ? Color.orange : color).fixedSize()
                 }
             }.padding(.horizontal, 8).frame(height: 48).frame(maxWidth: .infinity)
                 .background(color.opacity(0.065), in: RoundedRectangle(cornerRadius: 7))
@@ -125,18 +125,18 @@ struct QuickDashboard: View {
         VStack(spacing: 0) {
             Divider()
             HStack {
-                Text("세션").font(.plex(size: 15, weight: .semibold))
-                Text("\(model.sessions.count)").font(.plex(size: 12)).foregroundStyle(.secondary); Spacer()
+                Text("세션").font(.system(size: 15, weight: .semibold))
+                Text("\(model.sessions.count)").font(.system(size: 12)).foregroundStyle(.secondary); Spacer()
                 Circle().fill(model.fresh ? panelAccent : Color.orange).frame(width: 5, height: 5)
                 Text(model.fresh ? "작업 중 \(model.working)" : "마지막 기록")
-                    .font(.plex(size: 12, weight: .medium)).foregroundStyle(model.fresh ? panelAccent : Color.orange)
+                    .font(.system(size: 12, weight: .medium)).foregroundStyle(model.fresh ? panelAccent : Color.orange)
             }.padding(.horizontal, 18).padding(.top, 10).padding(.bottom, 7)
                 .help("작업 중인 세션부터 표시합니다. 아래로 스크롤하면 모든 세션을 볼 수 있습니다.")
             if model.sessions.isEmpty {
                 VStack(spacing: 8) {
-                    Image(systemName: "terminal").font(.plex(size: 25)).foregroundStyle(.secondary)
-                    Text(model.snapshot?.ready == true ? "감지된 AI 세션이 없습니다" : "로컬 세션을 확인하고 있습니다").font(.plex(size: 14))
-                    Text("실행 중인 AI 세션이 여기에 표시됩니다.").font(.plex(size: 12)).foregroundStyle(.secondary)
+                    Image(systemName: "terminal").font(.system(size: 25)).foregroundStyle(.secondary)
+                    Text(model.snapshot?.ready == true ? "감지된 AI 세션이 없습니다" : "로컬 세션을 확인하고 있습니다").font(.system(size: 14))
+                    Text("실행 중인 AI 세션이 여기에 표시됩니다.").font(.system(size: 12)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
@@ -154,14 +154,14 @@ struct QuickDashboard: View {
         return VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 7) {
                 RoundedRectangle(cornerRadius: 2).fill(tint).frame(width: 5, height: 13)
-                Text(quota.kind == "Claude" ? "Claude Code" : quota.kind).font(.plex(size: 13, weight: .semibold))
-                Text(quota.plan ?? "").font(.plex(size: 10, weight: .medium)).foregroundStyle(tint)
+                Text(quota.kind == "Claude" ? "Claude Code" : quota.kind).font(.system(size: 13, weight: .semibold))
+                Text(quota.plan ?? "").font(.system(size: 10, weight: .medium)).foregroundStyle(tint)
                 Spacer()
                 Circle().fill(quota.stale ? Color.orange : panelAccent).frame(width: 5, height: 5)
                 Text(quota.statusLabel)
-                    .font(.plex(size: 10)).foregroundStyle(quota.stale ? Color.orange : Color.secondary)
+                    .font(.system(size: 10)).foregroundStyle(quota.stale ? Color.orange : Color.secondary)
             }
-            Text(quota.account_label).font(.plex(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            Text(quota.account_label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 .help(quota.account_label + " · " + quota.id.suffix(6))
             HStack(alignment: .top, spacing: 18) {
                 ForEach(quota.windows) { window in
@@ -169,7 +169,7 @@ struct QuickDashboard: View {
                         HStack {
                             Text(window.label).foregroundStyle(.secondary); Spacer()
                             Text(window.pct.map { DesktopFormat.percent($0) } ?? "미확인").monospacedDigit()
-                        }.font(.plex(size: 12, weight: .medium))
+                        }.font(.system(size: 12, weight: .medium))
                         GeometryReader { geo in
                             Capsule().fill(Color.white.opacity(0.08)).overlay(alignment: .leading) {
                                 if let pct = window.pct {
@@ -177,12 +177,12 @@ struct QuickDashboard: View {
                                 }
                             }
                         }.frame(height: 3).accessibilityLabel(window.pct == nil ? "사용률 미확인" : "사용률 \(Int(window.pct ?? 0))퍼센트")
-                        Text(resetLabel(window.reset)).font(.plex(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                        Text(resetLabel(window.reset)).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                     }.frame(maxWidth: .infinity)
                 }
             }.padding(.top, 2)
             if quota.stale, quota.status != nil {
-                Text(quota.note).font(.plex(size: 10)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                Text(quota.note).font(.system(size: 10)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
             }
         }.padding(.horizontal, 12).padding(.vertical, 10)
             .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
@@ -198,10 +198,10 @@ struct QuickDashboard: View {
     }
     private var header: some View {
         HStack(spacing: 10) {
-            Image(systemName: "waveform.path").font(.plex(size: 18, weight: .semibold)).foregroundStyle(panelAccent)
-            Text("1top").font(.plex(size: 19, weight: .semibold)).accessibilityLabel("1top"); Spacer()
+            Image(systemName: "waveform.path").font(.system(size: 18, weight: .semibold)).foregroundStyle(panelAccent)
+            Text("1top").font(.system(size: 19, weight: .semibold)).accessibilityLabel("1top"); Spacer()
             Circle().fill(model.fresh ? panelAccent : Color.orange).frame(width: 6, height: 6)
-            Text(model.connectionLabel).font(.plex(size: 12)).foregroundStyle(.secondary)
+            Text(model.connectionLabel).font(.system(size: 12)).foregroundStyle(.secondary)
             Menu {
                 Button("브라우저에서 열기", action: openBrowser)
                 Button("지금 새로고침") { model.refresh() }
@@ -213,7 +213,7 @@ struct QuickDashboard: View {
                 Divider()
                 Button("로컬 수집기 다시 시작", action: restart)
                 Button("1top 종료", action: quit)
-            } label: { Image(systemName: "ellipsis.circle").font(.plex(size: 18)) }
+            } label: { Image(systemName: "ellipsis.circle").font(.system(size: 18)) }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 24).accessibilityLabel("1top 옵션")
         }.padding(.horizontal, 18).padding(.vertical, 9)
     }
@@ -227,7 +227,7 @@ struct QuickDashboard: View {
                 }
             }.frame(height: 3)
             Text(DesktopFormat.percent(value)).monospacedDigit().frame(width: 36, alignment: .trailing)
-        }.font(.plex(size: 13)).help("\(label) · 이 Mac 전체 사용률 \(DesktopFormat.percent(value))")
+        }.font(.system(size: 13)).help("\(label) · 이 Mac 전체 사용률 \(DesktopFormat.percent(value))")
     }
     private func sessionRow(_ s: DesktopSession) -> some View {
         let quota = model.snapshot?.account_quotas?.first { $0.id == s.usage?.weekly_account }
@@ -245,9 +245,9 @@ struct QuickDashboard: View {
                 .frame(width: 5, height: 5).help(s.groupStateLabel).accessibilityLabel(s.groupStateLabel)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
-                    Text(s.project ?? s.kind).font(.plex(size: 15, weight: .semibold)).lineLimit(1)
+                    Text(s.project ?? s.kind).font(.system(size: 15, weight: .semibold)).lineLimit(1)
                     if let count = s.children_count, count > 0 {
-                        Text("하위 \(count)").font(.plex(size: 12)).foregroundStyle(.secondary).fixedSize()
+                        Text("하위 \(count)").font(.system(size: 12)).foregroundStyle(.secondary).fixedSize()
                             .help("하위 \(count)개 세션의 사용량을 포함합니다. 제어 버튼은 상위 세션에 적용됩니다." +
                                   (s.group_usage_partial == true ? " 일부 하위 세션의 토큰은 미보고 상태입니다." : ""))
                     }
@@ -259,21 +259,21 @@ struct QuickDashboard: View {
                             .help("현재 effort · " + effort)
                     }
                     Text("· " + s.locationLabel).foregroundStyle(.secondary)
-                }.font(.plex(size: 13)).lineLimit(1)
+                }.font(.system(size: 13)).lineLimit(1)
             }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
                 .help(sessionHelp)
             VStack(alignment: .trailing, spacing: 1) {
                 Text(tokensMode ? DesktopFormat.number(DesktopFormat.total(s.tokens == nil ? nil : (s.usage?.windows?[model.selectedPeriod] ?? nil))) : (s.usage?.weekly_estimate?[model.selectedPeriod].map { "≈" + DesktopFormat.quota($0.used_pp) } ?? (DesktopFormat.number(DesktopFormat.total(s.usage?.windows?[model.selectedPeriod] ?? nil)) + " tok")))
-                    .font(.plex(size: 15, weight: .medium)).monospacedDigit()
+                    .font(.system(size: 15, weight: .medium)).monospacedDigit()
                 if tokensMode {
                     Text("\(DesktopFormat.number(model.fresh ? s.usage?.rate : nil)) tok/s")
-                        .font(.plex(size: 12)).foregroundStyle(.secondary).monospacedDigit()
+                        .font(.system(size: 12)).foregroundStyle(.secondary).monospacedDigit()
                 } else if let burn {
                     Text(DesktopFormat.burnRate(burn))
-                        .font(.plex(size: 12)).foregroundStyle(.secondary).monospacedDigit()
+                        .font(.system(size: 12)).foregroundStyle(.secondary).monospacedDigit()
                 }
             }.fixedSize().help(tokensMode ? "선택 기간의 누적 토큰 · 최근 60초 평균 소비" : weeklyExplanation + "\n최근 60초 토큰 속도로 환산한 시간당 소진 추정입니다.\n" + (s.usage?.weekly_estimate?[model.selectedPeriod]?.calculationLabel ?? "") + (burn == nil ? "\n" + pending : ""))
-            Button { control("focus", s) } label: { Image(systemName: "arrow.up.right").font(.plex(size: 14)) }
+            Button { control("focus", s) } label: { Image(systemName: "arrow.up.right").font(.system(size: 14)) }
                 .buttonStyle(.plain).frame(width: 22, height: 30).disabled(!model.fresh || model.busy || !s.allows("focus"))
                 .accessibilityLabel("\(s.project ?? s.kind) · \(s.terminalName) 바로가기")
             Menu {
@@ -282,7 +282,7 @@ struct QuickDashboard: View {
                 Button("새 요청으로 재개…") { control("resume", s) }.disabled(!s.allows("resume"))
                 Divider()
                 Button("CLI 종료…", role: .destructive) { control("terminate", s) }.disabled(!s.allows("terminate"))
-            } label: { Image(systemName: "ellipsis").font(.plex(size: 14)) }
+            } label: { Image(systemName: "ellipsis").font(.system(size: 14)) }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 22)
                 .disabled(!model.fresh || model.busy).accessibilityLabel("\(s.project ?? s.kind) 세션 제어")
         }.padding(.horizontal, 18).frame(height: 54)

@@ -63,7 +63,7 @@ struct CompactTokenMap: View {
         VStack(alignment: .leading, spacing: 4) {
             if data.tiles.isEmpty {
                 Text(data.reported == 0 ? "이 기간의 사용량 보고가 없습니다" : "이 기간의 보고된 사용량은 0입니다")
-                    .font(.plex(size: 13)).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 112)
+                    .font(.system(size: 13)).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 112)
                     .background(Color.white.opacity(0.025), in: RoundedRectangle(cornerRadius: 6))
             } else {
                 GeometryReader { geometry in
@@ -76,12 +76,12 @@ struct CompactTokenMap: View {
                                     RoundedRectangle(cornerRadius: 4).fill(tint.opacity(hoveredID == item.id ? 0.32 : 0.17))
                                     if width >= 92 && height >= 42 {
                                         VStack(alignment: .leading, spacing: 1) {
-                                            Text(item.tile.title).font(.plex(size: 13, weight: .semibold)).lineLimit(1)
-                                            Text(share(item.tile.value, data.total)).font(.plex(size: 13, weight: .medium)).monospacedDigit().foregroundStyle(tint)
+                                            Text(item.tile.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                                            Text(share(item.tile.value, data.total)).font(.system(size: 13, weight: .medium)).monospacedDigit().foregroundStyle(tint)
                                         }.padding(4)
                                     } else if width >= 42 && height >= 24 {
                                         Text(share(item.tile.value, data.total))
-                                            .font(.plex(size: 12, weight: .medium)).foregroundStyle(tint).padding(5)
+                                            .font(.system(size: 12, weight: .medium)).foregroundStyle(tint).padding(5)
                                     }
                                 }.frame(width: width, height: height).contentShape(Rectangle()).clipped()
                                     .overlay(RoundedRectangle(cornerRadius: 4).stroke(tint.opacity(0.55), lineWidth: 0.7))
@@ -97,10 +97,10 @@ struct CompactTokenMap: View {
             .popover(item: $selected, arrowEdge: .bottom) { original in
                 let current = data.tiles.first { $0.id == original.id } ?? original
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(current.title).font(.plex(size: 15, weight: .semibold))
-                    Text("\(share(current.value, data.total)) · \(current.value.formatted(.number.precision(.fractionLength(0)))) tokens").font(.plex(size: 17, weight: .semibold)).monospacedDigit()
-                    Text(current.detail).font(.plex(size: 12)).foregroundStyle(.secondary)
-                    if !model.fresh { Text("마지막 수신 기록").font(.plex(size: 12)).foregroundStyle(.orange) }
+                    Text(current.title).font(.system(size: 15, weight: .semibold))
+                    Text("\(share(current.value, data.total)) · \(current.value.formatted(.number.precision(.fractionLength(0)))) tokens").font(.system(size: 17, weight: .semibold)).monospacedDigit()
+                    Text(current.detail).font(.system(size: 12)).foregroundStyle(.secondary)
+                    if !model.fresh { Text("마지막 수신 기록").font(.system(size: 12)).foregroundStyle(.orange) }
                 }.padding(18).frame(width: 290, alignment: .leading).fixedSize(horizontal: false, vertical: true)
             }
     }

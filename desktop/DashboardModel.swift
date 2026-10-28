@@ -376,10 +376,8 @@ final class DashboardModel: ObservableObject {
         return DesktopFormat.total(window?.tokens)
     }
     var sortedSessions: [DesktopSession] {
-        let ranks = ["working":0, "waiting":1, "resuming":1, "paused":2, "interrupted":2, "unknown":2, "idle":2]
         let rows = sessions, timestamp = now.timeIntervalSince1970
-        // Hold within-tier order for one minute. Activity changes still move a
-        // group immediately; changing the selected period refreshes its amounts.
+        // Hold period usage ranks for one minute; status changes do not reorder.
         if sessionSortPeriod != selectedPeriod || sessionSortUpdated == nil ||
             timestamp - (sessionSortUpdated ?? timestamp) >= 60 || timestamp < (sessionSortUpdated ?? timestamp) {
             sessionSortAmounts = [:]; sessionSortPeriod = selectedPeriod; sessionSortUpdated = timestamp
@@ -396,9 +394,6 @@ final class DashboardModel: ObservableObject {
             sessionSortAmounts[row.id] = amount ?? -1
         }
         return rows.sorted {
-            let a = $0.isWorkingGroup ? 0 : ranks[$0.state] ?? 2
-            let b = $1.isWorkingGroup ? 0 : ranks[$1.state] ?? 2
-            if a != b { return a < b }
             let ar = sessionSortAmounts[$0.id] ?? -1, br = sessionSortAmounts[$1.id] ?? -1
             if ar != br { return ar > br }
             return $0.id < $1.id

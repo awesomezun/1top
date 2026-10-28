@@ -18,7 +18,7 @@ struct CompactUsageFlow: View {
                     ForEach(trend.bins) { bin in tokenBar(bin, scale: scale, series: trend.series) }
                 }
                 if !trend.reported {
-                    Text("사용 기록 대기").font(.plex(size: 12)).foregroundStyle(.secondary)
+                    Text("사용 기록 대기").font(.system(size: 12)).foregroundStyle(.secondary)
                 }
             }
             timeAxis(start: trend.bins.first?.start, finish: trend.bins.last?.end)
@@ -43,7 +43,7 @@ struct CompactUsageFlow: View {
                 ForEach(0..<3) { index in
                     let value = scale * Double(2 - index) / 2
                     Text(axisLabel(value) + " tokens")
-                        .font(.plex(size: 12)).monospacedDigit().foregroundStyle(.secondary)
+                        .font(.system(size: 12)).monospacedDigit().foregroundStyle(.secondary)
                         .frame(width: axisWidth, alignment: .trailing)
                         .position(x: axisWidth / 2, y: plotHeight * CGFloat(index) / 2)
                 }
@@ -65,7 +65,7 @@ struct CompactUsageFlow: View {
     private func timeAxis(start: Double?, finish: Double?) -> some View {
         HStack(spacing: 4) {
             Text(time(start)); Spacer(minLength: 4); Text(time(finish))
-        }.font(.plex(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+        }.font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
             .padding(.leading, axisWidth + 6).frame(height: 18)
     }
     private func axisLabel(_ value: Double) -> String {

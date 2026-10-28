@@ -124,8 +124,7 @@ function renderTable(){
  const order={working:0,waiting:1,resuming:2,paused:3,interrupted:4,unknown:5,idle:6},sort=$('sort').value;
  // Compare the same token unit across accounts, regardless of the displayed quota estimate.
  const numeric=s=>sort==='period'?total(s.usage?.windows?.[selectedPeriod]):sort==='rate'?s.usage?.rate:sort==='total'?total(s.tokens):s.resources?.[sort];
- const activityTier=s=>display(s)==='working'?0:['waiting','resuming'].includes(display(s))?1:2;
- const compare=(a,b)=>sort==='status'?(order[display(a)]-order[display(b)]||b.last_usage-a.last_usage):sort==='terminal'?(a.orca_terminal?.title||'').localeCompare(b.orca_terminal?.title||''):((sort==='period'?activityTier(a)-activityTier(b):0)||(numeric(b)??-1)-(numeric(a)??-1));
+ const compare=(a,b)=>sort==='status'?(order[display(a)]-order[display(b)]||b.last_usage-a.last_usage):sort==='terminal'?(a.orca_terminal?.title||'').localeCompare(b.orca_terminal?.title||''):((numeric(b)??-1)-(numeric(a)??-1));
  const orderKey=JSON.stringify([selectedPeriod,usageUnit,provider,query,state,modelFilter,sort]),now=Date.now();
  if(sessionOrder.key!==orderKey||now-sessionOrder.at>=60000){
   rows.sort(compare);sessionOrder={key:orderKey,at:now,ids:rows.map(s=>s.id)};
@@ -133,8 +132,7 @@ function renderTable(){
   const byID=new Map(rows.map(s=>[s.id,s])),previous=new Set(sessionOrder.ids);
   rows=[...sessionOrder.ids.map(id=>byID.get(id)).filter(Boolean),...rows.filter(s=>!previous.has(s.id)).sort(compare)];
  }
- // Activity changes move tiers immediately; stable sorting keeps each tier's cached order.
- if(sort==='period')rows.sort((a,b)=>activityTier(a)-activityTier(b));
+ // Status updates never override the selected period's stable usage ranking.
  sessionOrder.ids=rows.map(s=>s.id);
  renderSidebar(rows);
  $('tableCount').textContent=rows.length;$('tableEmpty').hidden=rows.length>0;
@@ -167,7 +165,7 @@ function renderBenchmark(){
  if(benchmark)$('benchmarkNumbers').innerHTML=`<table><thead><tr><th>버전</th><th>평균 CPU</th><th>평균 RSS</th><th>API 평균 응답</th><th>응답 크기</th></tr></thead><tbody>${benchmark.map(b=>`<tr><td>v${esc(b.version)}</td><td>${pct(b.cpu_one_core_mean)}</td><td>${bytes(b.rss_mean_bytes)}</td><td>${b.api_ms_mean.toFixed(1)} ms</td><td>${bytes(b.api_bytes_mean)}</td></tr>`).join('')}</tbody></table>`;
 }
 function canvasBase(id){const canvas=$(id);if(!canvas||canvas.closest('[hidden]'))return null;const r=canvas.getBoundingClientRect();if(!r.width||!r.height)return null;const dpr=devicePixelRatio||1;canvas.width=Math.round(r.width*dpr);canvas.height=Math.round(r.height*dpr);const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);return {ctx,w:r.width,h:r.height,l:58,t:10,b:30,r:9};}
-function axes(c,max,unit='',ticks=4){const {ctx,w,h,l,t,b,r}=c;ctx.font='13px "IBM Plex Sans", "IBM Plex Sans KR", sans-serif';for(let i=0;i<ticks;i++){const fraction=i/(ticks-1),y=t+(h-t-b)*fraction;ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--line');ctx.beginPath();ctx.moveTo(l,y+.5);ctx.lineTo(w-r,y+.5);ctx.stroke();ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--muted');ctx.textAlign='left';ctx.fillText(fmt(max*(1-fraction))+unit,0,y+3);}}
+function axes(c,max,unit='',ticks=4){const {ctx,w,h,l,t,b,r}=c;ctx.font='13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';for(let i=0;i<ticks;i++){const fraction=i/(ticks-1),y=t+(h-t-b)*fraction;ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--line');ctx.beginPath();ctx.moveTo(l,y+.5);ctx.lineTo(w-r,y+.5);ctx.stroke();ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--muted');ctx.textAlign='left';ctx.fillText(fmt(max*(1-fraction))+unit,0,y+3);}}
 function tokenFlowData(events,minutes,updated,range){
  const end=range?.end??(Math.floor((Number.isFinite(updated)?updated:0)/60)*60+60),start=range?.start??(end-minutes*60),step=range?.step??Math.max(minutes>300?900:minutes>60?300:60,Math.ceil(minutes/240)*60),n=Math.max(1,Math.ceil((end-start)/step));
  const reports=events.map(e=>({t:e.t,kind:typeof e.kind==='string'&&e.kind.trim()?e.kind.trim():'unknown',n:e.n??((e.fresh??0)+(e.cached??0)+(e.written??0)+(e.output??0))})).filter(e=>Number.isFinite(e.t)&&e.t>=start&&e.t<end&&Number.isFinite(e.n)&&e.n>=0);
@@ -334,7 +332,7 @@ function drawWeeklyCharts(){
   const padding=Math.max(1,trend.max-trend.min)*.1,lower=Math.max(0,trend.min-padding),upper=Math.min(100,trend.max+padding);
   const step=10**Math.floor(Math.log10(Math.max(.1,upper-lower)))/2,axisMin=Math.max(0,Math.floor(lower/step)*step),axisMax=Math.min(100,Math.ceil(upper/step)*step),scale=axisMax-axisMin;
   const pw=Math.max(1,width-left-right),ph=height-top-bottom;
-  c.font='12px "IBM Plex Sans", "IBM Plex Sans KR", sans-serif';
+  c.font='12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   for(let i=0;i<3;i++){const v=axisMin+scale*(2-i)/2,y=top+ph*i/2;c.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--line');c.beginPath();c.moveTo(left,y);c.lineTo(width-right,y);c.stroke();c.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--muted');c.textAlign='right';c.fillText(OneTopWeekly.percent(v),left-7,y+4);}
   c.strokeStyle=getComputedStyle(el.closest('.weekly-card')).getPropertyValue('--quota-color');c.lineWidth=2;
   const x=t=>left+(t-start)/seconds*pw,y=value=>top+ph-(value-axisMin)/scale*ph;

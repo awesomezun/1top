@@ -9,9 +9,8 @@ if [[ -e "$APP" ]]; then echo "Versioned build already exists: $APP" >&2; exit 1
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/agent"
 cp -R build/agent-dist/onetop-agent/. "$APP/Contents/Resources/agent/"
 SWIFT_SDK="${ONETOP_MACOS_SDK:-$(xcrun --show-sdk-path)}"
-xcrun swiftc -O -sdk "$SWIFT_SDK" -framework AppKit -framework SwiftUI -framework WebKit -framework CoreText -target arm64-apple-macosx13.0 desktop/*.swift -o "$APP/Contents/MacOS/1top"
+xcrun swiftc -O -sdk "$SWIFT_SDK" -framework AppKit -framework SwiftUI -framework WebKit -target arm64-apple-macosx13.0 desktop/*.swift -o "$APP/Contents/MacOS/1top"
 scripts/macos-icon.sh
-cp -R desktop/Fonts "$APP/Contents/Resources/Fonts"
 cp build/1top.icns "$APP/Contents/Resources/1top.icns"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict>
