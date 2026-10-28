@@ -182,6 +182,7 @@ def desktop(launcher):
             Path(report).write_text(json.dumps({
                 'smoke_failure': 'Dashboard or fixture did not become ready',
                 'ui': result, 'collector_ready': state.get('ready'),
+                'script_globals': window.evaluate_js('({dashboard:typeof OneTopDashboard,i18n:typeof OneTopI18n,effects:typeof OneTopEffects,maps:typeof OneTopMaps,weekly:typeof OneTopWeekly,data:typeof data,refresh:typeof refresh,connection:document.querySelector("#connectionText")?.textContent,resources:performance.getEntriesByType("resource").filter(r=>r.name.endsWith(".js")).map(r=>({name:r.name.split("/").pop(),size:r.decodedBodySize}))})'),
                 'collector_version': state.get('version'),
                 'session_count': len(state.get('sessions', [])),
                 'fixture_tokens': match.get('tokens'),
