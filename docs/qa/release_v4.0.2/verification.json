@@ -1,0 +1,40 @@
+{
+  "version": "4.0.2",
+  "binary_source_commit": "61da6c7b1af63473ac9023a4b73bc9675232d1e7",
+  "date": "2026-10-29",
+  "python_tests": 349,
+  "github_runs": {
+    "checks": [
+      40848429677,
+      40848420555
+    ],
+    "windows": 40848420508
+  },
+  "macos": {
+    "installed": true,
+    "launched": true,
+    "live_api_version": "4.0.2",
+    "account_count": 4,
+    "all_accounts_fresh": true,
+    "credential_prompt_count": 1,
+    "developer_id_signed": false,
+    "notarized": false
+  },
+  "windows": {
+    "exe_installed_scenarios": 4,
+    "msix_installed_scenarios": 7,
+    "store_certified": false
+  },
+  "android": {
+    "version": "4.0.0",
+    "version_code": 9,
+    "emulator": "Medium_Phone_API_36.1",
+    "update_install": true,
+    "release_certificate_matches_v1_5_0": true,
+    "physical_device_test": false
+  },
+  "relay": {
+    "deployment_id": "992a91a7-688b-4649-abfd-a56c4473cc81",
+    "origin": "https://onetop-relay.gitreels.workers.dev"
+  }
+}

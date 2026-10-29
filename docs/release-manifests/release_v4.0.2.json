@@ -1,0 +1,60 @@
+{
+  "version": "4.0.2",
+  "status": "preview",
+  "signed": false,
+  "notarized": false,
+  "releases": "https://github.com/awesomezun/1top/releases/tag/v4.0.2",
+  "platforms": {
+    "macos": {
+      "architecture": "arm64",
+      "url": "https://github.com/awesomezun/1top/releases/download/v4.0.2/1top-4.0.2-macos-arm64.dmg",
+      "version": "4.0.2",
+      "status": "preview",
+      "signed": false,
+      "notarized": false,
+      "sha256": "8027cf752048d6902e0cbc77aca3915a239c53f1734be048f5342ebbc7947b39"
+    },
+    "windows": {
+      "architecture": "x64",
+      "status": "microsoft-store-pending",
+      "distribution": "msix",
+      "url": null,
+      "store_product_id": null,
+      "signed": false,
+      "store_certified": false,
+      "legacy_preview": {
+        "architecture": "x64",
+        "url": "https://github.com/awesomezun/1top/releases/download/v4.0.2/1top-4.0.2-windows-x64-setup.exe",
+        "sha256": "58c7431a9e3d84dc9eda73067a88b432fc20cf950c7dc2a7337879f0296996fc",
+        "version": "4.0.2",
+        "signed": false,
+        "status": "preview"
+      },
+      "version": "4.0.2",
+      "test_msix": {
+        "version": "4.0.2.0",
+        "url": "https://github.com/awesomezun/1top/releases/download/v4.0.2/1top-4.0.2.0-windows-x64-test.msix",
+        "sha256": "0ec0d1fcd6a503c5e887f80207c5aa636e8bc123e74725886247396669ea21b2",
+        "status": "test-only",
+        "store_certified": false
+      }
+    },
+    "android": {
+      "status": "preview",
+      "version": "4.0.0",
+      "signed": true,
+      "url": "https://github.com/awesomezun/1top/releases/download/v4.0.2/1top-4.0.0-android.apk",
+      "sha256": "70822d1bbda112dd0a298b5a54a2c1b88a59d23d21721031badbda5ed12adfff",
+      "version_code": 9,
+      "bundle": {
+        "url": "https://github.com/awesomezun/1top/releases/download/v4.0.2/1top-4.0.0-android.aab",
+        "sha256": "b8c238d522ba4cdc9c00448731375d91fcc84165ff9f395e551ffffe9daa87b0"
+      }
+    },
+    "ios": {
+      "status": "native-device-preview-store-distribution-pending",
+      "version": "4.0.0",
+      "build": 3
+    }
+  }
+}
