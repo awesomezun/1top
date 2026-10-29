@@ -14,10 +14,12 @@ const i18n=context.window.OneTopI18n;i18n.setLanguage('zh');
 const hangul=/[가-힣]/;
 
 // Texts that are content, not interface: what a photo-only message says to the AI (sent in the chosen
-// language), and a workspace name.
-const CONTENT=new Set(['첨부한 사진을 확인해 주세요.','Aside 기본 작업공간']);
+// language), a workspace name, the language menu's own names, the Korean weekday row (the other
+// languages have their own) and the glyphs of the language change effect.
+const CONTENT=new Set(['첨부한 사진을 확인해 주세요.','Aside 기본 작업공간','한','한국어','월','화','수','목','금','토','일','깃릴스코드레포영상별가나다라마바사아자차카타파하']);
 const texts=new Map();
-const add=(text,where)=>{text=text.replace(/\s+/g,' ').trim();if(hangul.test(text)&&!CONTENT.has(text)&&!texts.has(text))texts.set(text,where);};
+// One text per line; a part that a script joins with ' · ' or a value is read without the joint.
+const add=(text,where)=>{for(let line of text.split('\n')){line=line.replace(/\s+/g,' ').replace(/^[\s·]+|[\s·]+$/g,'');if(hangul.test(line)&&!CONTENT.has(line)&&!texts.has(line))texts.set(line,where);}};
 // A template part can start or end inside a tag; its attribute hints are read, the tag edges dropped.
 const addHtml=(text,where)=>{
  for(const m of text.matchAll(/(?:aria-label|title|placeholder)="([^"$]+)"/g))add(m[1],where);
@@ -33,13 +35,14 @@ for(const m of html.matchAll(/(?:aria-label|title|placeholder)="([^"]+)"/g))add(
 // inside ${...}, read with a small tokenizer so nested templates and quotes keep their place.
 function strings(source,emit){
  let i=0;const n=source.length;
- const quoted=q=>{let s='';i++;while(i<n&&source[i]!==q){if(source[i]==='\\'){s+=source[i+1];i+=2;continue;}s+=source[i++];}i++;return s;};
+ const escape=c=>({n:'\n',t:'\t'})[c]??c;
+ const quoted=q=>{let s='';i++;while(i<n&&source[i]!==q){if(source[i]==='\\'){s+=escape(source[i+1]);i+=2;continue;}s+=source[i++];}i++;return s;};
  // A regular expression literal holds quotes and braces that are not code: skip it whole.
  function regex(){i++;let klass=false;while(i<n){const c=source[i];if(c==='\\'){i+=2;continue;}if(c==='[')klass=true;else if(c===']')klass=false;else if(c==='/'&&!klass){i++;break;}else if(c==='\n')break;i++;}}
  function template(){
   let part='';i++;
   while(i<n&&source[i]!=='`'){
-   if(source[i]==='\\'){part+=source[i+1];i+=2;continue;}
+   if(source[i]==='\\'){part+=escape(source[i+1]);i+=2;continue;}
    if(source[i]==='$'&&source[i+1]==='{'){emit(part,true);part='';i+=2;code('}');i++;continue;}
    part+=source[i++];
   }
@@ -61,10 +64,13 @@ function strings(source,emit){
  }
  code(null);
 }
-const SCRIPTS=['app.js','dashboard.js','conversation.js','history.js','weekly.js','speed.js','effects.js','ranges.js'];
+// ranges.js holds per-language unit tables and the words a typed range may use, not page texts.
+const SCRIPTS=['app.js','dashboard.js','conversation.js','history.js','weekly.js','speed.js','effects.js'];
 for(const file of SCRIPTS)strings(dist(file),(text,markup)=>markup||/[<>]/.test(text)?addHtml(text,file):add(text,file));
 
-const missing=[...texts].filter(([text])=>hangul.test(i18n.t(text)));
+// A part a script builds around a number or a name counts as translated when it reads in such a place.
+const readable=text=>!hangul.test(i18n.t(text))||text.split(' · ').every(part=>[part,'1'+part,part+'1','1 '+part,part+' 1','1'+part+'1','1 '+part+' 1','1 '+part+'%','X '+part,part+' 1개'].some(s=>!hangul.test(i18n.t(s))));
+const missing=[...texts].filter(([text])=>!readable(text));
 if(process.argv.includes('--write-baseline')){writeFileSync(BASELINE,JSON.stringify(missing.map(([text])=>text).sort(),null,1)+'\n');console.log(`Baseline: ${missing.length} texts`);process.exit(0);}
 const known=new Set(JSON.parse(readFileSync(BASELINE,'utf8'))),fresh=missing.filter(([text])=>!known.has(text));
 const fixed=[...known].filter(text=>!missing.some(([m])=>m===text));

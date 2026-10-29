@@ -109,6 +109,11 @@ const TEXT={
  denied:['이 계정은 원격 접근이 활성화되지 않았습니다. 로컬 모니터링과 체험 화면은 무료입니다.','Remote access is not enabled for this account. Local monitoring and the demo are free.','此账户未开通远程访问。本地监控和演示均免费。'],
  empty:['연결된 컴퓨터가 없습니다. 모니터링할 컴퓨터에서 1top 앱을 실행하고 이 계정으로 로그인하세요.','No computer is connected. Open the 1top app on the computer to monitor and sign in with this account.','尚未连接电脑。请在要监控的电脑上打开 1top 应用并用此账户登录。'],
  reconnecting:['원격 연결을 다시 시도하고 있습니다.','Reconnecting to the relay.','正在重新连接中继。'],
+ disconnect:['연결 해제','Disconnect','断开连接'],cancel:['취소','Cancel','取消'],disconnecting:['해제하는 중…','Disconnecting…','正在断开…'],
+ disconnectTitle:['{name}의 연결을 해제할까요?','Disconnect {name}?','要断开 {name} 吗？'],
+ disconnectText:['원격 접근이 중단됩니다. 그 컴퓨터의 1top 앱에서 다시 연결할 수 있습니다.','Remote access will stop. You can connect it again from the 1top app on that computer.','远程访问将停止。可在该电脑的 1top 应用中重新连接。'],
+ disconnectDemo:['체험 화면에서는 이 페이지에서만 사라지고, 새로고침하면 돌아옵니다.','In the demo it only leaves this page and comes back on reload.','演示中只会从此页面移除，刷新后会恢复。'],
+ disconnectFailed:['연결을 해제하지 못했습니다: {error} 잠시 뒤 다시 시도하세요.','Could not disconnect: {error} Try again in a moment.','无法断开连接：{error} 请稍后再试。'],
 };
 const lang=()=>document.documentElement.lang.startsWith('zh')?2:document.documentElement.lang==='en'?1:0;
 const say=key=>TEXT[key][lang()];
@@ -127,14 +132,42 @@ let computersHtml='';
 function renderComputers(){
  const root=$('remoteComputers');if(!root)return;
  const all=devices(),roots=d=>(d.snapshot.sessions||[]).filter(s=>!s.parent_session_id).length,time=ms=>ms?new Date(ms).toLocaleTimeString(document.documentElement.lang||'ko',{hour:'2-digit',minute:'2-digit'}):'—';
- const card=(id,name,detail,body)=>`<button type="button" class="remote-computer${scope===id?' selected':''}" data-remote-scope="${esc(id)}" aria-pressed="${scope===id}"><b>${name}</b><small>${detail}</small>${body}</button>`;
+ // A card chooses the scope; a computer's card also offers disconnecting it.
+ const card=(id,name,detail,body,remove='')=>`<div class="remote-computer${scope===id?' selected':''}"><button type="button" class="remote-computer-pick" data-remote-scope="${esc(id)}" aria-pressed="${scope===id}"><b>${name}</b><small>${detail}</small>${body}</button>${remove}</div>`;
  const html=`<div class="remote-computers-head"><h2>${say('scope')}</h2><p>${say('scopeNote')}</p></div><div class="remote-computer-list">`+
   card('all',esc(say('all')),`${say('sum')} · ${all.length} · ${say('sessions')} ${all.reduce((n,d)=>n+roots(d),0)}`,'')+
   all.map(d=>{const on=isFresh(d),h=d.snapshot.host||{},mem=h.total_memory>0?h.used_memory/h.total_memory*100:null;
-   return card(d.id,`<i class="dot ${on?'green':'offline'}"></i>${esc(d.name)}`,`${esc(d.platform||'')} · ${on?say('online'):say('offline')} · ${say('last')} ${time(d.received)}`,meter('CPU',h.cpu)+meter(say('memory'),mem)+`<small>${say('sessions')} ${roots(d)}</small>`);}).join('')+'</div>';
+   return card(d.id,`<i class="dot ${on?'green':'offline'}"></i>${esc(d.name)}`,`${esc(d.platform||'')} · ${on?say('online'):say('offline')} · ${say('last')} ${time(d.received)}`,meter('CPU',h.cpu)+meter(say('memory'),mem)+`<small>${say('sessions')} ${roots(d)}</small>`,
+    `<button type="button" class="remote-computer-disconnect" data-remote-disconnect="${esc(d.id)}">${say('disconnect')}</button>`);}).join('')+'</div>';
  if(html!==computersHtml){computersHtml=html;root.innerHTML=html;}
 }
+// Disconnect: confirm, ask the relay (or the demo relay), then the list without that computer; a
+// refusal stays in the dialog with what the relay said.
+let leaving=null;
+function askDisconnect(id){
+ const d=devices().find(x=>x.id===id),dialog=$('remoteDisconnect');if(!d||!dialog)return;leaving=d;
+ $('remoteDisconnectTitle').textContent=say('disconnectTitle').replace('{name}',d.name||id);
+ $('remoteDisconnectText').textContent=say('disconnectText')+(demo?' '+say('disconnectDemo'):'');
+ $('remoteDisconnectError').hidden=true;$('remoteDisconnectCancel').textContent=say('cancel');
+ const confirm=$('remoteDisconnectConfirm');confirm.textContent=say('disconnect');confirm.disabled=false;dialog.showModal();$('remoteDisconnectCancel').focus();
+}
+async function disconnect(){
+ const d=leaving,confirm=$('remoteDisconnectConfirm');if(!d)return;
+ confirm.disabled=true;$('remoteDisconnectCancel').disabled=true;confirm.textContent=say('disconnecting');
+ try{
+  await (await ready).revoke(d.id);
+  leaving=null;$('remoteDisconnect').close();
+  if(scope===d.id){scope='all';write(SCOPE,scope);}
+  renderChrome();window.refresh?.();
+ }catch(error){
+  const note=$('remoteDisconnectError');note.textContent=say('disconnectFailed').replace('{error}',error.message||'');note.hidden=false;
+ }finally{confirm.disabled=false;$('remoteDisconnectCancel').disabled=false;confirm.textContent=say('disconnect');}
+}
 document.addEventListener('click',e=>{
+ const remove=e.target.closest('[data-remote-disconnect]');
+ if(remove){askDisconnect(remove.dataset.remoteDisconnect);return;}
+ if(e.target.closest('#remoteDisconnectCancel')){leaving=null;$('remoteDisconnect').close();return;}
+ if(e.target.closest('#remoteDisconnectConfirm')){disconnect();return;}
  const pick=e.target.closest('[data-remote-scope]');
  if(pick){scope=pick.dataset.remoteScope;write(SCOPE,scope);renderChrome();window.refresh?.();return;}
  if(e.target.closest('#remoteSignOut'))ready.then(relay=>relay.signOut()).then(()=>location.assign('/'));

@@ -85,6 +85,11 @@ with tempfile.TemporaryDirectory() as tmp:
                 assert result['fixture_period_tokens'] == [100, 200, 10, 20], result
             assert result['collector_version'] == __version__, result
             assert result['host_resources'], result
+            # The tray quick view loads hidden beside the dashboard and lists the same root sessions.
+            assert result['quick_ready'] and result['quick_render_error'] is None, result
+            assert result['quick_rows'] == result['root_session_count'], result
+            assert result['quick_connection'] == '실시간 · 이 PC', result
+            assert result['window_title'] == '1top — 이 PC', result
             assert result['collector_owned'] == (name != 'existing-collector'), result
             if agent:
                 assert agent.poll() is None, 'Closing the UI must preserve an external collector'

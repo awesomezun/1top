@@ -44,6 +44,8 @@ export function liveRelay({onStatus}){
   devices:()=>[...devices.values()],
   send:command=>api('/api/action',command),
   onResult:listener=>results.add(listener),
+  // Disconnecting a computer, as the earlier web dashboard did; the relay also tells the socket.
+  async revoke(id){await api('/api/devices/revoke',{device_id:id});devices.delete(id);deviceList=deviceList.filter(d=>d.id!==id);},
   // One mailbox read: the computer answers on the socket with at most ten recently changed rows.
   mailbox(request){
    if(ws?.readyState!==1)return Promise.reject(Object.assign(Error('컴퓨터 연결이 끊겼습니다. 재연결하면 답신을 확인할 수 있습니다.'),{status:503}));

@@ -57,7 +57,7 @@ assert.deepEqual(remoteState([a,b],{now,scope:'d2'}).sessions.map(s=>s.id),['d2:
 
 // The dashboard markup the site edits is still where the site expects it.
 const {assets,body}=dashboardMarkup();
-for(const id of ['remoteScope','remoteIdentity','remoteSignOut','remoteNotice','remoteComputers','helpButton','localVersion'])assert.ok(body.includes(`id="${id}"`),id);
+for(const id of ['remoteScope','remoteIdentity','remoteSignOut','remoteNotice','remoteComputers','remoteDisconnect','remoteDisconnectConfirm','helpButton','localVersion'])assert.ok(body.includes(`id="${id}"`),id);
 assert.ok(assets.indexOf('dashboard/dashboard.js')<assets.indexOf('dashboard/app.js'));
 assert.ok(dashboardFiles().includes('app.js')&&dashboardFiles().includes('benchmark.json'));
 
@@ -70,5 +70,7 @@ const result=new Promise(done=>demo.onResult(done));
 assert.equal((await demo.send({action:'pause',request_id:'r1',device_id:demo.devices()[0].id,session_id:target.id,control_key:'demo'})).status,'sent');
 assert.equal((await result).status,'completed');
 assert.equal(remoteState(demo.devices()).sessions.find(s=>s.source_id===target.id&&s.device_id==='demo-0').display_status,'paused');
-console.log('Remote workspace: relay snapshots as the collector state, trees, scope, periods, flow, speed, accounts, markup and demo relay passed.');
+// Disconnecting a demo computer takes it off this page only.
+await demo.revoke('demo-1');assert.deepEqual(demo.devices().map(d=>d.id),['demo-0','demo-2']);
+console.log('Remote workspace: relay snapshots as the collector state, trees, scope, periods, flow, speed, accounts, markup, demo relay and disconnecting passed.');
 process.exit(0);

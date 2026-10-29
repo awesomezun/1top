@@ -7,11 +7,14 @@
 .remote .remote-computers-head h2{margin:0;font-size:var(--type-title,15px);font-weight:600}
 .remote .remote-computers-head p{margin:4px 0 12px;color:var(--muted);font-size:var(--type-caption,11.5px)}
 .remote .remote-computer-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
-.remote .remote-computer{display:grid;gap:7px;align-content:start;padding:14px 16px;border:1px solid var(--line);border-radius:var(--radius,10px);background:var(--panel);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.remote .remote-computer{display:grid;align-content:start;border:1px solid var(--line);border-radius:var(--radius,10px);background:var(--panel);overflow:hidden}
 .remote .remote-computer:hover{border-color:var(--muted)}
+.remote .remote-computer-pick{display:grid;gap:7px;align-content:start;padding:14px 16px;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.remote .remote-computer-disconnect{justify-self:start;margin:0 16px 12px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--muted);font:inherit;font-size:var(--type-caption,11.5px);cursor:pointer}
+.remote .remote-computer-disconnect:hover{border-color:color-mix(in srgb,var(--red,#f08a8a) 50%,transparent);color:var(--red,#f08a8a)}
 .remote .remote-computer.selected{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
-.remote .remote-computer>b{display:flex;align-items:center;gap:7px;min-width:0;font-size:var(--type-body,13px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.remote .remote-computer>small{color:var(--dim);font-size:var(--type-caption,11.5px)}
+.remote .remote-computer-pick>b{display:flex;align-items:center;gap:7px;min-width:0;font-size:var(--type-body,13px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.remote .remote-computer-pick>small{color:var(--dim);font-size:var(--type-caption,11.5px)}
 .remote .remote-computer .dot.offline{background:#bd9d6a}
 .remote .remote-meter{display:grid;grid-template-columns:52px minmax(0,1fr) 38px;align-items:center;gap:8px;font-size:var(--type-caption,11.5px)}
 .remote .remote-meter small{color:var(--muted)}

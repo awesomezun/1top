@@ -122,6 +122,7 @@
  // Bloom in each element's own colour, as in the cockpit candidates.
  const glowFilter='<filter id="fsGlow" filterUnits="userSpaceOnUse" x="-12" y="-12" width="276" height="220" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="2.3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
  function instrument(o){return (o.style==='scope'?'':face(o))+(o.rate>0?motion(o.style):'')+(o.style==='scope'?face(o):'');}
- const api={measure,niceMax,baseMax,scaleMax,instrument,face,motion,glowFilter,digits};
+ // seg7 also draws the reading in the Windows tray's quick view.
+ const api={measure,niceMax,baseMax,scaleMax,instrument,face,motion,glowFilter,digits,seg7};
  if(typeof module!=='undefined')module.exports=api;else root.OneTopSpeed=api;
 })(typeof window==='undefined'?globalThis:window);

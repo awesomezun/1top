@@ -15,6 +15,7 @@ on:
       - 'scripts/*windows-msix*'
       - 'scripts/windows-msix-smoke.py'
       - 'tests/test_msix.py'
+      - 'tests/test_windows_shell.py'
       - '.github/workflows/windows-release.yml'
 jobs:
   build:
@@ -34,6 +35,7 @@ jobs:
       - run: python -m unittest discover -s tests -p test_windows.py -v
       - run: python -m unittest discover -s tests -p test_desktop_startup.py -v
       - run: python -m unittest discover -s tests -p test_msix.py -v
+      - run: python -m unittest discover -s tests -p test_windows_shell.py -v
       - run: ./scripts/build-windows.ps1
         shell: pwsh
       - run: python scripts/windows-smoke.py

@@ -18,6 +18,8 @@ export function dashboardFiles(){
 }
 
 const REMOTE_FOOT='<div class="rail-bottom"><i class="dot green"></i> <span id="remoteIdentity" data-user-content>원격 워크스페이스</span><br><small id="localVersion">REMOTE</small><a class="remote-link" id="remoteHome" href="/" data-user-content>1top.si ↗</a><button id="remoteSignOut" type="button" data-user-content hidden>로그아웃</button><button id="helpButton">수치와 제어 이해하기 ↗</button></div></aside>';
+// Disconnecting a computer from the remote workspace: asked first, as the earlier web dashboard did.
+const DISCONNECT='<dialog id="remoteDisconnect" class="remote-disconnect" aria-labelledby="remoteDisconnectTitle" data-user-content><div class="eyebrow">REMOTE ACCESS</div><h2 id="remoteDisconnectTitle"></h2><p id="remoteDisconnectText" class="action-explanation"></p><p id="remoteDisconnectError" class="action-error" role="alert" hidden></p><div class="confirmation-buttons"><button id="remoteDisconnectCancel" class="button" type="button"></button><button id="remoteDisconnectConfirm" class="button danger" type="button"></button></div></dialog>';
 function replaceOnce(text,pattern,value){
  const count=typeof pattern==='string'?text.split(pattern).length-1:(text.match(new RegExp(pattern.source,'g'))||[]).length;
  if(count!==1)throw Error(`Dashboard markup changed: expected one ${pattern}, found ${count}`);
@@ -36,6 +38,7 @@ export function dashboardMarkup(){
  body=replaceOnce(body,/<div class="rail-bottom">[\s\S]*?<\/div><\/aside>/,REMOTE_FOOT);
  body=replaceOnce(body,'<div id="notice" class="notice" hidden></div>','<div id="notice" class="notice" hidden></div><div id="remoteNotice" class="notice remote-notice" data-user-content hidden></div>');
  body=replaceOnce(body,'<section id="systemView" class="view" hidden>','<section id="systemView" class="view" hidden><section id="remoteComputers" class="remote-computers" data-user-content></section>');
+ body+=DISCONNECT;
  return {assets,body};
 }
 

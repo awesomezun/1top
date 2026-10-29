@@ -152,9 +152,10 @@ function report(now,started,controls){
 // The demo relay: the same interface as remote-live.js. Controls are confirmed after a moment, as a
 // computer confirms them, and change only this page.
 export function demoRelay(){
- const started=Date.now()/1000,controls=new Map(),results=new Set(),mailboxes=new Map();
+ const started=Date.now()/1000,controls=new Map(),results=new Set(),mailboxes=new Map(),removed=new Set();
+ const reportNow=()=>report(Date.now()/1000,started,controls).filter(d=>!removed.has(d.id));
  let devices=report(started,started,controls);
- setInterval(()=>{devices=report(Date.now()/1000,started,controls);},3000);
+ setInterval(()=>{devices=reportNow();},3000);
  return {
   devices:()=>devices,
   async send(command){
@@ -165,12 +166,14 @@ export function demoRelay(){
     if(command.action==='pause')controls.set(key,{status:'paused'});
     if(command.action==='resume')controls.set(key,{status:'working'});
     if(command.action==='terminate')controls.set(key,{removed:true});
-    if(command.action!=='focus')devices=report(Date.now()/1000,started,controls);
+    if(command.action!=='focus')devices=reportNow();
     for(const listener of results)listener({type:'result',request:command,status:'completed',message:ANSWERS[command.action]||'',created:Date.now()});
    },900);
    return {status:'sent'};
   },
   onResult:listener=>results.add(listener),
+  // The demo's computers leave this page only; a reload brings them back.
+  async revoke(id){await new Promise(done=>setTimeout(done,600));removed.add(id);devices=devices.filter(d=>d.id!==id);},
   // The session's latest messages, as the computer reads them: at most ten recently changed rows.
   async mailbox(request){
    await new Promise(done=>setTimeout(done,250));
