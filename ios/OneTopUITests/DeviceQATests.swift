@@ -308,6 +308,15 @@ final class DeviceQATests: XCTestCase {
         let connection = element(app, "connection"), menu = app.buttons["display-menu"]
         XCTAssertTrue(connection.waitForExistence(timeout: 20) && wait(connection, Self.liveLabel, timeout: 45), "Not live; is this iPhone signed in?")
         let dashboardTab = app.tabBars.buttons.element(boundBy: 0), workspaceTab = app.tabBars.buttons.element(boundBy: 4)
+        // A scrolled list minimizes the iOS 26 tab bar, and a tap where a tab used to be lands on the
+        // content below it. Scroll back to the top first and open a tab only once it can be tapped.
+        func show(_ tab: XCUIElement, _ name: String) {
+            XCTAssertFalse(app.buttons["Sheet Grabber"].exists, "A sheet covers the screen before opening \(name)")
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02)).tap()
+            XCTAssertTrue(wait(tab, "isHittable == true", timeout: 10), "\(name) tab cannot be tapped")
+            tab.tap()
+            XCTAssertTrue(wait(tab, "isSelected == true", timeout: 10), "\(name) tab did not open")
+        }
         func choose(_ title: String, expect value: String, step: String) {
             XCTAssertTrue(wait(menu, "isHittable == true", timeout: 10), "Theme and language menu cannot be tapped")
             menu.tap()
@@ -322,10 +331,11 @@ final class DeviceQATests: XCTestCase {
         func check(_ step: String) {
             XCTAssertTrue(wait(connection, Self.liveLabel, timeout: 30), "Lost live after \(step): \(connection.label)")
             XCTAssertTrue(element(app, "period-5h").isSelected, "Period lost after \(step)")
-            workspaceTab.tap()
-            XCTAssertTrue(element(app, computer).waitForExistence(timeout: 10) && element(app, computer).isSelected, "Computer lost after \(step)")
-            dashboardTab.tap()
-            XCTAssertTrue(menu.waitForExistence(timeout: 10))
+            show(workspaceTab, "Workspace")
+            let chosen = element(app, computer)
+            XCTAssertTrue(chosen.waitForExistence(timeout: 10) && wait(chosen, "isHittable == true", timeout: 10) && chosen.isSelected, "Computer lost after \(step)")
+            show(dashboardTab, "Dashboard")
+            XCTAssertTrue(wait(menu, "isHittable == true", timeout: 10), "Dashboard header is covered after \(step)")
             shot(app, "16-" + step)
         }
         // Korean first, so the theme names below are known; nothing is chosen yet to check.
@@ -334,12 +344,13 @@ final class DeviceQATests: XCTestCase {
         app.buttons["한국어"].tap()
         XCTAssertTrue(wait(menu, "value ENDSWITH ' ko'", timeout: 5))
         element(app, "period-5h").tap()
-        workspaceTab.tap()
+        show(workspaceTab, "Workspace")
         let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'computer-' AND identifier != 'computer-all'")).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 10), "No computer to choose")
+        XCTAssertTrue(row.waitForExistence(timeout: 10) && wait(row, "isHittable == true", timeout: 10), "No computer to choose")
         computer = row.identifier
         row.tap()
-        dashboardTab.tap()
+        XCTAssertFalse(app.buttons["Sheet Grabber"].exists, "Choosing a computer opened a sheet")
+        show(dashboardTab, "Dashboard")
         check("01-scope-chosen")
         choose("다크", expect: "dark ko", step: "02-dark")
         choose("라이트", expect: "light ko", step: "03-light")
@@ -354,10 +365,10 @@ final class DeviceQATests: XCTestCase {
         shot(app, "16-06-relaunched")
         // The period and computer start over after a relaunch; choose them again for the last checks.
         element(app, "period-5h").tap()
-        workspaceTab.tap()
-        XCTAssertTrue(element(app, computer).waitForExistence(timeout: 10))
+        show(workspaceTab, "Workspace")
+        XCTAssertTrue(element(app, computer).waitForExistence(timeout: 10) && wait(element(app, computer), "isHittable == true", timeout: 10))
         element(app, computer).tap()
-        dashboardTab.tap()
+        show(dashboardTab, "Dashboard")
         choose("한국어", expect: "light ko", step: "07-korean")
         choose("시스템", expect: "system ko", step: "08-system")
         restoreDisplay = false
