@@ -22,18 +22,21 @@ export function orderSessions(rows,period){
 
 /** Bins for the radar, newest first: the collector's flow when every computer sends it, else the
  *  nested period totals (for the last hour: the last 10 minutes, 10–30 and 30–60 minutes ago). */
-export function reading(devices,rows,period){
- const seconds=SECONDS[period],periodTotals=devices.map(d=>(d.snapshot.periods||[]).find(p=>p.key===period)).filter(Boolean);
+export function reading(devices,rows,period,filter=null){
+ // A tool or app filter narrows the reading to those sessions: computer-wide period totals no longer
+ // apply, a tool keeps the fine bins but only its own share, and an app (not in the bins) uses the
+ // nested period totals of the matching sessions.
+ const seconds=SECONDS[period],periodTotals=filter?.tool||filter?.app?[]:devices.map(d=>(d.snapshot.periods||[]).find(p=>p.key===period)).filter(Boolean);
  const sums=rows.map(r=>total(r.windows?.[period])).filter(valid);
  const tokens=periodTotals.length?periodTotals.reduce((n,p)=>n+(total(p.tokens)||0),0):sums.length?sums.reduce((a,b)=>a+b,0):null;
  const average=tokens===null?null:tokens/seconds*3600;
  // Several computers line up on real time (bin i covers start+i*step), not position: they report at
  // different moments. The axis ends where every one has reported; a bin one of them lacks stays unknown.
- const flows=devices.map(d=>d.snapshot.flow?.[period]).filter(f=>f&&Array.isArray(f.bins)&&f.step>0);
+ const flows=filter?.app?[]:devices.map(d=>d.snapshot.flow?.[period]).filter(f=>f&&Array.isArray(f.bins)&&f.step>0);
  if(flows.length&&flows.length===devices.length&&flows.every(f=>f.step===flows[0].step)&&(flows.length===1||flows.every(f=>valid(f.start)))){
   const step=flows[0].step,n=Math.max(...flows.map(f=>f.bins.length)),end=flows.length>1?Math.min(...flows.map(f=>valid(f.end)?f.end:f.start+f.bins.length*step)):null,bins=[];
   for(let i=0;i<n;i++){const by={};let known=true;
-   for(const f of flows){const j=end===null?f.bins.length-1-i:Math.round((end-(i+1)*step-f.start)/step),v=j>=0&&j<f.bins.length?f.bins[j]:null;if(!v){known=false;break;}for(const [k,x] of Object.entries(v))if(valid(x))by[k]=(by[k]||0)+x;}
+   for(const f of flows){const j=end===null?f.bins.length-1-i:Math.round((end-(i+1)*step-f.start)/step),v=j>=0&&j<f.bins.length?f.bins[j]:null;if(!v){known=false;break;}for(const [k,x] of Object.entries(v))if(valid(x)&&(!filter?.tool||k===filter.tool))by[k]=(by[k]||0)+x;}
    const parts=known?Object.entries(by).sort((a,b)=>rank(a[0])-rank(b[0])).map(([k,x])=>[k,x/step*3600]):[];bins.push({start:i*step,end:Math.min(seconds,(i+1)*step),parts,total:known?parts.reduce((s,p)=>s+p[1],0):null});}
   return {average,bins};
  }
@@ -83,7 +86,7 @@ export function scopeBeam(){
 }
 
 /** How old a value that could not be refreshed is: "38m ago", "38분 전 보고". */
-function age(updated,now,t){const s=valid(updated)?Math.max(0,now/1000-updated):null;if(s===null)return t('Last report','마지막 보고');const [n,en,ko]=s<60?[0,'Just now','방금']:s<3600?[Math.floor(s/60),'m','분 전']:s<86400?[Math.floor(s/3600),'h','시간 전']:[Math.floor(s/86400),'d','일 전'];return n?t(n+en+' ago',n+ko+' 보고'):t(en,ko+' 보고');}
+function age(updated,now,t){const s=valid(updated)?Math.max(0,now/1000-updated):null;if(s===null)return t('Last report','마지막 보고');const [n,en,ko,zh]=s<60?[0,'Just now','방금','刚刚']:s<3600?[Math.floor(s/60),'m','분 전',' 分钟前']:s<86400?[Math.floor(s/3600),'h','시간 전',' 小时前']:[Math.floor(s/86400),'d','일 전',' 天前'];return n?t(n+en+' ago',n+ko+' 보고',n+zh+'的报告'):t(en,ko+' 보고',zh+'的报告');}
 
 /** The weekly % across the period, ending at the current report. */
 function spark(points,start,end,stroke,faded){
@@ -96,9 +99,9 @@ function spark(points,start,end,stroke,faded){
 
 /** Everything that changes with each snapshot: the scope's data and centre, the model legend,
  *  weekly limit tiles and each computer's CPU and memory. */
-export function renderCockpit(root,{devices,rows,period,t,live,now}){
+export function renderCockpit(root,{devices,rows,period,t,live,now,filter=null}){
  if(!root)return;const online=devices.filter(d=>d.online&&now-d.received<30000),scoped=rows.filter(r=>online.includes(r.device));
- const data=reading(online,scoped,period),label=t(`Last ${period}`,'최근 '+{'10m':'10분','30m':'30분','1h':'1시간','5h':'5시간','12h':'12시간','24h':'24시간'}[period]);
+ const data=reading(online,scoped,period,filter),label=t(`Last ${period}`,'최근 '+{'10m':'10분','30m':'30분','1h':'1시간','5h':'5시간','12h':'12시간','24h':'24시간'}[period],'最近 '+{'10m':'10 分钟','30m':'30 分钟','1h':'1 小时','5h':'5 小时','12h':'12 小时','24h':'24 小时'}[period]);
  root.querySelector('[data-scope-data]').innerHTML=scopeData(data,period);
  root.querySelector('.scope').classList.toggle('moving',(data.average??0)>0);
  root.querySelector('[data-scope-center]').innerHTML=`<span>${t('Average','평균')}</span>${digits(data.average,29)}<small>${data.average===null?t('Checking','확인 중'):t('tokens/h','tokens/시간')}</small>`;
@@ -110,7 +113,7 @@ export function renderCockpit(root,{devices,rows,period,t,live,now}){
  const share=v=>sumAll>0?(v/sumAll*100<1?'<1%':Math.round(v/sumAll*100)+'%'):'—';
  root.querySelector('[data-models]').innerHTML=slices.length?`<p class="cockpit-caption">${t('By model','모델별')}</p><div class="model-bar">${slices.map(x=>`<i style="flex:${x.v};background:${x.fill};opacity:${x.op}"></i>`).join('')}</div>${slices.map(x=>`<div class="model-row"><i style="background:${x.fill};opacity:${x.op}"></i><span><b>${esc(x.name)}</b><small>${esc(x.detail)}</small></span><em>${share(x.v)}</em></div>`).join('')}`
   :`<p class="cockpit-caption">${data.average===null?t('Checking usage','사용량을 확인하고 있습니다'):t('No usage reported in this period','이 기간에 보고된 사용이 없습니다')}</p>`;
- const quotas=new Map();for(const d of online)for(const q of d.snapshot.account_quotas||[])if(!quotas.has(q.id))quotas.set(q.id,{q,d});
+ const quotas=new Map();for(const d of online)for(const q of d.snapshot.account_quotas||[])if(!quotas.has(q.id)&&(!filter?.tool||q.kind===filter.tool))quotas.set(q.id,{q,d});
  const end=Math.max(...online.map(d=>d.snapshot.updated||0),now/1000)||now/1000,start=end-SECONDS[period];
  root.querySelector('[data-weekly]').innerHTML=quotas.size?[...quotas.values()].slice(0,4).map(({q})=>{const w=(q.windows||[]).find(x=>['주간','Weekly','7d'].includes(x.label)),p=q.weekly?.[period],rate=!q.stale&&valid(p?.used_pp)&&valid(p?.observed_seconds)&&p.observed_seconds>=120?p.used_pp/p.observed_seconds*3600:null,tag=String(q.account_label||'').split(' · ').pop();
   return `<div class="weekly-tile" style="--tool:${color(q.kind)}"><div><i></i><b>${esc(toolName(q.kind))}</b><strong class="${q.stale?'stale':''}">${pct(w?.pct)}</strong></div><div><small>${esc(tag)}</small>${spark(q.usage_points,start,end,color(q.kind),q.stale)}<em class="${q.stale?'stale':''}">${q.stale?(['login_required','login_expired','credential_store_unavailable','access_denied'].includes(q.status)?t('Reconnect needed','재연결 필요'):age(q.updated,now,t)):rate===null?t('Collecting','수집 중'):pct(rate)+t('/h','/시간')}</em></div></div>`;}).join('')

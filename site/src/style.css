@@ -74,3 +74,40 @@
 .pill:not(.working):not(.waiting):not(.paused):before{width:7px;height:7px;background:transparent;box-shadow:inset 0 0 0 1.5px currentColor}
 @keyframes state-wave{0%,100%{background-size:2px 40%,2px 100%,2px 65%}33%{background-size:2px 100%,2px 50%,2px 85%}66%{background-size:2px 60%,2px 75%,2px 35%}}
 @media(prefers-reduced-motion:reduce){.pill.working:before{animation:none}}
+/* Workspace sidebar, matching the desktop dashboard: small section labels, indented links, then AI tool and app filters. */
+.workspace-sidebar{overflow-y:auto;scrollbar-width:thin}.workspace-sidebar .sidebar-label{padding:14px 10px 7px;font-size:10px;font-weight:600;letter-spacing:.06em}
+.side-nav{display:grid;gap:2px}
+.side-item{display:grid;grid-template-columns:15px minmax(0,1fr);align-items:center;column-gap:9px;min-height:31px;margin:0;padding:0 10px 0 18px;font-size:13px;line-height:1.3}
+.side-item:hover:not(.selected){background:#181c20;color:var(--text)}.side-item.selected{font-weight:600}.side-item.selected .side-icon{color:var(--accent)}
+.side-icon{display:grid;place-items:center;width:15px;height:15px}.side-icon svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.side-filter-label{margin-top:8px}.side-filters{display:grid;gap:1px}
+.side-filter{display:flex;align-items:center;gap:9px;width:100%;min-height:28px;padding:0 10px 0 18px;border:0;border-radius:7px;background:none;color:var(--muted);font:inherit;font-size:12.5px;line-height:1.3;text-align:left}
+.side-filter .dot{flex:none;width:7px;height:7px;border-radius:50%;background:#8b939f}.side-filter span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.side-filter small{margin-left:auto;color:var(--dim);font-size:11.5px;font-variant-numeric:tabular-nums}
+.side-filter:hover{background:#181c20;color:var(--text)}.side-filter[aria-pressed=true]{background:rgba(108,207,169,.12);color:var(--text)}.side-filter[aria-pressed=true] small{color:#8fe2c2}
+/* One scope chip and the active filters above the period picker. */
+.dash-controls{flex-wrap:wrap;justify-content:flex-start}.dash-controls .secondary{margin-left:auto}
+.scope-chip{display:inline-flex;align-items:center;gap:2px;padding:6px 11px;border:1px solid var(--line);border-radius:999px;background:var(--panel);font-size:12px;white-space:nowrap}.scope-chip span{color:var(--dim);font-size:9px;margin-left:4px}
+.filter-strip{display:inline-flex;align-items:center;gap:8px;min-width:0;padding:3px 4px 3px 11px;border:1px solid #3d6d5c;border-radius:999px;background:rgba(108,207,169,.12);font-size:12px}.filter-strip[hidden]{display:none}
+.filter-strip>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}.filter-strip b{color:var(--text);font-weight:600}
+.filter-strip button{display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;border-radius:50%;background:none;color:var(--muted);font-size:11px}.filter-strip button:hover{background:#21262c;color:var(--text)}
+/* Computers: each one's CPU, memory and connection; choosing one sets the scope for every section. */
+.computer-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;padding:0 21px 21px}
+.computer-card{display:grid;gap:7px;align-content:start;padding:14px 16px;border:1px solid var(--line);border-radius:8px;background:#121418;color:var(--text);font:inherit;text-align:left}
+.computer-card>b{display:flex;align-items:center;min-width:0;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.computer-card>small{color:var(--dim);font-size:11px}
+.computer-card:hover{border-color:#3c4350}.computer-card.selected{background:#1d222b;border-color:#4b5f82}
+.computer-meter{display:grid;grid-template-columns:52px minmax(0,1fr) 38px;align-items:center;gap:8px;font-size:11px}.computer-meter small{color:var(--muted)}
+.computer-meter i{height:4px;border-radius:2px;background:var(--line);overflow:hidden}.computer-meter u{display:block;height:100%;background:var(--lcd)}.computer-meter em{font-style:normal;text-align:right;font-variant-numeric:tabular-nums}
+/* One language button with a short menu, as in the desktop dashboard. Public pages use the landing colors. */
+.pref-language{position:relative}
+.language-button{display:inline-flex;align-items:center;justify-content:center;gap:5px;width:54px;height:32px;padding:0 8px;border:1px solid var(--g-line,var(--line));border-radius:8px;background:var(--g-panel,var(--panel));color:var(--g-ink,var(--text));font:inherit;font-size:12.5px;font-weight:600}
+.language-button span{color:var(--g-dim,var(--dim));font-size:9px}
+.language-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:40;display:grid;gap:2px;min-width:128px;padding:4px;border:1px solid var(--g-line,var(--line));border-radius:10px;background:var(--g-panel,var(--panel));box-shadow:0 12px 32px rgba(0,0,0,.28)}
+.language-menu[hidden]{display:none}
+.language-menu button{height:30px;padding:0 10px;border:0;border-radius:6px;background:none;color:var(--g-muted,var(--muted));font:inherit;font-size:12.5px;text-align:left}
+.language-menu button:hover{background:var(--g-raised,#181c20);color:var(--g-ink,var(--text))}.language-menu button[aria-checked=true]{background:var(--g-raised,#1b1e24);color:var(--g-ink,var(--text));font-weight:600}
+@media(max-width:600px){.workspace-sidebar{overflow:visible}.side-nav,.side-filters{display:flex;flex-basis:100%;gap:4px;overflow-x:auto;scrollbar-width:none}.side-nav::-webkit-scrollbar,.side-filters::-webkit-scrollbar{display:none}
+.side-item{flex:none;grid-template-columns:13px max-content;column-gap:6px;min-height:30px;margin:4px 0 0;padding:0 10px;font-size:11.5px}.side-icon,.side-icon svg{width:13px;height:13px}
+.side-filter{flex:none;width:auto;min-height:28px;gap:6px;padding:0 10px;border:1px solid var(--line);border-radius:999px;font-size:11.5px}.side-filter span{flex:none;max-width:140px}.side-filter[aria-pressed=true]{border-color:#3d6d5c}
+.computer-cards{grid-template-columns:minmax(0,1fr);padding:0 14px 14px}.dash-controls{gap:8px}.dash-controls .secondary{margin-left:0}}
+@media(max-width:600px){.language-button{width:42px;padding:0 6px;gap:3px}.header-actions .language{padding-inline:8px;white-space:nowrap}.header-actions .public-header-download{white-space:nowrap}}
