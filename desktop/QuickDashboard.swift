@@ -601,6 +601,7 @@ struct QuickDashboard: View {
                 HStack(alignment: .firstTextBaseline, spacing: m(5)) {
                     Circle().fill(color).frame(width: m(6), height: m(6)).alignmentGuide(.firstTextBaseline) { $0[.bottom] - m(1) }
                     Text(toolName(q.kind)).font(m.font(.body, .semibold)).lineLimit(1).fixedSize()
+                    accountChip(q.id)
                     Spacer(minLength: m(4))
                     Text(pct1(w?.pct)).font(m.font(.figure, .semibold)).monospacedDigit().fixedSize()
                         .foregroundStyle(q.stale ? theme.muted : theme.ink)
@@ -750,6 +751,7 @@ struct QuickDashboard: View {
                 }
                 HStack(spacing: m(4)) {
                     Text(tool).foregroundStyle(AgentPalette.color(s.kind))
+                    accountChip(s.usage?.weekly_estimate?[model.selectedPeriod]?.account_id ?? s.usage?.weekly_account)
                     Text("· " + project).foregroundStyle(theme.muted)
                 }.font(m.font(.label)).lineLimit(1)
             }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
@@ -798,12 +800,32 @@ struct QuickDashboard: View {
         }.padding(.horizontal, m(14)).padding(.vertical, m(10))
             .overlay(alignment: .top) { Rectangle().fill(theme.line).frame(height: 1) }
     }
+    /// Several accounts of one tool are numbered by account name (Claude Code 1, 2), so a session and
+    /// its account's limit tile match at a glance. A tool with one account shows no number.
+    private var accountNumbers: [String: Int] {
+        let quotas = model.snapshot?.account_quotas ?? []
+        var out: [String: Int] = [:]
+        for kind in Set(quotas.map(\.kind)) {
+            let list = quotas.filter { $0.kind == kind }.sorted { $0.account_label.lowercased() < $1.account_label.lowercased() }
+            if list.count > 1 { for (i, q) in list.enumerated() { out[q.id] = i + 1 } }
+        }
+        return out
+    }
+    @ViewBuilder private func accountChip(_ id: String?) -> some View {
+        if let id, let n = accountNumbers[id] {
+            Text("\(n)").font(m.font(.caption, .semibold)).monospacedDigit().foregroundStyle(theme.ink)
+                .padding(.horizontal, m(4)).frame(minWidth: m(15), minHeight: m(15))
+                .background(theme.raised, in: RoundedRectangle(cornerRadius: m(4))).fixedSize()
+                .help(model.snapshot?.account_quotas?.first { $0.id == id }?.account_label ?? "")
+        }
+    }
     private func compactQuota(_ quota: AccountQuota) -> some View {
         let tint = AgentPalette.color(quota.kind)
         return VStack(alignment: .leading, spacing: m(5)) {
             HStack(spacing: m(7)) {
                 RoundedRectangle(cornerRadius: m(2)).fill(tint).frame(width: m(5), height: m(13))
                 Text(toolName(quota.kind)).font(m.font(.title, .semibold))
+                accountChip(quota.id)
                 Text(quota.plan ?? "").font(m.font(.caption, .medium)).foregroundStyle(tint)
                 Spacer()
                 Circle().fill(quota.stale ? theme.amber : theme.segmentOn).frame(width: m(5), height: m(5))
