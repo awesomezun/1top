@@ -136,6 +136,15 @@ final class DeviceQATests: XCTestCase {
         shot(app, "06b-scrolled")
     }
 
+    /// Demo data: the Mac mini is paired without remote control, so its session offers nothing to send.
+    func test07_ComputerWithoutRemoteControl() {
+        let app = launch(["--demo", "-screenDetail", "m1"])
+        XCTAssertTrue(element(app, "control-off").waitForExistence(timeout: 10), "No notice for a computer without remote control")
+        XCTAssertFalse(app.buttons["작업 제어"].exists, "Pane picker shown")
+        XCTAssertFalse(element(app, "control-pause").exists || element(app, "instruction").exists || element(app, "mail-draft").exists, "A control is offered")
+        shot(app, "07-control-off")
+    }
+
     // MARK: With the test session (QA_SESSION)
 
     private func openTestSession(_ pane: String) throws -> XCUIApplication {

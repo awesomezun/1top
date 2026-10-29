@@ -3,6 +3,8 @@ import Foundation
 /// Two made-up computers for trying the app without an account. No real projects or accounts.
 enum DemoData {
     private static let controls = ["focus", "pause", "resume", "terminate", "prompt", "message", "mailbox"]
+    /// The demo Mac mini is paired without remote control, so its sessions show usage only.
+    static let controlOff: Set<String> = ["demo-mini"]
 
     static func devices(now: Double) -> [Device] {
         func vector(_ total: Double) -> [Double] { [total * 0.01, total * 0.92, total * 0.04, total * 0.03] }

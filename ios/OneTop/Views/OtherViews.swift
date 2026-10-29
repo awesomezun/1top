@@ -68,7 +68,9 @@ struct SessionsView: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("session-" + s.id)
             .swipeActions(edge: .trailing) {
-                Button { detail = s } label: { Label(L.t("Messages", "메시지함"), systemImage: "bubble.left") }.tint(.blue)
+                if !model.isControlOff(s) {
+                    Button { detail = s } label: { Label(L.t("Messages", "메시지함"), systemImage: "bubble.left") }.tint(.blue)
+                }
                 if s.can("terminate") {
                     Button { request = ControlRequest(session: s, action: "terminate") } label: { Label(AppModel.actionLabel("terminate"), systemImage: SessionDetail.icon("terminate")) }
                         .tint(.red).disabled(!available)
