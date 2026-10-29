@@ -87,6 +87,17 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(sum(v or 0 for v in value['total']),50)
         self.assertEqual(value['by_model'][0]['key'],'gpt-test')
 
+    def test_codex_fork_metadata_maps_to_physical_thread_without_counting_replay(self):
+        sid='11111111-2222-3333-4444-555555555555';at=self.now-100
+        rows=[{'type':'session_meta','timestamp':at-20,'payload':{'id':'parent','cwd':'/fork'}},
+              {'type':'turn_context','timestamp':at-10,'payload':{'model':'gpt-fork'}},
+              {'type':'event_msg','timestamp':at,'payload':{'type':'token_count','info':{'total_token_usage':{'input_tokens':500}}}}]
+        self.store.import_file('Codex',self.write(rows,'rollout-2024-'+sid+'.jsonl'))
+        self.event(at,sid=sid,kind='Codex',tokens=20,model=None,cwd=None)
+        result=self.response()['series']
+        self.assertEqual(result['by_model'][0]['key'],'gpt-fork')
+        self.assertEqual(sum(v or 0 for v in result['total']),20)
+
     def test_codex_deltas_model_changes_reset_and_replay(self):
         rows=[{'type':'session_meta','timestamp':self.now-7000,'payload':{'id':'cx','cwd':'/codex/a'}},
               {'type':'turn_context','timestamp':self.now-7000,'payload':{'model':'first'}}]

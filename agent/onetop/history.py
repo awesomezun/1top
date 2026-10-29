@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -119,6 +120,8 @@ class HistoryStore:
         with closing(self.connect()) as db:
             prior = db.execute('SELECT inode,offset,state FROM files WHERE path=?', (str(path),)).fetchone()
             offset, state = (prior[1], json.loads(prior[2])) if prior and prior[0] == inode and prior[1] <= stat.st_size else (0, {})
+            if kind == 'Codex' and state.get('metadata_schema') != 2:
+                offset,state = 0, {'metadata_schema':2}
             if offset == stat.st_size and prior:
                 return True
             state.setdefault('sid', path.stem)
@@ -152,6 +155,13 @@ class HistoryStore:
                         elif row.get('type') == 'event_msg' and payload.get('type') == 'token_count':
                             usage = (payload.get('info') or {}).get('total_token_usage')
                             if not isinstance(usage, dict):continue
+                            # Forked rollouts can replay their parent's session_meta.
+                            # The collector's thread ID is the physical rollout UUID;
+                            # preserve that alias for event-time model attribution.
+                            alias = re.search(r'([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$',path.stem)
+                            for sid in {state['sid'],alias.group(1) if alias else state['sid']}:
+                                db.execute('INSERT OR REPLACE INTO metadata VALUES(?,?,?,?)',
+                                           (sid,t,state['model'],state['cwd']))
                             values = vector(usage, True); old = state.get('total'); state['total'] = values
                             if old is None or any(a < b for a,b in zip(values,old)):continue
                             delta = [a-b for a,b in zip(values,old)]
