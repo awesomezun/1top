@@ -130,7 +130,7 @@ class Controller:
                                            for s in snapshot['root_sessions']]
             return result
 
-    def resolve(self,sid,key):
+    def resolve(self,sid,key,allow_continuation=False):
         if sid.startswith('aside:'):
             from .aside import resolve
             spec=resolve(sid,key)
@@ -138,7 +138,8 @@ class Controller:
             return spec
         fresh=self.factory();fresh.discover()
         spec=next((s for s in fresh.specs if s['id']==sid),None)
-        if not spec or not spec.get('control_key') or spec['control_key']!=key:
+        if (not spec or not spec.get('control_key') or
+                spec['control_key']!=key and not (allow_continuation and key in spec.get('continuation_keys', []))):
             raise ActionError('세션이나 터미널 연결이 변경되었습니다. 새로고침 후 다시 확인하세요.')
         if len(spec['pids'])!=1:raise ActionError('개별 CLI 프로세스를 확인할 수 없습니다.')
         return spec
@@ -149,7 +150,8 @@ class Controller:
         if time.time()-snapshot.get('updated',0)>20:return
         for row in self.mailbox.queued()[:5]:
             spec=next((s for s in snapshot.get('sessions',[]) if s['id']==row['session_id']),None)
-            if time.time()-row['created']>900 or spec and spec.get('control_key')!=row['control_key']:
+            if (time.time()-row['created']>900 or spec and
+                    spec.get('control_key')!=row['control_key'] and row['control_key'] not in spec.get('continuation_keys', [])):
                 self.mailbox.delivery(row['id'],'not_delivered');continue
             if not spec or not accepts_instruction(spec):continue
             with self.state_lock:mark=self.paused.get(row['session_id'])
@@ -165,7 +167,8 @@ class Controller:
         with self.collector.lock:
             snapshot=self.collector.snapshot
             if time.time()-snapshot.get('updated',0)>20:raise ActionError('Computer report is stale.')
-            spec=next((s for s in snapshot.get('sessions',[]) if s['id']==sid and s.get('control_key')==key),None)
+            spec=next((s for s in snapshot.get('sessions',[]) if s['id']==sid and
+                       (s.get('control_key')==key or key in s.get('continuation_keys', []))),None)
         if not spec or not key or not mailbox_readable(spec):raise ActionError('Session reply source is unavailable.')
         return self.mailbox.read(spec)
 
@@ -224,7 +227,10 @@ class Controller:
                 previous,result=self.receipts[rid]
                 if previous!=request:raise ActionError('요청 ID가 이미 사용되었습니다.')
                 if not (payload.get('_dispatch_queued') is True and result.get('queued')):return result
-            spec=self.resolve(sid,key);terminal=spec.get('orca_terminal')
+            # Only correspondence may follow a proven continuation. A stale
+            # destructive control must still be reconfirmed against the new PID.
+            spec=self.resolve(sid,key,allow_continuation=True) if action=='message' else self.resolve(sid,key)
+            terminal=spec.get('orca_terminal')
             if action=='rename':
                 if not terminal or not terminal.get('handle'):
                     raise ActionError('제목을 변경할 Orca 터미널 연결을 확인할 수 없습니다.')

@@ -326,7 +326,7 @@ def bind_account(spec, index, roots, now):
     Ambiguous or unrecognized explicit identities disable that hint. Binding
     starts at the actual observation, never rewrites earlier usage events.
     """
-    report = index.get((spec.get('kind'), spec.get('id')))
+    report = index.get((spec.get('kind'), spec.get('active_session_id') or spec.get('id')))
     if not report or not report['account_ids']:
         return
     known = {v[0] for v in roots.values() if v[1] == spec['kind']}
@@ -340,7 +340,7 @@ def bind_account(spec, index, roots, now):
 
 
 def enrich(spec, index):
-    report = index.get((spec.get('kind'), spec.get('id')))
+    report = index.get((spec.get('kind'), spec.get('active_session_id') or spec.get('id')))
     if not report:
         return
     spec['telemetry'] = report

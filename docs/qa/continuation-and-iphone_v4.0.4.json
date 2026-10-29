@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "date": "2026-10-29",
+  "backend_version": "4.0.4",
+  "ios_version": "4.1.0",
+  "ios_build": 5,
+  "python_tests": {
+    "passed": 359
+  },
+  "javascript_test_files": 9,
+  "swift_model_checks": "passed",
+  "frontend_freeze": {
+    "manifest": "frontend-freeze_v1.12.1.sha256",
+    "passed": 75
+  },
+  "real_record_replay": {
+    "recent_5h_tokens_recovered": 71315464,
+    "repeat_read_added_rows": 0,
+    "account_boundaries": "preserved"
+  },
+  "installed_mac": {
+    "single_session_row": true,
+    "new_executor_identified": true,
+    "input_verified": true,
+    "usage_and_weekly_estimate_present": true,
+    "diagnostic_message": "queued then delivered once; correlated reply read from new transcript using production Mailbox reader on a copy of mailbox state"
+  },
+  "physical_iphone": {
+    "model": "iPhone 15 Pro Max",
+    "os": "26.6.1",
+    "test": "test16_DisplayChangesKeepLiveSession",
+    "passed": 1,
+    "failed": 0,
+    "checks": [
+      "one-tap theme",
+      "Korean/English/Chinese",
+      "selected computer and period",
+      "live connection",
+      "settings after relaunch",
+      "restored Korean and system theme"
+    ],
+    "prior_attempt": "interrupted by unexpected session sheet; retained as failed evidence, later diagnostic run passed",
+    "scope": "No remote control actions were sent by this UI test"
+  },
+  "simulator": {
+    "passed": 6,
+    "checks": [
+      6,
+      7,
+      8,
+      9,
+      20,
+      23
+    ],
+    "source": "frontend build5 before DEBUG-only sheet diagnostics"
+  },
+  "source_sha256": {
+    "agent/onetop/claude_continuation.py": "c89a6b7b4ab2aacc58ff7f5ab96b3c4680a42d9b7902e43adb5f63a67912c6dc",
+    "agent/onetop/server.py": "89f98280b77c113450b2501769d89d54b27144bb488245b0755b1c1ad0110e0e",
+    "agent/onetop/controls.py": "7de1a2385cdb73e222af3f2e16366fc47931f35b71514982045031b0df795b74",
+    "agent/onetop/mailbox.py": "48e3973046d1d59a59b4820f420c512d13de8b88b3e9db6b21f1cc7c6b8457ea",
+    "agent/onetop/claude_statusline.py": "d8fabe1557868a3bdaa67a882e381f65e111e233dbecdb54607664729187e6f3",
+    "agent/onetop/effort.py": "941e46b85b223c7ed2f744010b7e160a6adac79ec8e5775fde1be71ffec7df0e",
+    "agent/onetop/telemetry.py": "90fc1585b4f7ba815d160f363ec4be016b4e80e77e2f586eed4e520821a34a8f"
+  },
+  "limits": [
+    "Personal Team development install, not App Store distribution",
+    "Public downloads unchanged",
+    "Reply transport verified through local API plus production transcript reader; this run did not send a new phone-origin message"
+  ]
+}

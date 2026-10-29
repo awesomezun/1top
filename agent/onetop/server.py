@@ -31,6 +31,7 @@ from .platform_support import data_directory
 from .hierarchy import codex_metadata, annotate as annotate_hierarchy, group_sessions
 from .effort import codex_level, backfill_codex, apply_statusline
 from .telemetry import TelemetryStore, session_index, bind_account, enrich
+from . import claude_continuation
 
 BASE = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -147,7 +148,7 @@ def bind_terminal(spec, metadata, terminals, pane_titles, specs):
         pids=matches
         source='Codex 세션명·프로젝트와 터미널 화면 제목의 고유한 일치 → Orca 터미널 ID'
         spec['pids']=matches
-    meta=metadata.get(pids[0],{}) if len(pids)==1 else {}
+    meta=metadata.get(spec.get('terminal_owner_pid', pids[0]),{}) if len(pids)==1 else {}
     terminal=terminal_for(meta,terminals)
     spec.update(orca_terminal=terminal,terminal_match='confirmed' if terminal else 'unavailable',
                 terminal_note=source if terminal else '프로세스는 실행 중이지만 현재 Orca 탭 목록에서 연결을 확인하지 못했습니다.')
@@ -244,9 +245,10 @@ class Ledger:
                 for key,value in zip(('input_tokens','cache_read_input_tokens','cache_creation_input_tokens'),new[:3]):usage[key]=value
             ctx=request_context(usage,t,model,(d.get('context_window') or {}).get('context_window_size'))
             if ctx is not None:s.update(context_usage=ctx,context_at=t,context_mid=mid)
-        if model:
+        if model and t >= s.get('model_at', 0):
             s['model'] = model
             s['model_at'] = t
+        if model:
             if model not in s['models']:
                 s['models'].append(model)
         if sum(delta):
@@ -340,13 +342,17 @@ class Collector:
             if len(p) != 11:
                 continue
             name = os.path.basename(p[10]).lower()
-            if name not in ('claude','codex','agy') or int(p[1]) == os.getpid():
+            if name not in ('claude','claude bg-spare','claude bg-pty-host','codex','agy') or int(p[1]) == os.getpid():
                 continue
             pid = int(p[0])
-            try:birth=psutil.Process(pid).create_time()
+            try:
+                process = psutil.Process(pid)
+                birth = process.create_time()
+                role = claude_continuation.role(name, process.cmdline() if name == 'claude' else ())
             except psutil.Error:continue
             rows[pid] = {'pid': pid, 'ppid': int(p[1]), 'tty': p[2], 'rss': int(p[3])/1024,
-                         'cpu': float(p[4]), 'exe': name, 'started':' '.join(p[5:10]),'birth':birth}
+                         'cpu': float(p[4]), 'exe': 'claude' if role else name,
+                         'claude_role': role, 'started':' '.join(p[5:10]),'birth':birth}
         return rows
 
     def metadata(self, process):
@@ -383,6 +389,11 @@ class Collector:
         processes = self.processes()
         self.process_cache = {k:v for k,v in self.process_cache.items() if k in processes}
         specs, counts = [], collections.Counter()
+        for process in processes.values():
+            self.metadata(process)
+        registries = {pid: claude_continuation.registry(self.process_cache[pid]['config_dir'], pid)
+                      for pid, p in processes.items() if p['exe'] == 'claude'}
+        continuations = claude_continuation.chains(processes, registries, self.process_cache)
         cwds, open_logs = {}, {}
         if processes:
             try:
@@ -401,28 +412,47 @@ class Collector:
             except (OSError, subprocess.SubprocessError):
                 pass
         for pid, p in processes.items():
+            if p.get('claude_role') in ('helper', 'background'):
+                # A background job is counted through its verified interactive owner.
+                continue
             if p['exe'] == 'codex':
                 if p['tty'] != '??':
                     counts['Codex'] += 1
                     self.metadata(p)
                 continue
+            chain = continuations.get(pid, [pid])
+            owner_pid = pid
+            pid = chain[-1]
+            p = processes[pid]
             meta = self.metadata(p)
             kind = 'Antigravity' if p['exe']=='agy' else ('GLM' if meta['provider'] in ('api.z.ai','open.bigmodel.cn') or meta['configured_model'].lower().startswith('glm') else 'Claude')
             counts[kind] += 1
-            reg = {}
-            try:
-                reg = json.loads((Path(meta['config_dir'])/'sessions'/f'{pid}.json').read_text())
-            except (OSError, ValueError):
-                pass
-            sid = reg.get('sessionId') or f'process-{pid}'
+            reg = registries.get(pid) or claude_continuation.registry(meta['config_dir'], pid)
+            original = registries.get(owner_pid, reg)
+            sid = original.get('sessionId') or f'process-{pid}'
             cwd = cwds.get(pid) or reg.get('cwd') or ''
-            path = claude_transcript(meta['config_dir'],sid)
+            path = claude_transcript(meta['config_dir'],reg.get('sessionId') or sid)
             spec = {'id': sid, 'kind': kind, 'cwd': cwd, 'title': reg.get('name') or Path(cwd).name,
                     'pid': pid, 'pids': [pid], 'cpu': p['cpu'], 'rss': round(p['rss']),
                     'status': registry_status(reg), 'status_at': epoch(reg.get('statusUpdatedAt')),
                     'waiting_for': reg.get('waitingFor'), 'path': path,
                     'configured_model': meta['configured_model'], 'provider': meta['provider'], 'config_dir':meta['config_dir'],
                     'source': 'Claude Code 세션 레지스트리' if reg else 'macOS 프로세스', 'connected': True}
+            if len(chain) > 1:
+                sources = [{'session_id': registries[p]['sessionId'],
+                            'path': claude_transcript(meta['config_dir'], registries[p]['sessionId'])}
+                           for p in chain]
+                spec.update(active_session_id=reg['sessionId'], continuation_sources=sources,
+                            terminal_owner_pid=owner_pid, continuation_processes=chain[:-1],
+                            source='Claude Code 검증된 백그라운드 이어하기')
+            elif reg.get('parkedJobId'):
+                spec.update(continuation_pending=True, status='unknown',
+                            note='백그라운드로 이어진 실제 세션을 확인 중입니다.')
+            if not spec.get('continuation_pending'):
+                completed = claude_continuation.completed_shell_turn(reg, path)
+                if completed:
+                    spec.update(status='idle', status_at=max(completed, spec['status_at']),
+                                status_source='claude_turn_completed')
             if kind == 'Antigravity':
                 spec['note'] = '실행 상태는 확인됩니다. 이 설치의 대화 DB에는 검증된 토큰 필드가 없어 세션 토큰은 표시하지 않습니다.'
             elif not path:
@@ -481,6 +511,9 @@ class Collector:
                 spec['process_started']=processes[spec['pids'][0]]['started']
                 spec['process_birth']=processes[spec['pids'][0]]['birth']
                 spec['control_key']=target_key(spec)
+                spec['continuation_keys'] = [target_key({**spec, 'pids': [pid],
+                    'process_started': processes[pid]['started'], 'process_birth': processes[pid]['birth']})
+                    for pid in spec.get('continuation_processes', [])]
         attached={pid for s in specs if s.get('control_key') for pid in s['pids']}
         for pid,p in processes.items():
             if p['exe']!='codex' or p['tty']=='??' or pid in attached:continue
@@ -501,10 +534,12 @@ class Collector:
         for spec in specs:
             term=spec.get('orca_terminal') or {}
             spec['input_verified']=bool(len(spec['pids'])==1 and term and
-                processes[spec['pids'][0]]['tty']!='??' and len(handles[term['handle']])==1)
+                not spec.get('continuation_pending') and
+                processes[spec.get('terminal_owner_pid', spec['pids'][0])]['tty']!='??' and len(handles[term['handle']])==1)
         self.app_inventory=inventory()
         self.apps=applications(self.app_inventory)
-        tracked={pid for spec in specs for pid in spec['pids']}
+        tracked={pid for spec in specs for pid in (*spec['pids'], *spec.get('continuation_processes', []))}
+        tracked.update(pid for pid, p in processes.items() if p.get('claude_role') in ('helper', 'background'))
         for spec in specs:
             spec['location']=context(spec['pids'][0],self.app_inventory) if len(spec['pids'])==1 else {'app':'Unknown','terminal':'','match':'unverified'}
         for pid,row in self.app_inventory.items():
@@ -529,15 +564,25 @@ class Collector:
 
     def read_tracker(self, spec):
         path = spec['path']
-        if path not in self.trackers:
-            row = self.db.execute('SELECT data FROM trackers WHERE path=?',(path,)).fetchone()
-            self.trackers[path] = Ledger(spec['kind'],json.loads(row[0]) if row else None)
-        tracker = self.trackers[path]
+        ledger_path = spec.get('_ledger_path') or path
+        if ledger_path not in self.trackers:
+            row = self.db.execute('SELECT data FROM trackers WHERE path=?',(ledger_path,)).fetchone()
+            self.trackers[ledger_path] = Ledger(spec['kind'],json.loads(row[0]) if row else None)
+        tracker = self.trackers[ledger_path]
         s = tracker.s
+        cursors = None
+        if spec.get('_ledger_path'):
+            cursors = s.setdefault('continuation_cursors', {
+                ledger_path: {'offset': s['offset'], 'inode': s['inode']}})
+            cursor = cursors.setdefault(path, {'offset': 0, 'inode': None})
+            s.update(cursor)
         st = os.stat(path)
         if (s['inode'] is not None and s['inode'] != st.st_ino) or st.st_size < s['offset']:
-            tracker = self.trackers[path] = Ledger(spec['kind'])
-            s = tracker.s
+            if cursors is not None:
+                s.update(offset=0, inode=None)
+            else:
+                tracker = self.trackers[ledger_path] = Ledger(spec['kind'])
+                s = tracker.s
         s['inode'] = st.st_ino
         effort_migrated = backfill_codex(s, path) if spec['kind'] == 'Codex' else False
         if s['offset']==0 and spec['kind']=='Codex' and st.st_size>16*1024*1024:
@@ -560,17 +605,18 @@ class Collector:
                     interesting = b'"usage"' in line or b'"token_count"' in line or b'"turn_context"' in line or b'"event_msg"' in line or b'"session_meta"' in line
                     if interesting:
                         try:
-                            event = tracker.consume(json.loads(line))
+                            record = json.loads(line)
+                            event = tracker.consume(record)
                             if event and event[0]>=self.started:
                                 t,v=event
+                                event_model = ((record.get('message') or {}).get('model')
+                                               if spec['kind'] in ('Claude', 'GLM') else None) or s.get('model')
                                 self.db.execute('INSERT INTO events(t,sid,kind,fresh,cached,written,output,account,model,cwd) VALUES(?,?,?,?,?,?,?,?,?,?)',
                                                 (t,spec['id'],spec['kind'],*v,weekly_usage.event_account(spec,t),
-                                                 s.get('model') or None,s.get('cwd') or spec.get('cwd')))
+                                                 event_model or None,s.get('cwd') or spec.get('cwd')))
                         except (ValueError, TypeError, KeyError):
                             pass
                 s['offset'] = f.tell()
-        if start < st.st_size or effort_migrated:
-            self.db.execute('INSERT OR REPLACE INTO trackers VALUES (?,?)',(path,json.dumps(s,separators=(',',':'))))
         spec['loading'] = s['offset'] < st.st_size
         spec['progress'] = round(100*s['offset']/max(1,st.st_size))
         spec['tokens'] = s['total'] if s['known'] and not spec['loading'] else None
@@ -596,6 +642,35 @@ class Collector:
             spec['status'],spec['status_at']=s['status'],s['status_at']
         if not spec['loading'] and not s['known']:
             spec['note']='대화 기록에 유효한 사용량 보고가 없습니다. 0으로 간주하지 않습니다.'
+        if cursors is not None:
+            cursors[path] = {'offset': s['offset'], 'inode': s['inode']}
+            s.update(cursors[ledger_path])
+        if start < st.st_size or effort_migrated or cursors is not None:
+            self.db.execute('INSERT OR REPLACE INTO trackers VALUES (?,?)',(ledger_path,json.dumps(s,separators=(',',':'))))
+
+    def read_continuation(self, spec, roots, telemetry_sessions, now):
+        from .claude_statusline import session_binding
+        sources = [source for source in spec['continuation_sources'] if source.get('path')]
+        if not sources:
+            return
+        active_id, active_path = spec['active_session_id'], spec['path']
+        for source in sources:
+            part = {**spec, 'path': source['path'], 'active_session_id': source['session_id'],
+                    '_ledger_path': sources[0]['path']}
+            part['account_binding'] = weekly_usage.account_for(part, roots)
+            part.pop('account_binding_source', None)
+            captured = session_binding(part, now=now)
+            if captured:
+                part.update(account_binding=captured, account_binding_source='claude_statusline_session')
+            bind_account(part, telemetry_sessions, roots, now)
+            self.read_tracker(part)
+            spec.pop('account_binding_source', None)
+            spec.update(part)
+            # Consume original context first; one ledger deduplicates copied IDs.
+            if part.get('loading'):
+                break
+        spec.update(active_session_id=active_id, path=active_path)
+        spec.pop('_ledger_path', None)
 
     def claude_quota(self, now):
         entries = []
@@ -654,7 +729,11 @@ class Collector:
             bind_account(s, telemetry_sessions, roots, now)
             s.update(tokens=None,model=s.get('configured_model',''),last_usage=0,loading=False)
             if s['path']:
-                try:self.read_tracker(s)
+                try:
+                    if s.get('continuation_sources'):
+                        self.read_continuation(s, roots, telemetry_sessions, now)
+                    else:
+                        self.read_tracker(s)
                 except OSError:s['note']='세션 기록을 읽을 수 없습니다.'
             if s['kind'] in ('Claude', 'GLM'):
                 apply_statusline(s, now)
