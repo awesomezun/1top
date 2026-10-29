@@ -182,7 +182,6 @@
 
  /* Icons drawn like the SF Symbols the macOS panel uses. */
  const icon={
-  wave:'<svg width="19" height="17" viewBox="0 0 19 17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8.5h2.2l1.6-4.2 2.4 9.4 2.5-12.4 2.4 14.4 2.1-9.2 1.4 2h2.4"/></svg>',
   more:'<svg width="15" height="4" viewBox="0 0 15 4" fill="currentColor"><circle cx="2" cy="2" r="1.6"/><circle cx="7.5" cy="2" r="1.6"/><circle cx="13" cy="2" r="1.6"/></svg>',
   plus:'<svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 1v8M1 5h8"/></svg>',
   open:'<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9 9.5 2.5M4 2.5h5.5V8"/></svg>',
@@ -202,7 +201,7 @@
  function renderHead(){
   const theme=preferences().theme,at=Math.max(0,LANGS.findIndex(l=>l[0]===S.lang)),[,mark,name]=LANGS[at],next=LANGS[(at+1)%LANGS.length][2];
   const themeLabel=T(theme==='dark'?'화이트 모드':'다크 모드'),langLabel=`${T('언어')}: ${name} → ${next}`;
-  update('qHead',`<div class="q-brand">${icon.wave}<span>1top</span></div><span class="q-spacer"></span><span class="q-pill"><i class="q-dot${fresh()?'':' warn'}"></i><span id="quickConnection">${esc(connectionLabel())}</span></span><button class="q-pref q-theme" data-act="theme" aria-label="${esc(themeLabel)}" title="${esc(themeLabel)}">${theme==='dark'?'☀':'☾'}</button><button class="q-pref q-lang" data-act="language" lang="${S.lang}" aria-label="${esc(langLabel)}" title="${esc(langLabel)}">${mark}</button><button class="q-more" data-act="menu" data-menu="head" aria-label="${esc(T('1top 옵션'))}" aria-haspopup="menu">${icon.more}</button>`);
+  update('qHead',`<div class="q-brand"><img class="q-mark" src="/brand-mark_v1.1.0.png" alt="" width="28" height="28"><span>1top</span></div><span class="q-spacer"></span><span class="q-pill"><i class="q-dot${fresh()?'':' warn'}"></i><span id="quickConnection">${esc(connectionLabel())}</span></span><button class="q-pref q-theme" data-act="theme" aria-label="${esc(themeLabel)}" title="${esc(themeLabel)}">${theme==='dark'?'☀':'☾'}</button><button class="q-pref q-lang" data-act="language" lang="${S.lang}" aria-label="${esc(langLabel)}" title="${esc(langLabel)}">${mark}</button><button class="q-more" data-act="menu" data-menu="head" aria-label="${esc(T('1top 옵션'))}" aria-haspopup="menu">${icon.more}</button>`);
   update('qPeriods',PERIODS.map(([k,l])=>`<button type="button" data-act="period" data-period="${k}" aria-pressed="${S.period===k}" aria-label="${esc(T('최근 '+l))}">${esc(T(l))}</button>`).join(''));
   $('qPeriods').setAttribute('aria-label',T('사용량 기간'));
  }

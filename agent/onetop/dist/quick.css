@@ -16,8 +16,9 @@ body.quick-body{margin:0;background:var(--bg);color:var(--ink);font:var(--q-titl
 
 /* Header and period */
 .q-head{display:flex;align-items:center;gap:8px;padding:12px 16px 10px}
-.q-brand{display:flex;align-items:center;gap:8px;font-size:var(--q-figure);font-weight:600}
-.q-brand svg{color:var(--accent)}
+.q-brand{display:flex;align-items:center;gap:5px;font-size:var(--q-figure);font-weight:600}
+/* The 1top brand mark, the same image as the dashboard rail and the Mac panel's waveform symbol. */
+.q-mark{display:block;width:28px;height:28px;object-fit:contain;flex:none}
 .q-spacer{flex:1;min-width:0}
 .q-pill{display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border:1px solid var(--line);border-radius:999px;font-size:var(--q-label);color:var(--muted);white-space:nowrap}
 .q-dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--lcd)}
