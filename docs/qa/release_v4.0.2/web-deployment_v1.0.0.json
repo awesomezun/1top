@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-29",
+  "status": "succeeded",
+  "site_version": 32,
+  "url": "https://onetop-si.awsmzun.chatgpt.site",
+  "custom_url": "https://1top.si",
+  "project_id": "appgprj_6adbd84c8b3881918ee60e753c101e75",
+  "version_id": "appgprj_6adbd84c8b3881918ee60e753c101e75~appgver_e96fc2604e1c8191ab4cc858f87681b6",
+  "deployment_id": "appgdep_6ae315437b888191bf76f838c64d4ec0",
+  "site_source_commit": "7d3bdcfd9d244302fa357c986b6279760c2a46f9",
+  "application_source_commit": "23ddd7f0323dd2922d71db2acb68f9dfec31b10b",
+  "public_v6_design_preserved": true,
+  "changed_files_from_previous_public_site": [
+    "public/release.json",
+    "src/cockpit.js",
+    "src/landing.js",
+    "src/main.js",
+    "src/maps.css",
+    "src/style.css"
+  ],
+  "freeze_manifest": "docs/handoffs/frontend-freeze_v1.10.0.sha256",
+  "freeze_file_count": 72,
+  "previous_failed_deployment_did_not_replace_public_site": true
+}
