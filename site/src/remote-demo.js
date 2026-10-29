@@ -13,14 +13,17 @@ const COMPUTERS=[
  {id:'demo-1',name:'Mac mini',seed:61,scale:.3e6,duty:.2,platform:'Darwin',cores:10,memory:24,used:15,cpu:35,network:{interfaces:['en0','en1'],rx:640*2**10,tx:120*2**10},disk:{total:2**39,free:188*2**30,read:.8*2**20,write:.3*2**20}},
  {id:'demo-2',name:'Workstation',seed:37,scale:.6e6,duty:.3,platform:'Windows',cores:16,memory:64,used:38,cpu:41,network:{interfaces:['Ethernet'],rx:2.6*2**20,tx:780*2**10},disk:{total:2*2**40,free:1.1*2**40,read:5.4*2**20,write:2.2*2**20}},
 ];
-// Two accounts for each of Claude Code and Codex. calibration: weekly % over the tokens of one reference
-// hour. weekly and five are the limits when the demo opens; they rise with the tokens used after that.
+// Two accounts for each of Claude Code and Codex. per: weekly percent per token, set once from a typical
+// week of this demo, so a limit is the tokens of its weekly window times per and moves with the work.
+// reset: seconds after the demo opened (the window began 7 days before); five: the 5-hour window's reset
+// and its percent per weekly percent.
 const ACCOUNTS={
- claude1:{id:'demo-claude-4f1c2a',kind:'Claude',plan:'Max',weekly:61,five:24,calibration:{seconds:3600,used_pp:10,tokens:400e6}},
- claude2:{id:'demo-claude-9b07e3',kind:'Claude',plan:'Pro',weekly:33,five:41,calibration:{seconds:3600,used_pp:10,tokens:90e6}},
- codex1:{id:'demo-codex-61d8f0',kind:'Codex',plan:'Pro',weekly:72,calibration:{seconds:3600,used_pp:10,tokens:60e6}},
- codex2:{id:'demo-codex-c2a957',kind:'Codex',plan:'Plus',weekly:18,calibration:{seconds:3600,used_pp:10,tokens:30e6}},
+ claude1:{id:'demo-claude-4f1c2a',kind:'Claude',plan:'Max',per:1.1e-8,reset:276000,five:{reset:8040,factor:6}},
+ claude2:{id:'demo-claude-9b07e3',kind:'Claude',plan:'Pro',per:3.3e-7,reset:311000,five:{reset:14200,factor:6}},
+ codex1:{id:'demo-codex-61d8f0',kind:'Codex',plan:'Pro',per:4.2e-7,reset:250000},
+ codex2:{id:'demo-codex-c2a957',kind:'Codex',plan:'Plus',per:2.7e-8,reset:337000},
 };
+const calibration=a=>({seconds:3600,used_pp:10,tokens:Math.round(10/a.per)});
 // [computer, project, kind, app, terminal, model, effort, weight, status, account]. weight is a session's
 // usual share of its computer. Gemini, Qwen Code, OpenCode and GitHub Copilot report sessions without
 // token counts, as the collector sees them.
@@ -108,30 +111,39 @@ function report(now,started,controls,bases){
   const rows=SESSIONS.map((row,i)=>[row,i]).filter(([row])=>row[0]===c);
   // Subagents share their lead's work: [row index of the lead, name, share, status].
   const children=CHILDREN.map(([lead,name,share,status])=>[rows.findIndex(([row])=>row[1]===lead),name,share,status]).filter(([k])=>k>=0);
+  // Earlier sessions of each account on this computer, closed before the shown ones began: they fill
+  // the weekly windows and never show in the last day.
+  const earlier=[...new Set(rows.map(([row])=>row[9]).filter(Boolean))].map(key=>({key,weight:rows.reduce((n,[row])=>n+(row[9]===key?row[7]:0),0)}));
   const streams=[...rows.map(([row,i])=>stream(row[7],row[8],i,started,controls.get('demo-'+row[1]))),
    ...children.map(([k,,share,status])=>{const lead=stream(rows[k][0][7],rows[k][0][8],rows[k][1],started,controls.get('demo-'+rows[k][0][1]));
-    return {...lead,weight:lead.weight*share,stop:status==='working'?lead.stop:Math.min(lead.stop,started-25*60)};})];
+    return {...lead,weight:lead.weight*share,stop:status==='working'?lead.stop:Math.min(lead.stop,started-25*60)};}),
+   ...earlier.map(({weight})=>({weight,start:started-8*86400,stop:started-30*3600}))];
+  const owners=[...rows.map(([row])=>ACCOUNTS[row[9]]?.id),...children.map(([k])=>ACCOUNTS[rows[k][0][9]]?.id),...earlier.map(({key})=>ACCOUNTS[key].id)];
   // One person's computers rest together (seed 7), and that person is at work when the demo opens.
   const u=usage(computer.seed,computer.scale,streams,now,started,7,computer.duty);
+  // Each stream's tokens from its account's weekly window start until the demo opened, read once.
+  if(!bases.has('week:'+computer.id)){const long=usage(computer.seed,computer.scale,streams,started,started,7,computer.duty,true,8*1440+15);
+   bases.set('week:'+computer.id,owners.map((owner,j)=>{const a=Object.values(ACCOUNTS).find(x=>x.id===owner);return a?since(long,j,started+a.reset-604800):0;}));}
+  const week=bases.get('week:'+computer.id);
   const base=(key,j)=>{if(!bases.has(key))bases.set(key,streams[j].weight*6e7+since(u,j,now-86400));return bases.get(key);};
   let sessions=rows.map(([row,i],j)=>session(row,i,now,controls.get('demo-'+row[1]),u,j,base('demo-'+row[1],j),started));
   children.forEach(([k,name,,status],n)=>{const parent=sessions[k],j=rows.length+n,id=parent.id+'-'+name,windows=Object.fromEntries(PERIODS.map(([key,seconds])=>[key,vector(since(u,j,now-seconds))]));
    sessions.push({...parent,id,control_key:'',terminal:'',status,capabilities:[],cpu:null,rss:null,
     tokens:vector(base(id,j)+since(u,j,started)),rate:status==='working'?Math.round(since(u,j,now-600)/600):0,windows,root_session_id:parent.id,parent_session_id:parent.id});});
-  return {computer,c,u,sessions,controls};
+  return {computer,c,u,sessions,controls,owners,week};
  });
- // An account's tokens since a moment, over every computer it works on. Read before the sessions
- // below give up their account key.
- const owners=machines.map(m=>m.sessions.map(s=>ACCOUNTS[s.account]?.id));
- const used=(id,from)=>machines.reduce((n,m,c)=>n+owners[c].reduce((k,owner,j)=>k+(owner===id?since(m.u,j,from):0),0),0);
+ // An account's tokens since a moment over every computer it works on, and its weekly percent: the
+ // tokens of its weekly window (before the demo opened, then since) times its per-token percent.
+ const used=(id,from)=>machines.reduce((n,m)=>n+m.owners.reduce((k,owner,j)=>k+(owner===id?since(m.u,j,from):0),0),0);
+ const weekly=a=>(machines.reduce((n,m)=>n+m.owners.reduce((k,owner,j)=>k+(owner===a.id?m.week[j]:0),0),0)+used(a.id,started))*a.per;
  return machines.map(({computer,c,u,sessions})=>{
   const accounts=[...new Set(sessions.filter(s=>!controls.get(s.root_session_id)?.removed).map(s=>s.account).filter(Boolean))].map(key=>ACCOUNTS[key]);
   for(const s of sessions){
    const a=ACCOUNTS[s.account];delete s.account;if(!a||!s.tokens)continue;
-   const ratio=a.calibration.used_pp/a.calibration.tokens;
+   const ratio=a.per;
    s.weekly_account=a.id;
    s.weekly_estimate=Object.fromEntries(PERIODS.map(([key,seconds])=>{const tokens=total(s.windows[key]);
-    return [key,{used_pp:Math.round(tokens*ratio*1e4)/1e4,partial:false,period_seconds:seconds,tokens,account_id:a.id,calibration:{...a.calibration,pp_per_token:ratio,confidence:'limited',from:now-7200,to:now-3600,valid_until:now+86400,source:''}}];}));
+    return [key,{used_pp:Math.round(tokens*ratio*1e4)/1e4,partial:false,period_seconds:seconds,tokens,account_id:a.id,calibration:{...calibration(a),pp_per_token:ratio,confidence:'limited',from:now-7200,to:now-3600,valid_until:now+86400,source:''}}];}));
   }
   const periods=PERIODS.map(([key,seconds])=>({key,label:key,tokens:[0,1,2,3].map(j=>sessions.reduce((n,s)=>n+(s.windows?.[key]?.[j]||0),0)),partial:false,observed_seconds:seconds}));
   const day=total(periods[0].tokens),kinds=sessions.map(s=>s.tokens?s.kind:null);
@@ -149,11 +161,11 @@ function report(now,started,controls,bases){
    applications:[...new Set([...shown.map(s=>s.app),...(computer.platform==='Windows'?['Windows Terminal','powershell']:['Terminal','Orca'])])].map(name=>({name,evidence:'application_process'})),
    operations:{updated:now,loop_state:'not_verified',skill_runtime:'partial',...GOALS[c]},
    account_quotas:accounts.map(a=>{
-    const ratio=a.calibration.used_pp/a.calibration.tokens,round=n=>Math.round(n*10)/10,pct=round(a.weekly+used(a.id,started)*ratio);
+    const ratio=a.per,round=n=>Math.round(n*10)/10,exact=weekly(a),pct=round(exact);
     return {id:a.id,kind:a.kind,account_label:a.kind+' · '+a.id.slice(-6),plan:a.plan,updated:now,stale:false,note:'',status:'',
-     windows:[...(a.five?[{label:'5H',pct:Math.min(100,round(a.five+used(a.id,started)*ratio*4)),reset:started+8040}]:[]),{label:'Weekly',pct,reset:started+172800}],
-     weekly:Object.fromEntries(PERIODS.map(([key,seconds])=>[key,{used_pp:Math.round(used(a.id,now-seconds)*ratio*100)/100,observed_seconds:seconds,partial:false}])),
-     usage_points:Array.from({length:145},(_,i)=>{const t=now-86400+i*600;return [t,Math.max(0,round(pct-used(a.id,t)*ratio)),0];})};
+     windows:[...(a.five?[{label:'5H',pct:Math.min(100,round(used(a.id,started+a.five.reset-18000)*ratio*a.five.factor)),reset:started+a.five.reset}]:[]),{label:'Weekly',pct,reset:started+a.reset}],
+     weekly:Object.fromEntries(PERIODS.map(([key,seconds])=>[key,{used_pp:Math.round(used(a.id,now-seconds)*ratio*1e4)/1e4,observed_seconds:seconds,partial:false}])),
+     usage_points:Array.from({length:145},(_,i)=>{const t=now-86400+i*600;return [t,Math.max(0,round(exact-used(a.id,t)*ratio)),started+a.reset];})};
    }),
   }};
  });

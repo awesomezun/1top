@@ -37,5 +37,56 @@ for(const d of devices){
 }
 const all=Object.values(byKind).reduce((a,b)=>a+b,0);
 assert.ok(byKind.Claude/all>.6&&byKind.Codex/all<.3,JSON.stringify(byKind));
-console.log('Demo usage: shared check values, the shape of a day, and a relay whose periods, flow and limits agree passed.');
+
+// Limits agree with the tokens behind them: the sessions' estimates add up to no more than the account's
+// period, the periods shrink from a day to an hour, a day is a plausible part of the week, and the weekly
+// percent itself comes from the tokens of its window.
+function limits(name,accounts){
+ for(const {id,weekly,periods,sessions} of accounts){
+  const at=k=>periods[k];
+  for(const k of ['24h','5h','1h'])assert.ok(sessions(k)<=at(k)+1e-3,`${name} ${id} ${k}: sessions ${sessions(k)} > account ${at(k)}`);
+  assert.ok(at('24h')+1e-3>=at('5h')&&at('5h')+1e-3>=at('1h'),`${name} ${id}: ${at('24h')} ≥ ${at('5h')} ≥ ${at('1h')}`);
+  assert.ok(at('24h')<=weekly+.05,`${name} ${id}: a day ${at('24h')} > weekly ${weekly}`);
+  assert.ok(weekly>0&&at('24h')/weekly>=.05&&at('24h')/weekly<=.5,`${name} ${id}: a day is ${Math.round(at('24h')/weekly*100)}% of the week`);
+ }
+}
+const realNow=Date.now;
+for(const start of [1800000000,1800040000,1800130000,1800333000,1801000000]){
+ Date.now=()=>start*1000;const d=demoRelay().devices();Date.now=realNow;
+ const quotas=new Map(d.flatMap(x=>x.snapshot.account_quotas).map(q=>[q.id,q])),shown=d.flatMap(x=>x.snapshot.sessions);
+ limits('web '+start,[...quotas.values()].map(q=>({id:q.id,weekly:q.windows.find(w=>w.label==='Weekly').pct,periods:Object.fromEntries(Object.entries(q.weekly).map(([k,v])=>[k,v.used_pp])),
+  sessions:k=>shown.filter(s=>s.weekly_account===q.id).reduce((n,s)=>n+s.weekly_estimate[k].used_pp,0)})));
+}
+
+// The invented collector answers with every key the real one does (tests/collector-keys.json), and its
+// limits follow the same rules.
+const {demoState,demoHistory}=await import('../scripts/demo-state.mjs');
+const {readFileSync}=await import('node:fs');
+const expected=JSON.parse(readFileSync(new URL('./collector-keys.json',import.meta.url),'utf8'));
+function paths(v,prefix='',out=new Set(),parent=''){
+ if(Array.isArray(v)){for(const x of v)if(x&&typeof x==='object')paths(x,prefix+'[]',out,parent);}
+ else if(v&&typeof v==='object')for(const [k,x] of Object.entries(v)){
+  const key=/^(10m|30m|1h|5h|12h|24h|all|custom:\d+)$/.test(k)?'<period>':['recent','process_counts','by_kind'].includes(parent)?'<kind>':k,p=prefix?prefix+'.'+key:key;
+  out.add(p);paths(x,p,out,k);}
+ return out;
+}
+for(const now of [1800000000,1800333000]){
+ const state=demoState(now,{period:'1h'}),missing=expected.state.filter(p=>!paths(state).has(p));
+ assert.deepEqual(missing,[],'keys the demo state lacks');
+ assert.deepEqual(expected.history.filter(p=>!paths(demoHistory(now,{period:'1h',step:'60'})).has(p)),[],'keys the demo history lacks');
+ const statuses=new Set(state.sessions.map(s=>s.display_status));
+ for(const s of ['working','waiting','paused','idle','unknown'])assert.ok(statuses.has(s),'a '+s+' session');
+ assert.ok(state.sessions.some(s=>s.is_subagent)&&state.sessions.some(s=>s.orca_terminal)&&state.root_sessions.some(s=>s.children_count>0));
+ const weekly=state.weekly_usage.accounts;
+ limits('state '+now,state.account_quotas.map(q=>({id:q.id,weekly:q.windows.find(w=>w.label==='주간').pct,periods:Object.fromEntries(Object.entries(weekly.find(a=>a.id===q.id).periods).map(([k,v])=>[k,v.used_pp])),
+  sessions:k=>state.sessions.filter(s=>s.usage.weekly_account===q.id).reduce((n,s)=>n+s.usage.weekly_estimate[k].used_pp,0)})));
+ // A long period arrives in 240 bins with its range, as the collector sends it.
+ const week=demoState(now,{period:'custom:604800'});
+ assert.equal(week.chart_range.step,2520);assert.ok(week.period_usage.windows.some(w=>w.key==='custom:604800'));
+ // The history: every bin's models and projects add up to its total, and more than 400 bins is refused.
+ const history=demoHistory(now,{period:'24h',step:'900'}),s=history.series;
+ s.total.forEach((t,i)=>{if(t===null)return;for(const rows of [s.by_model,s.by_project])assert.equal(rows.reduce((n,r)=>n+r.tokens[i],0),t);});
+ assert.equal(history.heatmap.hours.length,720);assert.equal(demoHistory(now,{period:'24h',step:'60'}).status,400);
+}
+console.log('Demo usage: shared check values, the shape of a day, a relay whose periods, flow and limits agree, and an invented collector with every real key passed.');
 process.exit(0);
