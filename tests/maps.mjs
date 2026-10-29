@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import '../agent/onetop/dist/maps.js';
 const M=globalThis.OneTopMaps;
 const sessions=[{id:'a',kind:'Claude',project:'A',app:'Orca',windows:{'1h':[10,20,0,10]}},{id:'b',kind:'Codex',project:'B',app:'Orca',windows:{'1h':[10,10,0,0]}},{id:'c',kind:'Unknown',windows:{}},{id:'d',kind:'Claude',windows:{'1h':[0,0,0,0]}}];
@@ -39,5 +38,4 @@ for(const [width,height] of [[1800,480],[960,240],[630,280],[480,630]]){
  }
 }
 assert.equal(JSON.stringify(quiltInput),originalQuilt);
-for(const f of ['maps.js','maps.css'])assert.deepEqual(fs.readFileSync(new URL('../agent/onetop/dist/'+f,import.meta.url)),fs.readFileSync(new URL('../site/src/'+f,import.meta.url)));
-console.log('Map accounting, exact-area layout, unknown/zero cases, capacity guards and shared assets passed.');
+console.log('Map accounting, exact-area layout, unknown/zero cases and capacity guards passed.');

@@ -1,38 +1,74 @@
-// Lists every English text the /app dashboard can show that has no Chinese yet.
-// node site/scripts/check-zh.mjs [--list]   (exit code 1 when anything is missing)
-import {readFileSync} from 'node:fs';
-import {ZH,zhText} from '../src/zh.js';
+// Lists the Korean interface texts of the app dashboard (agent/onetop/dist, also 1top.si/app) that
+// i18n.js leaves Korean in Chinese. The dashboard is written in Korean and i18n.js translates the
+// page as it renders, so each text in the markup and scripts is put through that same translation.
+// Texts that were already untranslated are kept in check-zh-baseline.json; a new one fails the check.
+// node site/scripts/check-zh.mjs [--list] [--write-baseline]
+import {readFileSync,writeFileSync} from 'node:fs';
+import vm from 'node:vm';
 
-const src=f=>readFileSync(new URL('../src/'+f,import.meta.url),'utf8');
-// Pages other than /app fall back to English, so their functions are not checked.
-const OTHER_PAGES=['landing','privacy','renderConnect','approvePair','releaseStatus','renderSettings','relayConsent'];
+const dist=name=>readFileSync(new URL('../../agent/onetop/dist/'+name,import.meta.url),'utf8');
+const BASELINE=new URL('./check-zh-baseline.json',import.meta.url);
+const context={window:{},document:{body:null,documentElement:{}},MutationObserver:class{observe(){}disconnect(){}},NodeFilter:{},queueMicrotask};
+vm.runInNewContext(dist('i18n.js'),context);
+const i18n=context.window.OneTopI18n;i18n.setLanguage('zh');
+const hangul=/[가-힣]/;
 
-function calls(text,name){
- const found=[],re=new RegExp(`(^|[^\\w$.])${name}\\(`,'g');let m;
- while((m=re.exec(text))){let i=m.index+m[0].length,depth=1,arg='',args=[],quote=null;
-  for(;i<text.length&&depth>0;i++){const c=text[i];
-   if(quote){arg+=c;if(c==='\\'){arg+=text[++i];continue;}if(c===quote)quote=null;continue;}
-   if(c==="'"||c==='"'||c==='`'){quote=c;arg+=c;continue;}
-   if('([{'.includes(c))depth++;if(')]}'.includes(c))depth--;
-   if(depth===0)break;if(depth===1&&c===','){args.push(arg.trim());arg='';continue;}arg+=c;}
-  args.push(arg.trim());found.push(args);}
- return found;
-}
-const literal=a=>{const m=a.match(/^(['"])((?:\\.|(?!\1).)*)\1$/s)||a.match(/^`([^`$]*)`$/s);return m?(m[2]??m[1]).replace(/\\'/g,"'").replace(/\\"/g,'"'):null;};
+// Texts that are content, not interface: what a photo-only message says to the AI (sent in the chosen
+// language), and a workspace name.
+const CONTENT=new Set(['첨부한 사진을 확인해 주세요.','Aside 기본 작업공간']);
+const texts=new Map();
+const add=(text,where)=>{text=text.replace(/\s+/g,' ').trim();if(hangul.test(text)&&!CONTENT.has(text)&&!texts.has(text))texts.set(text,where);};
+// A template part can start or end inside a tag; its attribute hints are read, the tag edges dropped.
+const addHtml=(text,where)=>{
+ for(const m of text.matchAll(/(?:aria-label|title|placeholder)="([^"$]+)"/g))add(m[1],where);
+ for(const part of text.replace(/^[^<>]*>/,'').replace(/<[^>]*$/,'').split(/<[^>]*>/))add(part.replace(/&nbsp;/g,' '),where);
+};
 
-function withoutOtherPages(text){
- for(const fn of OTHER_PAGES){const i=text.indexOf(`function ${fn}(`);if(i<0)continue;const j=text.indexOf('\nfunction ',i+1),k=text.indexOf('\nasync function ',i+1);const end=Math.min(...[j,k].filter(x=>x>0),text.length);text=text.slice(0,i)+text.slice(end);}
- return text;
+// Markup: text between tags and the attributes read aloud or shown as hints.
+const html=dist('index.html').replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g,'');
+for(const m of html.matchAll(/>([^<>]+)</g))add(m[1],'index.html');
+for(const m of html.matchAll(/(?:aria-label|title|placeholder)="([^"]+)"/g))add(m[1],'index.html');
+
+// Scripts: every string literal and every text part of a template literal, including the ones
+// inside ${...}, read with a small tokenizer so nested templates and quotes keep their place.
+function strings(source,emit){
+ let i=0;const n=source.length;
+ const quoted=q=>{let s='';i++;while(i<n&&source[i]!==q){if(source[i]==='\\'){s+=source[i+1];i+=2;continue;}s+=source[i++];}i++;return s;};
+ // A regular expression literal holds quotes and braces that are not code: skip it whole.
+ function regex(){i++;let klass=false;while(i<n){const c=source[i];if(c==='\\'){i+=2;continue;}if(c==='[')klass=true;else if(c===']')klass=false;else if(c==='/'&&!klass){i++;break;}else if(c==='\n')break;i++;}}
+ function template(){
+  let part='';i++;
+  while(i<n&&source[i]!=='`'){
+   if(source[i]==='\\'){part+=source[i+1];i+=2;continue;}
+   if(source[i]==='$'&&source[i+1]==='{'){emit(part,true);part='';i+=2;code('}');i++;continue;}
+   part+=source[i++];
+  }
+  emit(part,true);i++;
+ }
+ function code(end){
+  let depth=0;
+  while(i<n){
+   const c=source[i];
+   if(c==='/'&&source[i+1]==='/'){while(i<n&&source[i]!=='\n')i++;continue;}
+   if(c==='/'&&source[i+1]==='*'){i=source.indexOf('*/',i+2)+2;continue;}
+   if(c==="'"||c==='"'){emit(quoted(c),false);continue;}
+   if(c==='/'&&/[(,=:[!&|?{};+\-*%<>~^]$|^$/.test(source.slice(Math.max(0,i-30),i).trimEnd().slice(-1))){regex();continue;}
+   if(c==='`'){template();continue;}
+   if(c==='{')depth++;
+   if(c==='}'){if(!depth&&end==='}')return;depth--;}
+   i++;
+  }
+ }
+ code(null);
 }
-const sources={'main.js':withoutOtherPages(src('main.js')),'cockpit.js':src('cockpit.js'),'usage-maps.js':src('usage-maps.js'),'session-mailbox.js':src('session-mailbox.js')};
-const missing=new Set(),dynamic=[];let checked=0;
-for(const [file,text] of Object.entries(sources))for(const args of calls(text,'t')){
- if(args.length<2)continue;const en=literal(args[0]);
- if(en===null){if(args.length<3)dynamic.push(file+': t('+args[0].slice(0,70)+')');continue;}
- checked++;if(args.length<3&&zhText(en)===en&&!(en in ZH))missing.add(en);
-}
-// maps.js is shared with the desktop dashboard and speaks only ko/en; its English is translated on the page.
-for(const args of calls(src('maps.js'),'text')){const en=literal(args[1]||'');if(en===null)continue;checked++;const key=en.trim();if(!(key in ZH)&&zhText(key)===key)missing.add(key);}
-console.log(`${checked} texts, ${Object.keys(ZH).length} entries, ${missing.size} missing, ${dynamic.length} dynamic without Chinese`);
-if(process.argv.includes('--list')){for(const m of missing)console.log('MISSING',JSON.stringify(m));for(const d of dynamic)console.log('DYNAMIC',d);}
-process.exit(missing.size||dynamic.length?1:0);
+const SCRIPTS=['app.js','dashboard.js','conversation.js','history.js','weekly.js','speed.js','effects.js','ranges.js'];
+for(const file of SCRIPTS)strings(dist(file),(text,markup)=>markup||/[<>]/.test(text)?addHtml(text,file):add(text,file));
+
+const missing=[...texts].filter(([text])=>hangul.test(i18n.t(text)));
+if(process.argv.includes('--write-baseline')){writeFileSync(BASELINE,JSON.stringify(missing.map(([text])=>text).sort(),null,1)+'\n');console.log(`Baseline: ${missing.length} texts`);process.exit(0);}
+const known=new Set(JSON.parse(readFileSync(BASELINE,'utf8'))),fresh=missing.filter(([text])=>!known.has(text));
+const fixed=[...known].filter(text=>!missing.some(([m])=>m===text));
+console.log(`${texts.size} Korean texts, ${missing.length} without Chinese (${fresh.length} new, ${missing.length-fresh.length} known), ${fixed.length} known now translated`);
+if(process.argv.includes('--list'))for(const [text,file] of missing)console.log(known.has(text)?'KNOWN':'MISSING',file,JSON.stringify(text));
+for(const [text,file] of fresh)console.log('NEW',file,JSON.stringify(text));
+process.exit(fresh.length?1:0);

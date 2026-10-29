@@ -7,8 +7,10 @@
   const w=state?.period_usage?.windows?.find(p=>p.key===key);
   const local=sum(w?.tokens),rows=[],seen=new Set();
   const known=local!==null&&(local>0||state?.period_usage?.known_kinds?.length>0);
-  let expected=1;
-  if(known&&now-state.updated<=20&&!state.error)rows.push({tokens:local,seconds:key==='all'?Math.max(1,now-(state.history_started??state.started)):w.seconds,partial:w.partial});
+  // The 1top.si remote workspace's totals already add up several computers: period_usage.computers out of .expected.
+  const covers=state?.period_usage?.computers??1;
+  let expected=state?.period_usage?.expected??1;
+  if(known&&now-state.updated<=20&&!state.error)rows.push({tokens:local,seconds:key==='all'?Math.max(1,now-(state.history_started??state.started)):w.seconds,partial:w.partial,computers:covers});
   for(const device of state?.workspace_usage?.devices||[]){
    if(!device.id||seen.has(device.id))continue;seen.add(device.id);
    if(!device.online||now-device.received/1000>90)continue;
@@ -19,7 +21,7 @@
   const seconds=key==='all'?Math.max(0,...rows.map(r=>r.seconds)):w?.seconds;
   const tokens=rows.reduce((n,r)=>n+r.tokens,0);
   return {tokens:rows.length?tokens:null,rate:rows.length&&seconds>0?tokens/seconds:null,
-   seconds,computers:rows.length,expected,partial:rows.length<expected||rows.some(r=>r.partial)};
+   seconds,computers:rows.reduce((n,r)=>n+(r.computers??1),0),expected,partial:rows.reduce((n,r)=>n+(r.computers??1),0)<expected||rows.some(r=>r.partial)};
  }
  function niceMax(value){if(!valid(value)||value===0)return 1;const power=10**Math.floor(Math.log10(value));return [1,2,5,10].map(n=>n*power).find(n=>n>=value)||10*power;}
  // The dial's resting full scale by period: longer periods hold more idle time, so their hourly
