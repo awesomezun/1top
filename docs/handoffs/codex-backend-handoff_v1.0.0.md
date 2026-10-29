@@ -12,7 +12,7 @@
 | 같은 브랜치 | `c940ca8` | 세션 정렬(Codex가 이 작업 폴더에 남긴 변경을 Claude가 검토 후 커밋) |
 | 같은 브랜치 | 이 문서가 포함된 커밋 | 계약서, 인계 문서, 프론트엔드 지문 목록, 시험 집계 스크립트 |
 | 같은 브랜치 | 그다음 커밋 | 웹 표 정렬(작업 중 먼저, 나머지 전체를 선택 기간 토큰 순) |
-| 같은 브랜치 | `21f8486`, `16a6124`, `99a2be6` | iPhone 네이티브 앱(`ios/`), Android 대시보드(`mobile/`). 지문 목록은 `frontend-freeze_v1.7.0.sha256`이 최신이며 `ios/`·`mobile/src/` 화면 파일과 1top.si 원격 대시보드(`site/src/main.js`, `site/src/cockpit.js`, `site/src/style.css`)를 포함합니다. 인증·릴레이 연결 파일(`ios/OneTop/Model/Relay.swift`, `mobile/src/connection.ts`)은 Codex가 고칠 수 있도록 제외했고, 고치면 변경 내용을 알려 주세요. |
+| 같은 브랜치 | `21f8486`, `16a6124`, `99a2be6` | iPhone 네이티브 앱(`ios/`), Android 대시보드(`mobile/`). 지문 목록은 `frontend-freeze_v1.8.0.sha256`이 최신이며 `ios/`·`mobile/src/` 화면 파일과 1top.si 원격 대시보드(`site/src/main.js`, `site/src/cockpit.js`, `site/src/style.css`)를 포함합니다. 인증·릴레이 연결 파일(`ios/OneTop/Model/Relay.swift`, `mobile/src/connection.ts`)은 Codex가 고칠 수 있도록 제외했고, 고치면 변경 내용을 알려 주세요. |
 
 `db319c3`에는 다음이 들어 있습니다.
 - 웹 대시보드: 계기판, 디자인 시스템, 글자 역할 토큰, 확대·축소 대응, 차트 재설계, 사용량 맵의 히트맵과 모델별·프로젝트별 추이
@@ -51,7 +51,7 @@
 작업을 마치고 보고하기 전에 저장소 루트에서 실행해 주세요. 모든 줄이 `OK`여야 완료입니다.
 
 ```bash
-shasum -a 256 -c docs/handoffs/frontend-freeze_v1.7.0.sha256
+shasum -a 256 -c docs/handoffs/frontend-freeze_v1.8.0.sha256
 ```
 
 병합이나 충돌 해결 중에 동결 파일이 바뀌었다면, 이 커밋의 내용으로 되돌린 뒤 4번 규칙대로 요청해 주세요.
