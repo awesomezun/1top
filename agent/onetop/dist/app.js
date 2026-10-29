@@ -131,7 +131,7 @@ function renderSessionSummary(){
 }
 let speedScale={key:null,max:1,lower:0,since:0};
 function renderFleetSpeed(){
- const s=OneTopSpeed.measure(data,selectedPeriod),rate=s.rate===null?null:s.rate*3600,next=OneTopSpeed.niceMax(rate),now=Date.now();
+ const s=OneTopSpeed.measure(data,selectedPeriod),rate=s.rate===null?null:s.rate*3600,next=OneTopSpeed.scaleMax(rate,periodMeta()?.seconds),now=Date.now();
  if(speedScale.key!==selectedPeriod||next>speedScale.max)speedScale={key:selectedPeriod,max:next,lower:0,since:0};
  else if(next<speedScale.max&&rate<speedScale.max*.4){if(speedScale.lower!==next){speedScale.lower=next;speedScale.since=now;}else if(now-speedScale.since>30000)speedScale.max=next;}
  else speedScale.lower=0;

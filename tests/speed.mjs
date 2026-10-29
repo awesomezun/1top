@@ -21,4 +21,8 @@ assert.equal(measure(state,'1h',now).rate,0);
 state.period_usage.known_kinds=[];
 assert.equal(measure(state,'1h',now).rate,null);
 for(const n of [0,.3,1,3,10,90,999,12345,1e8])assert(niceMax(n)>=n);
+// The dial rests at 200M up to an hour, 100M up to a week and 50M beyond, and grows past that only when exceeded.
+const {baseMax,scaleMax}=require('../agent/onetop/dist/speed.js');
+assert.equal(baseMax(600),2e8);assert.equal(baseMax(3600),2e8);assert.equal(baseMax(3601),1e8);assert.equal(baseMax(604800),1e8);assert.equal(baseMax(604801),5e7);
+assert.equal(scaleMax(79e6,600),2e8);assert.equal(scaleMax(3e8,600),5e8);assert.equal(scaleMax(12e6,86400),1e8);assert.equal(scaleMax(130e6,86400),2e8);assert.equal(scaleMax(null,2592000),5e7);
 console.log('Fleet speed: period totals, normalized rates, multi-device deduplication, offline/stale/missing coverage and all-history horizon passed.');
