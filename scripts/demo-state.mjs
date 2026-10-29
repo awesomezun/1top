@@ -118,7 +118,8 @@ const say=(key,lang)=>WRITTEN[key][lang]||WRITTEN[key].ko;
 export function demoState(now=Date.now()/1000,{period='1h',anchor=now,lang='ko'}={}){
  const m=minutes(now,anchor),seconds=periodSeconds(period,now,anchor),keys=[...PERIODS.map(p=>p[0]),...(PERIODS.some(p=>p[0]===period)?[]:[period])];
  const span=k=>periodSeconds(k,now,anchor),accounts=accountUsage(m,anchor),accountOf=id=>accounts.find(a=>a.id===id);
- const reportAt=a=>a.stale?now-a.stale:now,weeklyPct=a=>round(a.used(a.id,a.start,reportAt(a))*a.per,1);
+ // Providers report limits in whole percent, so the windows and their history are whole numbers.
+ const reportAt=a=>a.stale?now-a.stale:now,weeklyPct=a=>Math.round(a.used(a.id,a.start,reportAt(a))*a.per);
  const minuteAt=(j,t)=>m.u.minutes[j][Math.floor(t/60)-m.u.first]||0,cpuOf=j=>Math.round((1.5+Math.min(30,minuteAt(j,now-60)/4e4))*10)/10;
 
  const session=(s,j,i)=>{
@@ -177,12 +178,12 @@ export function demoState(now=Date.now()/1000,{period='1h',anchor=now,lang='ko'}
  for(let t=from;t<now;t+=bin)for(const k of kinds){const n=m.list.reduce((x,s,j)=>x+(s.kind===k?m.sum(j,t,Math.min(now+1,t+bin)):0),0);if(!n)continue;
   const [fresh,cached,written,output]=vector(n);events.push({cached,fresh,kind:k,output,t:range?t:Math.floor(t),written});}
 
- const quotas=accounts.map(a=>{const pct=weeklyPct(a),five=a.five&&Math.min(100,round(a.used(a.id,a.five?anchor+a.five.reset-5*3600:0,reportAt(a))*a.per*a.five.factor,1));
+ const quotas=accounts.map(a=>{const pct=weeklyPct(a),five=a.five&&Math.min(100,Math.round(a.used(a.id,a.five?anchor+a.five.reset-5*3600:0,reportAt(a))*a.per*a.five.factor));
   const q={account_label:a.label,id:a.id,kind:a.kind,note:a.kind==='Claude'?'Claude Code 상태줄 보고':a.stale?'계정 조회 지연 · 마지막 보고값':'Codex 계정 사용률 · 2분마다 확인',plan:a.plan,source:a.source||'codex_rate_limits',stale:!!a.stale,updated:reportAt(a),verified_activity:true,
    windows:[...(a.five?[{label:'5시간',pct:five,reset:Math.round(anchor+a.five.reset)}]:[]),{label:'주간',pct,reset:Math.round(a.resetAt)}]};
   if(a.alias)q.alias=a.alias;if(a.status)q.status=a.status;return q;});
  const weekly={accounts:accounts.map(a=>{const to=reportAt(a),step=600,points=[];for(let t=a.start;t<=to;t+=step)points.push(t);
-  const pct=t=>round(a.used(a.id,a.start,t)*a.per,2),flow=points.slice(1).map((t,i)=>[points[i],t,round(pct(t)-pct(points[i]),3)]);
+  const pct=t=>Math.round(a.used(a.id,a.start,t)*a.per),flow=points.slice(1).map((t,i)=>[points[i],t,round(pct(t)-pct(points[i]),3)]);
   return {calibration:a.calibration(now),flow,history:points.filter((_,i)=>i%3===0).map(t=>[t,pct(t)]),history_quality:{correction_count:0,excluded_samples:0,last_correction:a.start,reconciled:true},
    id:a.id,increase_intervals:flow.map(([f,t,pp])=>[f,t,pp,pp>0]),kind:a.kind,
    periods:Object.fromEntries(keys.map(k=>[k,{observed_from:now-span(k),observed_seconds:span(k),observed_to:now,partial:false,sample_count:Math.round(span(k)/60),unattributed_pp:0,used_pp:round(a.used(a.id,now-span(k),Infinity)*a.per)}])),

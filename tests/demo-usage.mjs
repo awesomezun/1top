@@ -54,6 +54,7 @@ const realNow=Date.now;
 for(const start of [1800000000,1800040000,1800130000,1800333000,1801000000]){
  Date.now=()=>start*1000;const d=demoRelay().devices();Date.now=realNow;
  const quotas=new Map(d.flatMap(x=>x.snapshot.account_quotas).map(q=>[q.id,q])),shown=d.flatMap(x=>x.snapshot.sessions);
+ for(const q of quotas.values())assert.ok(q.windows.every(w=>Number.isInteger(w.pct))&&q.usage_points.every(p=>Number.isInteger(p[1])),'web '+q.id+': whole percent limits');
  limits('web '+start,[...quotas.values()].map(q=>({id:q.id,weekly:q.windows.find(w=>w.label==='Weekly').pct,periods:Object.fromEntries(Object.entries(q.weekly).map(([k,v])=>[k,v.used_pp])),
   sessions:k=>shown.filter(s=>s.weekly_account===q.id).reduce((n,s)=>n+s.weekly_estimate[k].used_pp,0)})));
 }
@@ -78,6 +79,10 @@ for(const now of [1800000000,1800333000]){
  for(const s of ['working','waiting','paused','idle','unknown'])assert.ok(statuses.has(s),'a '+s+' session');
  assert.ok(state.sessions.some(s=>s.is_subagent)&&state.sessions.some(s=>s.orca_terminal)&&state.root_sessions.some(s=>s.children_count>0));
  const weekly=state.weekly_usage.accounts;
+ // Limits arrive in whole percent, as providers report them; estimates and period use stay fractional.
+ for(const q of state.account_quotas)assert.ok(q.windows.every(w=>Number.isInteger(w.pct)),q.id+': whole percent windows');
+ for(const a of weekly)assert.ok(a.usage_points.every(p=>Number.isInteger(p[1]))&&a.history.every(p=>Number.isInteger(p[1])),a.id+': whole percent history');
+ assert.ok(state.sessions.some(s=>Object.values(s.usage.weekly_estimate).some(e=>!Number.isInteger(e.used_pp))),'session estimates stay fractional');
  limits('state '+now,state.account_quotas.map(q=>({id:q.id,weekly:q.windows.find(w=>w.label==='주간').pct,periods:Object.fromEntries(Object.entries(weekly.find(a=>a.id===q.id).periods).map(([k,v])=>[k,v.used_pp])),
   sessions:k=>state.sessions.filter(s=>s.usage.weekly_account===q.id).reduce((n,s)=>n+s.usage.weekly_estimate[k].used_pp,0)})));
  // A long period arrives in 240 bins with its range, as the collector sends it.

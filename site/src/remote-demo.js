@@ -161,7 +161,8 @@ function report(now,started,controls,bases){
    applications:[...new Set([...shown.map(s=>s.app),...(computer.platform==='Windows'?['Windows Terminal','powershell']:['Terminal','Orca'])])].map(name=>({name,evidence:'application_process'})),
    operations:{updated:now,loop_state:'not_verified',skill_runtime:'partial',...GOALS[c]},
    account_quotas:accounts.map(a=>{
-    const ratio=a.per,round=n=>Math.round(n*10)/10,exact=weekly(a),pct=round(exact);
+    // Providers report limits in whole percent, so the windows and their history are whole numbers.
+    const ratio=a.per,round=n=>Math.round(n),exact=weekly(a),pct=round(exact);
     return {id:a.id,kind:a.kind,account_label:a.kind+' · '+a.id.slice(-6),plan:a.plan,updated:now,stale:false,note:'',status:'',
      windows:[...(a.five?[{label:'5H',pct:Math.min(100,round(used(a.id,started+a.five.reset-18000)*ratio*a.five.factor)),reset:started+a.five.reset}]:[]),{label:'Weekly',pct,reset:started+a.reset}],
      weekly:Object.fromEntries(PERIODS.map(([key,seconds])=>[key,{used_pp:Math.round(used(a.id,now-seconds)*ratio*1e4)/1e4,observed_seconds:seconds,partial:false}])),
