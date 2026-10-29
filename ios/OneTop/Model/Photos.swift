@@ -14,6 +14,16 @@ struct Draft {
     var photos: [PickedPhoto] = []
     var error: String?
     var isEmpty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && photos.isEmpty }
+
+    /// This draft with `other` brought back after it: text on a new line, photos up to the limit.
+    func appending(_ other: Draft) -> Draft {
+        var out = self
+        let mine = text.trimmingCharacters(in: .whitespacesAndNewlines), theirs = other.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        out.text = mine.isEmpty ? other.text : theirs.isEmpty ? text : text + "\n" + other.text
+        out.photos = Array((photos + other.photos).prefix(PhotoPrep.maxPhotos))
+        out.error = nil
+        return out
+    }
 }
 
 /// Fits a photo to the conversation contract: at most 1600 pixels on the long edge, re-encoded as
@@ -25,19 +35,23 @@ enum PhotoPrep {
     static let maxPhotos = 3
 
     static func prepare(_ data: Data) throws -> PickedPhoto {
-        guard let image = UIImage(data: data) else {
+        guard let image = UIImage(data: data), image.size.width > 0, image.size.height > 0 else {
             throw Relay.Failure(status: nil, message: L.t("This photo could not be read.", "이 사진을 읽을 수 없습니다."))
         }
         let pixels = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
+        // First at its own size (capped at 1600) whatever that size is, so small images pass; the
+        // 480-pixel floor applies only to the shrinking that follows.
         var edge = min(maxEdge, max(pixels.width, pixels.height))
-        while edge >= 480 {
+        while true {
             let resized = render(image, pixels: pixels, longEdge: edge)
             for quality in [0.82, 0.7, 0.58, 0.46, 0.36] as [CGFloat] {
                 if let jpeg = resized.jpegData(compressionQuality: quality), jpeg.count <= maxBytes {
                     return PickedPhoto(jpeg: jpeg, preview: resized)
                 }
             }
-            edge *= 0.75
+            let next = edge * 0.75
+            guard next >= 480 else { break }
+            edge = next
         }
         throw Relay.Failure(status: nil, message: L.t("This photo could not be made small enough (512 KB) and was left out.",
                                                       "이 사진은 512KB 이하로 줄일 수 없어 제외했습니다."))
@@ -50,7 +64,12 @@ enum PhotoPrep {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = true
-        return UIGraphicsImageRenderer(size: size, format: format).image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+        // JPEG has no transparency: a transparent PNG goes on white rather than black.
+        return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
+            UIColor.white.setFill()
+            ctx.fill(CGRect(origin: .zero, size: size))
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
     }
 
     #if DEBUG

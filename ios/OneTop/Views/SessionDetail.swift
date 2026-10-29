@@ -246,6 +246,7 @@ struct ConversationTimeline: View {
         case "delivery_unconfirmed": (L.t("Delivery unconfirmed — check the session before resending", "전달 미확인 · 재전송 전에 세션 확인"), "exclamationmark.triangle", .orange)
         case "source_changed": (L.t("Reply source changed", "답신 연결 변경됨"), "arrow.triangle.branch", .orange)
         case "not_delivered": (L.t("Not delivered — the session changed or the wait expired", "미전달 · 세션 변경 또는 대기 만료"), "xmark.circle", .red)
+        case "send_failed": (L.t("Not sent — the relay refused it", "보내지 못함 · 릴레이가 거부했습니다"), "exclamationmark.circle", .red)
         default: (status, "questionmark.circle", .secondary)
         }
     }
@@ -331,6 +332,14 @@ struct ConversationTimeline: View {
                     .font(.caption).foregroundStyle(state.color)
                     .accessibilityIdentifier("mail-status")
                     .accessibilityValue(m.status)
+                if model.failedSends[m.id] != nil {
+                    // Refused while a new draft was being written: nothing is lost, it comes back on request.
+                    Button(L.t("Bring back to the composer", "입력창으로 다시 가져오기"), systemImage: "arrow.uturn.down") {
+                        model.bringBack(m.id, key: session.key)
+                    }
+                    .font(.caption.weight(.semibold)).buttonStyle(.glass).controlSize(.small)
+                    .accessibilityIdentifier("bring-back")
+                }
             }
             .padding(12)
             .background(Color.mint1top.opacity(0.18), in: RoundedRectangle(cornerRadius: 16))
@@ -407,8 +416,10 @@ struct Composer: View {
 
     var body: some View {
         let d = draft.wrappedValue, block = model.sendBlock(session), photosOK = session.can("message_images")
-        let busy = model.sending.contains(session.key) || model.pending[session.key] != nil
-        let ready = model.canControl(session) && block == nil && !d.isEmpty && !busy
+        // Messages can follow one another while earlier ones are still on their way; an instruction-only
+        // session takes one control at a time.
+        let busy = (model.sending[session.key] ?? 0) > 0 || model.pending[session.key] != nil
+        let ready = model.canControl(session) && block == nil && !d.isEmpty && !(model.pending[session.key] != nil && !session.can("message"))
         VStack(alignment: .leading, spacing: 8) {
             if !d.photos.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -461,7 +472,8 @@ struct Composer: View {
                     .accessibilityLabel(L.t("Message to session", "세션에 보낼 메시지"))
                     .accessibilityIdentifier("mail-draft")
                 Button { confirm() } label: {
-                    Image(systemName: busy ? "ellipsis" : "arrow.up").font(.body.weight(.semibold)).frame(width: 30, height: 30)
+                    Image(systemName: "arrow.up").font(.body.weight(.semibold)).frame(width: 30, height: 30)
+                        .overlay(alignment: .topTrailing) { if busy { Circle().fill(.white.opacity(0.9)).frame(width: 7, height: 7).offset(x: 3, y: -3) } }
                 }
                 .buttonStyle(.glassProminent).buttonBorderShape(.circle)
                 .disabled(!ready)
