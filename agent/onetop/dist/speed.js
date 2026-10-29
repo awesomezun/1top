@@ -107,7 +107,10 @@
  // Only shown while tokens flow.
  function motion(style){
   if(style==='scope')return `<g class="fs-radar" data-radar>${Array.from({length:12},(_,j)=>`<path d="${sector(126,98,50,88,-90-(j+1)*4,-90-j*4)}" opacity="${n2(.26*(1-j/12)**1.6)}"/>`).join('')}<line x1="126" y1="48" x2="126" y2="8" class="fs-beam fs-glow"/></g>`;
-  return `<g class="fs-scanner">${Array.from({length:6},(_,j)=>`<path d="${arc(126,108,63,266,274)}" class="fs-scan${j?'':' fs-glow'}" style="animation-delay:${n2(-.72+j*.12)}s" opacity="${n2((1-j/6)**1.5)}"/>`).join('')}</g>`;
+  // 18 copies 0.04 s apart: at the sweep's fastest (about 120°/s) they sit about 5° apart, under the
+  // 8° arc, so the trail reads as one continuous fade with no gaps. The tail is a little fainter so
+  // the overlaps don't add up to a brighter band.
+  return `<g class="fs-scanner">${Array.from({length:18},(_,j)=>`<path d="${arc(126,108,63,266,274)}" class="fs-scan${j?'':' fs-glow'}" style="animation-delay:${n2(-.72+j*.04)}s" opacity="${n2(j?.72*(1-j/18)**1.6:1)}"/>`).join('')}</g>`;
  }
  // Bloom in each element's own colour, as in the cockpit candidates.
  const glowFilter='<filter id="fsGlow" filterUnits="userSpaceOnUse" x="-12" y="-12" width="276" height="220" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="2.3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';

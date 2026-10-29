@@ -553,3 +553,6 @@ dialog h2{font-size:var(--type-heading);font-weight:650}
 .weekly-reconnect{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:10px}
 .weekly-reconnect button{height:28px;padding:0 12px;border:1px solid var(--line-strong);border-radius:7px;background:var(--raised);color:var(--ink);font-size:var(--type-label);font-weight:600}
 .weekly-reconnect small{color:var(--muted);font-size:var(--type-caption)}
+
+/* Account number when one tool has several accounts: Claude Code 1, Claude Code 2. */
+.account-no{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 4px;margin-left:5px;border-radius:5px;background:var(--raised);color:var(--ink);font-size:var(--type-caption);font-weight:650;line-height:1;font-variant-numeric:tabular-nums;vertical-align:1px}
