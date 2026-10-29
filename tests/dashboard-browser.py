@@ -13,6 +13,12 @@ from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
 
+
+def pick_language(page,lang):
+    # One language button opens a short menu; pick the language from it.
+    page.locator('[data-language-menu]').click()
+    page.locator(f'[data-language="{lang}"]').click()
+
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / 'agent/onetop/dist'
 sys.path.insert(0,str(ROOT/'agent'))
@@ -280,7 +286,7 @@ try:
         page.screenshot(path=str(ROOT/'build/theme-reveal-v3.26.2.png'))
         finish_transition();assert page.locator('html').get_attribute('data-theme')=='light'
         pref_x=page.locator('[data-theme-switch]').bounding_box()['x']
-        page.locator('[data-language="en"]').click()
+        pick_language(page,'en')
         page.wait_for_function("[...document.querySelectorAll('canvas')].some(c=>c.style.viewTransitionName==='onetop-matrix')")
         page.wait_for_timeout(240)
         assert page.evaluate("[...document.querySelectorAll('canvas')].filter(c=>c.style.viewTransitionName==='onetop-matrix').some(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0))")
@@ -291,17 +297,17 @@ try:
         assert page.locator('#fleetSpeedUnit').inner_text()=='tokens/h'
         assert 'Weekly limit' in page.locator('#periodColumn').inner_text()
         assert page.locator('#search').get_attribute('placeholder')=='Search terminal, project or model'
-        page.locator('[data-language="zh"]').click();finish_transition();assert page.locator('#pageTitle').inner_text()=='仪表盘'
+        pick_language(page,'zh');finish_transition();assert page.locator('#pageTitle').inner_text()=='仪表盘'
         assert_range_geometry()
         assert abs(page.locator('[data-theme-switch]').bounding_box()['x']-pref_x)<1
-        page.locator('[data-language="ko"]').click();finish_transition();assert page.locator('#pageTitle').inner_text()=='대시보드'
+        pick_language(page,'ko');finish_transition();assert page.locator('#pageTitle').inner_text()=='대시보드'
         page.evaluate("for(const lang of ['en','zh','ko'])document.querySelector('[data-language='+lang+']').click()")
         finish_transition();assert page.locator('#pageTitle').inner_text()=='대시보드'
         assert page.locator('canvas[style*="onetop-matrix"]').count()==0
         page.emulate_media(reduced_motion='reduce')
-        page.locator('[data-language="en"]').click();assert page.locator('#pageTitle').inner_text()=='Dashboard'
+        pick_language(page,'en');assert page.locator('#pageTitle').inner_text()=='Dashboard'
         assert page.locator('html').get_attribute('data-preference-transition') is None
-        page.locator('[data-language="ko"]').click()
+        pick_language(page,'ko')
         page.emulate_media(reduced_motion='no-preference')
         checks.append('circular theme reveal, rendered matrix language ring, rapid picks and reduced motion')
         # The wordmark follows the theme's ink colour rather than a fixed value.
@@ -327,7 +333,7 @@ try:
         page.locator('[data-theme-switch]').click()
         finish_transition()
         page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.26.2.png'),full_page=False)
-        page.locator('[data-language="en"]').click();finish_transition()
+        pick_language(page,'en');finish_transition()
         for width in (1100,768,390):
             page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
             assert_range_geometry()

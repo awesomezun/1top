@@ -566,3 +566,18 @@ dialog h2{font-size:var(--type-heading);font-weight:650}
 .alias-form input{height:30px;padding:0 9px;border:1px solid var(--line-strong);border-radius:7px;background:var(--panel);color:var(--ink);font-size:var(--type-label)}
 .alias-form button{height:30px;padding:0 12px;border:1px solid var(--line-strong);border-radius:7px;background:var(--raised);color:var(--ink);font-size:var(--type-label);font-weight:600}
 .alias-form small{flex-basis:100%;color:var(--muted);font-size:var(--type-caption)}
+
+/* Sidebar: smaller section labels, menu items one step smaller and set in from those labels. */
+.rail-label{font-size:var(--type-tiny);letter-spacing:.06em}
+.rail #views .nav,.rail #views .nav[data-view=sessions]{min-height:31px;padding:0 10px 0 18px;column-gap:9px;grid-template-columns:15px minmax(0,1fr);font-size:var(--type-body)}
+.rail #views .nav .nav-icon,.rail #views .nav[data-view=sessions] .nav-icon,.rail #views .nav-icon svg{width:15px;height:15px}
+.rail #providers .provider-nav,.rail #hostApps .provider-nav{min-height:28px;padding:0 10px 0 18px;font-size:var(--type-label)}
+/* One language button with a short menu instead of three side-by-side choices. */
+.pref-language{position:relative}
+.language-button{display:inline-flex;align-items:center;justify-content:center;gap:5px;width:54px;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel);color:var(--ink);font-size:var(--type-label);font-weight:600}
+.language-button span{color:var(--dim);font-size:9px}
+.language-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:40;display:grid;gap:2px;min-width:128px;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:0 12px 32px rgba(0,0,0,.28)}
+.language-menu[hidden]{display:none}
+.language-menu button{height:30px;padding:0 10px;border:0;border-radius:6px;background:none;color:var(--muted);font-size:var(--type-label);text-align:left}
+.language-menu button:hover{background:var(--hover);color:var(--ink)}
+.language-menu button[aria-checked=true]{background:var(--raised);color:var(--ink);font-weight:600}
