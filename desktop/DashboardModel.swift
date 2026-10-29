@@ -470,15 +470,20 @@ struct AccountQuota: Decodable, Identifiable {
     var statusLabel: String {
         if !stale { return "확인됨" }
         switch status {
-        case "last_report": return "마지막 보고"
+        case "last_report": return Self.reportAge(updated)
         case "report_pending": return "보고 대기"
         case "login_required", "login_expired": return "재로그인 필요"
         case "refresh_pending": return "갱신 중"
         case "rate_limited": return "조회 제한"
         case "access_denied": return "권한 확인"
         case "credential_store_unavailable": return "저장소 확인"
-        default: return updated > 0 ? "마지막 보고" : "조회 지연"
+        default: return updated > 0 ? Self.reportAge(updated) : "조회 지연"
         }
+    }
+    /// How old a value that could not be refreshed is, so an old % never reads as current: "38분 전 보고".
+    static func reportAge(_ updated: Double, now: Double = Date().timeIntervalSince1970) -> String {
+        let s = max(0, now - updated)
+        return (s < 60 ? "방금" : s < 3600 ? "\(Int(s / 60))분 전" : s < 86400 ? "\(Int(s / 3600))시간 전" : "\(Int(s / 86400))일 전") + " 보고"
     }
     struct Window: Decodable, Identifiable {
         var label: String; var pct: Double?; var reset: Double

@@ -18,8 +18,9 @@ private struct QuickTheme {
     var muted: Color { pick((154, 165, 174), (91, 102, 112)) }
     var dim: Color { pick((108, 120, 130), (135, 146, 155)) }
     var accent: Color { pick((108, 207, 169), (19, 128, 95)) }
-    var segmentOn: Color { pick((116, 212, 177), (31, 138, 105)) }
-    var segmentLead: Color { pick((196, 245, 226), (15, 90, 68)) }
+    // Readouts, meters and the working state wear a yellow-green LCD tone so they never read as Codex's teal.
+    var segmentOn: Color { pick((157, 255, 60), (106, 168, 0)) }
+    var segmentLead: Color { pick((226, 255, 196), (61, 99, 0)) }
     var segmentOff: Color { pick((29, 35, 39), (238, 241, 243)) }
     var grid: Color { pick((43, 50, 56), (211, 218, 222)) }
     var amber: Color { pick((233, 178, 92), (154, 100, 16)) }
@@ -432,7 +433,7 @@ struct QuickDashboard: View {
             Text("1top").font(m.font(.figure, .semibold)).accessibilityLabel("1top")
             Spacer()
             HStack(spacing: m(6)) {
-                Circle().fill(model.fresh ? theme.accent : theme.amber).frame(width: m(6), height: m(6))
+                Circle().fill(model.fresh ? theme.segmentOn : theme.amber).frame(width: m(6), height: m(6))
                 Text(model.connectionLabel).font(m.font(.label)).foregroundStyle(theme.muted)
             }.padding(.horizontal, m(9)).frame(height: m(24)).overlay(Capsule().stroke(theme.line))
             Menu {
@@ -635,7 +636,7 @@ struct QuickDashboard: View {
             Text(label).foregroundStyle(theme.muted)
             GeometryReader { geo in
                 Capsule().fill(theme.line).overlay(alignment: .leading) {
-                    Capsule().fill((value ?? 0) > 90 ? theme.amber : theme.accent)
+                    Capsule().fill((value ?? 0) > 90 ? theme.amber : theme.segmentOn)
                         .frame(width: geo.size.width * min(100, max(0, value ?? 0)) / 100)
                 }
             }.frame(height: m(3))
@@ -655,9 +656,9 @@ struct QuickDashboard: View {
                 Text("\(model.sessions.count)").font(m.font(.label, .semibold)).monospacedDigit().foregroundStyle(theme.muted)
                     .padding(.horizontal, m(6)).frame(height: m(18)).background(theme.raised, in: RoundedRectangle(cornerRadius: m(5)))
                 HStack(spacing: m(5)) {
-                    Circle().fill(model.fresh ? theme.accent : theme.amber).frame(width: m(6), height: m(6))
+                    if model.fresh { WorkingWave(color: theme.segmentOn, size: m(9)) } else { Circle().fill(theme.amber).frame(width: m(6), height: m(6)) }
                     Text(model.fresh ? "작업 중 \(model.working)" : "마지막 기록")
-                }.font(m.font(.label, .medium)).foregroundStyle(model.fresh ? theme.accent : theme.amber).padding(.leading, m(4))
+                }.font(m.font(.label, .medium)).foregroundStyle(model.fresh ? theme.ink : theme.amber).padding(.leading, m(4))
                 Spacer(minLength: m(4))
                 Text(tokensMode ? "토큰" : "주간 한도 사용량").font(m.font(.caption)).foregroundStyle(theme.muted)
                     .fixedSize().frame(width: m(Self.valueColumn), alignment: .trailing)
@@ -715,7 +716,7 @@ struct QuickDashboard: View {
         let tool = s.kind == "Aside" ? (s.model ?? "Aside") : toolName(s.kind)
         var helpLines = [project, "\(s.locationLabel) · \(s.model ?? s.kind)" + (s.reportedEffort.map { " · effort \($0)" } ?? ""), s.groupStateLabel]
         if let title = s.title { helpLines.append(title) }
-        let hub = s.isWorkingGroup ? theme.accent : s.state == "waiting" ? theme.amber : theme.dim
+        let hub = s.isWorkingGroup ? theme.segmentOn : s.state == "waiting" ? theme.amber : theme.dim
         let paceText = burn.map { tokensMode ? shortNumber($0) + " tokens/시간" : rate1($0) }
         return HStack(alignment: .center, spacing: m(9)) {
             VStack(spacing: m(2)) {
@@ -796,7 +797,7 @@ struct QuickDashboard: View {
                 Text(toolName(quota.kind)).font(m.font(.title, .semibold))
                 Text(quota.plan ?? "").font(m.font(.caption, .medium)).foregroundStyle(tint)
                 Spacer()
-                Circle().fill(quota.stale ? theme.amber : theme.accent).frame(width: m(5), height: m(5))
+                Circle().fill(quota.stale ? theme.amber : theme.segmentOn).frame(width: m(5), height: m(5))
                 Text(quota.statusLabel).font(m.font(.caption)).foregroundStyle(quota.stale ? theme.amber : theme.muted)
             }
             Text(quota.account_label).font(m.font(.label)).foregroundStyle(theme.muted).lineLimit(1)
@@ -833,5 +834,23 @@ struct QuickDashboard: View {
         if minutes <= 0 { return "초기화 보고 대기" }
         if minutes >= 1440 { return "\(minutes / 1440)일 \((minutes % 1440) / 60)시간 후 초기화" }
         return minutes >= 60 ? "\(minutes / 60)시간 \(minutes % 60)분 후 초기화" : "\(minutes)분 후 초기화"
+    }
+}
+
+/// "Working" is a moving three-bar wave, never a dot in a tool's hue. Still when Reduce Motion is on.
+private struct WorkingWave: View {
+    var color: Color
+    var size: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var still
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 20, paused: still)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            HStack(alignment: .bottom, spacing: size * 0.17) {
+                ForEach(0..<3, id: \.self) { i in
+                    Capsule().fill(color)
+                        .frame(width: size * 0.22, height: size * (still ? [0.45, 1, 0.7][i] : 0.35 + 0.65 * abs(sin(t * 2.6 + Double(i) * 1.1))))
+                }
+            }.frame(width: size, height: size, alignment: .bottom)
+        }.accessibilityHidden(true)
     }
 }

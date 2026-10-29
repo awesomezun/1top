@@ -18,6 +18,8 @@ const pct=n=>n==null?'—':n.toFixed(1)+'%';
 const loadAverage=values=>Array.isArray(values)&&values.length&&values.every(Number.isFinite)?values.map(n=>n.toFixed(2)).join(' / '):'미보고';
 const time=t=>new Date(t*1000).toLocaleTimeString(OneTopI18n.locale(),{hour12:false,hour:'2-digit',minute:'2-digit'});
 const ago=t=>{if(!t)return '보고 없음';const n=Math.max(0,Date.now()/1000-t);return n<5?'방금':n<60?Math.floor(n)+'초 전':n<3600?Math.floor(n/60)+'분 전':n<86400?Math.floor(n/3600)+'시간 전':Math.floor(n/86400)+'일 전';};
+// How old a value that could not be refreshed is, so an old % never reads as current: "38분 전 보고".
+const reportAge=t=>t?ago(t)+' 보고':'마지막 보고';
 const model=m=>(m||'모델 미확인').replace(/\[1m\]/gi,'').replace(/^claude-/,'').replace(/^gpt-/,'GPT-');
 const reportedEffort=s=>typeof s.effort==='string'&&s.effort.trim()?s.effort:'';
 const effortBadge=s=>reportedEffort(s)?` <span class="count" title="보고된 추론 강도 (reasoning effort)">${esc(reportedEffort(s))}</span>`:'';
@@ -113,8 +115,8 @@ function renderSessionSummary(){
  $('sessionAccountStrip').innerHTML=(data.account_quotas||[]).map(q=>{
   const n=OneTopWeekly.weekly(q)?.pct,known=OneTopWeekly.valid(n),current=known&&!q.stale;
   const label=q.account_label||q.plan||'계정 확인 중',shortLabel=label.includes('@')?label.split('@')[0]:label;
-  const note=current?`${OneTopWeekly.percent(n)} 사용 · 주간 한도 100% 기준`:OneTopWeekly.valid(n)?`마지막 보고 ${OneTopWeekly.percent(n)} · 최신 보고 대기`:'주간 사용량 보고 대기';
-  return `<button class="session-account ${known?(current?'':'is-last-report'):'is-pending'}" data-summary-view="accounts" style="--account-color:${colors[q.kind]||'#8d9ba8'}" title="${esc(kindName(q.kind)+' · '+label+'\n'+note)}"><i></i><span class="session-account-identity"><b>${esc(kindName(q.kind))}</b><small>${esc(shortLabel)}</small></span><strong>${known?OneTopWeekly.percent(n)+(current?'':'<small>마지막 보고</small>'):'보고 대기'}</strong>${track(n)}</button>`;
+  const note=current?`${OneTopWeekly.percent(n)} 사용 · 주간 한도 100% 기준`:OneTopWeekly.valid(n)?`${reportAge(q.updated)} ${OneTopWeekly.percent(n)} · 최신 보고 대기`:'주간 사용량 보고 대기';
+  return `<button class="session-account ${known?(current?'':'is-last-report'):'is-pending'}" data-summary-view="accounts" style="--account-color:${colors[q.kind]||'#8d9ba8'}" title="${esc(kindName(q.kind)+' · '+label+'\n'+note)}"><i></i><span class="session-account-identity"><b>${esc(kindName(q.kind))}</b><small>${esc(shortLabel)}</small></span><strong>${known?OneTopWeekly.percent(n)+(current?'':`<small>${esc(reportAge(q.updated))}</small>`):'보고 대기'}</strong>${track(n)}</button>`;
  }).join('')||'<button class="session-accounts-empty" data-summary-view="accounts">계정 연결 · 사용량 보고 대기 ↗</button>';
 }
 let speedScale={key:null,max:1,lower:0,since:0};
@@ -530,7 +532,7 @@ function drawTrend(id,group){
  const totals=s.bins.map((_,i)=>s.total[i]==null?null:layers.reduce((sum,L)=>sum+(L.row.tokens[i]||0),0));
  const peak=Math.max(0,...totals.filter(v=>v!=null)),max=OneTopHistory.axisMax(peak);
  axes(c,max,'',3);
- const x=i=>l+(i+.5)*pw/n,y=v=>base-v/max*ph,alpha=document.documentElement.dataset.theme==='light'?.85:.8;
+ const x=i=>l+(i+.5)*pw/n,y=v=>base-v/max*ph,alpha=document.documentElement.dataset.theme==='light'?.32:.4;
  // Outside the record: a quiet hatch, never a zero line.
  ctx.save();ctx.beginPath();ctx.rect(l,t,pw,ph);ctx.clip();ctx.strokeStyle=style.line;ctx.lineWidth=1;
  totals.forEach((v,i)=>{if(v!=null)return;const x0=l+i*pw/n,x1=l+(i+1)*pw/n;for(let k=Math.floor((x0-ph)/6)*6;k<x1;k+=6){ctx.beginPath();ctx.moveTo(Math.max(x0,k),base-Math.max(0,x0-k));ctx.lineTo(Math.min(x1,k+ph),base-Math.min(ph,Math.min(x1,k+ph)-k));ctx.stroke();}});
@@ -541,8 +543,9 @@ function drawTrend(id,group){
   const sampled=layers.map(L=>OneTopHistory.smooth(L.row.tokens.slice(a,z+1).map(v=>v||0),samples)),xs=sampled[0].map(p=>x(a+p.x)),bounds=[xs.map(()=>0)];
   for(const S of sampled)bounds.push(S.map((p,k)=>bounds.at(-1)[k]+p.y));
   layers.forEach((L,j)=>{const lo=bounds[j],hi=bounds[j+1];ctx.beginPath();xs.forEach((X,k)=>k?ctx.lineTo(X,y(hi[k])):ctx.moveTo(X,y(hi[k])));for(let k=xs.length-1;k>=0;k--)ctx.lineTo(xs[k],y(lo[k]));ctx.closePath();ctx.fillStyle=withAlpha(L.color,alpha);ctx.fill();});
-  ctx.strokeStyle=style.panel;ctx.lineWidth=1.5;ctx.lineJoin='round';
-  for(let j=1;j<bounds.length-1;j++){ctx.beginPath();xs.forEach((X,k)=>k?ctx.lineTo(X,y(bounds[j][k])):ctx.moveTo(X,y(bounds[j][k])));ctx.stroke();}
+  // Translucent layers with each top drawn in its own colour, as in shadcn's stacked area chart.
+  ctx.lineWidth=1.5;ctx.lineJoin='round';
+  layers.forEach((L,j)=>{ctx.strokeStyle=L.color;ctx.beginPath();xs.forEach((X,k)=>k?ctx.lineTo(X,y(bounds[j+1][k])):ctx.moveTo(X,y(bounds[j+1][k])));ctx.stroke();});
  }
  // Time labels at even spacing, ends aligned to the plot edges.
  ctx.font=`${style.caption} ${style.font}`;ctx.fillStyle=style.dim;
@@ -602,6 +605,8 @@ function drawYear(grid,d){
  grid.innerHTML=`<div class="year-months">${months.map(m=>`<span style="grid-column:${m.week+1}" data-user-content>${esc(monthName(m.month))}</span>`).join('')}</div>`+
   `<div class="year-body"><div class="year-days">${weekdays().map((w,i)=>`<span data-user-content>${i%2?'':esc(w)}</span>`).join('')}</div><div class="year-grid">${weeks.map((col,w)=>col.map((c,i)=>`<i class="heat-cell${c.future?' is-future':c.value===null?' is-null':''}${c.date===todayKey?' is-today':''}"${typeof c.value==='number'?` data-level="${OneTopHistory.level(c.value,max)}"`:''} data-i="${w*7+i}"></i>`).join('')).join('')}</div></div>`;
  grid.cells=weeks.flat();
+ // Like GitHub, a narrow window shows the newest weeks and scrolls back in time.
+ grid.scrollLeft=grid.scrollWidth;
  const first=(d.heatmap?.days||[])[0]?.[0];
  $('yearCaption').innerHTML=spans(['최근 1년 날짜별 합계'])+(first?`<span><b data-user-content>${esc(new Date(first+'T00:00:00').toLocaleDateString(OneTopI18n.locale(),{year:'numeric',month:'short',day:'numeric'}))}</b> <span>부터 기록</span></span>`:'');
  const sum=values.reduce((n,c)=>n+c.value,0),top=values.reduce((p,c)=>!p||c.value>p.value?c:p,null),used=values.filter(c=>c.value>0).length;
@@ -641,7 +646,7 @@ function renderWeekly(){
  const periodLabel=periodMeta()?.label||selectedPeriod;
  $('weeklyOverview').innerHTML=rows.map(q=>{
   const w=OneTopWeekly.weekly(q),n=w?.pct,valid=OneTopWeekly.valid(n),a=data.weekly_usage?.accounts.find(a=>a.id===q.id),p=a?.periods[selectedPeriod];
-  const current=valid&&!q.stale,delta=OneTopWeekly.valid(p?.used_pp),status=current?'제공자 보고':q.updated?'마지막 보고':'확인 필요';
+  const current=valid&&!q.stale,delta=OneTopWeekly.valid(p?.used_pp),status=current?'제공자 보고':q.updated?reportAge(q.updated):'확인 필요';
   const rate=OneTopWeekly.accountBurn(p,q),rateKnown=OneTopWeekly.valid(rate);
   const rateNote=rateKnown?`최근 ${periodLabel}${p.partial?' 중 관측된 구간만 계산':''} · ${OneTopWeekly.duration(p.observed_seconds)} 관측에서 +${OneTopWeekly.number(p.used_pp)}%\n한도 증가량 ÷ 실제 관측 시간으로 계산한 평균입니다. 주간 한도 100%를 기준으로 한 시간당 소진 비율이며, 미래 소진량 예측이 아닙니다.`:'최소 2분의 유효한 한도 관측과 최신 계정 보고가 필요합니다.';
   return `<article class="weekly-card ${current?'':'is-stale'}" style="--quota-color:${colors[q.kind]||'#8d9ba8'}"><div class="weekly-card-heading"><b>${dot(q.kind)}${esc(kindName(q.kind))}</b><span>${esc(q.plan||'')} · ${status}</span></div><p class="weekly-account" title="${esc(q.account_label)}">${esc(q.account_label)}</p><div class="weekly-value"><strong>${valid?OneTopWeekly.percent(n):'—'}</strong><span>/ 100% 사용</span><b>${current?OneTopWeekly.percent(Math.max(0,100-n))+' 남음':''}</b></div><div class="track"><i style="width:${valid?Math.min(100,n):0}%;background:var(--quota-color)"></i></div><div class="weekly-period"><span>${periodCaption()}</span><strong>${delta?'+'+OneTopWeekly.number(p.used_pp)+'%':q.stale?'조회 필요':'다음 보고 대기'}</strong><span title="${esc(rateNote)}">${rateKnown?'평균 '+OneTopWeekly.burn(rate):delta?'소진 속도 확인 중':'한도 변화 기록 중'}</span></div><div class="weekly-chart" data-weekly-chart="${esc(q.id)}"></div><p class="weekly-note">${q.stale?esc(q.note):w?.reset?new Date(w.reset*1000).toLocaleString(OneTopI18n.locale(),{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화 · '+ago(q.updated)+' 확인':'주간 한도 확인 중'}</p></article>`;
