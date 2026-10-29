@@ -26,14 +26,17 @@ const grid=H.weekHours([['2026-10-26',9,100],['2026-11-02',9,0],['2026-10-27',3,
 assert.deepEqual(grid[0][9],{value:50,days:2,used:1});
 assert.equal(grid[1][3],null);
 
-// October 2026 starts on a Thursday: three empty cells, then the 1st.
-const october=H.month([['2026-10-01',5]],2026,9);
-assert.equal(october[0][3].day,1);
-assert.equal(october[0][3].value,5);
-assert.equal(october[0][0],null);
-assert.equal(october.flat().filter(Boolean).length,31);
-assert.equal(october[0][4].value,undefined);
-
+// A year grid: 53 Monday-first weeks ending this week; before the record is null, after today future.
+const y=H.year([['2026-10-27',5],['2026-10-28',7]],'2026-10-29');
+assert.equal(y.weeks.length,53);
+assert.ok(y.weeks.every(w=>w.length===7));
+const last=y.weeks.at(-1);
+assert.equal(last[0].date,'2026-10-26');
+assert.equal(last[0].value,null);
+assert.equal(last[1].value,5);
+assert.equal(last[3].future,false);
+assert.equal(last[4].future,true);
+assert.ok(y.months.some(m=>m.month===10));
 assert.equal(H.level(null,10),null);
 assert.equal(H.level(0,10),0);
 assert.equal(H.level(10,10),5);
@@ -56,4 +59,4 @@ assert.equal(H.modelName('gpt-6-astra'),'GPT-6-astra');
 assert.equal(H.modelName('glm-5.3[1m]'),'glm-5.3');
 assert.equal(H.projectName({key:'/Users/kang/.aside/u/0',label:'0'}),'Aside 기본 작업공간');
 assert.equal(H.projectName({key:'/x/1top',label:'1top'}),'1top');
-console.log('Usage history: trend bins, folding, sticky colours, weekday-hour averages, month calendar, levels and monotone smoothing passed.');
+console.log('Usage history: trend bins, folding, sticky colours, weekday-hour averages, year grid, levels and monotone smoothing passed.');

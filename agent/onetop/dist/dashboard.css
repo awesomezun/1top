@@ -487,20 +487,11 @@ dialog h2{font-size:var(--type-heading);font-weight:650}
 .history-legend-item>b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
 .history-legend-item>small{color:var(--dim);font-size:var(--type-caption);font-variant-numeric:tabular-nums}
 .heatmap-panel{margin-top:16px}
-.heatmap-panel>.panel-heading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between}
-.heatmap-controls{display:flex;align-items:center;gap:10px;margin-left:auto}
-.month-nav{display:inline-flex;align-items:center;gap:4px;color:var(--ink);font-size:var(--type-label);font-weight:600;font-variant-numeric:tabular-nums}
-.month-nav[hidden]{display:none}
-.month-nav button{width:28px;height:28px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg);color:var(--muted);font-size:var(--type-figure);line-height:1}
-.month-nav button:hover:not(:disabled){color:var(--ink);background:var(--hover)}
-.month-nav span{min-width:92px;text-align:center}
 .heatmap{display:grid;gap:4px;padding:6px 18px 4px;transition:opacity .2s}
 .heatmap.is-hours{grid-template-columns:24px repeat(24,minmax(0,1fr))}
-.heatmap.is-month{grid-template-columns:repeat(7,minmax(0,1fr))}
 .heat-label{align-self:center;color:var(--dim);font-size:var(--type-caption);font-variant-numeric:tabular-nums;text-align:center;line-height:1}
 .heat-label.is-row{text-align:left}
 .heat-cell{position:relative;aspect-ratio:1;min-width:0;border-radius:4px;background:var(--heat-0);font-style:normal}
-.heatmap.is-month .heat-cell{aspect-ratio:auto;height:44px;border-radius:6px}
 .heat-cell[data-level="1"],.heatmap-scale i[data-level="1"]{background:var(--heat-1)}
 .heat-cell[data-level="2"],.heatmap-scale i[data-level="2"]{background:var(--heat-2)}
 .heat-cell[data-level="3"],.heatmap-scale i[data-level="3"]{background:var(--heat-3)}
@@ -510,10 +501,7 @@ dialog h2{font-size:var(--type-heading);font-weight:650}
 .heat-cell.is-future{background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
 .heat-cell.is-outside{visibility:hidden}
 .heat-cell:hover,.heat-cell:focus-visible{outline:2px solid var(--ink);outline-offset:1px;z-index:1}
-.heat-cell>b{position:absolute;left:8px;top:6px;color:var(--heat-ink-low);font-size:var(--type-caption);font-weight:600;font-variant-numeric:tabular-nums}
-.heat-cell[data-level="4"]>b,.heat-cell[data-level="5"]>b{color:var(--heat-ink-high)}
-.heat-cell.is-null>b,.heat-cell.is-future>b,.heat-cell[data-level="0"]>b{color:var(--dim)}
-.heat-cell.is-today::after{content:'';position:absolute;inset:-3px;border:1.5px solid var(--accent);border-radius:8px}
+.heat-cell.is-today{box-shadow:0 0 0 1.5px var(--accent)}
 .heatmap-foot[hidden],.history-coverage[hidden]{display:none}
 .heatmap-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;padding:10px 18px 14px;color:var(--muted);font-size:var(--type-caption)}
 .heatmap-scale,.heatmap-keys{display:inline-flex;align-items:center;gap:4px}
@@ -521,7 +509,26 @@ dialog h2{font-size:var(--type-heading);font-weight:650}
 .heatmap-scale>span:first-child{margin-right:3px}.heatmap-scale>span:last-child{margin-left:3px}
 .heatmap-keys i[data-level="0"]{background:var(--heat-0)}
 .heatmap-keys span{margin-right:8px}
-.heatmap-summary{margin-left:auto;color:var(--ink);font-size:var(--type-label)}
+.heatmap-summary{margin:10px 0 0;color:var(--muted);font-size:var(--type-label)}
+.heatmap-summary b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+/* Two small heatmaps side by side: weekday × hour on the left, the last year GitHub-style on the right. */
+.heatmap-pair{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,8fr);gap:32px;padding:4px 18px 0}
+.heatmap-pair[hidden]{display:none}
+.heatmap-half{min-width:0}
+.heatmap-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin-bottom:10px;color:var(--muted);font-size:var(--type-caption)}
+.heatmap-head>b{color:var(--ink);font-size:var(--type-label);font-weight:600}
+.heatmap-head>span{display:flex;gap:0 6px}
+.heatmap-head>span>span+span::before{content:'·';margin-right:6px;color:var(--dim)}
+.heatmap-half .heatmap{padding:0;gap:3px}
+.heatmap-half .heatmap.is-hours{grid-template-columns:20px repeat(24,minmax(0,1fr))}
+.heatmap-half .heat-cell{border-radius:2.5px}
+.heatmap-year{display:grid;gap:4px}
+.year-months{display:grid;grid-template-columns:repeat(53,minmax(0,1fr));gap:3px;margin-left:24px;color:var(--dim);font-size:var(--type-caption);line-height:1;white-space:nowrap}
+.year-body{display:grid;grid-template-columns:24px minmax(0,1fr)}
+.year-days{display:grid;grid-template-rows:repeat(7,minmax(0,1fr));gap:3px;color:var(--dim);font-size:var(--type-caption);line-height:1;align-items:center}
+.year-grid{display:grid;grid-template-rows:repeat(7,auto);grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px}
+.year-grid .heat-cell{border-radius:2px}
+.year-grid .heat-cell.is-future{box-shadow:none;background:transparent}
 .history-tooltip{position:fixed;z-index:60;min-width:180px;max-width:min(340px,calc(100vw - 24px));padding:10px 12px;border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--panel-2);box-shadow:0 12px 32px rgba(0,0,0,.35);color:var(--ink);font-size:var(--type-label);pointer-events:none}
 .history-tooltip[hidden]{display:none}
 .history-tooltip>strong{display:block;margin-bottom:6px;font-size:var(--type-label);font-weight:600}
@@ -531,5 +538,6 @@ dialog h2{font-size:var(--type-heading);font-weight:650}
 .history-tooltip .tip-row>span{color:var(--muted);overflow-wrap:anywhere}
 .history-tooltip .tip-total{margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
 .history-tooltip p{margin:2px 0 0;color:var(--muted)}
-@media(max-width:640px){.heatmap.is-hours{grid-template-columns:18px repeat(24,minmax(0,1fr));gap:2px}.heatmap.is-hours .heat-label.is-hour:nth-child(odd){visibility:hidden}.heat-cell{border-radius:2px}.heatmap.is-month .heat-cell{height:36px}}
+@media(max-width:1000px){.heatmap-pair{grid-template-columns:minmax(0,1fr);gap:22px}}
+@media(max-width:640px){.heatmap-half .heatmap.is-hours{grid-template-columns:16px repeat(24,minmax(0,1fr));gap:2px}.year-grid,.year-months{gap:2px}.year-months span:nth-child(even){visibility:hidden}}
 
