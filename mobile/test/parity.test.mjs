@@ -99,9 +99,11 @@ test('phone demo limits follow the web demo rules and give the iPhone values (De
    const week=q.windows.find(w=>w.key==='7d').pct,[h1,h5,day]=['1h','5h','24h'].map(p=>q.weekly[p].used_pp);
    for(const p of ['1h','5h','24h'])assert.ok(Math.abs(sessions.filter(s=>s.weekly_account===q.id).reduce((n,s)=>n+s.weekly_estimate[p].used_pp,0)-q.weekly[p].used_pp)<1e-5,q.id+' '+p);
    assert.ok(h1<=h5&&h5<=day&&day<=week,q.id+' at '+k);
+   // Limits are whole percent, as providers report them.
+   assert.ok(q.windows.every(w=>Number.isInteger(w.pct)),q.id+' whole percent at '+k);
    assert.ok(day/week>=.1&&day/week<=.42,q.id+' day share '+(day/week).toFixed(2)+' at '+k);
   }}
  // The same start gives the same limits on both phones.
  const at=1_793_200_000,limits=Object.fromEntries(new Map(demoDevices(undefined,at+600,at).flatMap(d=>d.snapshot.account_quotas).map(q=>[q.id,q.windows.map(w=>w.pct)])));
- assert.deepEqual(limits,{'demo:claude-a':[6.9,31.7],'demo:claude-b':[12.2,61.7],'demo:codex-a':[28.9],'demo:codex-b':[69]});
+ assert.deepEqual(limits,{'demo:claude-a':[7,32],'demo:claude-b':[12,62],'demo:codex-a':[29],'demo:codex-b':[69]});
 });

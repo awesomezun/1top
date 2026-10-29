@@ -52,12 +52,14 @@ final class DemoUsageTests: XCTestCase {
                     XCTAssertEqual(sum, use[i], accuracy: 1e-5, "\(q.id) \(p)")
                 }
                 XCTAssertTrue(use[0] <= use[1] && use[1] <= use[2] && use[2] <= week, "\(q.id) at \(k)")
+                // Limits are whole percent, as providers report them.
+                XCTAssertTrue(q.windows.allSatisfy { ($0.pct ?? 0) == ($0.pct ?? 0).rounded() }, "\(q.id) whole percent at \(k)")
                 XCTAssertTrue(use[2] / week >= 0.1 && use[2] / week <= 0.42, "\(q.id) day share \(use[2] / week) at \(k)")
             }
         }
         let at = 1_793_200_000.0
         var limits: [String: [Double]] = [:]
         for q in DemoData.devices(now: at + 600, anchor: at).flatMap({ $0.snapshot?.accountQuotas ?? [] }) { limits[q.id] = q.windows.compactMap(\.pct) }
-        XCTAssertEqual(limits, ["demo:claude-a": [6.9, 31.7], "demo:claude-b": [12.2, 61.7], "demo:codex-a": [28.9], "demo:codex-b": [69]])
+        XCTAssertEqual(limits, ["demo:claude-a": [7, 32], "demo:claude-b": [12, 62], "demo:codex-a": [29], "demo:codex-b": [69]])
     }
 }

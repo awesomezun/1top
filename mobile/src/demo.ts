@@ -94,7 +94,8 @@ export function demoDevices(t:T=(en)=>en,now=Date.now()/1000,anchor=ANCHOR):Devi
  const quota=(a:typeof DEMO_ACCOUNTS[number]):Quota=>{
   const exact=weekly(a),reset=anchor+a.reset;
   return {id:a.id,kind:a.kind,account_label:a.label,plan:a.plan,updated:now-a.ago,stale:!!a.stale,...(a.alias?{alias:a.alias}:{}),
-   windows:[...(a.five?[{key:'5h',label:'5H',pct:Math.min(100,round(used(a.id,anchor+a.five.reset-18000)*a.per*a.five.factor)),reset:anchor+a.five.reset}]:[]),{key:'7d',label:'주간',pct:round(exact),reset}],
+   // Providers report limits in whole percent, as the collector shows them; use and points keep decimals.
+   windows:[...(a.five?[{key:'5h',label:'5H',pct:Math.min(100,Math.round(used(a.id,anchor+a.five.reset-18000)*a.per*a.five.factor)),reset:anchor+a.five.reset}]:[]),{key:'7d',label:'주간',pct:Math.round(exact),reset}],
    weekly:Object.fromEntries(PERIODS.map(([k,s])=>[k,{used_pp:used(a.id,now-s)*a.per,observed_seconds:s,partial:false}])),
    usage_points:Array.from({length:145},(_,i)=>{const at=now-86400+i*600;return [at,Math.max(0,round(exact-used(a.id,at)*a.per)),reset];})};
  };

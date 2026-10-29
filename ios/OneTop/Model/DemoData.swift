@@ -132,10 +132,11 @@ enum DemoData {
         func quota(_ a: Account) -> Quota {
             let exact = weekly(a), reset = anchor + a.reset
             var windows: [QuotaWindow] = []
+            // Providers report limits in whole percent, as the collector shows them; use and points keep decimals.
             if let five = a.five {
-                windows.append(QuotaWindow(key: "5h", label: "5H", pct: min(100, round(used(a.id, anchor + five.reset - 18_000) * a.per * five.factor)), reset: anchor + five.reset))
+                windows.append(QuotaWindow(key: "5h", label: "5H", pct: min(100, (used(a.id, anchor + five.reset - 18_000) * a.per * five.factor).rounded()), reset: anchor + five.reset))
             }
-            windows.append(QuotaWindow(key: "7d", label: "주간", pct: round(exact), reset: reset))
+            windows.append(QuotaWindow(key: "7d", label: "주간", pct: exact.rounded(), reset: reset))
             let periods = Dictionary(uniqueKeysWithValues: Period.allCases.map { p in
                 (p.rawValue, WeeklyPeriod(usedPp: used(a.id, now - p.seconds) * a.per, observedSeconds: p.seconds, partial: false))
             })
