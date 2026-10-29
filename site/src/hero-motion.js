@@ -1,283 +1,210 @@
-// Hero explainer v2.0.0: agent sessions scattered across apps and computers gather into one
-// 1top view with weekly-limit shares, then the token flow, usage map, weekly account limits and
-// the unified menu-bar panel. Every frame is a pure function of time, so live playback and the video render match.
-const T=24,CH=[0,9.6,13,16,19.2,T],CAP=[0,3,5.6,9.6,13,16,19.2,T],REP=[7.1,12.7,15.2,18.6,21.5];
-const clamp=v=>v<0?0:v>1?1:v,seg=(t,a,b)=>clamp((t-a)/(b-a)),lerp=(a,b,p)=>a+(b-a)*p,lerpA=(a,b,p)=>a.map((v,i)=>lerp(v,b[i],p));
-const out3=p=>1-(1-p)**3,io3=p=>p<.5?4*p*p*p:1-(-2*p+2)**3/2,expo=p=>p>=1?1:1-2**(-10*p);
+// Hero motion v3.0.0 "Cluster": 1top as the instrument cluster for AI work. The gauges wake with an
+// ignition sweep, a speedometer reads each session's weekly-limit burn rate, the same cluster lives in
+// the macOS menu bar, the time window shifts like a gear, and each account's weekly limit is a fuel gauge.
+// Every frame is a pure function of time, so live playback, stills and the video render match.
+const T=28,CH=[0,10,16,20.5,T],CAP=[0,3,10,16,20.5,T],REP=[4.4,13.1,18.75,22.6];
+const clamp=v=>v<0?0:v>1?1:v,seg=(t,a,b)=>clamp((t-a)/(b-a)),lerp=(a,b,p)=>a+(b-a)*p;
+const out3=p=>1-(1-p)**3,io3=p=>p<.5?4*p*p*p:1-(-2*p+2)**3/2,back=p=>1+2.4*(p-1)**3+1.4*(p-1)**2;
 const fade=(t,a,b,i=.35,o=.35)=>Math.min(out3(seg(t,a,a+i)),1-io3(seg(t,b-o,b)));
-const hex=c=>[1,3,5].map(i=>parseInt(c.slice(i,i+2),16)),rgba=c=>`rgba(${c[0]|0},${c[1]|0},${c[2]|0},${c[3].toFixed(3)})`;
-const fmt=k=>k>=999.95?(k/1000).toFixed(2)+'M':k.toFixed(1)+'k';
+const noise=(a,b)=>{const x=Math.sin(a*12.9898+b*78.233)*43758.5453;return x-Math.floor(x)};
+const fmtM=k=>k>=999.95?(k/1000).toFixed(2)+'M':k.toFixed(1)+'k';
 
-// Cursor keeps its English menus in both languages, as the app does by default.
-const CURSOR_MENUS=['File','Edit','Selection','View','Go','Run','Terminal','Window','Help'];
 const COPY={
- en:{label:'Animated overview of 1top. Agent sessions from several apps and computers gather into one dashboard that shows where each session runs and how much of its weekly subscription limit it uses, then the token flow over time windows, a usage map, weekly account limits and the menu-bar panel.',
-  cap:['Your AI agents run across apps, terminals and computers.','1top gathers every session into one view.','See where each one runs and how much of your weekly limit it uses.','Switch the time window — the token flow and every number follow.','The usage map shows which sessions used the most.','See how much of each subscription’s weekly limit is used.','Limits and sessions, one click away in the menu bar.'],
-  ch:['Sessions','Usage','Usage map','Weekly limits','Menu bar'],show:'Show',
-  zones:['MacBook Pro · This Mac','Mac Studio · Remote'],win:'1top — This Mac',live:'Live',
-  head:['Sessions','Token flow','Usage map','Weekly limits'],meta:['6 sessions · 2 computers','Last hour · by session','4 accounts · last hour'],
-  th:['Session','AI tool · model','App · computer','Status','Weekly % · 1h','Tokens · 1h'],status:['Idle','Working','Paused'],hl:['Where it runs','Share of the weekly limit'],
-  win6:['10m','30m','1h','5h','12h','24h'],ago:['10m ago','30m ago','1h ago','5h ago','12h ago','24h ago'],span:['last 10 minutes','last 30 minutes','last hour','last 5 hours','last 12 hours','last 24 hours'],
-  now:'now',unit:s=>`tokens · ${s}`,rate:'tok/s · 60-second average',kids:n=>`${n} sub`,none:'Not reported',
-  used:'/ 100% used',left:v=>`${v}% left`,inc:'Last hour',burn:v=>`${v}%/h`,avg:v=>`avg ${v}%/h`,who:['Personal','Work'],
-  toast:'Cursor brought forward on MacBook Pro',apps:['Finder','Cursor'],menus:[['File','Edit','View','Go','Window','Help'],CURSOR_MENUS],clock:['Mon Oct 26','9:41 AM'],
-  desc:['Frontend','Backend','Docs refresh','Research notes','Mobile app','Design system']},
- ko:{label:'1top 동작 개요 애니메이션입니다. 여러 앱과 컴퓨터에 흩어진 에이전트 세션이 하나의 대시보드로 모이고, 세션마다 실행 위치와 주간 한도 사용량, 기간별 토큰 흐름, 사용량 맵, 계정별 주간 한도, 메뉴 막대 패널을 차례로 보여 줍니다.',
-  cap:['AI 에이전트는 여러 앱·터미널·컴퓨터에서 동시에 돌아갑니다.','1top이 모든 세션을 한 화면으로 모읍니다.','어디서 돌고, 주간 한도를 얼마나 쓰는지 바로 보입니다.','기간을 바꾸면 토큰 흐름과 모든 수치가 함께 바뀝니다.','사용량 맵으로 어느 세션이 많이 썼는지 봅니다.','구독마다 주간 한도를 몇 % 썼는지 봅니다.','메뉴 막대에서 한도와 세션을 바로 확인합니다.'],
-  ch:['세션','사용량','사용량 맵','주간 한도','메뉴 막대'],show:'보기',
-  zones:['MacBook Pro · 이 Mac','Mac Studio · 원격'],win:'1top — 이 Mac',live:'실시간',
-  head:['세션','토큰 흐름','사용량 맵','주간 한도'],meta:['세션 6개 · 컴퓨터 2대','최근 1시간 · 세션별','계정 4개 · 최근 1시간'],
-  th:['세션','AI 도구 · 모델','앱 · 컴퓨터','상태','주간 한도 · 1시간','토큰 · 1시간'],status:['대기 중','작업 중','일시정지'],hl:['어디서 실행 중인지','주간 한도를 얼마나 쓰는지'],
-  win6:['10분','30분','1시간','5시간','12시간','24시간'],ago:['10분 전','30분 전','1시간 전','5시간 전','12시간 전','24시간 전'],span:['최근 10분','최근 30분','최근 1시간','최근 5시간','최근 12시간','최근 24시간'],
-  now:'현재',unit:s=>`토큰 · ${s}`,rate:'tok/s · 최근 60초 평균',kids:n=>`하위 ${n}`,none:'보고 없음',
-  used:'/ 100% 사용',left:v=>`${v}% 남음`,inc:'최근 1시간',burn:v=>`${v}%/시간`,avg:v=>`평균 ${v}%/시간`,who:['개인','회사'],
-  toast:'MacBook Pro에서 Cursor를 앞으로 가져왔습니다',apps:['Finder','Cursor'],menus:[['파일','편집','보기','이동','윈도우','도움말'],CURSOR_MENUS],clock:['10월 26일 (월)','오전 9:41'],
-  desc:['프론트엔드','백엔드','문서 정리','리서치 노트','모바일 앱','디자인 시스템']}
+ en:{label:'Animated overview of 1top as an instrument cluster. The gauges wake up, a speedometer shows how fast each session uses its weekly subscription limit in percent per hour, the same gauges open from the macOS menu bar, the time window changes the token flow, and each account shows how much of its weekly limit is used and how fast.',
+  cap:['Start 1top and your AI work comes up on the gauges.','A speedometer for every session: how fast it uses your weekly limit.','The same gauges, one click away in the macOS menu bar.','Shift the time window — the token flow and every number follow.','Each account’s weekly limit: how much is used, and how fast.'],
+  ch:['Speedometer','Menu bar','Time window','Weekly limits'],show:'Show',
+  tach:'Token speed',tachU:'k tok/s · 60-second avg',speed:'Burn rate',speedU:'%/h of weekly limit',
+  tells:['Claude Code 5','Codex 5','GLM 2','Needs attention 1','Live'],
+  sess:'Running sessions',flow:'Token flow',acct:'Weekly limits',gear:'Time window',fuel:'Weekly limit left',odo:'tokens',
+  win6:['10m','30m','1h','5h','12h','24h','Custom'],cust:'36h',span:['last 10 min','last 30 min','last hour','last 5 hours','last 12 hours','last 24 hours','last 36 hours'],
+  kids:n=>`${n} sub`,rate:v=>`${v}%/h`,used:'/ 100% used',inc:v=>`Last hour +${v}%`,avg:v=>`avg ${v}%/h`,who:['Personal','Work'],
+  apps:'Finder',menus:['File','Edit','View','Go','Window','Help'],clock:['Wed Oct 28','9:41 AM'],host:'website — Cursor',term:'Polish the landing page hero'},
+ ko:{label:'1top을 자동차 계기판처럼 보여 주는 애니메이션입니다. 계기판이 켜지고, 속도계가 세션마다 주간 구독 한도를 시간당 몇 %씩 쓰는지 보여 줍니다. 같은 계기판을 macOS 메뉴 막대에서 열고, 기간에 따라 토큰 흐름이 바뀌며, 계정마다 주간 한도를 얼마나, 얼마나 빨리 쓰는지 보여 줍니다.',
+  cap:['1top을 켜면 AI 작업이 계기판에 올라옵니다.','세션마다 주간 한도를 시간당 몇 %씩 쓰는지, 속도계로 봅니다.','같은 계기판을 macOS 메뉴 막대에서 바로 엽니다.','기간을 바꾸면 토큰 흐름과 모든 수치가 함께 바뀝니다.','계정마다 이번 주 한도를 얼마나, 얼마나 빨리 쓰는지 봅니다.'],
+  ch:['속도계','메뉴 막대','기간','주간 한도'],show:'보기',
+  tach:'토큰 속도',tachU:'k tok/s · 60초 평균',speed:'소진 속도',speedU:'%/시간 · 주간 한도 기준',
+  tells:['Claude Code 5','Codex 5','GLM 2','확인 필요 1','실시간'],
+  sess:'실행 중인 세션',flow:'토큰 흐름',acct:'주간 한도',gear:'기간',fuel:'남은 주간 한도',odo:'토큰',
+  win6:['10분','30분','1시간','5시간','12시간','24시간','기간 지정'],cust:'36시간',span:['최근 10분','최근 30분','최근 1시간','최근 5시간','최근 12시간','최근 24시간','최근 36시간'],
+  kids:n=>`하위 ${n}`,rate:v=>`${v}%/시간`,used:'/ 100% 사용',inc:v=>`최근 1시간 +${v}%`,avg:v=>`평균 ${v}%/시간`,who:['개인','회사'],
+  apps:'Finder',menus:['파일','편집','보기','이동','윈도우','도움말'],clock:['10월 28일 (수)','오전 9:41'],host:'website — Cursor',term:'Polish the landing page hero'}
 };
 
-// Tool identities match the app palette (AgentPalette.swift); the light tone is for text on dark tiles.
+// Tool identities match the app palette (AgentPalette.swift); the light tone is for text and needles on dark faces.
 const TOOL={claude:['Claude Code','#bd8965','#e3b796'],codex:['Codex','#378d76','#72d1b0'],glm:['GLM','#7c86bd','#aeb6ee']};
-const PCS=['MacBook Pro','Mac Studio'];
-// Example data shared with the v5.0.0 product films: tokens in thousands over the last hour,
-// eq = estimated share of the account's weekly limit in that hour, burn = current %/h.
+// Example data shared with the v6.0.0 product films (app v3.19.4, synthetic fixture): eq = estimated share of the
+// account's weekly limit in the last hour, burn = current %/h of the weekly limit (the app's 소진 속도 gauge).
 const SESS=[
- {id:'website',tool:'claude',model:'opus-5-5',eff:'xhigh',app:'Cursor',pc:0,st:1,tok:7940,eq:.76,burn:1.2},
- {id:'api-service',tool:'codex',model:'gpt-6-astra',eff:'ultra',app:'Orca',pc:0,st:1,tok:5780,eq:1.19,burn:1.07,kids:3},
- {id:'docs',tool:'glm',model:'glm-5.3',eff:'high',app:'VS Code',pc:1,st:1,tok:2490,eq:null},
- {id:'research',tool:'codex',model:'gpt-6-astra',eff:'high',app:'Aside',pc:0,st:0,tok:3120,eq:.64,burn:0},
- {id:'mobile-app',tool:'codex',model:'gpt-6-astra',eff:'xhigh',app:'Terminal',pc:1,st:1,tok:1610,eq:.32,burn:.34},
- {id:'design-system',tool:'claude',model:'sonnet-5-5',eff:'high',app:'iTerm',pc:1,st:2,tok:980,eq:.17,burn:0}];
-// Periods in the app's order: 10m, 30m, 1h, 5h, 12h, 24h.
-const SUM=SESS.reduce((a,s)=>a+s.tok,0),TOTAL=[3910,11240,SUM,98600,214500,388200],SPAN=[1/6,.5,1,5,12,24],HOUR=2;
-const ACCT=[{tool:'claude',plan:'Max',who:0,week:34,inc:.89,burn:.92},{tool:'codex',plan:'Pro',who:0,week:61,inc:1.87,burn:1.93},{tool:'claude',plan:'Team',who:1,week:18,inc:.17,burn:.18},{tool:'codex',plan:'Business',who:1,week:27,inc:.37,burn:.38}];
-const PICK=[[10.45,5],[11.25,3],[12.05,HOUR]];
-// Brand mark: the waveform.path symbol traced from site/public/brand/v1.1.0/mark.png.
+ {id:'website',tool:'claude',model:'opus-5-5',eff:'xhigh',eq:.76,burn:1.21},
+ {id:'api-service',tool:'codex',model:'gpt-6-astra',eff:'ultra',eq:1.19,burn:1.06,kids:3},
+ {id:'research',tool:'codex',model:'gpt-6-astra',eff:'high',eq:.64,burn:.29},
+ {id:'mobile-app',tool:'codex',model:'gpt-6-astra',eff:'xhigh',eq:.32,burn:.30}];
+const ACCT=[{tool:'claude',plan:'Max',who:0,week:34,inc:.89,burn:.92},{tool:'codex',plan:'Pro',who:0,week:61,inc:1.87,burn:1.93},
+ {tool:'claude',plan:'Team',who:1,week:18,inc:.17,burn:.18},{tool:'codex',plan:'Business',who:1,week:27,inc:.37,burn:.38}];
+// Tokens in thousands for 10m, 30m, 1h, 5h, 12h, 24h and a custom 36-hour range.
+const TOTAL=[3910,11240,21920,98600,214500,388200,563400],HOUR=2,CUSTOM=6;
+const SPEED={max:2,major:.5,minor:.1,fmt:v=>String(+v.toFixed(1))},TACH={max:12,major:2,minor:.5,fmt:v=>String(v)};
+
+// Who the speedometer reads: [time, session (s) or account (a) index]. Rates are never added across accounts.
+const SUBJ=[[0,'s',0],[5.4,'s',1],[7.8,'s',2],[16,'s',0],[20.6,'a',0],[21.9,'a',1],[23.2,'a',2],[24.5,'a',3]];
+// The time window shifts like a gear: [time, period index].
+const GEAR=[[0,HOUR],[16.8,5],[17.8,CUSTOM],[18.8,0],[19.8,HOUR]];
+// Menu-bar panel captured from the v3.20.1 recording build; boxes (account cards, sessions) are fractions of the image.
+const PANEL_IMG='/media/v6.0.0/menu-panel.png',PANEL_ASPECT=1092/1572,PANEL_HL=[[.045,.128,.91,.175],[.045,.627,.91,.287]];
 const MARK='M401.0 0.0 L394.5 1.5 L387.0 6.0 L381.8 12.5 L378.8 22.0 L340.5 465.5 L339.5 464.5 L338.8 461.2 L306.5 174.2 L304.5 168.0 L300.0 161.2 L293.2 156.2 L286.5 154.0 L276.2 154.0 L267.8 157.2 L263.8 160.2 L260.2 164.2 L256.0 173.5 L216.8 436.2 L215.5 440.2 L214.8 439.2 L182.5 284.2 L179.0 277.2 L174.0 272.0 L168.8 269.0 L160.8 267.0 L150.8 268.0 L144.0 271.0 L138.0 276.2 L134.0 282.8 L109.0 381.2 L107.2 384.8 L25.0 384.8 L19.0 386.0 L10.5 390.8 L4.2 397.8 L0.8 406.0 L0.0 416.0 L2.0 423.5 L6.2 430.5 L10.5 434.8 L14.8 437.5 L24.0 440.5 L126.0 440.8 L132.2 439.8 L137.2 438.0 L141.8 435.5 L147.0 430.8 L150.5 425.0 L154.8 411.2 L155.8 410.8 L195.0 596.8 L199.0 604.2 L201.8 607.2 L206.2 610.2 L214.0 613.2 L225.0 613.5 L231.5 611.5 L237.8 607.8 L242.5 601.8 L244.5 596.5 L275.8 387.8 L277.2 382.0 L278.0 383.8 L318.0 739.0 L321.0 747.0 L324.5 751.8 L328.8 755.2 L333.0 757.5 L339.0 759.2 L347.8 759.2 L356.2 756.2 L363.0 750.8 L367.2 743.2 L368.8 736.0 L403.2 338.8 L404.5 333.2 L405.2 334.5 L440.5 737.8 L443.8 747.5 L449.0 753.8 L457.0 758.2 L463.0 759.5 L467.8 759.5 L475.8 757.5 L482.0 753.8 L488.0 746.5 L491.0 737.8 L531.0 382.8 L531.5 382.2 L533.0 387.5 L564.2 595.5 L567.5 603.5 L571.8 608.2 L579.5 612.5 L585.2 613.8 L595.2 613.2 L602.2 610.5 L606.2 608.0 L609.5 604.8 L613.8 597.0 L653.2 408.8 L655.0 410.2 L659.0 422.8 L662.2 428.0 L666.5 432.8 L670.5 435.8 L676.5 438.8 L686.0 440.8 L780.5 440.8 L786.2 439.8 L795.0 435.5 L801.8 428.8 L805.8 420.5 L806.8 410.8 L804.8 402.2 L799.8 394.2 L793.2 388.8 L785.0 385.2 L701.5 384.5 L699.0 377.0 L676.5 288.0 L673.8 280.2 L669.5 274.2 L663.0 269.2 L654.8 266.5 L647.8 266.2 L640.8 268.0 L635.5 271.0 L630.5 276.0 L627.0 282.8 L594.0 439.5 L593.2 440.2 L592.0 436.2 L552.8 173.2 L548.8 164.5 L542.5 158.2 L533.2 154.2 L523.0 154.0 L514.5 157.0 L508.0 162.5 L504.2 168.8 L502.2 176.2 L470.0 461.2 L469.2 464.5 L468.2 465.5 L430.2 21.5 L429.0 16.5 L426.8 11.8 L424.0 8.0 L420.0 4.5 L411.0 0.5Z';
-const FIELDS=['dot','name','desc','tool','model','app','pc','status','eq','burn','tok','wave','pct','open','card'],RIGHT=new Set(['eq','burn','tok','wave','open']);
-// The closing panel is the shipping native view (v5.0.0 recording at 2x); positions below are fractions of that image.
-const PANEL_IMG='/media/v5.0.0/menu-panel.png',PANEL_ASPECT=1092/1572,OPEN=[.868,.703],HIT=[.051,.667,.898,.068];
 
-const WIDE={W:1280,H:800,n:0,zones:[[40,40,540,600],[700,40,540,600]],chip:[290,88],at:[[80,118],[230,268],[750,150],[90,420],[910,300],[760,452]],
- mark:[640,340],win:[40,36,1200,640],head:[72,98],meta:1208,row:[56,186,1168,64,70],
- th:[[80,158],[366,158],[596,158],[816,158],[1014,158,1],[1200,158,1]],thD:[816,158],hl:[[584,146,232,468],[880,146,146,468]],
- compact:k=>[800,186+k*62,400,54],seg:[72,156,84,44],big:[72,224],unit:[72,330],rate:[752,332],chart:[72,380,680,200],leg:[72,622],
- tree:[68,160,1144,492],card:k=>[68+(k%2)*586,160+(k>>1)*258,558,234],icon:960,mbh:32,sys:[34,66,95,124],menuN:9,date:1,panel:[752,34,600*PANEL_ASPECT,600],host:[60,112,520,436],cur:[640,560],toast:[320,48]};
-const NARROW={W:640,H:700,n:1,zones:[[20,24,600,280],[20,396,600,280]],chip:[270,86],at:[[40,72],[330,108],[40,446],[60,206],[330,486],[60,578]],
- mark:[320,350],win:[16,20,608,612],head:[44,80],meta:596,row:[28,160,584,70,74],
- th:[[46,134],[296,134],null,null,[594,134,1],null],thD:null,hl:[[30,124,232,488],[462,124,150,488]],
- compact:k=>[28+(k%2)*300,446+(k>>1)*60,284,52],seg:[44,124,88,42],big:[44,180],unit:[44,264],rate:[596,266],chart:[44,304,552,118],leg:null,
- tree:[28,124,584,496],card:k=>[28,124+k*124,584,114],icon:430,mbh:40,sys:[38,72,0,102],menuN:2,date:0,panel:[430-298*PANEL_ASPECT,42,596*PANEL_ASPECT,596],host:[-150,116,360,430],cur:[330,560],toast:[320,636]};
+const WIDE={W:1280,H:640,n:0,body:[46,22,1188,596],tach:[262,300,1],speed:[1018,300,1],tells:[640,64],mid:[420,118,1],
+ gear:[640,516],fuel:[118,486],odo:[1162,486],mbh:30,panel:(k,x)=>[Math.min(x-264*k,1272-528*k),40,528*k,528],host:[64,96,620,436],cur:[700,600]};
+const NARROW={W:640,H:900,n:1,body:[16,16,608,868],tach:[170,248,.74],speed:[470,248,.74],tells:[320,52],mid:[48,452,1.2],
+ gear:[320,404],fuel:null,odo:null,mbh:36,panel:k=>[320-370*k,46,740*k,740],host:null,cur:[320,860]};
 
-function rate(h,dx){
- const a=f=>clamp(1.5-f*dx*4/6.283),g=(c,w,k)=>k*Math.exp(-(((h-c)/w)**2));
- return .42+.13*Math.sin(h*.34+1)+.09*Math.sin(h*1.7)+.07*a(5.3)*Math.sin(h*5.3+2)+.05*a(23)*Math.sin(h*23+.4)+.04*a(61)*Math.sin(h*61+1.3)+.03*a(173)*Math.sin(h*173+2.1)+.025*a(611)*Math.sin(h*611)+g(20.5,.7,.5)+g(23.4,.3,.38)+g(9,1.3,.3)+g(23.9,.06,.25);
+// Token flow for the flow page; the same curve family as the dashboard films.
+function rate(h){return .42+.13*Math.sin(h*.34+1)+.09*Math.sin(h*1.7)+.07*Math.sin(h*5.3+2)+.05*Math.sin(h*23+.4)+.04*Math.sin(h*61+1.3)+.3*Math.exp(-(((h-20.5)/.7)**2))+.25*Math.exp(-(((h-23.4)/.3)**2))}
+const SPAN=[1/6,.5,1,5,12,24,36],share=h=>{const c=.42+.08*Math.sin(h*.9+.5)+.04*Math.sin(h*7.1),x=.38+.07*Math.sin(h*1.3+2)+.03*Math.sin(h*11.3+1);return [c,x,Math.max(.05,1-c-x)]};
+const BARS=SPAN.map(d=>{const v=Array.from({length:36},(_,j)=>{const h=24-d+d*(j+.5)/36;return rate(h)*(.82+.36*noise(d*7,j))}),m=Math.max(...v);return v.map((x,j)=>{const s=share(24-d+d*j/36);return s.map(k=>x/m*k)})});
+
+function track(t,keys,dur,ease=back){let v=keys[0][1];for(let i=1;i<keys.length;i++){const [k,x]=keys[i];if(t<k)break;v=lerp(v,x,ease(seg(t,k,k+dur)))}return v}
+const at=(t,keys)=>{let k=keys[0];for(const x of keys)if(t>=x[0])k=x;return k};
+
+function dialSVG(id,g,label){
+ const C=170,ang=f=>(135+270*f)*Math.PI/180,pt=(f,r)=>[C+r*Math.cos(ang(f)),C+r*Math.sin(ang(f))],n=Math.round(g.max/g.minor);
+ let ticks='',labels='';
+ for(let i=0;i<=n;i++){const v=i*g.minor,f=v/g.max,maj=Math.abs(v/g.major-Math.round(v/g.major))<1e-6,[x1,y1]=pt(f,maj?122:131),[x2,y2]=pt(f,141);
+  ticks+=`<line class="${maj?'mj':'mn'}" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/>`;
+  if(maj){const [lx,ly]=pt(f,103);labels+=`<text x="${lx.toFixed(1)}" y="${(ly+6).toFixed(1)}" text-anchor="middle">${g.fmt(v)}</text>`}}
+ return `<svg viewBox="0 0 340 340" aria-hidden="true"><defs><radialGradient id="${id}f" cx="50%" cy="42%" r="60%"><stop offset="0" stop-color="#161c20"/><stop offset=".78" stop-color="#0c1012"/><stop offset="1" stop-color="#090b0d"/></radialGradient></defs>
+  <circle class="face" cx="170" cy="170" r="160" fill="url(#${id}f)"/><circle class="rim" cx="170" cy="170" r="160"/><circle class="rim2" cx="170" cy="170" r="151"/>
+  <circle class="trk" cx="170" cy="170" r="147" pathLength="360" stroke-dasharray="270 360" transform="rotate(135 170 170)"/>
+  <circle class="val" cx="170" cy="170" r="147" pathLength="360" stroke-dasharray="0 360" transform="rotate(135 170 170)"/>
+  <g class="tk">${ticks}</g><g class="lb">${labels}</g>
+  <g class="nd"><path d="M158 166.4 L301 169.3 L301 170.7 L158 173.6 Z"/></g><circle class="hub" cx="170" cy="170" r="13"/><circle class="hub2" cx="170" cy="170" r="5"/></svg>
+  <div class="hx-dl">${label}</div><div class="hx-read"><b>0</b><small></small></div><div class="hx-sub"><i></i><span></span></div>`;
 }
-// Each bar stacks Codex, Claude Code and GLM; their shares drift slowly over the day.
-const share=h=>{const x=.44+.08*Math.sin(h*.9+.5)+.04*Math.sin(h*7.1),c=.36+.07*Math.sin(h*1.3+2)+.03*Math.sin(h*11.3+1);return [x,c,Math.max(.04,1-x-c)]};
-const YMAX=SPAN.map(d=>{let m=0;for(let j=0;j<=400;j++)m=Math.max(m,rate(24-d+(d+.4)*j/400,d/140));return m*1.18});
-
-// The last hour of an account's weekly percentage: small uneven steps from week-inc up to week.
-function weekLine(a,k){
- const n=13,w=[...Array(n-1)].map((_,j)=>.35+(1+Math.sin(j*1.9+k*2.3))**2),tw=w.reduce((s,v)=>s+v,0),lo=a.week-a.inc*1.12,hi=a.week+a.inc*.08;
- let v=a.week-a.inc,pts=[[0,v]];w.forEach((x,j)=>{v+=a.inc*x/tw;pts.push([(j+1)*240/(n-1),v])});
- const y=v=>(56-(v-lo)/(hi-lo)*50).toFixed(1),line=pts.map(([x,v],j)=>(j?'L':'M')+x.toFixed(1)+' '+y(v)).join('');
- return {line,area:line+'L240 60L0 60Z'};
-}
-
-function squarify(vals,[x,y,w,h]){
- const total=vals.reduce((a,v)=>a+v.v,0),k=w*h/total,out=[];
- let items=vals.map(v=>({...v,a:v.v*k}));
- const worst=(row,side)=>{const s=row.reduce((a,v)=>a+v.a,0),mx=Math.max(...row.map(v=>v.a)),mn=Math.min(...row.map(v=>v.a));return Math.max(side*side*mx/(s*s),s*s/(side*side*mn))};
- while(items.length){
-  const side=Math.min(w,h);let row=[items[0]],best=worst(row,side),n=1;
-  while(n<items.length){const next=row.concat(items[n]),v=worst(next,side);if(v>best)break;row=next;best=v;n++}
-  const s=row.reduce((a,v)=>a+v.a,0);
-  if(w>=h){const cw=s/h;let cy=y;for(const v of row){const ch=v.a/cw;out[v.i]=[x,cy,cw,ch];cy+=ch}x+=cw;w-=cw}
-  else{const ch=s/w;let cx=x;for(const v of row){const cw=v.a/ch;out[v.i]=[cx,y,cw,ch];cx+=cw}y+=ch;h-=ch}
-  items=items.slice(row.length);
- }
- return out.map(([x,y,w,h])=>[x+4,y+4,w-8,h-8]);
-}
-
-const pickAt=t=>{let a=HOUR,b=HOUR,s=-1;for(const [ts,k] of PICK)if(t>=ts){a=b;b=k;s=ts}return {a,b,p:s<0?1:io3(seg(t,s,s+.55))}};
-const tokAt=(i,t)=>{const s=SESS[i];if(t<9.6)return s.st?s.tok*(.9+.1*io3(seg(t,0,9.6))):s.tok;const w=pickAt(t);return s.tok*lerp(TOTAL[w.a],TOTAL[w.b],w.p)/SUM+(t>19.2&&s.st===1?(t-19.2)*6:0)};
 
 export function mountHeroMotion(root,{lang='en',capture=false}={}){
  const S=COPY[lang]||COPY.en,ver=Math.random().toString(36).slice(2,7);
- const card=i=>{const a=ACCT[i],[tn,c,l]=TOOL[a.tool],g=weekLine(a,i);return `<div class="hm-f f-card" style="--c:${c};--l:${l}"><div class="cd-h"><i></i>${tn}<em>${a.plan}</em><span>${S.who[a.who]}</span></div><div class="cd-w"><strong>0%</strong><small>${S.used}</small><span>${S.left(100-a.week)}</span></div><div class="cd-t"><s></s></div><div class="cd-i"><span>${S.inc} <b>+${a.inc.toFixed(2)}%</b></span><span>${S.avg(a.burn.toFixed(2))}</span></div><svg class="cd-g" viewBox="0 0 240 60" preserveAspectRatio="none" aria-hidden="true"><path class="ga" d="${g.area}"/><path class="gl" d="${g.line}" pathLength="1" stroke-dasharray="1 1"/></svg></div>`};
- const item=(s,i)=>{const [tn,c,l]=TOOL[s.tool];return `<div class="hm-item" style="--c:${c};--l:${l}"><i class="hm-f f-dot"></i><b class="hm-f f-name">${s.id}${s.kids?`<u>${S.kids(s.kids)}</u>`:''}</b><span class="hm-f f-desc">${S.desc[i]}</span><span class="hm-f f-tool">${tn}</span><span class="hm-f f-model">${s.model}<em>${s.eff}</em></span><span class="hm-f f-app">${s.app}</span><span class="hm-f f-pc">${PCS[s.pc]}</span><span class="hm-f f-status s${s.st}">${S.status[s.st]}</span><span class="hm-f r f-eq${s.eq==null?' none':''}">${s.eq==null?'—':'≈'+s.eq.toFixed(2)+'%'}</span><span class="hm-f r f-burn">${s.eq==null?S.none:S.burn(s.burn)}</span><span class="hm-f r f-tok"></span><span class="hm-f r f-wave">${'<i></i>'.repeat(5)}</span><span class="hm-f f-pct">${(s.tok/SUM*100).toFixed(1)}%</span><span class="hm-f r f-open">↗</span>${i<4?card(i):''}</div>`};
- const mark=(w,h,inner='')=>`<svg width="${w}" height="${h}" viewBox="0 0 806.8 759.5" aria-hidden="true">${inner}<path d="${MARK}"/></svg>`;
- root.classList.add('hm');root.classList.toggle('hm--capture',capture);root.setAttribute('role','group');root.setAttribute('aria-label',S.label);
- root.innerHTML=`<div class="hm-stage"><div class="hm-canvas" aria-hidden="true"><div class="hm-grid"></div><div class="hm-a hm-glow g1"></div><div class="hm-a hm-glow g2"></div><div class="hm-world"><div class="hm-a hm-desk"></div>
-  ${S.zones.map(z=>`<div class="hm-a hm-zone"><span><i></i>${z}</span></div>`).join('')}
-  <svg class="hm-wires"><defs><filter id="hmg${ver}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter></defs>${SESS.map(()=>`<path pathLength="1" stroke-dasharray="1 1"/>`).join('')}${SESS.map(()=>'<circle r="4"/><circle r="4"/><circle r="4"/>').join('')}</svg>
-  <div class="hm-a hm-halo"></div>
-  <div class="hm-a hm-win"><div class="tb"><i></i><i></i><i></i><b>${S.win}</b><em>${S.live}</em></div></div>
-  ${S.head.map(h=>`<div class="hm-a hm-head">${h}</div>`).join('')}${S.meta.map(m=>`<div class="hm-a hm-meta">${m}</div>`).join('')}
-  ${S.th.map((h,k)=>`<div class="hm-a hm-th${k>3?' r':''}">${h}</div>`).join('')}
-  <div class="hm-a hm-seg"><i class="pill"></i>${S.win6.map(w=>`<span>${w}</span>`).join('')}</div><div class="hm-a hm-bars">${'<i><b></b><b></b><b></b></i>'.repeat(36)}</div><div class="hm-a hm-big"></div><div class="hm-a hm-unit"></div><div class="hm-a hm-rate"><b>6.1k</b> ${S.rate}</div>
-  <svg class="hm-a hm-chart"><line class="gl"/><line class="gl"/><line class="gl"/><text class="t0"></text><text class="t1" text-anchor="end">${S.now}</text></svg>
-  <div class="hm-a hm-leg">${['codex','claude','glm'].map(k=>`<span style="--c:${TOOL[k][1]}">${TOOL[k][0]}</span>`).join('')}</div>
-  <div class="hm-a hm-host"><div class="tb"><i></i><i></i><i></i><b>website — Cursor</b></div><div class="bd"><div class="tree">${[70,52,84,60,46,72].map(w=>`<i style="width:${w}%"></i>`).join('')}</div><div class="code">${[[38,'#9ab9ff'],[62,0],[54,0],[30,'#bd8965'],[72,0],[48,'#378d76'],[66,0],[40,0],[58,'#7c86bd'],[34,0]].map(([w,c])=>`<i style="width:${w}%;${c?`background:${c}66`:''}"></i>`).join('')}</div></div><div class="term"><b>Claude Code</b> › Build the landing page<br><em>●</em> Working · ${fmt(SESS[0].tok)} tokens</div></div>
-  <div class="hm-a hm-panel"><img class="hm-native-panel" src="${PANEL_IMG}" alt=""><i class="hm-rowhit"></i></div>
-  ${SESS.map(item).join('')}
-  ${S.hl.map(h=>`<div class="hm-a hm-hl"><span>${h}</span></div>`).join('')}
-  <div class="hm-a hm-mb">${S.apps.map((a,k)=>`<div class="lf"><i class="ap"></i><b>${a}</b>${S.menus[k].map(m=>`<span>${m}</span>`).join('')}</div>`).join('')}<i class="press"></i><i class="ic bt"></i><svg class="ic wf" viewBox="0 0 24 18" aria-hidden="true"><path d="M2 6.5a14.5 14.5 0 0 1 20 0M5.2 9.9a9.8 9.8 0 0 1 13.6 0M8.4 13.2a5.2 5.2 0 0 1 7.2 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.7" fill="currentColor"/></svg><svg class="ic sp" viewBox="0 0 18 18" aria-hidden="true"><circle cx="7.4" cy="7.4" r="5.6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M11.6 11.6l4.8 4.8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><svg class="ic cc" viewBox="0 0 20 17" aria-hidden="true"><rect x="1" y="1.2" width="18" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="15.8" cy="4.2" r="1.8" fill="currentColor"/><rect x="1" y="9.8" width="18" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="4.2" cy="12.8" r="1.8" fill="currentColor"/></svg><time><span>${S.clock[0]}</span>${S.clock[1]}</time></div>
-  <div class="hm-a hm-mark"><svg width="150" height="141" viewBox="0 0 806.8 759.5" aria-hidden="true"><defs><clipPath id="hmk${ver}"><rect x="-40" y="-40" height="840" width="0"/></clipPath></defs><g clip-path="url(#hmk${ver})"><path d="${MARK}"/></g></svg></div>
-  <div class="hm-a hm-ripple"></div><div class="hm-a"><div class="hm-toast" style="transform:translateX(-50%)"><i>↗</i>${S.toast}</div></div>
-  <svg class="hm-a hm-cursor" viewBox="0 0 26 34"><path d="M3 2v25l6.5-6 4.4 10.2 4.4-1.9-4.3-10H22z" fill="#fff" stroke="#0a0c0f" stroke-width="1.6" stroke-linejoin="round"/></svg>
- </div></div></div>
- <div class="hm-hud"><div class="hm-cap" aria-hidden="true"><i></i>${S.cap.map(c=>`<span>${c}</span>`).join('')}</div><div class="hm-ch">${S.ch.map(c=>`<button type="button" aria-label="${S.show}: ${c}">${c}<i><b></b></i></button>`).join('')}</div></div>`;
+ const mini=`<svg viewBox="0 0 64 36" aria-hidden="true"><path class="mt" d="M7 32 A25 25 0 0 1 57 32"/><path class="mv" d="M7 32 A25 25 0 0 1 57 32" pathLength="100" stroke-dasharray="0 100"/><line class="mn" x1="32" y1="32" x2="32" y2="12"/></svg>`;
+ const row=(s,i)=>{const [tn,c,l]=TOOL[s.tool];return `<div class="hx-row" style="--c:${c};--l:${l}"><div class="nm"><b><i></i>${s.id}${s.kids?`<u>${S.kids(s.kids)}</u>`:''}</b><span>${tn} · ${s.model}<em>${s.eff}</em></span></div><div class="eq">≈${s.eq.toFixed(2)}%</div><div class="mg">${mini}<span>${S.rate(s.burn.toFixed(2))}</span></div></div>`};
+ const card=(a,i)=>{const [tn,c,l]=TOOL[a.tool];return `<div class="hx-card" style="--c:${c};--l:${l}"><div class="h"><i></i>${tn}<em>${a.plan}</em><span>${S.who[a.who]}</span></div><div class="w"><strong>0%</strong><small>${S.used}</small></div><div class="bar"><s></s></div><div class="f"><span>${S.inc(a.inc.toFixed(2))}</span><span>${S.avg(a.burn.toFixed(2))}</span></div></div>`};
+ const digits=Array.from({length:9},(_,k)=>`${k&&k%3===0?'<em>,</em>':''}<i><span>${[0,1,2,3,4,5,6,7,8,9,0].map(d=>`<b>${d}</b>`).join('')}</span></i>`).join('');
+ root.classList.add('hx');root.classList.toggle('hx--capture',capture);root.setAttribute('role','group');root.setAttribute('aria-label',S.label);
+ root.innerHTML=`<div class="hx-stage"><div class="hx-canvas" aria-hidden="true"><div class="hx-glow"></div>
+  <div class="hx-desk"></div>
+  <div class="hx-host"><div class="tb"><i></i><i></i><i></i><b>${S.host}</b></div><div class="bd"><div class="tree">${[70,52,84,60,46,72,58].map(w=>`<i style="width:${w}%"></i>`).join('')}</div><div class="code">${[[38,'#69bda1'],[62,0],[54,0],[30,'#bd8965'],[72,0],[48,'#378d76'],[66,0],[40,0],[58,'#7c86bd'],[34,0],[52,0]].map(([w,c])=>`<i style="width:${w}%;${c?`background:${c}66`:''}"></i>`).join('')}</div></div><div class="term"><b>Claude Code</b> › ${S.term}<br><em>●</em> opus-5-5 · xhigh</div></div>
+  <div class="hx-cluster"><div class="hx-body"></div>
+   <div class="hx-tells">${S.tells.map((x,k)=>`<span class="tl t${k}" style="--c:${['#e3b796','#72d1b0','#aeb6ee','#e3b45a','#82edc6'][k]}"><i></i>${x}</span>`).join('')}</div>
+   <div class="hx-dial tach">${dialSVG('hxt'+ver,TACH,S.tach)}</div><div class="hx-dial speed">${dialSVG('hxs'+ver,SPEED,S.speed)}</div>
+   <div class="hx-mid"><div class="pg logo"><svg viewBox="0 0 806.8 759.5"><path d="${MARK}"/></svg><b>1top</b></div>
+    <div class="pg sess"><div class="ph"><b>${S.sess}</b><span>${S.span[HOUR]}</span></div>${SESS.map(row).join('')}</div>
+    <div class="pg flow"><div class="ph"><b>${S.flow}</b><span class="fs"></span></div><div class="big"><strong></strong><small>${S.odo}</small></div><div class="bars">${'<i><b></b><b></b><b></b></i>'.repeat(36)}</div><div class="leg">${['claude','codex','glm'].map(k=>`<span style="--c:${TOOL[k][1]}">${TOOL[k][0]}</span>`).join('')}</div></div>
+    <div class="pg acct"><div class="ph"><b>${S.acct}</b><span>${S.span[HOUR]}</span></div><div class="cards">${ACCT.map(card).join('')}</div></div></div>
+   <div class="hx-gear"><small>${S.gear}</small><div><i class="pill"></i>${S.win6.map(w=>`<span>${w}</span>`).join('')}</div></div>
+   <div class="hx-fuel"><small>${S.fuel}</small><div>${ACCT.map(a=>`<span style="--c:${TOOL[a.tool][1]};--l:${TOOL[a.tool][2]}"><i><s></s></i><b>${a.plan}</b></span>`).join('')}</div></div>
+   <div class="hx-odo"><small></small><div>${digits}</div></div>
+  </div>
+  <div class="hx-mb"><div class="lf"><svg class="ap" viewBox="0 0 17 20"><path d="M14.1 10.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9s-2-.9-3.4-.9C3.6 4.8 2 5.8 1.1 7.3c-1.8 3.2-.5 7.9 1.3 10.5.9 1.3 1.9 2.7 3.2 2.6 1.3 0 1.8-.8 3.3-.8s2 .8 3.4.8 2.2-1.3 3.1-2.6c1-1.5 1.4-2.9 1.4-3-.1 0-2.7-1-2.7-4.2zM11.5 3c.7-.8 1.2-2 1-3.1-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4z" fill="currentColor"/></svg><b>${S.apps}</b>${S.menus.map(m=>`<span>${m}</span>`).join('')}</div>
+   <div class="rt"><span class="st"><i class="press"></i><svg class="one" viewBox="0 0 24 18"><path d="M1.5 9h2.6l1.6-3.2 2.2 8.4 2.4-12.2 2.6 15.4 2.4-12 2.2 7.6 1.6-4h3.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span><svg class="ic" viewBox="0 0 24 18"><path d="M2 6.5a14.5 14.5 0 0 1 20 0M5.2 9.9a9.8 9.8 0 0 1 13.6 0M8.4 13.2a5.2 5.2 0 0 1 7.2 0" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1.7" fill="currentColor"/></svg><svg class="ic" viewBox="0 0 26 13"><rect x=".8" y=".8" width="21.5" height="11.4" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="2.8" y="2.8" width="15" height="7.4" rx="1.6" fill="currentColor"/><path d="M23.6 4.6v3.8c.9-.3 1.5-1.1 1.5-1.9s-.6-1.6-1.5-1.9z" fill="currentColor"/></svg><time><span>${S.clock[0]}</span>${S.clock[1]}</time></div></div>
+  <div class="hx-panel"><img src="${PANEL_IMG}" alt="">${PANEL_HL.map(()=>'<i></i>').join('')}</div>
+  <svg class="hx-cursor" viewBox="0 0 26 34"><path d="M3 2v25l6.5-6 4.4 10.2 4.4-1.9-4.3-10H22z" fill="#fff" stroke="#0a0c0f" stroke-width="1.6" stroke-linejoin="round"/></svg>
+ </div></div>
+ <div class="hx-hud"><div class="hx-cap" aria-hidden="true"><i></i>${S.cap.map(c=>`<span>${c}</span>`).join('')}</div><div class="hx-ch">${S.ch.map(c=>`<button type="button" aria-label="${S.show}: ${c}">${c}<i><b></b></i></button>`).join('')}</div></div>`;
 
  const q=s=>root.querySelector(s),qa=s=>[...root.querySelectorAll(s)];
- const E={stage:q('.hm-stage'),canvas:q('.hm-canvas'),world:q('.hm-world'),g1:q('.g1'),g2:q('.g2'),zones:qa('.hm-zone'),wires:q('.hm-wires'),paths:qa('.hm-wires path'),dots:qa('.hm-wires circle'),
-  halo:q('.hm-halo'),win:q('.hm-win'),tb:q('.hm-win .tb'),heads:qa('.hm-head'),metas:qa('.hm-meta'),th:qa('.hm-th'),hl:qa('.hm-hl'),seg:q('.hm-seg'),pill:q('.hm-seg .pill'),segs:qa('.hm-seg span'),
-  chartBars:q('.hm-bars'),bars:qa('.hm-bars i').map(b=>[...b.children]),big:q('.hm-big'),unit:q('.hm-unit'),rate:q('.hm-rate'),rateN:q('.hm-rate b'),chart:q('.hm-chart'),gl:qa('.hm-chart .gl'),t0:q('.hm-chart .t0'),t1:q('.hm-chart .t1'),leg:q('.hm-leg'),
-  desk:q('.hm-desk'),host:q('.hm-host'),panel:q('.hm-panel'),rowhit:q('.hm-rowhit'),apps:qa('.hm-mb .lf'),mb:q('.hm-mb'),press:q('.hm-mb .press'),mark:q('.hm-mark'),mpath:q('.hm-mark path'),mclip:q(`#hmk${ver} rect`),
-  ripple:q('.hm-ripple'),toast:q('.hm-toast').parentNode,cursor:q('.hm-cursor'),cap:q('.hm-cap'),capBg:q('.hm-cap>i'),caps:qa('.hm-cap span'),chs:qa('.hm-ch button'),fills:qa('.hm-ch b')};
- const IT=qa('.hm-item').map(el=>{const f={};for(const k of FIELDS)f[k]=el.querySelector('.f-'+k);return {el,f,bars:[...el.querySelectorAll('.f-wave i')],strong:el.querySelector('.cd-w strong'),fill:el.querySelector('.cd-t s'),line:el.querySelector('.cd-g .gl'),area:el.querySelector('.cd-g .ga'),inc:el.querySelector('.cd-i')}});
+ const dial=el=>({el,val:el.querySelector('.val'),nd:el.querySelector('.nd'),ticks:[...el.querySelectorAll('.tk line')],lb:el.querySelector('.lb'),read:el.querySelector('.hx-read b'),unit:el.querySelector('.hx-read small'),sub:el.querySelector('.hx-sub'),subDot:el.querySelector('.hx-sub i'),subTxt:el.querySelector('.hx-sub span'),dl:el.querySelector('.hx-dl')});
+ const E={stage:q('.hx-stage'),canvas:q('.hx-canvas'),glow:q('.hx-glow'),desk:q('.hx-desk'),host:q('.hx-host'),cluster:q('.hx-cluster'),body:q('.hx-body'),tells:qa('.hx-tells .tl'),tellBox:q('.hx-tells'),
+  tach:dial(q('.hx-dial.tach')),speed:dial(q('.hx-dial.speed')),mid:q('.hx-mid'),pages:Object.fromEntries(qa('.hx-mid .pg').map(p=>[p.classList[1],p])),
+  rows:qa('.hx-row').map(r=>({el:r,mv:r.querySelector('.mv'),mn:r.querySelector('.mn')})),fs:q('.flow .fs'),fbig:q('.flow .big strong'),bars:qa('.flow .bars i').map(b=>[...b.children]),
+  cards:qa('.hx-card').map(c=>({el:c,pct:c.querySelector('strong'),bar:c.querySelector('.bar s')})),
+  gear:q('.hx-gear'),pill:q('.hx-gear .pill'),gears:qa('.hx-gear span'),fuel:q('.hx-fuel'),fuels:qa('.hx-fuel span').map(s=>({el:s,f:s.querySelector('s')})),
+  odo:q('.hx-odo'),odoL:q('.hx-odo small'),odoD:qa('.hx-odo i').map(i=>i.firstElementChild).reverse(),odoC:qa('.hx-odo i').reverse(),
+  mb:q('.hx-mb'),press:q('.hx-mb .press'),icon:q('.hx-mb .one'),iconBox:q('.hx-mb .st'),panel:q('.hx-panel'),phl:qa('.hx-panel i'),cursor:q('.hx-cursor'),
+  cap:q('.hx-cap'),capBg:q('.hx-cap>i'),caps:qa('.hx-cap span'),chs:qa('.hx-ch button'),fills:qa('.hx-ch b')};
+ E.speed.unit.textContent=S.speedU;E.tach.unit.textContent=S.tachU;
 
  const css=(el,p,v)=>{const c=el._c||(el._c={});if(c[p]!==v){el.style[p]=v;c[p]=v}};
  const put=(el,x,y,s=1,o=1)=>{const op=o<.002?0:o>.998?1:+o.toFixed(3);css(el,'opacity',String(op));css(el,'visibility',op?'visible':'hidden');if(op)css(el,'transform',`translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0)${s!==1?` scale(${s.toFixed(4)})`:''}`)};
- const size=(el,w,h)=>{css(el,'width',w.toFixed(1)+'px');css(el,'height',h.toFixed(1)+'px')};
  const txt=(el,s)=>{if(el._x!==s){el.textContent=s;el._x=s}};
- let L=WIDE,TREE=[],now=0,capR=[];
+ let L=WIDE,now=0,capR=[],ix=0;
 
- const flash=(i,t)=>{const a=4.1+i*.06;return seg(t,a,a+.15)*(1-seg(t,a+.2,a+.9))};
- const gone=st=>({...st,r:[st.r[0]+st.r[2]*.2,st.r[1]+st.r[3]*.2,st.r[2]*.6,st.r[3]*.6],o:0});
- function lay(i,m,t){
-  const s=SESS[i];
-  if(m==='chip'){const [w,h]=L.chip,[x,y]=L.at[i],e=out3(seg(t,.25+i*.09,1.05+i*.09)),fy=7*Math.sin((t/5+i*.17)*6.283),fx=4*Math.sin((t/7+i*.29)*6.283);
-   return {r:[x+fx,y+fy+(1-e)*26,w,h],o:e,rad:16,bg:[17,21,26,1],bd:lerpA([255,255,255,.09],[130,237,198,.75],flash(i,t)),f:{dot:[18,25,1,1],tool:[36,15,1.04,1],app:[18,53,.9,.72],tok:[18,53,.95,1],wave:[18,18,1,1]}}}
-  if(m==='row'){const [x,y,w,h,g]=L.row;
-   return {r:[x,y+i*g,w,h],o:1,rad:12,bg:[19,23,28,1],bd:[255,255,255,.05],f:L.n?{name:[18,12,1.04,1],app:[18,41,.88,.75],dot:[250,19,1,1],tool:[268,12,1,1],model:[268,41,1,1],eq:[18,12,1.06,1],tok:[18,42,.9,.8]}
-    :{name:[24,10,1,1],desc:[24,36,1,1],dot:[292,27,1,1],tool:[310,10,1,1],model:[310,36,1,1],app:[540,10,1,1],pc:[540,36,1,1],status:[760,16,1,1],eq:[210,9,1,1],burn:[210,38,1,1],tok:[24,20,1.04,1]}}}
-  if(m==='compact'){const r=L.compact(i),c=r[3]/2;return {r,o:1,rad:12,bg:[21,25,30,1],bd:[255,255,255,.08],f:{dot:[16,c-5,1,1],name:[34,c-12,.95,1],tok:[16,c-12,.95,1]}}}
-  if(m==='tile'){const r=TREE[i],c=hex(TOOL[s.tool][1]),roomy=r[3]>150&&r[2]>170;
-   return {r,o:1,rad:14,bg:[...lerpA([14,17,21],c,.2),1],bd:[...c,.62],f:{name:[18,16,1.04,1,(r[2]-30)/1.04],pct:[18,46,r[2]<130?.6:r[2]<220?.8:1,1],...(r[2]>190?{tok:[16,18,.88,.75]}:{}),...(roomy?{dot:[18,r[3]-30,1,1],tool:[36,r[3]-39,.85,.8]}:{})}}}
-  if(i>3)return gone(lay(i,'tile',t));
-  if(m==='card')return {r:L.card(i),o:1,rad:16,bg:[19,23,28,1],bd:[255,255,255,.09],f:{card:[0,0,1,1]}};
-  // Account cards shrink into the menu-bar icon; the panel that opens there shows the same accounts.
-  const [x,y,w,h]=L.card(i),k=.55,ax=L.icon,ay=L.mbh/2;return {r:[ax+(x-ax)*k,ay+(y-ay)*k,w*k,h*k],o:0,rad:16*k,bg:[19,23,28,1],bd:[255,255,255,.09],f:{card:[0,0,k,0]}};
- }
- function mix(A,B,p){
-  const f={};
-  for(const k in A.f){const a=A.f[k],b=B.f[k];f[k]=b?[lerp(a[0],b[0],p),lerp(a[1],b[1],p),lerp(a[2],b[2],p),lerp(a[3],b[3],p),p<.5?a[4]:b[4]]:[a[0],a[1],a[2],a[3]*(1-seg(p,0,k==='card'?.22:.4))]}
-  for(const k in B.f)if(!A.f[k]){const b=B.f[k];f[k]=[b[0],b[1],b[2],b[3]*seg(p,k==='card'?.45:.6,1)]}
-  return {r:lerpA(A.r,B.r,p),o:lerp(A.o,B.o,p),rad:lerp(A.rad,B.rad,p),bg:lerpA(A.bg,B.bg,p),bd:lerpA(A.bd,B.bd,p),f};
- }
- // [mode, start, duration, stagger per item]
- const MODES=[['chip',0,0],['row',4.6,1],['compact',9.6,.8],['tile',13.1,.85],['card',16,.8],['tuck',19.3,.45,.02]];
- function itemAt(i,t){
-  const at=j=>MODES[j][1]+i*(MODES[j][3]??.055);let k=0;for(let j=1;j<MODES.length;j++)if(t>=at(j))k=j;
-  const B=lay(i,MODES[k][0],t);if(!k)return B;
-  const p=io3(seg(t,at(k),at(k)+MODES[k][2]));
-  return p>=1?B:mix(lay(i,MODES[k-1][0],t),B,p);
- }
- function drawItem(it,st){
-  const [x,y,w,h]=st.r;put(it.el,x,y,1,st.o);if(st.o<.002)return;
-  size(it.el,w,h);css(it.el,'borderRadius',st.rad.toFixed(1)+'px');css(it.el,'background',rgba(st.bg));css(it.el,'borderColor',rgba(st.bd));
-  for(const k of FIELDS){const fe=it.f[k];if(!fe)continue;const v=st.f[k];if(!v){put(fe,0,0,1,0);continue}put(fe,RIGHT.has(k)?-v[0]:v[0],v[1],v[2],v[3]);if(k==='name')css(fe,'maxWidth',v[4]?v[4].toFixed(0)+'px':'none')}
- }
-
- function applyLayout(next){
-  L=next;const {W,H}=L;root.classList.toggle('hm--narrow',!!L.n);
-  size(E.canvas,W,H);E.wires.setAttribute('width',W);E.wires.setAttribute('height',H);E.wires.setAttribute('viewBox',`0 0 ${W} ${H}`);
-  TREE=squarify(SESS.map((s,i)=>({i,v:s.tok})).sort((a,b)=>b.v-a.v),L.tree);
-  E.metas.forEach(m=>{css(m,'left','auto');css(m,'right',W-L.meta+'px')});
-  E.th.forEach((el,k)=>{const p=L.th[k];if(p&&p[2]){css(el,'left','auto');css(el,'right',W-p[0]+'px')}});
-  css(E.rate,'left','auto');css(E.rate,'right',W-L.rate[0]+'px');
-  const [,,sw,sh]=L.seg;E.segs.forEach(s=>size(s,sw,sh-8));size(E.pill,sw,sh-8);
-  const [,,cw,ch]=L.chart;E.chart.setAttribute('width',cw);E.chart.setAttribute('height',ch+30);E.chart.setAttribute('viewBox',`0 0 ${cw} ${ch+30}`);
-  E.gl.forEach((g,k)=>{const y=(ch*(k+1)/4).toFixed(1);g.setAttribute('x1',0);g.setAttribute('x2',cw);g.setAttribute('y1',y);g.setAttribute('y2',y)});
-  E.t0.setAttribute('x',0);E.t0.setAttribute('y',ch+26);E.t1.setAttribute('x',cw);E.t1.setAttribute('y',ch+26);
-  size(E.desk,W,H);size(E.mb,W,L.mbh);E.apps.forEach(g=>g.querySelectorAll('span').forEach((s,k)=>{s.style.display=k<L.menuN?'':'none'}));
-  E.press.style.left=L.icon+'px';E.mb.querySelectorAll('.ic').forEach((el,k)=>{el.style.display=L.sys[k]?'':'none';el.style.left=L.icon+L.sys[k]+'px'});E.mb.querySelector('time span').style.display=L.date?'':'none';
-  const P=L.panel;size(E.panel,P[2],P[3]);css(E.rowhit,'left',(HIT[0]*100)+'%');css(E.rowhit,'top',(HIT[1]*100)+'%');css(E.rowhit,'width',(HIT[2]*100)+'%');css(E.rowhit,'height',(HIT[3]*100)+'%');
-  size(E.host,L.host[2],L.host[3]);IT.slice(0,4).forEach((it,i)=>{const c=L.card(i);size(it.f.card,c[2],c[3])});
+ function applyLayout(n){
+  L=n;const {W,H}=L;root.classList.toggle('hx--narrow',!!L.n);
+  for(const el of [E.canvas,E.desk])css(el,'width',W+'px'),css(el,'height',H+'px');
+  const [bx,by,bw,bh]=L.body;css(E.body,'left',bx+'px');css(E.body,'top',by+'px');css(E.body,'width',bw+'px');css(E.body,'height',bh+'px');
+  css(E.mb,'width',W+'px');css(E.mb,'height',L.mbh+'px');
+  const [,,pw,ph]=L.panel(PANEL_ASPECT,0);css(E.panel,'width',pw+'px');css(E.panel,'height',ph+'px');
+  PANEL_HL.forEach(([x,y,w,h],k)=>{const b=E.phl[k];css(b,'left',x*100+'%');css(b,'top',y*100+'%');css(b,'width',w*100+'%');css(b,'height',h*100+'%')});
+  if(L.host){css(E.host,'width',L.host[2]+'px');css(E.host,'height',L.host[3]+'px')}
   fit();
  }
- function fit(){const w=root.clientWidth||L.W;css(E.canvas,'transform',`scale(${(w/L.W).toFixed(5)})`);css(E.stage,'aspectRatio',`${L.W}/${L.H}`);if(capture)css(q('.hm-hud'),'zoom',(w/L.W).toFixed(4));measureCaps()}
- // Caption widths as a share of the caption row; ratios stay correct under the capture zoom.
+ function fit(){const w=root.clientWidth||L.W;css(E.canvas,'transform','none');const c=E.canvas.getBoundingClientRect(),r=E.iconBox.getBoundingClientRect();ix=r.width?r.left+r.width/2-c.left:L.W-200;css(E.canvas,'transform',`scale(${(w/L.W).toFixed(5)})`);css(E.stage,'aspectRatio',`${L.W}/${L.H}`);if(capture)css(q('.hx-hud'),'zoom',(w/L.W).toFixed(4));measureCaps()}
  function measureCaps(){const w=E.cap.getBoundingClientRect().width;capR=w?E.caps.map(c=>c.getBoundingClientRect().width/w):[]}
+
+ // Dial state: needle value, lit ticks (the ignition sweep and power-down), value arc and readout.
+ function drawDial(D,g,v,lit,color,read,sub,subColor){
+  const f=clamp(v/g.max);css(D.nd,'transform',`rotate(${(135+270*f).toFixed(2)}deg)`);D.val.setAttribute('stroke-dasharray',`${(270*f).toFixed(2)} 360`);css(D.val,'stroke',color);css(D.nd,'fill',color);
+  const n=D.ticks.length-1;D.ticks.forEach((k,i)=>{const on=clamp((lit*(n+4)-i)/4),under=i/n<=f+1e-4;css(k,'opacity',(on*(under?1:.42)).toFixed(3));css(k,'stroke',under?color:'#c9d2d6')});
+  css(D.lb,'opacity',lit.toFixed(3));txt(D.read,read);css(D.read.parentNode,'opacity',clamp(lit*1.6-.4).toFixed(3));
+  if(sub!==undefined){txt(D.subTxt,sub);css(D.subDot,'background',subColor)}
+ }
 
  function render(t){
   t=((t%T)+T)%T;now=t;const {W,H}=L;
-  const outP=io3(seg(t,23.25,23.95));put(E.world,0,0,1-.03*outP,1-outP);
-  put(E.g1,W*(.3+.06*Math.sin(t*.26)),H*(.42+.05*Math.cos(t*.21)));put(E.g2,W*(.72+.05*Math.cos(t*.23)),H*(.52+.06*Math.sin(t*.19)));
-  E.zones.forEach((z,k)=>{const [x,y,w,h]=L.zones[k];put(z,x,y+(1-out3(seg(t,0,.8)))*12,1,fade(t,.05+k*.12,3.75,.6,.6));size(z,w,h)});
+  // Ignition: body warms up, ticks light in a sweep, needles self-test to full scale and settle. Power-down mirrors it.
+  const on=Math.min(seg(t,.15,1.25),1-seg(t,26.5,27.5)),warm=Math.min(io3(seg(t,0,.9)),1-io3(seg(t,27.1,28)));
+  put(E.glow,W/2,H*.47,1,.35+.65*warm);
+  const sweep=t<2.7?Math.min(io3(seg(t,.55,1.35)),1-out3(seg(t,1.5,2.6))):0;
 
-  // Wires: each session reports into the 1top mark.
-  const [mx,my]=L.mark,wireOn=t>3.2&&t<4.9;
-  for(let i=0;i<6;i++){
-   const path=E.paths[i],d=i*.06;
-   if(!wireOn){css(path,'opacity','0');for(let k=0;k<3;k++)css(E.dots[i*3+k],'opacity','0');continue}
-   const [x,y,w,h]=lay(i,'chip',t).r;let ax,ay,c1,c2;
-   if(L.n){ax=x+w/2;ay=y+h/2<my?y+h:y;c1=[ax,lerp(ay,my,.6)];c2=[mx,lerp(ay,my,.4)]}else{ax=x+w/2<mx?x+w:x;ay=y+h/2;c1=[lerp(ax,mx,.6),ay];c2=[lerp(ax,mx,.4),my]}
-   path.setAttribute('d',`M${ax.toFixed(1)} ${ay.toFixed(1)}C${c1[0].toFixed(1)} ${c1[1].toFixed(1)} ${c2[0].toFixed(1)} ${c2[1].toFixed(1)} ${mx} ${my}`);
-   css(path,'strokeDashoffset',(1-io3(seg(t,3.3+d,4.15+d))).toFixed(4));css(path,'opacity',((1-seg(t,4.5,4.85))*.85).toFixed(3));
-   const env=seg(t,3.85+d,4.05+d)*(1-seg(t,4.45,4.8));
-   for(let k=0;k<3;k++){const u=(((t-3.85-d)*.85+k/3)%1+1)%1,v=1-u,dot=E.dots[i*3+k];
-    dot.setAttribute('cx',(v*v*v*ax+3*v*v*u*c1[0]+3*v*u*u*c2[0]+u*u*u*mx).toFixed(1));dot.setAttribute('cy',(v*v*v*ay+3*v*v*u*c1[1]+3*v*u*u*c2[1]+u*u*u*my).toFixed(1));css(dot,'opacity',(env*Math.sin(Math.PI*u)).toFixed(3))}
-  }
+  // Menu bar: the cluster folds into its status icon, the panel opens beneath it, then the cluster unfolds again.
+  const fold=io3(seg(t,10.05,10.8))*(1-io3(seg(t,15.15,15.9))),desk=Math.min(io3(seg(t,10,10.6)),1-io3(seg(t,15.35,16)));
+  const iy=L.mbh/2,sc=lerp(1,.012,fold);
+  put(E.cluster,ix*(1-sc),iy*(1-sc),sc,1-seg(fold,.75,1));
+  put(E.desk,0,0,1,desk);put(E.mb,0,lerp(-10,0,desk),1,desk);
+  if(L.host){const h=fade(t,10.25,15.7,.5,.4);put(E.host,L.host[0],L.host[1]+(1-h)*12,1,h)}else put(E.host,0,0,1,0);
+  const [px,py,pw,ph]=L.panel(PANEL_ASPECT,ix),po=out3(seg(t,11.62,11.86))*(1-io3(seg(t,14.95,15.2)));
+  put(E.panel,px,py-10*(1-out3(seg(t,11.62,11.86))),1,po);
+  PANEL_HL.forEach((_,k)=>{const a=12.25+k*1.35,o=fade(t,a,a+1.25,.25,.25);css(E.phl[k],'opacity',o.toFixed(3))});
+  css(E.press,'opacity',(seg(t,11.5,11.56)*(1-seg(t,14.95,15.1))).toFixed(3));
+  css(E.icon,'transform',`scale(${(1+.35*Math.sin(Math.PI*seg(t,10.72,11.05))).toFixed(3)})`);
+  const m1=io3(seg(t,10.85,11.45)),m2=io3(seg(t,11.95,12.5)),m3=io3(seg(t,13.4,13.95)),pr=Math.sin(Math.PI*seg(t,11.45,11.6));
+  const tg=k=>{const [x,y,w,h]=PANEL_HL[k];return [px+pw*(x+w*.72),py+ph*(y+h*.45)]},[ax,ay]=tg(0),[bx,by]=tg(1);
+  let cx=lerp(L.cur[0],ix-4,m1)+40*Math.sin(Math.PI*m1),cy=lerp(L.cur[1],iy-2,m1);cx=lerp(cx,ax,m2);cy=lerp(cy,ay,m2);cx=lerp(cx,bx,m3);cy=lerp(cy,by,m3);
+  put(E.cursor,cx,cy,1-.14*pr,out3(seg(t,10.8,11))*(1-seg(t,14.7,15)));
 
-  // The mark grows, docks in the title bar, then becomes the menu-bar icon.
-  const dock=io3(seg(t,4.6,5.4)),mbar=io3(seg(t,19.3,19.85)),Wr=L.win;
-  let x=lerp(mx,Wr[0]+96,dock),y=lerp(my,Wr[1]+23,dock),s=lerp(1,.156,dock);x=lerp(x,L.icon,mbar);y=lerp(y,L.mbh/2,mbar);s=lerp(s,L.n?.15:.128,mbar);
-  put(E.mark,x,y,s,seg(t,3.05,3.15));
-  // The mark is traced in from left to right, rises from the baseline and breathes until it docks.
-  {const rise=out3(seg(t,3.1,3.75)),live=1+.05*Math.sin(t*5.2)*(1-dock);E.mclip.setAttribute('width',(890*io3(seg(t,3.05,3.6))).toFixed(1));E.mpath.setAttribute('transform',`translate(0 ${(412*(1-(.2+.8*rise)*live)).toFixed(2)}) scale(1 ${((.2+.8*rise)*live).toFixed(4)})`);css(E.mpath,'fill',rgba([...lerpA([110,204,168],[255,255,255],mbar),1]))}
-  const ho=out3(seg(t,3.2,3.8))*(1-seg(t,4.5,5));put(E.halo,mx,my,.85+.15*ho+.03*Math.sin(t*3),ho);
+  // Tell-tales: everything lights at ignition, then only live states stay on.
+  const [tx,ty]=L.tells;put(E.tellBox,tx,ty,1,1);
+  E.tells.forEach((el,k)=>{const test=seg(t,.3+k*.06,.45+k*.06)*(1-seg(t,1.7,2)),live=seg(t,2+k*.08,2.3+k*.08)*(1-seg(t,26.4+k*.05,26.8+k*.05)),blink=k===3?.75+.25*Math.cos(t*4):1;
+   css(el,'opacity',(.16+.84*Math.max(test,live*blink)).toFixed(3));el.classList.toggle('lit',Math.max(test,live)>.5)});
 
-  // The window grows out of the mark and later shrinks toward the menu-bar icon with the account cards while the desktop shows through.
-  const grow=expo(seg(t,4.75,5.55)),fold=io3(seg(t,19.3,19.75)),ax=L.icon,ay=L.mbh/2;
-  const wr=lerpA(lerpA([mx-90,my-60,180,120],Wr,grow),[ax+(Wr[0]-ax)*.55,ay+(Wr[1]-ay)*.55,Wr[2]*.55,Wr[3]*.55],fold);
-  put(E.win,wr[0],wr[1],1,out3(seg(t,4.75,5))*(1-seg(t,19.3,19.7)));size(E.win,wr[2],wr[3]);css(E.tb,'opacity',(seg(t,5.1,5.5)*(1-seg(t,19.3,19.55))).toFixed(3));
+  // Speedometer subject and needle.
+  const [,kind,idx]=at(t,SUBJ),subj=kind==='s'?SESS[idx]:ACCT[idx],tool=TOOL[subj.tool];
+  const keys=SUBJ.map(([k,kd,i])=>[k,(kd==='s'?SESS[i]:ACCT[i]).burn]),live=(a,b)=>.014*Math.sin(t*a)+.008*Math.sin(t*b+1);
+  let sv=track(t,keys,.8)+live(2.1,5.3)*on;sv=lerp(sv,SPEED.max,sweep);sv*=t>26.4?1-io3(seg(t,26.4,27.4)):1;sv*=t<1.4?seg(t,.5,.55):1;
+  const subLabel=kind==='s'?`${subj.id} · ${tool[0]}`:`${tool[0]} · ${subj.plan}`;
+  const [sx,sy,ss]=L.speed;put(E.speed.el,sx-170*ss,sy-170*ss,ss,.4+.6*warm);
+  drawDial(E.speed,SPEED,sv,on,tool[2],t<2.4?(sv).toFixed(2):Math.max(0,sv).toFixed(2),subLabel,tool[1]);
+  css(E.speed.sub,'opacity',(on*seg(t,2.2,2.6)).toFixed(3));
+  // Tachometer: all tools' tokens per second can be added together.
+  let tv=(6.1+.35*Math.sin(t*2.3)+.2*Math.sin(t*5.1+.7))*seg(t,2.3,2.9);tv=Math.max(tv,lerp(0,TACH.max,sweep));tv*=t>26.4?1-io3(seg(t,26.4,27.4)):1;
+  const [hx,hy,hs]=L.tach;put(E.tach.el,hx-170*hs,hy-170*hs,hs,.4+.6*warm);
+  drawDial(E.tach,TACH,tv,on,'#82edc6',tv.toFixed(1));css(E.tach.sub,'opacity','0');
 
-  [[5.4,9.75],[9.75,13.15],[13.15,16.1],[16.1,19.4]].forEach(([a,b],k)=>{const o=fade(t,a,b,.4,.3);put(E.heads[k],L.head[0],L.head[1]+(1-o)*8,1,o)});
-  [[5.6,9.75],[13.3,16.1],[16.3,19.4]].forEach(([a,b],k)=>{const o=fade(t,a,b,.4,.3);put(E.metas[k],0,L.head[1]+8+(1-o)*8,1,o)});
-  E.th.forEach((el,k)=>{const p=L.th[k];if(!p)return put(el,0,0,1,0);
-   if(!k&&L.thD){const m=io3(seg(t,9.6,10.4));put(el,lerp(p[0],L.thD[0],m),lerp(p[1],L.thD[1],m),1,fade(t,5.45,13.15,.4,.3))}
-   else put(el,p[2]?0:p[0],p[1],1,fade(t,5.45,9.75,.4,.3))});
-  E.hl.forEach((el,k)=>{const [x,y,w,h]=L.hl[k],o=k?fade(t,7.95,9.5,.3,.3):fade(t,6.35,7.95,.3,.3);put(el,x,y+(1-o)*6,1,o);size(el,w,h)});
-
-  for(let i=0;i<6;i++){const it=IT[i];drawItem(it,itemAt(i,t));txt(it.f.tok,fmt(tokAt(i,t)));
-   if(t<5.8)it.bars.forEach((b,k)=>css(b,'height',(SESS[i].st===1?6+12*Math.abs(Math.sin(t*(5+i*.7)+k*1.3+i)):SESS[i].st?5:3).toFixed(1)+'px'));
-   // Weekly cards count up to the reported percentage while the last hour's line draws in.
-   if(i<4&&t>15.9&&t<20){const a=ACCT[i],p=out3(seg(t,16.7+i*.12,17.7+i*.12)),q=io3(seg(t,16.9+i*.12,18.1+i*.12));txt(it.strong,Math.round(a.week*p)+'%');css(it.fill,'width',(a.week*p).toFixed(2)+'%');
-    css(it.line,'strokeDashoffset',(1-q).toFixed(4));css(it.area,'opacity',(q*.9).toFixed(3));css(it.inc,'opacity',seg(t,17.4+i*.12,17.8+i*.12).toFixed(3))}}
-
-  // Usage scene: the selected window drives the big number, the stacked token flow and every row.
-  const uo=fade(t,9.95,13.2,.5,.35);
-  if(uo>0){
-   const w=pickAt(t),tot=lerp(TOTAL[w.a],TOTAL[w.b],w.p),[sx,sy,sw,sh]=L.seg;
-   put(E.seg,sx,sy+(1-uo)*10,1,uo);size(E.seg,sw*6+8+10,sh);css(E.pill,'transform',`translateX(${(4+lerp(w.a,w.b,w.p)*(sw+2)).toFixed(2)}px)`);
-   E.segs.forEach((s,k)=>css(s,'color',k===w.b?'#e9fbf4':'#8a9199'));
-   put(E.big,L.big[0],L.big[1]+(1-uo)*14,1,uo);txt(E.big,fmt(tot));put(E.unit,L.unit[0],L.unit[1]+(1-uo)*14,1,uo);txt(E.unit,S.unit(S.span[w.b]));
-   put(E.rate,0,L.rate[1]+(1-uo)*14,1,uo*seg(t,10.3,10.8));txt(E.rateN,((6100+180*Math.sin(t*2.3))/1000).toFixed(1)+'k');
-   const [cx,cy,cw,ch]=L.chart,D=Math.exp(lerp(Math.log(SPAN[w.a]),Math.log(SPAN[w.b]),w.p)),ym=lerp(YMAX[w.a],YMAX[w.b],w.p),he=24+t/60;
-   put(E.chart,cx,cy+(1-uo)*14,1,uo);put(E.chartBars,cx,cy+(1-uo)*14,1,uo);size(E.chartBars,cw,ch);
-   E.bars.forEach((b,j)=>{const h=he-D+D*j/35,v=Math.min(1,rate(h,D/36)/ym)*94*out3(seg(t,10.05+j*.018,10.45+j*.018)),sh=share(h);b.forEach((x,k)=>css(x,'height',(v*sh[k]).toFixed(2)+'%'))});
-   if(L.leg)put(E.leg,L.leg[0],L.leg[1]+(1-uo)*14,1,uo*seg(t,10.5,10.9));else put(E.leg,0,0,1,0);
-   txt(E.t0,S.ago[w.b]);
-  }else[E.seg,E.big,E.unit,E.rate,E.chart,E.chartBars,E.leg].forEach(el=>put(el,0,0,1,0));
-
-  // Desktop: the wallpaper and menu bar appear, the pointer clicks the 1top icon, its panel opens under it,
-  // and opening a session closes the panel and brings Cursor forward (the menu bar switches from Finder to Cursor).
-  const P=L.panel,ix=L.icon-2,iy=L.mbh/2-2,tx=P[0]+P[2]*OPEN[0],ty=P[1]+P[3]*OPEN[1];
-  put(E.desk,0,0,1,io3(seg(t,19.3,19.8)));
-  const mo=io3(seg(t,19.3,19.75)),sw=seg(t,21.74,21.86);put(E.mb,0,lerp(-12,0,mo),1,mo);css(E.apps[0],'opacity',(1-sw).toFixed(3));css(E.apps[1],'opacity',sw.toFixed(3));
-  css(E.press,'opacity',(seg(t,20.5,20.56)*(1-seg(t,21.8,21.95))).toFixed(3));
-  const po=out3(seg(t,20.52,20.74))*(1-io3(seg(t,21.8,21.96)));put(E.panel,P[0],P[1]-8*(1-out3(seg(t,20.52,20.74))),1,po);
-  css(E.rowhit,'opacity',seg(t,21.36,21.5).toFixed(3));
-  const lit=out3(seg(t,21.74,21.95)),hb=Math.sin(Math.PI*seg(t,21.74,22.3));
-  const hi=out3(seg(t,19.55,20));put(E.host,L.host[0],L.host[1]+(1-hi)*10,1+.012*hb,hi);E.host.classList.toggle('lit',lit>.5);
-  css(E.host,'borderColor',rgba(lerpA([38,43,49,1],[130,237,198,.7],lit*(1-seg(t,22.6,23.2)))));css(E.host,'boxShadow',`0 30px 70px -24px rgba(0,0,0,.7),0 0 ${(40*lit).toFixed(0)}px -10px rgba(130,237,198,${(.35*lit).toFixed(3)})`);
-  const m1=io3(seg(t,19.95,20.45)),m2=io3(seg(t,20.82,21.42)),press=Math.sin(Math.PI*seg(t,20.46,20.6))+Math.sin(Math.PI*seg(t,21.55,21.7));
-  const cx=lerp(lerp(L.cur[0],ix,m1)+40*Math.sin(Math.PI*m1),tx,m2)-30*Math.sin(Math.PI*m2),cy=lerp(lerp(L.cur[1],iy,m1),ty,m2);
-  put(E.cursor,cx,cy,1-.14*press,out3(seg(t,19.85,20.05))*(1-seg(t,22.5,22.9)));
-  const rp=seg(t,21.58,21.92);put(E.ripple,tx,ty,.3+.9*out3(rp),t>21.58?1-rp:0);
-  const to=fade(t,21.95,23.1,.3,.35);put(E.toast,L.toast[0],L.toast[1]-(1-to)*10,.96+.04*to,to);
+  // Centre display pages.
+  const [mx,my,ms]=L.mid;put(E.mid,mx,my,ms,1);
+  const pv={logo:fade(t,.45,2.55,.45,.35),sess:fade(t,2.55,10.85,.45,.05),flow:fade(t,15.2,20.65,.05,.3),acct:fade(t,20.6,26.6,.45,.4)};
+  for(const k in pv)put(E.pages[k],0,(1-out3(Math.min(1,pv[k]*1.4)))*8,1,pv[k]);
+  if(pv.sess)E.rows.forEach((r,i)=>{const s=SESS[i],hi=kind==='s'&&idx===i?1:0,f=clamp((s.burn+live(2.7+i,4.1+i)*1.5)/2)*seg(t,2.8+i*.12,3.5+i*.12);r.el.classList.toggle('on',!!hi);
+   r.mv.setAttribute('stroke-dasharray',`${(100*f).toFixed(1)} 100`);css(r.mn,'transform',`rotate(${(-90+180*f).toFixed(1)}deg)`);put(r.el,0,i*64+(1-out3(seg(t,2.7+i*.1,3.3+i*.1)))*10,1,out3(seg(t,2.7+i*.1,3.3+i*.1)))});
+  // The gear: pill slides between periods; the odometer rolls to the period total.
+  const gi=track(t,GEAR,.5,io3),gk=at(t,GEAR)[1],tot=Math.exp(track(t,GEAR.map(([k,i])=>[k,Math.log(TOTAL[i])]),.8,io3));
+  const [gx,gy]=L.gear;put(E.gear,gx,gy,1,on);css(E.pill,'transform',`translateX(${(gi*100).toFixed(2)}%)`);E.gears.forEach((s,k)=>s.classList.toggle('on',k===gk));txt(E.gears[CUSTOM],gk===CUSTOM?S.cust:S.win6[CUSTOM]);
+  if(pv.flow){txt(E.fs,S.span[gk]);txt(E.fbig,fmtM(tot));const a=at(t,GEAR),pa=GEAR[Math.max(0,GEAR.indexOf(a)-1)][1];
+   E.bars.forEach((b,j)=>{const p=io3(seg(t,a[0]+j*.012,a[0]+.45+j*.012)),grow=out3(seg(t,15.6+j*.015,16.1+j*.015));b.forEach((x,k)=>css(x,'height',(92*grow*lerp(BARS[pa][j][k],BARS[gk][j][k],p)).toFixed(2)+'%'))})}
+  if(pv.acct)E.cards.forEach((c,i)=>{const a=ACCT[i],g=out3(seg(t,20.75+i*.1,21.75+i*.1));txt(c.pct,Math.round(a.week*g)+'%');css(c.bar,'transform',`scaleX(${(a.week/100*g).toFixed(4)})`);c.el.classList.toggle('on',kind==='a'&&idx===i)});
+  if(L.odo){const [ox,oy]=L.odo;put(E.odo,ox,oy,1,on);txt(E.odoL,`${S.odo} · ${S.span[gk]}`);
+   const n=tot*1000+6100*Math.max(0,t-2.6)*(t<16||t>20.5?1:0);
+   E.odoD.forEach((d,k)=>{const p=10**k,lower=(n%p)/p,pos=Math.floor(n/p)%10+(k?clamp((lower-1+1/p)*p):0);css(d,'transform',`translateY(${(-pos*9.0909).toFixed(3)}%)`);E.odoC[k].classList.toggle('lead',p>n)})}else put(E.odo,0,0,1,0);
+  if(L.fuel){const [fx,fy]=L.fuel;put(E.fuel,fx,fy,1,on);E.fuels.forEach((f,i)=>{const g=out3(seg(t,1.1+i*.12,2.2+i*.12))*(1-io3(seg(t,26.5,27.3)));css(f.f,'transform',`scaleY(${((100-ACCT[i].week)/100*g).toFixed(4)})`);f.el.classList.toggle('on',kind==='a'&&idx===i)})}else put(E.fuel,0,0,1,0);
+  put(E.body,0,0,1,.55+.45*warm);
 
   if(capR.length){const k=CAP.findIndex((a,j)=>t>=a&&t<CAP[j+1]),b=CAP[k+1],r=lerp(capR[k],capR[(k+1)%capR.length],io3(seg(t,b-.34,b)));css(E.capBg,'width',(r*100).toFixed(3)+'%')}
   E.caps.forEach((c,k)=>{const a=CAP[k],b=CAP[k+1],i=out3(seg(t,a+.12,a+.5)),o=io3(seg(t,b-.32,b)),v=Math.min(i,1-o);css(c,'opacity',v.toFixed(3));css(c,'transform',`translateY(${((1-i)*8-o*8).toFixed(2)}px)`)});
@@ -294,7 +221,7 @@ export function mountHeroMotion(root,{lang='en',capture=false}={}){
  E.chs.forEach((b,k)=>b.addEventListener('click',()=>pick(k)));
  const ro=new ResizeObserver(()=>{const n=(root.clientWidth||1280)<560?NARROW:WIDE;n!==L?applyLayout(n):fit();render(clock)});
  // Font swaps change caption widths after mount.
- const cro=new ResizeObserver(()=>{measureCaps();render(now)});E.caps.forEach(c=>cro.observe(c));
+ const cro=new ResizeObserver(()=>{fit();render(now)});E.caps.forEach(c=>cro.observe(c));
  const io=new IntersectionObserver(es=>{visible=es[0].isIntersecting;sync()},{threshold:.05});
  const mo=host&&new MutationObserver(()=>{pageHold=host.classList.contains('motion-paused');sync()});
  const motion=()=>{if(reduce.matches){clock=REP[0];render(clock)}sync()};
