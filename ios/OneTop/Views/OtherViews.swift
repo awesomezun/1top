@@ -19,8 +19,8 @@ struct SessionsView: View {
             List {
                 Section {
                     ConnectionNotice().listRowInsets(.init()).listRowBackground(Color.clear)
-                    Picker(L.t("Period", "기간"), selection: $model.period) { ForEach(Period.allCases) { Text($0.label).tag($0) } }
-                        .pickerStyle(.segmented).listRowBackground(Color.clear).listRowInsets(.init())
+                    GlassSegments.periods($model.period)
+                        .listRowBackground(Color.clear).listRowInsets(.init())
                     HStack(spacing: 28) {
                         stat("\(model.allSessions.count)", L.t("sessions", "세션"), .primary)
                         stat("\(model.allSessions.filter(model.isWorking).count)", L.t("working", "작업 중"), .primary, glyph: true)
@@ -245,8 +245,12 @@ struct SettingsView: View {
                     }
                 }
                 RelaySettings()
-                Section(L.t("Language", "언어")) {
+                // The same choices as the dashboard's theme and language menu, stored in the same place.
+                Section(L.t("Theme and language", "테마와 언어")) {
+                    Picker(L.t("Theme", "테마"), selection: $model.appearance) { ForEach(Appearance.allCases) { Text($0.label).tag($0) } }
+                        .accessibilityIdentifier("settings-theme")
                     Picker(L.t("Language", "언어"), selection: $model.language) { ForEach(Language.allCases) { Text($0.name).tag($0) } }
+                        .accessibilityIdentifier("settings-language")
                 }
                 Section {
                     Link(L.t("Get the desktop app ↗", "데스크톱 앱 다운로드 ↗"), destination: URL(string: "https://1top.si/#download")!)
@@ -286,5 +290,7 @@ struct SettingsView: View {
                 if model.selectedDeviceID == device?.id { Image(systemName: "checkmark").foregroundStyle(Color.mint1top) }
             }
         }
+        .accessibilityIdentifier("computer-" + (device?.id ?? "all"))
+        .accessibilityAddTraits(model.selectedDeviceID == device?.id ? .isSelected : [])
     }
 }

@@ -100,11 +100,9 @@ struct SessionDetail: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(place).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
                     if !remoteOff {
-                        Picker("", selection: $pane) {
-                            Text(L.t("Messages", "메시지함")).tag(Pane.messages)
-                            Text(L.t("Controls", "작업 제어")).tag(Pane.controls)
-                        }
-                        .pickerStyle(.segmented)
+                        GlassSegments(items: [.init(value: Pane.messages, label: L.t("Messages", "메시지함")),
+                                              .init(value: Pane.controls, label: L.t("Controls", "작업 제어"))],
+                                      selection: $pane)
                     }
                 }
                 .padding(.horizontal, 16).padding(.bottom, 8)
@@ -155,17 +153,29 @@ struct SessionDetail: View {
             } else {
                 Section {
                     let actions = Self.controls.filter(s.can)
-                    ForEach(actions, id: \.self) { action in
-                        Button(role: action == "terminate" ? .destructive : nil) {
-                            request = ControlRequest(session: s, action: action)
-                        } label: {
-                            Label(AppModel.actionLabel(action), systemImage: Self.icon(action))
-                        }
-                        .disabled(!available || busy)
-                        .accessibilityIdentifier("control-" + action)
-                    }
                     if actions.isEmpty {
                         Text(L.t("No controls reported for this session.", "이 세션에서 사용 가능한 제어가 없습니다.")).foregroundStyle(.secondary)
+                    } else {
+                        // Glass buttons, two to a row; quitting the CLI is tinted red.
+                        GlassEffectContainer(spacing: 8) {
+                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                                ForEach(actions, id: \.self) { action in
+                                    Button(role: action == "terminate" ? .destructive : nil) {
+                                        request = ControlRequest(session: s, action: action)
+                                    } label: {
+                                        Label(AppModel.actionLabel(action), systemImage: Self.icon(action))
+                                            .font(.subheadline.weight(.medium)).lineLimit(1).minimumScaleFactor(0.8)
+                                            .frame(maxWidth: .infinity).padding(.vertical, 4)
+                                    }
+                                    .buttonStyle(.glass)
+                                    .tint(action == "terminate" ? .red : nil)
+                                    .disabled(!available || busy)
+                                    .accessibilityIdentifier("control-" + action)
+                                }
+                            }
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                     }
                 } header: {
                     Text(L.t("Session controls", "세션 제어"))
@@ -199,7 +209,11 @@ struct SessionDetail: View {
                         Task { @MainActor in try? await Task.sleep(for: .milliseconds(350)); request = ask }
                     } label: {
                         Label(L.t("Send instruction", "지시 보내기"), systemImage: "paperplane")
+                            .font(.body.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 4)
                     }
+                    .buttonStyle(.glassProminent)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                     .accessibilityIdentifier("instruction-send")
                     .disabled(!available || !s.can("prompt") || busy || instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 } header: {

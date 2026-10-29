@@ -73,8 +73,14 @@ enum Format {
             : L.t("Resets in \(minutes)m", "\(minutes)분 후 초기화")
     }
     static func status(_ status: String) -> String {
-        let ko = ["working": "작업 중", "waiting": "확인 필요", "paused": "일시정지", "idle": "대기 중", "interrupted": "중단됨", "resuming": "재개 중"]
-        let en = ["working": "Working", "waiting": "Needs input", "paused": "Paused", "idle": "Idle", "interrupted": "Interrupted", "resuming": "Resuming"]
-        return L.t(en[status] ?? "Unknown state", ko[status] ?? "상태 미확인")
+        switch status {
+        case "working": L.t("Working", "작업 중")
+        case "waiting": L.t("Needs input", "확인 필요")
+        case "paused": L.t("Paused", "일시정지")
+        case "idle": L.t("Idle", "대기 중")
+        case "interrupted": L.t("Interrupted", "중단됨")
+        case "resuming": L.t("Resuming", "재개 중")
+        default: L.t("Unknown state", "상태 미확인")
+        }
     }
 }

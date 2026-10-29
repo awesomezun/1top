@@ -95,15 +95,14 @@ struct UsageView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     ConnectionNotice()
-                    Picker(L.t("Period", "기간"), selection: $model.period) { ForEach(Period.allCases) { Text($0.label).tag($0) } }
-                        .pickerStyle(.segmented)
+                    GlassSegments.periods($model.period)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(L.t("Last \(model.period.label) · reported tokens, including cache", "최근 \(model.period.label) · 보고된 토큰 · 캐시 포함"))
                             .font(.footnote).foregroundStyle(.secondary)
                         Text(Format.tokens(data.sum)).font(.system(size: 34, weight: .semibold)).monospacedDigit()
                     }
-                    Picker(L.t("Group by", "분류"), selection: $grouping) { ForEach(Grouping.allCases) { Text($0.label).tag($0) } }
-                        .pickerStyle(.segmented)
+                    GlassSegments(items: Grouping.allCases.map { .init(value: $0, label: $0.label, identifier: "group-" + $0.rawValue) },
+                                  selection: $grouping)
                     if data.tiles.isEmpty {
                         ContentUnavailableView(L.t("No positive reported usage in this period.", "이 기간에 보고된 양의 사용량이 없습니다."), systemImage: "square.grid.2x2")
                     } else {
