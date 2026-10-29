@@ -17,8 +17,7 @@ const STARTED=30*3600; // the shown sessions began this long before the demo
 // Limits. per: weekly percent per token, set once from a typical week of this demo (not from the
 // window shown), so the weekly percent moves with the work. reset: seconds after the demo began.
 // five: the 5-hour window's reset after the demo began and its percent per weekly percent.
-// Notes are the collector's own words where the dashboard translates them; Codex notes stay empty
-// (the collector's Codex notes have no English or Chinese in the dashboard yet).
+// Notes are the collector's own words (agent/onetop/accounts.py), which the dashboard translates.
 const ACCOUNTS=[
  {id:'claude-a',kind:'Claude',label:'dev@example.com',plan:'Max',per:1.46e-8,reset:266000,five:{reset:7400,factor:6},source:'claude_statusline'},
  {id:'claude-b',kind:'Claude',label:'studio@example.com',plan:'Pro',alias:'Studio',per:6.9e-8,reset:330000,five:{reset:14200,factor:6},source:'claude_statusline'},
@@ -33,7 +32,7 @@ const ROWS=[
  ['s2','Codex','billing-service','gpt-6.1-sol','working','codex-b',8,'Orca','Billing API','ultra'],
  ['s3','Claude','docs-site','claude-sonnet-5-5','working','claude-b',6,'Visual Studio Code','docs','high'],
  ['s4','GLM','data-sync','glm-5.3[1m]','waiting',null,2,'Orca','Nightly sync','high'],
- ['s5','Aside','release-notes','gpt-6.1-sol','working',null,1.5,'Aside','Release notes','medium'],
+ ['s5','Aside','0','gpt-6.1-sol','working',null,1.5,'Aside','Release notes','medium'],
  ['s6','Codex','api-gateway','gpt-6-astra','idle','codex-a',3,'Orca','Gateway','high'],
  ['s7','Claude','mobile-app','claude-haiku-5-5','paused','claude-a',2,'Orca','Mobile','low'],
  ['s8','Antigravity','research','gemini-3.5-pro','unknown',null,0,'Cursor','research',null],
@@ -48,7 +47,7 @@ const CHILDREN=[['s1','reviewer',.25,'working'],['s1','tester',.1,'idle'],['s2',
 const EARLIER=[
  ['Claude','claude-a','claude-opus-5-5','storefront',30],['Claude','claude-a','claude-sonnet-5-5','design-system',8],
  ['Claude','claude-b','claude-sonnet-5-5','docs-site',6],['Codex','codex-a','gpt-6-astra','api-gateway',4],
- ['Codex','codex-b','gpt-6.1-sol','ml-pipeline',7],['GLM',null,'glm-5.3[1m]','data-sync',2],['Aside',null,'gpt-6.1-sol','release-notes',1.5],
+ ['Codex','codex-b','gpt-6.1-sol','ml-pipeline',7],['GLM',null,'glm-5.3[1m]','data-sync',2],['Aside',null,'gpt-6.1-sol','0',1.5],
 ];
 const APPS={Orca:'/Applications/Orca.app','Visual Studio Code':'/Applications/Visual Studio Code.app',Cursor:'/Applications/Cursor.app',
  Ghostty:'/Applications/Ghostty.app',iTerm2:'/Applications/iTerm.app',Terminal:'/System/Applications/Utilities/Terminal.app',
@@ -57,8 +56,8 @@ const SOURCES={Claude:'Claude Code 세션 레지스트리',GLM:'Claude Code 세�
  Aside:'Aside local session database and per-request usage reports'};
 const PROVIDERS={Codex:'openai-codex',GLM:'api.z.ai',Claude:''};
 const round=(n,d=4)=>Math.round(n*10**d)/10**d;
-// Aside sessions work in a named Aside workspace; the others in a project folder.
-const cwd=(project,kind)=>kind==='Aside'?`${HOME}/.aside/w/${project}`:`${HOME}/projects/${project}`;
+// Aside sessions work in Aside's default workspace (project '0'); the others in a project folder.
+const cwd=(project,kind)=>kind==='Aside'?`${HOME}/.aside/u/demo-user`:`${HOME}/projects/${project}`;
 const pidOf=i=>40100+i*37;
 
 export function periodSeconds(key,now,anchor=now){
@@ -137,7 +136,7 @@ export function demoState(now=Date.now()/1000,{period='1h',anchor=now,lang='ko'}
    continuation_keys:[],continuation_processes:[],continuation_sources:[],control_key:'demo-'+id,counter_reset:false,cpu:raw==='working'?cpuOf(j):status==='unknown'?.6:.3,
    cwd:cwd(project,kind),display_status:display,effort:effort,effort_source:effort?(kind==='Codex'?'codex_turn_context':kind==='Aside'?'aside_session_configuration':'claude_statusline'):null,effort_updated:effort?now-900:null,
    id,input_verified:orca,is_subagent:!!s.child,kind,last_usage:tracked?Math.max(anchor-STARTED,...history.map(h=>h[0]),now-1800):null,loading:false,
-   location:{app:s.child?app:app,app_path:APPS[app]||'/Applications/'+app+'.app',match:s.child?'parent_session':kind==='Aside'?'aside_database':orca?'tty':'process_ancestry',terminal:s.child?'':title},
+   location:{app,app_path:APPS[app]||'/Applications/'+app+'.app',match:s.child?'parent_session':kind==='Aside'?'aside_database':orca?'tty':'process_ancestry',terminal:s.child?'':kind==='Aside'?'Aside 내부 세션':title},
    model,model_updated:now-1200,models:model?[model]:[],orca_terminal:orca&&!s.child?{handle:'term_demo_'+id,incarnationId:'inc-'+id,tabId:'tab-'+(i+1),title,worktreePath:ORCA+'/'+project}:undefined,
    parent_session_id:s.child?root:null,path:kind==='Codex'?`${HOME}/.codex/sessions/2026/10/rollout-${id}.jsonl`:`${HOME}/.claude/projects/-Users-demo-projects-${project}/${id}.jsonl`,
    pid,pids:[pid],process_birth:since,process_only:false,process_started:new Date(since*1000).toString().slice(0,24),progress:kind==='Aside'?100:null,project,
@@ -147,8 +146,7 @@ export function demoState(now=Date.now()/1000,{period='1h',anchor=now,lang='ko'}
     error_count:0,first_seen:since,identity_at:now-600,kind,last_seen:now-20,model:model||'',model_at:now-1200,request_count:40+i*7,session_id:id,signals:['logs'],token_reports:120+i*9,
     tokens_24h:tracked?vector(m.sum(j,now-DAY)):[0,0,0,0],ttft_ms:900+i*40,ttft_ms_at:now-60},
    terminal_match:s.child?'parent_session':orca?'confirmed':'unavailable',
-   // The collector's terminal notes have no English or Chinese in the dashboard yet, so they stay empty.
-   terminal_note:'',terminal_owner_pid:pid-1,title:s.child?s.child.name:title,
+   terminal_note:s.child?'하위 에이전트 · 부모 세션의 실행 위치에서 확인':kind==='Aside'?'Aside 내부 세션 · 터미널 CLI가 아님 · 바로가기는 Aside 앱 열기':orca?'':'세션과 터미널 화면 제목의 고유한 일치를 확인하지 못했습니다.',terminal_owner_pid:pid-1,title:s.child?s.child.name:title,
    tokens:tracked?vector(weight*5e7+m.sum(j,now-DAY)):null,
    usage:{history,last_five_minutes:vector(m.sum(j,now-300)),last_minute:vector(m.sum(j,now-60)),output_rate:round(m.sum(j,now-600)*.005/600,2),rate:raw==='working'?Math.round(m.sum(j,now-600)/600):0,
     weekly_account:a?.id||null,weekly_estimate:estimate,window_seconds:60,windows},
@@ -180,7 +178,7 @@ export function demoState(now=Date.now()/1000,{period='1h',anchor=now,lang='ko'}
   const [fresh,cached,written,output]=vector(n);events.push({cached,fresh,kind:k,output,t:range?t:Math.floor(t),written});}
 
  const quotas=accounts.map(a=>{const pct=weeklyPct(a),five=a.five&&Math.min(100,round(a.used(a.id,a.five?anchor+a.five.reset-5*3600:0,reportAt(a))*a.per*a.five.factor,1));
-  const q={account_label:a.label,id:a.id,kind:a.kind,note:a.kind==='Claude'?'Claude Code 상태줄 보고':'',plan:a.plan,source:a.source||'codex_rate_limits',stale:!!a.stale,updated:reportAt(a),verified_activity:true,
+  const q={account_label:a.label,id:a.id,kind:a.kind,note:a.kind==='Claude'?'Claude Code 상태줄 보고':a.stale?'계정 조회 지연 · 마지막 보고값':'Codex 계정 사용률 · 2분마다 확인',plan:a.plan,source:a.source||'codex_rate_limits',stale:!!a.stale,updated:reportAt(a),verified_activity:true,
    windows:[...(a.five?[{label:'5시간',pct:five,reset:Math.round(anchor+a.five.reset)}]:[]),{label:'주간',pct,reset:Math.round(a.resetAt)}]};
   if(a.alias)q.alias=a.alias;if(a.status)q.status=a.status;return q;});
  const weekly={accounts:accounts.map(a=>{const to=reportAt(a),step=600,points=[];for(let t=a.start;t<=to;t+=step)points.push(t);
