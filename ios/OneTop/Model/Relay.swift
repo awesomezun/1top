@@ -7,6 +7,8 @@ import Security
 enum Relay {
     static let managed = URL(string: "https://onetop-relay.gitreels.workers.dev")!
     static let callbackScheme = "onetop"
+    /// Cloudflare in front of the relay rejects anonymous client signatures; name the app.
+    static let userAgent = "1top/\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2") (iPhone; iOS)"
 
     struct Failure: LocalizedError {
         var status: Int?
@@ -35,6 +37,7 @@ enum Relay {
         var request = URLRequest(url: relay.appending(path: path), timeoutInterval: 15)
         request.httpMethod = body == nil ? "GET" : "POST"
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let body { request.httpBody = try JSONEncoder().encode(body) }
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -58,6 +61,7 @@ enum Relay {
         var request = URLRequest(url: ticket.socketUrl)
         request.setValue("1top, ticket." + ticket.ticket, forHTTPHeaderField: "Sec-WebSocket-Protocol")
         request.setValue("https://1top.si", forHTTPHeaderField: "Origin")
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         let task = URLSession.shared.webSocketTask(with: request)
         task.resume()
         return task
@@ -85,6 +89,23 @@ enum TokenStore {
                                    kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
         SecItemAdd(item as CFDictionary, nil)
     }
+
+    #if DEBUG
+    /// Development only: a token approved on the Mac can be copied into this app's Documents as
+    /// development-mobile-auth.json ({"token", "relay"}). It is moved into the Keychain once and the
+    /// file is deleted at once. Release builds never contain this path.
+    static func importDevelopmentToken() {
+        guard let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let file = folder.appending(path: "development-mobile-auth.json")
+        guard let data = try? Data(contentsOf: file) else { return }
+        defer { try? FileManager.default.removeItem(at: file) }
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = object["token"] as? String, token.range(of: #"^1tm_[a-f0-9]{64}$"#, options: .regularExpression) != nil,
+              (object["relay"] as? String)?.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == Relay.managed.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        else { return }
+        save(token)
+    }
+    #endif
 
     static func delete() {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,

@@ -16,6 +16,9 @@ final class AppModel {
 
     init() {
         if ProcessInfo.processInfo.arguments.contains("--demo") { showDemo(); return }
+        #if DEBUG
+        TokenStore.importDevelopmentToken()
+        #endif
         if let saved = TokenStore.load() { token = saved; connect() }
     }
 
