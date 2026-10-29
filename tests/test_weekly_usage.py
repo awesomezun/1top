@@ -113,6 +113,26 @@ class WeeklyUsageTests(unittest.TestCase):
         self.assertEqual(account['calibration']['from'],self.now-240)
         self.assertEqual(account['calibration']['used_pp'],1)
         self.assertEqual(account['calibration']['tokens'],100)
+    def test_claude_reuses_unaffected_same_cycle_interval_after_correction(self):
+        for age,pct in [(800,3),(680,3),(560,4),(440,5),(320,4),(200,4)]:
+            self.point(self.now-age,pct)
+        for age,tokens in [(740,100),(620,1000000),(500,9000000),(260,3000000)]:
+            self.event(self.now-age,'s',tokens)
+        self.db.execute("UPDATE events SET kind='Claude'")
+        self.db.execute("UPDATE weekly_samples SET kind='Claude'")
+        quota={'id':'a','kind':'Claude','source':'claude_statusline','stale':True,
+               'windows':[{'label':'주간','pct':4,'reset':self.now+86400}]}
+        result,_=w.snapshot(self.db,[quota],self.now)
+        c=result['accounts'][0]['calibration']
+        self.assertTrue(c['reused_before_correction'])
+        self.assertEqual(c['tokens'],1000000)
+        self.assertEqual(c['used_pp'],1)
+        self.assertEqual(c['to'],self.now-560)
+        self.assertEqual(c['source'],'historical_provider_calibration')
+        # A different reset cannot inherit that earlier cycle's conversion.
+        quota['windows'][0]['reset']+=1000
+        self.assertIsNone(w.snapshot(self.db,[quota],self.now)[0]['accounts'][0]['calibration'])
+
     def test_reconciliation_partial_reduction_is_net_change_not_sum_of_positive_spikes(self):
         self.point(self.now-360,4);self.point(self.now-240,6);self.point(self.now-120,5)
         account=self.result()[0]['accounts'][0]
@@ -306,6 +326,24 @@ class WeeklyUsageTests(unittest.TestCase):
         self.assertEqual(c['tokens'],4000000)
         self.assertEqual(c['used_pp'],2)
         self.assertAlmostEqual(c['pp_per_token'],.0000005)
+
+    def test_delayed_quota_callback_keeps_preceding_token_denominator(self):
+        # The token log arrives while the integer quota is unchanged. A later
+        # provider callback increments the quota without another token report.
+        self.point(self.now-480,20);self.point(self.now-360,20)
+        self.point(self.now-240,21);self.point(self.now-120,21)
+        self.event(self.now-420,'s',3000000)
+        c=self.result()[0]['accounts'][0]['calibration']
+        self.assertEqual(c['tokens'],3000000)
+        self.assertEqual(c['used_pp'],1)
+        self.assertEqual(c['seconds'],360)
+        self.assertAlmostEqual(c['pp_per_token'],1/3000000)
+
+    def test_delayed_callback_does_not_cross_unattributed_work(self):
+        for age,pct in [(600,20),(480,20),(360,20),(240,21)]:self.point(self.now-age,pct)
+        self.event(self.now-540,'known',100)
+        self.event(self.now-420,'unknown',100,None)
+        self.assertIsNone(self.result()[0]['accounts'][0]['calibration'])
 
     def test_calibration_rejects_partial_account_token_coverage(self):
         self.point(self.now-240,20);self.point(self.now-120,22)

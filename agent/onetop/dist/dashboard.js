@@ -4,8 +4,8 @@ window.OneTopDashboard=(()=>{
  const key='onetop.dashboard.v1',ids=['session','model','status','period','total','rate','cpu','memory','controls'];
  const defaults={session:210,model:145,status:85,period:110,total:95,rate:120,cpu:65,memory:75,controls:155};
  const minima={session:120,model:100,status:75,period:95,total:85,rate:120,cpu:65,memory:75,controls:150};
- const panels=['summary','speed','flow','map','sessions','shared'];
- const state={theme:'dark',lang:'ko',period:'1h',columns:[...ids],widths:{...defaults},panels:[...panels],spans:{summary:12,speed:12,flow:6,map:6,sessions:12,shared:12},heights:{}};
+ const panels=['speed','summary','flow','map','sessions','shared'];
+ const state={theme:'dark',lang:'ko',period:'1h',columns:[...ids],widths:{...defaults},panels:[...panels],spans:{summary:9,speed:3,flow:6,map:6,sessions:12,shared:12},heights:{}};
  let hooks={},editing=false,dragging=false,frame,initialized=false;
  let gaugeScale={scope:null,max:1,lower:null,since:0};
  const list=(v,allowed)=>Array.isArray(v)&&v.length===allowed.length&&new Set(v).size===allowed.length&&v.every(x=>allowed.includes(x));
@@ -15,9 +15,13 @@ window.OneTopDashboard=(()=>{
   if(list(saved.columns,ids))state.columns=saved.columns;if(list(saved.panels,panels))state.panels=saved.panels;else if(list(saved.panels,panels.filter(p=>p!=='speed'))){state.panels=[...saved.panels];state.panels.splice(state.panels.indexOf('summary')+1,0,'speed');}
   if(validPeriod(saved.period))state.period=saved.period;
   if(saved.rangeScale==='fixed-v1')state.rangeScale=saved.rangeScale;
+  if(saved.cockpit==='boost-v1')state.cockpit=saved.cockpit;
+  if(Number.isFinite(saved.instrumentWidth))state.instrumentWidth=Math.max(200,Math.min(600,saved.instrumentWidth));
   for(const id of ids)if(Number.isFinite(saved.widths?.[id]))state.widths[id]=Math.max(minima[id],Math.min(700,saved.widths[id]));
   for(const id of panels){if(Number.isInteger(saved.spans?.[id]))state.spans[id]=Math.max(id==='summary'?6:3,Math.min(12,saved.spans[id]));if(Number.isFinite(saved.heights?.[id]))state.heights[id]=Math.max(150,Math.min(1200,saved.heights[id]));}
  }}catch{}
+ // Migrate only the two overview panels; keep every other panel and table preference.
+ if(state.cockpit!=='boost-v1'){state.panels=state.panels.filter(p=>p!=='speed');state.panels.splice(state.panels.indexOf('summary'),0,'speed');state.spans.speed=3;state.spans.summary=9;delete state.heights.speed;delete state.heights.summary;state.cockpit='boost-v1';}
  document.documentElement.dataset.theme=state.theme;document.documentElement.style.colorScheme=state.theme;
  const save=()=>{try{localStorage.setItem(key,JSON.stringify(state));}catch{}};
  const t=s=>window.OneTopI18n?.t(s)||s;
@@ -32,11 +36,12 @@ window.OneTopDashboard=(()=>{
   document.getElementById('editDashboard').onclick=()=>{editing=!editing;document.getElementById('dashboardGrid').classList.toggle('editing',editing);prefs();queueDraw();};
  }
  function panelSetup(){
-  const root=document.getElementById('sessionsView'),range=root.querySelector('.range-toolbar');root.prepend(range);
-  const grid=document.createElement('div');grid.id='dashboardGrid';range.after(grid);
-  const elements={summary:document.getElementById('sessionSummary'),speed:document.getElementById('fleetSpeed'),flow:root.querySelector('.token-flow-panel'),map:root.querySelector('.session-map-panel'),sessions:root.querySelector('.session-panel'),shared:root.querySelector('.shared-backend-panel')};
+  const root=document.getElementById('sessionsView'),range=root.querySelector('.range-toolbar');
+  const grid=document.createElement('div');grid.id='dashboardGrid';root.prepend(grid);
+  const summary=document.createElement('div');summary.id='cockpitSummary';summary.className='cockpit-summary';summary.append(range,document.getElementById('sessionSummary'));
+  const elements={summary,speed:document.getElementById('fleetSpeed'),flow:root.querySelector('.token-flow-panel'),map:root.querySelector('.session-map-panel'),sessions:root.querySelector('.session-panel'),shared:root.querySelector('.shared-backend-panel')};
   for(const id of panels){const panel=elements[id];panel.dataset.panel=id;grid.append(panel);
-   const tools=document.createElement('div');tools.className='panel-edit-tools';tools.innerHTML=`<button type="button" draggable="true" class="panel-drag" data-panel-drag="${id}" aria-label="패널 이동">⠿ <span>패널 이동</span></button><div><button type="button" data-span="6">50%</button><button type="button" data-span="12">100%</button></div>`;
+   const tools=document.createElement('div');tools.className='panel-edit-tools';tools.innerHTML=`<button type="button" draggable="true" class="panel-drag" data-panel-drag="${id}" aria-label="패널 이동">⠿ <span>패널 이동</span></button><div>${id==='speed'?'<button type="button" data-span="3">25%</button>':id==='summary'?'<button type="button" data-span="9">75%</button>':''}<button type="button" data-span="6">50%</button><button type="button" data-span="12">100%</button></div>`;
    panel.prepend(tools);const resize=document.createElement('button');resize.type='button';resize.className='panel-resize';resize.setAttribute('aria-label','패널 크기 조절');panel.append(resize);
    tools.querySelectorAll('[data-span]').forEach(b=>b.onclick=()=>{state.spans[id]=Number(b.dataset.span);applyPanels();save();});
    const handle=tools.querySelector('.panel-drag');handle.ondragstart=e=>{if(!editing){e.preventDefault();return;}e.dataTransfer.setData('application/onetop-panel',id);};
@@ -44,8 +49,8 @@ window.OneTopDashboard=(()=>{
    panel.ondragover=e=>{if(editing&&[...e.dataTransfer.types].includes('application/onetop-panel'))e.preventDefault();};
    panel.ondrop=e=>{const from=e.dataTransfer.getData('application/onetop-panel');if(!editing||!panels.includes(from))return;e.preventDefault();move(state.panels,from,id);applyPanels();save();};
    resize.onpointerdown=e=>{if(!editing)return;e.preventDefault();dragging=true;const rect=panel.getBoundingClientRect(),width=grid.getBoundingClientRect().width,x=e.clientX,y=e.clientY;resize.setPointerCapture(e.pointerId);
-    const onmove=ev=>{state.spans[id]=Math.max(id==='summary'?6:3,Math.min(12,Math.round((rect.width+ev.clientX-x+18)/(width+18)*12)));state.heights[id]=Math.max(id==='sessions'?250:150,Math.min(1200,Math.round(rect.height+ev.clientY-y)));applyPanels(false);};
-    const end=()=>{dragging=false;resize.removeEventListener('pointermove',onmove);save();};resize.addEventListener('pointermove',onmove);resize.addEventListener('pointerup',end,{once:true});resize.addEventListener('pointercancel',end,{once:true});
+    const onmove=ev=>{if(id==='speed'&&panel.closest('.cockpit-overview'))state.instrumentWidth=Math.max(200,Math.min(600,Math.round(rect.width+ev.clientX-x)));else state.spans[id]=Math.max(id==='summary'?6:3,Math.min(12,Math.round((rect.width+ev.clientX-x+18)/(width+18)*12)));state.heights[id]=Math.max(id==='sessions'?250:150,Math.min(1200,Math.round(rect.height+ev.clientY-y)));applyPanels(false);};
+    const end=()=>{dragging=false;resize.removeEventListener('pointermove',onmove);applyPanels();save();};resize.addEventListener('pointermove',onmove);resize.addEventListener('pointerup',end,{once:true});resize.addEventListener('pointercancel',end,{once:true});
    };
    resize.onkeydown=e=>{if(!editing||!e.key.startsWith('Arrow'))return;e.preventDefault();if(e.key==='ArrowLeft'||e.key==='ArrowRight')state.spans[id]=Math.max(id==='summary'?6:3,Math.min(12,state.spans[id]+(e.key==='ArrowLeft'?-1:1)));else state.heights[id]=Math.max(150,Math.min(1200,(state.heights[id]||panel.offsetHeight)+(e.key==='ArrowUp'?-20:20)));applyPanels(false);save();};
   }
@@ -53,7 +58,12 @@ window.OneTopDashboard=(()=>{
  }
  function applyPanels(reorder=true){
   const grid=document.getElementById('dashboardGrid');if(!grid)return;
-  for(const id of state.panels){const panel=grid.querySelector(`[data-panel="${id}"]`);if(reorder)grid.append(panel);panel.style.gridColumn='span '+state.spans[id];if(state.heights[id])panel.style.minHeight=state.heights[id]+'px';
+  const elements=Object.fromEntries([...grid.querySelectorAll('[data-panel]')].map(p=>[p.dataset.panel,p]));
+  const paired=state.panels.indexOf('summary')===state.panels.indexOf('speed')+1&&state.spans.speed===3&&state.spans.summary===9;
+  let cockpit=grid.querySelector('.cockpit-overview');
+  if(reorder||(!dragging&&paired!==!!cockpit)){for(const id of state.panels)grid.append(elements[id]);cockpit?.remove();cockpit=null;if(paired){cockpit=document.createElement('div');cockpit.className='cockpit-overview';elements.speed.before(cockpit);cockpit.append(elements.speed,elements.summary);}}
+  if(cockpit)cockpit.style.setProperty('--instrument-width',state.instrumentWidth?state.instrumentWidth+'px':'clamp(240px,20vw,260px)');
+  for(const id of state.panels){const panel=elements[id];panel.style.gridColumn='span '+state.spans[id];if(state.heights[id])panel.style.minHeight=state.heights[id]+'px';
    if(id==='sessions'&&state.heights[id])panel.style.height=Math.max(250,state.heights[id])+'px';
    const chart=panel.querySelector('.chart-wrap'),map=panel.querySelector('.map-surface');if(chart&&state.heights[id])chart.style.height=Math.max(130,state.heights[id]-90)+'px';if(map&&state.heights[id])map.style.height=Math.max(130,state.heights[id]-62)+'px';
   }queueDraw();
@@ -84,8 +94,8 @@ window.OneTopDashboard=(()=>{
  function number(n){const digits=2;return n>0&&n<10**-digits?'<' +(10**-digits):Number(n.toFixed(digits)).toLocaleString(state.lang==='ko'?'ko-KR':state.lang==='zh'?'zh-CN':'en-US');}
  const rateSuffix=()=>state.lang==='ko'?'%/시간':state.lang==='zh'?'%/小时':'%/h';
  function rateCell(rate,kind,note=''){
-  if(!Number.isFinite(rate)||rate<0)return '<span class="unknown-value">—</span>';
   const suffix=rateSuffix();
+  if(!Number.isFinite(rate)||rate<0)return `<span class="burn-unavailable" title="${esc(note||t('환산 기준 수집 중'))}">—<small>${suffix}</small></span>`;
   return `<div class="burn-gauge" title="${esc(note)}"><canvas width="96" height="46" data-burn-rate="${rate}" data-kind="${esc(kind)}" role="img" aria-label="${esc(number(rate))}${suffix}"></canvas><strong>${esc(number(rate))}<small>${suffix}</small></strong></div>`;
  }
  function nice(n){if(n<=0)return 1;const power=10**Math.floor(Math.log10(n)),ratio=n/power;return (ratio<=1?1:ratio<=2?2:ratio<=5?5:10)*power;}

@@ -183,7 +183,7 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
         # as if it represented all tokens in a longer selected period.
         current_reset=points[-1][2] if points else None
         account_observed_since=events[account][0][0] if events[account] else None
-        eligible=[]
+        eligible=[];earlier=[];pending_tokens=0;pending_end=None
         for index,o in enumerate(observations):
             t0,t1,delta,uncertain,weights=o
             same_cycle=(current_reset is not None and abs(points[index][2]-current_reset)<=60
@@ -191,8 +191,31 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
             missing=any(t0<t<=t1 for t in unbound[quota['kind']])
             after_correction=not corrections or t0>=corrections[-1]
             attribution_started=(not claude_history or (account_observed_since is not None and account_observed_since<=t0))
-            if same_cycle and after_correction and attribution_started and not uncertain and delta is not None and weights and not missing:
-                eligible.append(o)
+            # A provider percentage can arrive after the token log. Include the
+            # complete settled interval even if that individual callback has no
+            # tokens, so a delayed quota increment is paired with preceding
+            # account-attributed work. Require a measured token denominator below.
+            settled_interval=t1<=now-10 and t1-t0<=calibration_gap
+            complete=(same_cycle and attribution_started and settled_interval
+                      and not uncertain and delta is not None and not missing)
+            if not complete:
+                pending_tokens=0;pending_end=None;continue
+            if pending_end!=t0:pending_tokens=0
+            pending_tokens+=sum(weights.values());pending_end=t1
+            # Never attach an empty increment across a gap, an unbound event,
+            # or work already consumed by an earlier percentage increment.
+            if delta>0 and pending_tokens<=0:continue
+            (eligible if after_correction else earlier).append(o)
+            if delta>0:pending_tokens=0
+        # A correction rejects the affected span, not unrelated earlier
+        # account-attributed measurements that survive reconciliation. Prefer
+        # post-correction data; otherwise retain a bounded same-cycle Claude
+        # calibration until a new positive percentage movement is available.
+        ready=lambda rows: (sum(sum(o[4].values()) for o in rows)>0
+                            and sum(o[2] for o in rows)>=1
+                            and sum(o[1]-o[0] for o in rows)>=120)
+        reused_earlier=bool(claude_history and not ready(eligible) and ready(earlier))
+        if reused_earlier:eligible=earlier
         calibration_tokens=sum(sum(o[4].values()) for o in eligible)
         calibration_pp=sum(o[2] for o in eligible)
         calibration_seconds=sum(o[1]-o[0] for o in eligible)
@@ -215,7 +238,7 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
             calibration.update(source='historical_provider_calibration',kind='Claude',reset=reported_reset,
                                valid_until=min(reported_reset,calibration['to']+CLAUDE_CALIBRATION_AGE),
                                age_seconds=max(0,now-calibration['to']),report_source=quota.get('source'),
-                               account_observed_since=account_observed_since)
+                               account_observed_since=account_observed_since,reused_before_correction=reused_earlier)
         periods={}
         for key,_,seconds in WINDOWS:
             start=now-seconds

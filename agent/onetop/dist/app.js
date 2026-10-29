@@ -120,7 +120,8 @@ function renderFleetSpeed(){
  if(speedScale.key!==selectedPeriod||next>speedScale.max)speedScale={key:selectedPeriod,max:next,lower:0,since:0};
  else if(next<speedScale.max&&rate<speedScale.max*.4){if(speedScale.lower!==next){speedScale.lower=next;speedScale.since=now;}else if(now-speedScale.since>30000)speedScale.max=next;}
  else speedScale.lower=0;
- $('fleetSpeedValue').textContent=fmt(rate);
+ const displayRate=fmt(rate),parts=displayRate.match(/^(.+?)([kMBT])$/);
+ $('fleetSpeedValue').innerHTML=parts?esc(parts[1])+'<small>'+parts[2]+'</small>':esc(displayRate);
  $('fleetSpeedUnit').textContent=OneTopI18n.t('tokens/시간');
  $('fleetSpeedScope').textContent=OneTopI18n.t('컴퓨터')+' '+(s.computers===s.expected?s.computers:s.computers+'/'+s.expected);
  $('fleetSpeedScope').title=OneTopI18n.t(s.partial?'확인된 기록 기준':'연결된 모든 AI 사용량');
@@ -135,24 +136,42 @@ function renderFleetSpeed(){
 function drawFleetSpeed(){
  const canvas=$('fleetSpeedBand');if(!canvas||!canvas.getContext)return;
  const {width:w,height:h}=canvas.getBoundingClientRect();if(!w||!h)return;
- const dpr=devicePixelRatio||1,c=canvas.getContext('2d'),css=getComputedStyle(document.documentElement),accent=css.getPropertyValue('--accent'),line=css.getPropertyValue('--line'),muted=css.getPropertyValue('--muted');
- canvas.width=w*dpr;canvas.height=h*dpr;c.scale(dpr,dpr);
- const x=w/2,y=h-24,r=Math.min(w/2-18,h-40),max=Number(canvas.dataset.max)||1,rate=canvas.dataset.rate===''?null:Number(canvas.dataset.rate),fraction=Math.min(1,(rate||0)/max);
- const point=(angle,radius)=>[x+Math.cos(angle)*radius,y+Math.sin(angle)*radius];
- // Compact tachometer arc: its sweep reads as a gauge, not a draggable slider.
- c.lineCap='round';c.lineWidth=6;c.strokeStyle=line;c.beginPath();c.arc(x,y,r,Math.PI,2*Math.PI);c.stroke();
- if(rate>0){c.strokeStyle=accent;c.beginPath();c.arc(x,y,r,Math.PI,Math.PI*(1+fraction));c.stroke();}
- c.lineCap='butt';c.lineWidth=1;
- for(let i=0;i<=30;i++){
-  const angle=Math.PI*(1+i/30),big=i%5===0,from=point(angle,r+8),to=point(angle,r+(big?16:12));
-  c.strokeStyle=i/30<=fraction&&rate!==null?accent:line;c.beginPath();c.moveTo(...from);c.lineTo(...to);c.stroke();
+ const dpr=devicePixelRatio||1,c=canvas.getContext('2d'),css=getComputedStyle(document.documentElement),light=document.documentElement.dataset.theme==='light';
+ canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);c.scale(w*dpr/300,h*dpr/300);
+ const ink=css.getPropertyValue('--ink'),muted=css.getPropertyValue('--muted'),mint=light?'#218d79':'#85f2dc',track=light?'#cbd9dc':'#24383e';
+ const max=Number(canvas.dataset.max)||1,rate=canvas.dataset.rate===''?null:Number(canvas.dataset.rate),fraction=Math.max(0,Math.min(1,(rate||0)/max));
+ const path=(points,close=false)=>{c.beginPath();points.forEach((p,i)=>i?c.lineTo(...p):c.moveTo(...p));if(close)c.closePath();};
+ const frame=[[14,1],[287,1],[299,13],[299,286],[286,299],[14,299],[1,286],[1,14]];
+ const face=c.createLinearGradient(0,0,300,300);face.addColorStop(0,light?'#f5fafb':'#132027');face.addColorStop(.45,light?'#eaf2f3':'#090f13');face.addColorStop(1,light?'#f7fafb':'#101b21');
+ path(frame,true);c.fillStyle=face;c.fill();c.strokeStyle=light?'#8caeb3':'#47636b';c.lineWidth=1;c.stroke();
+ // Fine machined edges and short corners give the instrument depth without a glow field.
+ path([[20,5],[283,5],[295,17],[295,282],[282,295],[18,295],[5,282],[5,20]],true);c.strokeStyle=light?'#d3e2e4':'#20343c';c.stroke();
+ for(const points of [[[3,27],[3,15],[15,3],[27,3]],[[273,3],[285,3],[297,15],[297,27]],[[297,273],[297,285],[285,297],[273,297]],[[27,297],[15,297],[3,285],[3,273]]]){path(points);c.strokeStyle=light?'#729c9e':'#6c9d9f';c.lineWidth=1.2;c.stroke();}
+ path([[10,91],[10,25],[25,10],[133,10]]);c.strokeStyle=light?'#b2cacc':'#293e46';c.lineWidth=1;c.stroke();
+ path([[24,55],[116,55],[160,20],[278,20]]);c.strokeStyle=light?'#98b7b8':'#3a5b62';c.stroke();
+ path([[31,59],[119,59],[163,25],[275,25]]);c.strokeStyle=light?'#d0dfdf':'#1a3038';c.stroke();
+ // Sample a rising, asymmetric sweep by distance so each segment means the same fraction.
+ const bez=(p0,p1,p2,p3,t)=>{const u=1-t;return [u*u*u*p0[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t*t*t*p3[0],u*u*u*p0[1]+3*u*u*t*p1[1]+3*u*t*t*p2[1]+t*t*t*p3[1]];};
+ const samples=[];let length=0;
+ for(let i=0;i<=240;i++){const t=i/240,p=bez([23,253],[27,125],[143,46],[264,46],t);if(samples.length)length+=Math.hypot(p[0]-samples.at(-1).p[0],p[1]-samples.at(-1).p[1]);samples.push({p,length});}
+
+ const at=d=>{d=Math.max(0,Math.min(length,d));let i=1;while(i<samples.length-1&&samples[i].length<d)i++;const a=samples[i-1],b=samples[i],t=(d-a.length)/(b.length-a.length||1);return [a.p[0]+(b.p[0]-a.p[0])*t,a.p[1]+(b.p[1]-a.p[1])*t];};
+ const edge=(d,offset)=>{const p=at(d),a=at(d-.6),b=at(d+.6),n=Math.hypot(b[0]-a[0],b[1]-a[1])||1;return [p[0]-(b[1]-a[1])/n*offset,p[1]+(b[0]-a[0])/n*offset];};
+ for(const offset of [-17,19]){path(Array.from({length:101},(_,i)=>edge(length*i/100,offset)));c.strokeStyle=light?'#87a8ad':offset<0?'#375860':'#41676e';c.lineWidth=.8;c.stroke();}
+ const segments=30,step=length/segments;
+ const segment=(a,b)=>{const points=[];for(let j=0;j<=4;j++)points.push(edge(a+(b-a)*j/4,-11));for(let j=4;j>=0;j--)points.push(edge(a+(b-a)*j/4,11));path(points,true);};
+ const fill=c.createLinearGradient(25,250,230,40);fill.addColorStop(0,light?'#34af99':'#a9ffeb');fill.addColorStop(1,mint);
+ for(let i=0;i<segments;i++){
+  const a=i*step+1.2,b=(i+1)*step-1.2;segment(a,b);c.fillStyle=track;c.fill();
+  const end=Math.min(b,fraction*length);if(rate!==null&&end>a){segment(a,end);c.fillStyle=fill;c.fill();}
  }
- c.font='11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';c.fillStyle=muted;c.textBaseline='middle';
- c.textAlign='center';c.fillText(fmt(max/2),x,y-r+25);c.fillText('0',x-r,y+17);c.fillText(fmt(max),x+r,y+17);
- if(rate!==null){
-  const angle=Math.PI*(1+fraction),from=point(angle,r-12),to=point(angle,r+6);
-  c.strokeStyle=accent;c.lineWidth=2;c.beginPath();c.moveTo(...from);c.lineTo(...to);c.stroke();
- }
+ // A scale endpoint, not a warning or an invented boost percentage.
+ path([[252,29],[282,29],[278,33],[248,33]],true);c.fillStyle=light?'#ad7838':'#e9bb73';c.fill();
+ c.font='12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';c.fillStyle=muted;c.textBaseline='middle';c.textAlign='right';c.fillText(fmt(max),283,71);c.textAlign='left';c.fillText('0',37,270);
+ if(rate!==null){path([edge(length*fraction,-16),edge(length*fraction,15)]);c.lineWidth=1.5;c.strokeStyle=ink;c.stroke();}
+ // Restrained lower scale etching, kept clear of the numeric reading.
+ for(let i=0;i<=18;i++){const x=78+i*10;path([[x,277],[x,277+(i%3===0?7:4)]]);c.strokeStyle=light?'#90b3b3':'#31585e';c.lineWidth=.8;c.stroke();}
+ path([[22,286],[65,286],[73,290],[280,290]]);c.strokeStyle=light?'#acc9cb':'#25434c';c.stroke();
 }
 
 function renderHost(){
@@ -402,9 +421,7 @@ function sessionBurnCell(s){
  // token events. A known idle session still has a measurable zero burn rate.
  if(!e&&q){const c=data.weekly_usage?.accounts.find(a=>a.id===q.id)?.calibration;if(c)e={account_id:q.id,basis:'calibrated_token_equivalent',calibration:c};}
  const rate=s.tokens==null?null:OneTopWeekly.sessionBurn(e,s.usage?.rate,q);
- if(rate==null&&s.tokens!=null&&Number.isFinite(s.usage?.rate)&&s.usage.rate>=0&&Date.now()/1000-data.updated<=20){
-  return `<div class="token-rate"><strong>${esc(fmt(s.usage.rate*3600))}</strong><small>${esc(OneTopI18n.t('tokens/시간'))}</small></div>`;
- }
+
  return OneTopDashboard.rateCell(rate,s.kind,OneTopWeekly.basis(e));
 }
 let renameRequest=null;
