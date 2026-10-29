@@ -105,7 +105,7 @@ window.OneTopI18n=(()=>{
  // An account with no e-mail is named by its tool and the end of its id ('Claude 계정 4f21a8').
  const account=/\b(Claude|Codex) 계정 ([0-9a-z]{6})\b/g;
  const renamed=text=>language==='ko'?text:named.reduce((out,ko)=>out.includes(ko)?out.replaceAll(ko,dictionary.get(ko)[language]):out,text).replace(account,(_,tool,id)=>tool+(language==='en'?' account ':' 账户 ')+id);
- const excluded='script,style,textarea,input,.cell-task,.terminal-rename,.cell-primary,.goal-objective,.goal-row h3,.skill-path,.map-tile-label,.map-tooltip strong,.map-legend-item>span,.detail-project,#detailTitle,#renameTarget,#actionTarget,#resumeText,[data-user-content]';
+ const excluded='script,style,textarea,input,.cell-task,.terminal-rename,.cell-primary,.goal-objective,.goal-row h3,.skill-path,.map-tile-label,.map-tooltip strong,.map-legend-item>span,.detail-name,.detail-path,#detailTitle,#renameTarget,#actionTarget,#resumeText,[data-user-content]';
  function source(node,current,store){const old=store.get(node);return old&&current===old.rendered?old.source:current;}
  function apply(){
   scheduled=false;observer.disconnect();
