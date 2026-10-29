@@ -35,13 +35,24 @@ final class AppModel {
     var drafts: [String: Draft] = [:]
     /// Previews of photos sent from this phone, by message ID; the relay never returns image data.
     var sentPhotos: [String: [UIImage]] = [:]
-    /// Sessions with a send in flight.
-    var sending: Set<String> = []
+    /// Sends in flight per session. Several may run at once; each has its own request ID.
+    var sending: [String: Int] = [:]
+    /// Drafts of sends the relay refused while a new draft was already being written, by message ID,
+    /// so they can be brought back into the composer instead of overwriting it.
+    var failedSends: [String: Draft] = [:]
+    /// The network step of a message send; tests replace it.
+    var transport: @MainActor (MessagePayload, String, URL) async throws -> Data = { payload, token, relay in
+        try await Relay.request("/api/action", token: token, payload: payload, relay: relay)
+    }
     /// Computers paired without remote control (`allow_control` 0 in /api/devices). Live snapshots do
     /// not carry the flag, so the device list is matched by id.
     var controlOff: Set<String> = []
     var busy = false
     private(set) var token: String?
+    #if DEBUG
+    /// Unit tests stand in a signed-in phone without the Keychain.
+    func useTestToken(_ value: String?) { token = value }
+    #endif
     private var liveTask: Task<Void, Never>?
     private var socket: URLSessionWebSocketTask?
 
@@ -257,6 +268,10 @@ final class AppModel {
     /// The latest mailbox request; only its answer is applied, so a late reply for a screen that
     /// has since closed never lands in another one.
     private var mailboxAsk: (requestId: String, deviceId: String, sessionId: String)?
+    #if DEBUG
+    /// Unit tests answer a mailbox request without a socket.
+    func expectMailboxAnswer(_ requestId: String, deviceId: String, sessionId: String) { mailboxAsk = (requestId, deviceId, sessionId) }
+    #endif
 
     /// Asks the computer for this session's latest messages; the answer arrives on the socket.
     @discardableResult
@@ -316,18 +331,30 @@ final class AppModel {
     /// photos, or, for a session that only takes instructions, a `prompt`.
     /// A definite refusal (4xx) keeps the draft and photos. A send whose fate is unknown (time-out,
     /// lost connection, server error) is marked delivery unconfirmed and is never resent on its own.
+    ///
+    /// The composer empties as soon as a send starts, so the next message can be written at once.
+    /// Whatever is written meanwhile is never overwritten: a refused send goes back to the composer
+    /// only if it is still empty; otherwise it stays in the timeline with a button to bring it back.
+    /// Only this session's draft is touched.
     func sendConversation(_ s: Session) async {
         let key = s.key
         var draft = drafts[key] ?? Draft()
-        guard !draft.isEmpty, !sending.contains(key) else { return }
+        guard !draft.isEmpty else { return }
         if let block = sendBlock(s) { draft.error = block; drafts[key] = draft; return }
         let typed = draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.error = nil
         if !s.can("message") {
-            if await control(s, action: "prompt", instruction: draft.text) { drafts[key] = Draft() }
+            drafts[key] = Draft()
+            if !(await control(s, action: "prompt", instruction: draft.text)) && connection != .demo {
+                // Back into the composer: as it was if still empty, or after what was written since.
+                let now = drafts[key] ?? Draft()
+                drafts[key] = now.isEmpty ? draft : now.appending(draft)
+            }
             return
         }
         guard let device = device(for: s), canControl(s) else {
-            draft.error = L.t("This session cannot receive messages right now.", "현재 이 세션에 메시지를 보낼 수 없습니다."); drafts[key] = draft; return
+            var kept = draft
+            kept.error = L.t("This session cannot receive messages right now.", "현재 이 세션에 메시지를 보낼 수 없습니다."); drafts[key] = kept; return
         }
         let text = typed.isEmpty ? Self.photoPrompt : draft.text
         let id = UUID().uuidString.lowercased(), created = Date().timeIntervalSince1970, photos = draft.photos
@@ -359,34 +386,66 @@ final class AppModel {
             }
             return
         }
-        guard let token else { draft.error = L.t("Sign in again.", "다시 로그인하세요."); drafts[key] = draft; return }
+        guard let token else { var kept = draft; kept.error = L.t("Sign in again.", "다시 로그인하세요."); drafts[key] = kept; return }
         #if DEBUG
-        if qaBlocked(s) { draft.error = Self.qaRefusal; drafts[key] = draft; return }
+        if qaBlocked(s) { var kept = draft; kept.error = Self.qaRefusal; drafts[key] = kept; return }
         #endif
-        sending.insert(key); defer { sending.remove(key) }
+        drafts[key] = Draft()
+        sending[key, default: 0] += 1
+        defer { sending[key] = max(0, (sending[key] ?? 1) - 1) }
         mailboxes[key, default: Mailbox()].messages.append(bubble("sending"))
         if !photos.isEmpty { sentPhotos[id] = photos.map(\.preview) }
         let payload = MessagePayload(requestId: id, deviceId: device.id, sessionId: s.id, controlKey: s.controlKey ?? "", prompt: text,
                                      attachments: photos.isEmpty ? nil : photos.map { .init(mime: "image/jpeg", data: $0.jpeg.base64EncodedString()) })
-        func mark(_ status: String) {
-            if var box = mailboxes[key], let i = box.messages.firstIndex(where: { $0.id == id }) { box.messages[i].status = status; mailboxes[key] = box }
-        }
         do {
-            let data = try await Relay.request("/api/action", token: token, payload: payload, relay: relay)
-            if (try? JSONDecoder.relay().decode(ActionReceipt.self, from: data))?.status == "unconfirmed" { mark("delivery_unconfirmed") }
-            drafts[key] = Draft()
+            let data = try await transport(payload, token, relay)
+            let receipt = (try? JSONDecoder.relay().decode(ActionReceipt.self, from: data))?.status
+            setStatus(receipt == "unconfirmed" ? "delivery_unconfirmed" : "awaiting_reply", id: id, key: key)
         } catch let failure as Relay.Failure where (400..<500).contains(failure.status ?? 0) {
-            // Refused for certain: nothing reached the session, so the draft and photos stay.
-            mailboxes[key]?.messages.removeAll { $0.id == id }
-            sentPhotos[id] = nil
-            draft.error = failure.message
-            drafts[key] = draft
+            // Refused for certain: nothing reached the session.
+            if (drafts[key] ?? Draft()).isEmpty {
+                mailboxes[key]?.messages.removeAll { $0.id == id }
+                sentPhotos[id] = nil
+                restore(draft, key: key, error: failure.message)
+            } else {
+                // A new draft is being written; keep this one in the timeline instead.
+                var kept = draft
+                kept.text = typed.isEmpty ? "" : draft.text
+                failedSends[id] = kept
+                if var box = mailboxes[key], let i = box.messages.firstIndex(where: { $0.id == id }) {
+                    box.messages[i].status = "send_failed"
+                    box.error = failure.message
+                    mailboxes[key] = box
+                }
+            }
         } catch {
             // It may or may not have arrived. Keep the bubble as unconfirmed; never resend by itself.
-            mark("delivery_unconfirmed")
-            drafts[key] = Draft()
+            setStatus("delivery_unconfirmed", id: id, key: key)
             message = L.t("Delivery unconfirmed — check the session before resending", "전달 미확인 · 재전송 전에 세션 확인")
         }
+    }
+
+    /// Puts a refused draft back into an empty composer.
+    private func restore(_ draft: Draft, key: String, error: String? = nil) {
+        var back = draft
+        back.error = error
+        drafts[key] = back
+    }
+
+    /// Brings a refused send back into the composer after what is already there; photos up to three.
+    func bringBack(_ id: String, key: String) {
+        guard let kept = failedSends.removeValue(forKey: id) else { return }
+        drafts[key] = (drafts[key] ?? Draft()).appending(kept)
+        mailboxes[key]?.messages.removeAll { $0.id == id }
+        sentPhotos[id] = nil
+        if mailboxes[key]?.messages.contains(where: { $0.status == "send_failed" }) == false { mailboxes[key]?.error = nil }
+    }
+
+    private func setStatus(_ status: String, id: String, key: String) {
+        guard var box = mailboxes[key], let i = box.messages.firstIndex(where: { $0.id == id }) else { return }
+        let row = box.messages[i]
+        box.messages[i].status = Conversation.advance(row.status, to: status, hasReply: !(row.reply ?? "").isEmpty)
+        mailboxes[key] = box
     }
 
     private func applyReceipt(_ live: LiveMessage) {
@@ -398,8 +457,11 @@ final class AppModel {
         notes[key] = ControlNote(id: request.requestId, text: head + (detail.isEmpty ? "" : " · " + detail), final: true)
         message = notes[key]?.text
         if var box = mailboxes[key], let i = box.messages.firstIndex(where: { $0.id == request.requestId }) {
-            box.messages[i].status = failed ? "delivery_unconfirmed" : "awaiting_reply"
-            if failed { box.error = detail.isEmpty ? nil : detail }
+            // A receipt arriving after the reply never sends the message back to waiting.
+            let row = box.messages[i]
+            box.messages[i].status = Conversation.advance(row.status, to: failed ? "delivery_unconfirmed" : "awaiting_reply",
+                                                          hasReply: !(row.reply ?? "").isEmpty)
+            if failed && box.messages[i].status != "replied" { box.error = detail.isEmpty ? nil : detail }
             mailboxes[key] = box
         }
     }
@@ -411,14 +473,9 @@ final class AppModel {
         let key = deviceId + ":" + sessionId
         var box = mailboxes[key] ?? Mailbox()
         if let error = live.error { box.error = error; mailboxes[key] = box; return }
-        let server = live.messages ?? [], now = Date().timeIntervalSince1970
-        let waiting = box.messages.filter { m in m.local == true && !server.contains { $0.id == m.id } }.map { m -> MailMessage in
-            var m = m
-            if now - m.created > 30 { m.status = "delivery_unconfirmed" }
-            return m
-        }
-        box.error = nil
-        box.messages = server + waiting
+        // Merged by ID, never replaced: the answer holds only the ten most recently changed rows.
+        box.messages = Conversation.merge(box.messages, with: live.messages ?? [])
+        if !box.messages.contains(where: { $0.status == "send_failed" }) { box.error = nil }
         mailboxes[key] = box
     }
 
@@ -454,7 +511,7 @@ final class AppModel {
 
     private func resetAccountState() {
         devices = []; account = nil; selectedDeviceID = nil; pending = [:]; notes = [:]; mailboxes = [:]; controlOff = []; mailboxAsk = nil
-        drafts = [:]; sentPhotos = [:]; sending = []
+        drafts = [:]; sentPhotos = [:]; sending = [:]; failedSends = [:]
     }
 
     func showDemo() {
@@ -514,7 +571,8 @@ final class AppModel {
         }
     }
 
-    private func apply(_ live: LiveMessage) {
+    /// Applies one live socket message (internal so unit tests can feed receipts and mailbox answers).
+    func apply(_ live: LiveMessage) {
         switch live.type {
         case "state": if let list = live.devices { devices = list }
         case "snapshot":

@@ -23,6 +23,7 @@ targets:
         # Development builds stay beside the store app (si.onetop.mobile) until release.
         PRODUCT_BUNDLE_IDENTIFIER: si.onetop.mobile.dev
         PRODUCT_NAME: 1top
+        PRODUCT_MODULE_NAME: OneTop
         INFOPLIST_KEY_CFBundleDisplayName: 1top
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -49,6 +50,24 @@ targets:
         SWIFT_STRICT_CONCURRENCY: minimal
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
+  # Logic tests: photo preparation, message ordering and merging, drafts during back-to-back sends.
+  OneTopTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: OneTopTests
+    dependencies:
+      - target: OneTop
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: si.onetop.mobile.dev.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/1top.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)1top"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        SWIFT_VERSION: "5.0"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
 schemes:
   OneTop:
     build:
@@ -59,4 +78,5 @@ schemes:
     test:
       config: Debug
       targets:
+        - OneTopTests
         - OneTopUITests

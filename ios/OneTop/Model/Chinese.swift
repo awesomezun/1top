@@ -19,6 +19,8 @@ enum Chinese {
     }
 
     static let exact: [String: String] = [
+        "Bring back to the composer": "放回输入框",
+        "Not sent — the relay refused it": "未发送 · 中继服务器拒绝了请求",
         "Working…": "正在处理…",
         "Preparing a reply…": "正在准备回复…",
         "The computer is offline": "电脑已离线",
