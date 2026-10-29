@@ -146,6 +146,7 @@ class CloudLink:
         self.collector=collector;self.controller=controller;self.data_dir=data_dir
         self.config_file=data_dir/'device.json';self.receipt_file=data_dir/'remote-receipts.json'
         self.stop=threading.Event();self.action_lock=threading.Lock();self.ws=None
+        self.message_lock=threading.Lock();self.receipt_lock=threading.RLock()
         self.status='Not connected'
         self.workspace_usage={'devices':[], 'updated':0}
         try:self.config=json.loads(self.config_file.read_text())
@@ -178,8 +179,9 @@ class CloudLink:
 
     def result(self,rid,ok,message):
         result={'type':'result','request_id':rid,'ok':ok,'message':message}
-        self.receipts[rid]=result
-        self.receipts=dict(list(self.receipts.items())[-200:]);save_private(self.receipt_file,self.receipts)
+        with self.receipt_lock:
+            self.receipts[rid]=result
+            self.receipts=dict(list(self.receipts.items())[-200:]);save_private(self.receipt_file,self.receipts)
         try:self.ws.send(json.dumps(result))
         except Exception:pass
 
@@ -187,16 +189,25 @@ class CloudLink:
         rid=data.get('request_id','')
         if not isinstance(rid,str) or len(rid)!=36:return
         if data.get('device_id')!=self.config['device_id']:return
-        if rid in self.receipts:
-            try:self.ws.send(json.dumps(self.receipts[rid]))
+        with self.receipt_lock:previous=self.receipts.get(rid)
+        if previous:
+            try:self.ws.send(json.dumps(previous))
             except Exception:pass
             return
         if data.get('expires_at',0)<time.time()*1000:return self.result(rid,False,'Request expired before delivery. Nothing executed.')
-        if not self.action_lock.acquire(blocking=False):return self.result(rid,False,'Another action is running. Check the device first.')
+        message = data.get('action')=='message'
+        lock = self.message_lock if message else self.action_lock
+        if not lock.acquire(blocking=message):return self.result(rid,False,'Another action is running. Check the device first.')
         try:
+            with self.receipt_lock:previous=self.receipts.get(rid)
+            if previous:
+                try:self.ws.send(json.dumps(previous))
+                except Exception:pass
+                return
             # Mark before executing: never replay an uncertain action after a crash/reconnect.
-            self.receipts[rid]={'type':'result','request_id':rid,'ok':False,'message':'Previous execution is unconfirmed. Check the session before requesting another action.'}
-            save_private(self.receipt_file,self.receipts)
+            with self.receipt_lock:
+                self.receipts[rid]={'type':'result','request_id':rid,'ok':False,'message':'Previous execution is unconfirmed. Check the session before requesting another action.'}
+                save_private(self.receipt_file,self.receipts)
             if data.get('action') not in ('focus','pause','resume','terminate','prompt','message'):raise ValueError('Unsupported action')
             result=self.controller.execute({k:data.get(k) for k in ('action','session_id','control_key','request_id','prompt','attachments') if k in data})
             self.result(rid,True,result.get('message','Completed'))
@@ -204,7 +215,7 @@ class CloudLink:
             if data.get('action')=='message':self.controller.mailbox.delivery(rid,'delivery_unconfirmed')
             from .controls import ActionError
             self.result(rid,False,str(e) if isinstance(e,ActionError) else 'The action could not be confirmed. Check this computer.')
-        finally:self.action_lock.release()
+        finally:lock.release()
 
     def read_mailbox(self,data):
         rid=data.get('request_id','')
@@ -251,7 +262,11 @@ class CloudLink:
                             interval=3 if message.get('interval')==3 else 60
                             if interval==3:last=0
                         if message.get('type')=='mailbox_request':threading.Thread(target=self.read_mailbox,args=(message,),daemon=True).start()
-                        if message.get('type')=='action':threading.Thread(target=self.command,args=(message,),daemon=True).start()
+                        if message.get('type')=='action':
+                            # Message admission only persists to the local queue;
+                            # keep socket arrival order without waiting on a CLI.
+                            if message.get('action')=='message':self.command(message)
+                            else:threading.Thread(target=self.command,args=(message,),daemon=True).start()
                     except websocket.WebSocketTimeoutException:continue
             except websocket.WebSocketBadStatusException as e:
                 if e.status_code in (401,403):self.status='Disconnected by account. Open 1top to reconnect.';return

@@ -21,6 +21,10 @@ class ActionError(Exception):
         self.status=status
 
 
+class ActionBusy(ActionError):
+    """No terminal input occurred; a queued message can be retried safely."""
+
+
 def target_key(spec):
     terminal=spec.get('orca_terminal') or {}
     identity=[spec['id'],spec['pids'],spec.get('process_started'),spec.get('process_birth'),
@@ -79,7 +83,7 @@ def accepts_message(spec):
     if accepts_instruction(spec):return True
     return bool(spec.get('control_key') and spec.get('orca_terminal') and
                 spec.get('input_verified') is True and spec['kind'] in ('Claude','GLM','Codex') and
-                spec.get('status')=='working' and spec.get('display_status')!='resuming')
+                spec.get('status') in ('working','idle','interrupted'))
 
 
 class Controller:
@@ -151,18 +155,23 @@ class Controller:
         if self.lock.locked():return
         with self.collector.lock:snapshot=self.collector.snapshot
         if time.time()-snapshot.get('updated',0)>20:return
-        for row in self.mailbox.queued()[:5]:
+        seen = set()
+        for row in self.mailbox.queued():
             spec=next((s for s in snapshot.get('sessions',[]) if s['id']==row['session_id']),None)
             if (time.time()-row['created']>900 or spec and
                     spec.get('control_key')!=row['control_key'] and row['control_key'] not in spec.get('continuation_keys', [])):
                 self.mailbox.delivery(row['id'],'not_delivered');continue
+            if row['session_id'] in seen:continue
+            seen.add(row['session_id'])
             if not spec or not accepts_instruction(spec):continue
             with self.state_lock:mark=self.paused.get(row['session_id'])
             if mark and mark['phase']=='resuming':continue
             try:
-                self.execute({'action':'message','session_id':row['session_id'],'control_key':row['control_key'],
-                              'request_id':row['id'],'prompt':row['text'],'_dispatch_queued':True})
-                break
+                result = self.execute({'action':'message','session_id':row['session_id'],'control_key':row['control_key'],
+                              'request_id':row['id'],'prompt':row['text']}, _dispatch_queued=True)
+                if not result.get('queued'):break
+            except ActionBusy:
+                continue
             except Exception:
                 self.mailbox.delivery(row['id'],'delivery_unconfirmed')
 
@@ -216,18 +225,40 @@ class Controller:
             if self.status(current) in ('idle','interrupted'):return current
         raise ActionError('중단 요청은 보냈지만 완료를 아직 확인하지 못해 CLI 종료를 보류했습니다. 터미널에서 확인 후 다시 시도하세요.')
 
-    def execute(self,payload):
+    def enqueue_message(self, sid, key, rid, prompt, images):
+        # Admit correspondence quickly, independently of long-running controls.
+        # Dispatch re-discovers the process before any terminal input.
+        with self.collector.lock:
+            snapshot = self.collector.snapshot
+            if time.time()-snapshot.get('updated',0)>20:raise ActionError('Computer report is stale. Nothing sent.')
+            spec = next((dict(s) for s in snapshot.get('sessions',[]) if s['id']==sid and
+                         (s.get('control_key')==key or key in s.get('continuation_keys',[]))),None)
+        if not spec or not accepts_message(spec):raise ActionError('This session cannot receive messages right now.')
+        try:
+            if images:
+                if spec['kind'] not in ('Claude','GLM','Codex'):raise ActionError('This session cannot receive photos right now.')
+                images = self.images.stage(rid,sid,images)
+            row = self.mailbox.enqueue(spec,rid,prompt,images)
+        except (ValueError,OSError) as error:
+            raise ActionError(str(error) if isinstance(error,ValueError) else 'Could not save this message. Nothing sent.') from None
+        return {'message':'메시지를 저장했습니다. 현재 작업이 끝나면 접수 순서대로 전달합니다.' if row['status']=='queued' else '이미 접수한 메시지입니다. 대화에서 결과를 확인하세요.',
+                'queued':row['status']=='queued','status':row['status']}
+
+    def execute(self,payload, _dispatch_queued=False):
         action=payload.get('action');sid=payload.get('session_id');key=payload.get('control_key');rid=payload.get('request_id')
         if action not in ('focus','interrupt','pause','resume','terminate','prompt','message','rename') or not all(isinstance(x,str) and x for x in (sid,key,rid)):
             raise ActionError('잘못된 동작 요청입니다.',400)
         prompt=instruction_text(payload.get('prompt')) if action in ('prompt','message') else None
         title=terminal_title(payload.get('title')) if action=='rename' else None
-        queued = next((r for r in self.mailbox.queued() if r['id']==rid and r['session_id']==sid), None) if payload.get('_dispatch_queued') is True else None
+        queued = next((r for r in self.mailbox.queued() if r['id']==rid and r['session_id']==sid), None) if _dispatch_queued else None
         if payload.get('attachments') and action != 'message':raise ActionError('Photos require a conversation message.',400)
         try:
             images = queued.get('attachments', []) if queued else decode_images(payload.get('attachments', []))
         except ValueError as error:raise ActionError(str(error),400) from None
-        if not self.lock.acquire(blocking=False):raise ActionError('이전 동작을 처리 중입니다. 잠시 후 다시 시도하세요.')
+        if action == 'message' and not _dispatch_queued:
+            return self.enqueue_message(sid,key,rid,prompt,images)
+        if _dispatch_queued and not queued:raise ActionError('Queued message no longer exists.')
+        if not self.lock.acquire(blocking=False):raise ActionBusy('이전 동작을 처리 중입니다. 잠시 후 다시 시도하세요.')
         try:
             content=title if action=='rename' else prompt
             if images:content=json.dumps([content,public_images(images)],sort_keys=True,separators=(',',':'))
@@ -235,7 +266,7 @@ class Controller:
             if rid in self.receipts:
                 previous,result=self.receipts[rid]
                 if previous!=request:raise ActionError('요청 ID가 이미 사용되었습니다.')
-                if not (payload.get('_dispatch_queued') is True and result.get('queued')):return result
+                if not (_dispatch_queued and result.get('queued')):return result
             # Only correspondence may follow a proven continuation. A stale
             # destructive control must still be reconfirmed against the new PID.
             spec=self.resolve(sid,key,allow_continuation=True) if action=='message' else self.resolve(sid,key)
@@ -263,9 +294,8 @@ class Controller:
                     except (ValueError,OSError) as error:raise ActionError(str(error) if isinstance(error,ValueError) else 'The attached photo could not be read. Nothing sent.') from None
                 with self.state_lock:mark=self.paused.get(sid)
                 if mark and mark['key']==key and mark['phase']=='resuming':
-                    raise ActionError('이미 지시 전송을 요청했습니다. 세션에서 결과를 확인하세요.')
+                    raise ActionBusy('이미 지시 전송을 요청했습니다. 세션에서 결과를 확인하세요.')
                 if action=='message' and current['kind']!='Aside' and current['status']=='working' and accepts_message(current):
-                    if not payload.get('_dispatch_queued'):self.mailbox.enqueue(spec,rid,prompt,images)
                     result={'message':'작업을 중단하지 않고 세션이 대기 상태가 되면 메시지를 전달합니다.','queued':True}
                     self.receipts[rid]=(request,result)
                     return result
