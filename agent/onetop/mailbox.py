@@ -160,6 +160,11 @@ class Mailbox:
         with self.lock:
             return [dict(r) for r in self.records if r['status'] == 'queued']
 
+    def pending_sessions(self):
+        with self.lock:
+            return {r['session_id'] for r in self.records if r.get('path') and
+                    r['status'] not in ('replied','queued','not_delivered')}
+
     def delivery(self, rid, status):
         with self.lock:
             row = next((r for r in self.records if r['id'] == rid), None)

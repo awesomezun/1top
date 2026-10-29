@@ -155,6 +155,10 @@ class Controller:
         if self.lock.locked():return
         with self.collector.lock:snapshot=self.collector.snapshot
         if time.time()-snapshot.get('updated',0)>20:return
+        # Replies continue to be collected while the phone is disconnected.
+        pending = self.mailbox.pending_sessions()
+        for spec in snapshot.get('sessions',[]):
+            if spec['id'] in pending:self.mailbox.read(spec)
         seen = set()
         for row in self.mailbox.queued():
             spec=next((s for s in snapshot.get('sessions',[]) if s['id']==row['session_id']),None)

@@ -126,6 +126,17 @@ class MessageSequenceTests(unittest.TestCase):
         self.assertLessEqual(len(updates),10)
         self.assertEqual(len(Mailbox(self.ctl.mailbox.path).records),15)
 
+    def test_reply_is_persisted_without_a_connected_phone(self):
+        request=self.request('Reconnect later');self.ctl.execute(request)
+        with patch.object(self.ctl,'orca',return_value={}):self.ctl.flush_mailbox()
+        with self.path.open('a') as f:
+            f.write(json.dumps({'type':'assistant','message':{'role':'assistant','content':[
+                {'type':'text','text':f'[1top-reply:{request["request_id"]}]Saved while offline[/1top-reply]'}]}})+'\n')
+        self.ctl.flush_mailbox()  # No read_mailbox request from a phone.
+        restored=Mailbox(self.ctl.mailbox.path)
+        self.assertEqual(restored.records[0]['status'],'replied')
+        self.assertEqual(restored.records[0]['reply'],'Saved while offline')
+
     def test_relay_burst_while_control_runs_is_accepted_once_and_survives_reconnect(self):
         link=CloudLink(self.collector,self.ctl,self.root);link.config={'device_id':'device'};link.ws=Mock()
         requests=[{**self.request(str(i)),'device_id':'device','expires_at':time.time()*1000+15000} for i in range(12)]
