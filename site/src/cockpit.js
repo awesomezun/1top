@@ -22,16 +22,19 @@ export function orderSessions(rows,period){
 
 /** Bins for the radar, newest first: the collector's flow when every computer sends it, else the
  *  nested period totals (for the last hour: the last 10 minutes, 10–30 and 30–60 minutes ago). */
-function reading(devices,rows,period){
+export function reading(devices,rows,period){
  const seconds=SECONDS[period],periodTotals=devices.map(d=>(d.snapshot.periods||[]).find(p=>p.key===period)).filter(Boolean);
  const sums=rows.map(r=>total(r.windows?.[period])).filter(valid);
  const tokens=periodTotals.length?periodTotals.reduce((n,p)=>n+(total(p.tokens)||0),0):sums.length?sums.reduce((a,b)=>a+b,0):null;
  const average=tokens===null?null:tokens/seconds*3600;
+ // Several computers line up on real time (bin i covers start+i*step), not position: they report at
+ // different moments. The axis ends where every one has reported; a bin one of them lacks stays unknown.
  const flows=devices.map(d=>d.snapshot.flow?.[period]).filter(f=>f&&Array.isArray(f.bins)&&f.step>0);
- if(flows.length&&flows.length===devices.length&&flows.every(f=>f.step===flows[0].step)){
-  const step=flows[0].step,n=Math.max(...flows.map(f=>f.bins.length)),bins=[];
-  for(let i=0;i<n;i++){const by={};for(const f of flows){const v=f.bins[f.bins.length-1-i];if(v)for(const [k,x] of Object.entries(v))if(valid(x))by[k]=(by[k]||0)+x;}
-   const parts=Object.entries(by).sort((a,b)=>rank(a[0])-rank(b[0])).map(([k,x])=>[k,x/step*3600]);bins.push({start:i*step,end:Math.min(seconds,(i+1)*step),parts,total:parts.reduce((s,p)=>s+p[1],0)});}
+ if(flows.length&&flows.length===devices.length&&flows.every(f=>f.step===flows[0].step)&&(flows.length===1||flows.every(f=>valid(f.start)))){
+  const step=flows[0].step,n=Math.max(...flows.map(f=>f.bins.length)),end=flows.length>1?Math.min(...flows.map(f=>valid(f.end)?f.end:f.start+f.bins.length*step)):null,bins=[];
+  for(let i=0;i<n;i++){const by={};let known=true;
+   for(const f of flows){const j=end===null?f.bins.length-1-i:Math.round((end-(i+1)*step-f.start)/step),v=j>=0&&j<f.bins.length?f.bins[j]:null;if(!v){known=false;break;}for(const [k,x] of Object.entries(v))if(valid(x))by[k]=(by[k]||0)+x;}
+   const parts=known?Object.entries(by).sort((a,b)=>rank(a[0])-rank(b[0])).map(([k,x])=>[k,x/step*3600]):[];bins.push({start:i*step,end:Math.min(seconds,(i+1)*step),parts,total:known?parts.reduce((s,p)=>s+p[1],0):null});}
   return {average,bins};
  }
  const edges=[[0,null],...KEYS.filter(k=>SECONDS[k]<seconds).map(k=>[SECONDS[k],k]),[seconds,period]];
@@ -110,7 +113,7 @@ export function renderCockpit(root,{devices,rows,period,t,live,now}){
  const quotas=new Map();for(const d of online)for(const q of d.snapshot.account_quotas||[])if(!quotas.has(q.id))quotas.set(q.id,{q,d});
  const end=Math.max(...online.map(d=>d.snapshot.updated||0),now/1000)||now/1000,start=end-SECONDS[period];
  root.querySelector('[data-weekly]').innerHTML=quotas.size?[...quotas.values()].slice(0,4).map(({q})=>{const w=(q.windows||[]).find(x=>['주간','Weekly','7d'].includes(x.label)),p=q.weekly?.[period],rate=!q.stale&&valid(p?.used_pp)&&valid(p?.observed_seconds)&&p.observed_seconds>=120?p.used_pp/p.observed_seconds*3600:null,tag=String(q.account_label||'').split(' · ').pop();
-  return `<div class="weekly-tile" style="--tool:${color(q.kind)}"><div><i></i><b>${esc(toolName(q.kind))}</b><strong class="${q.stale?'stale':''}">${pct(w?.pct)}</strong></div><div><small>${esc(tag)}</small>${spark(q.usage_points,start,end,color(q.kind),q.stale)}<em class="${q.stale?'stale':''}">${q.stale?age(q.updated,now,t):rate===null?t('Collecting','수집 중'):pct(rate)+t('/h','/시간')}</em></div></div>`;}).join('')
+  return `<div class="weekly-tile" style="--tool:${color(q.kind)}"><div><i></i><b>${esc(toolName(q.kind))}</b><strong class="${q.stale?'stale':''}">${pct(w?.pct)}</strong></div><div><small>${esc(tag)}</small>${spark(q.usage_points,start,end,color(q.kind),q.stale)}<em class="${q.stale?'stale':''}">${q.stale?(['login_required','login_expired','credential_store_unavailable','access_denied'].includes(q.status)?t('Reconnect needed','재연결 필요'):age(q.updated,now,t)):rate===null?t('Collecting','수집 중'):pct(rate)+t('/h','/시간')}</em></div></div>`;}).join('')
   :`<p class="cockpit-caption">${t('Connect subscription accounts in 1top on your computer.','컴퓨터의 1top에서 구독 계정을 연결하면 표시됩니다.')}</p>`;
  root.querySelector('[data-hosts]').innerHTML=online.map(d=>{const h=d.snapshot.host||{},mem=valid(h.used_memory)&&h.total_memory>0?h.used_memory/h.total_memory*100:null;
   return `<div class="host-row"><b>${esc(d.name)}</b>${[['CPU',h.cpu],[t('Memory','메모리'),mem]].map(([n,v])=>`<span><small>${n}</small><i><u style="width:${Math.min(100,Math.max(0,v||0))}%"></u></i><em>${pct(v)}</em></span>`).join('')}</div>`;}).join('')||`<p class="cockpit-caption">${t('Waiting for a computer to report.','컴퓨터의 보고를 기다립니다.')}</p>`;

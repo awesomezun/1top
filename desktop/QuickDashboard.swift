@@ -645,6 +645,17 @@ struct QuickDashboard: View {
     }
 
     // MARK: Sessions
+    private func paceCell(gauge: MiniGauge, text: String, ink: Color, help: String, label: String) -> some View {
+        VStack(spacing: m(2)) {
+            gauge
+            Text(text).font(m.font(.tiny)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.85).foregroundStyle(ink)
+        }
+        .frame(width: m(Self.paceColumn))
+        .help(help)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+    }
+
     private var orderedSessions: [DesktopSession] {
         let sorted = model.sortedSessions
         return sorted.filter(\.isWorkingGroup) + sorted.filter { !$0.isWorkingGroup }
@@ -717,18 +728,16 @@ struct QuickDashboard: View {
         var helpLines = [project, "\(s.locationLabel) · \(s.model ?? s.kind)" + (s.reportedEffort.map { " · effort \($0)" } ?? ""), s.groupStateLabel]
         if let title = s.title { helpLines.append(title) }
         let hub = s.isWorkingGroup ? theme.segmentOn : s.state == "waiting" ? theme.amber : theme.dim
-        let paceText = burn.map { tokensMode ? shortNumber($0) + " tokens/시간" : rate1($0) }
+        // Small, typed pieces: older Swift compilers time out type-checking this row as one expression.
+        let paceText: String = burn.map { tokensMode ? shortNumber($0) + " tokens/시간" : rate1($0) } ?? "확인 중"
+        let gaugeText: String = burn.map { tokensMode ? shortNumber($0) + "/시간" : rate1($0) } ?? "—"
+        let gaugeInk: Color = burn == nil ? theme.dim : burn == 0 ? theme.muted : theme.ink
+        let pendingLine: String = burn == nil && !tokensMode ? "\n" + pending : ""
+        let paceHelp: String = s.groupStateLabel + "\n지금 속도: " + paceText + " · 최근 60초의 토큰 속도로 계속 쓸 때" + pendingLine
+        let paceLabel: String = s.groupStateLabel + ", 지금 속도 " + paceText
+        let gauge = MiniGauge(value: burn, scale: paceScale, color: AgentPalette.color(s.kind), hub: hub, theme: theme, m: m)
         return HStack(alignment: .center, spacing: m(9)) {
-            VStack(spacing: m(2)) {
-                MiniGauge(value: burn, scale: paceScale, color: AgentPalette.color(s.kind), hub: hub, theme: theme, m: m)
-                Text(burn.map { tokensMode ? shortNumber($0) + "/시간" : rate1($0) } ?? "—")
-                    .font(m.font(.tiny)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.85)
-                    .foregroundStyle(burn == nil ? theme.dim : burn == 0 ? theme.muted : theme.ink)
-            }
-            .frame(width: m(Self.paceColumn))
-            .help(s.groupStateLabel + "\n지금 속도: " + (paceText ?? "확인 중") + " · 최근 60초의 토큰 속도로 계속 쓸 때" + (burn == nil && !tokensMode ? "\n" + pending : ""))
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(s.groupStateLabel + ", 지금 속도 " + (paceText ?? "확인 중"))
+            paceCell(gauge: gauge, text: gaugeText, ink: gaugeInk, help: paceHelp, label: paceLabel)
             VStack(alignment: .leading, spacing: m(2)) {
                 HStack(spacing: m(6)) {
                     Text(sessionName(s)).font(m.font(.title, .semibold)).lineLimit(1)
