@@ -106,11 +106,15 @@ window.OneTopI18n=(()=>{
  const account=/\b(Claude|Codex) 계정 ([0-9a-z]{6})\b/g;
  const renamed=text=>language==='ko'?text:named.reduce((out,ko)=>out.includes(ko)?out.replaceAll(ko,dictionary.get(ko)[language]):out,text).replace(account,(_,tool,id)=>tool+(language==='en'?' account ':' 账户 ')+id);
  const excluded='script,style,textarea,input,.cell-task,.terminal-rename,.cell-primary,.goal-objective,.goal-row h3,.skill-path,.map-tile-label,.map-tooltip strong,.map-legend-item>span,.detail-name,.detail-path,#detailTitle,#renameTarget,#actionTarget,#resumeText,[data-user-content]';
+ // A state reads as a state where it names one (badge, filter chip, group head, filter option: 'Paused')
+ // and as a command elsewhere, such as the pause button ('Pause').
+ const states={'일시정지':['Paused','已暂停']},stateContext='.status,[data-state-chip],.group-head,option';
+ const stateWord=(node,text)=>language!=='ko'&&states[text]&&node.parentElement?.closest(stateContext)?states[text][language==='en'?0:1]:null;
  function source(node,current,store){const old=store.get(node);return old&&current===old.rendered?old.source:current;}
  function apply(){
   scheduled=false;observer.disconnect();
   const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let node;
-  while((node=walker.nextNode())){const kept=node.parentElement?.closest(excluded),raw=source(node,node.nodeValue,texts),trim=raw.trim();if(!trim||kept&&!named.some(ko=>trim.includes(ko))&&!/\b(Claude|Codex) 계정 [0-9a-z]{6}\b/.test(trim))continue;const translated=kept?renamed(trim):t(trim),rendered=raw.replace(trim,translated);texts.set(node,{source:raw,rendered});if(node.nodeValue!==rendered)node.nodeValue=rendered;}
+  while((node=walker.nextNode())){const kept=node.parentElement?.closest(excluded),raw=source(node,node.nodeValue,texts),trim=raw.trim();if(!trim||kept&&!named.some(ko=>trim.includes(ko))&&!/\b(Claude|Codex) 계정 [0-9a-z]{6}\b/.test(trim))continue;const translated=kept?renamed(trim):stateWord(node,trim)??t(trim),rendered=raw.replace(trim,translated);texts.set(node,{source:raw,rendered});if(node.nodeValue!==rendered)node.nodeValue=rendered;}
   document.querySelectorAll('[aria-label],[placeholder],[title]').forEach(el=>{const kept=el.closest('.map-tile,.map-legend-item')||el.closest(excluded)&&!el.matches('input,textarea');const saved=attributes.get(el)||{};for(const attr of ['aria-label','placeholder','title'])if(el.hasAttribute(attr)){const current=el.getAttribute(attr),previous=saved[attr],raw=previous&&current===previous.rendered?previous.source:current;if(kept&&!named.some(ko=>raw.includes(ko))&&!/\b(Claude|Codex) 계정 [0-9a-z]{6}\b/.test(raw))continue;const rendered=kept?renamed(raw):t(raw);saved[attr]={source:raw,rendered};if(current!==rendered)el.setAttribute(attr,rendered);}attributes.set(el,saved);});
   observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['title','placeholder','aria-label']});
  }

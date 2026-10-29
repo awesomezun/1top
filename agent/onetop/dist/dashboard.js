@@ -98,15 +98,34 @@ window.OneTopDashboard=(()=>{
  // Saved widths stay as they are. When the panel is narrower than their sum (a narrow window or app
  // zoom), CPU and memory give way before session names drop under about 190px, then each column
  // gives back its room above the minimum.
+ // Columns also never get narrower than their header in the page's language ('Total tokens' is wider than
+ // '세션 전체 누적'), and two never narrower than their widest content: the status badge ('Needs attention')
+ // and the tool, account and effort chips of the model column (up to 220px). Saved widths stay as set.
+ function fitted(table){
+  const fit={},pads=el=>{const css=getComputedStyle(el);return parseFloat(css.paddingLeft)+parseFloat(css.paddingRight);};
+  for(const th of table.querySelectorAll('thead th[data-column]')){
+   const label=Math.max(0,...[...th.children].filter(k=>!k.classList.contains('column-resize')).map(k=>k.scrollWidth));
+   if(label)fit[th.dataset.column]=Math.ceil(label+pads(th));
+  }
+  for(const id of ['status','model']){
+   const cells=[...table.querySelectorAll(`tbody td[data-column="${id}"]`)].filter(td=>td.firstElementChild);if(!cells.length)continue;
+   const content=Math.min(220,Math.ceil(Math.max(...cells.map(td=>Math.max(...[...td.querySelectorAll('*')].map(e=>e.scrollWidth))))+pads(cells[0])));
+   fit[id]=Math.max(fit[id]||0,content);
+  }
+  return fit;
+ }
  function applyWidths(){
   const table=document.querySelector('.sessions-table');if(!table)return;
-  const room=table.parentElement?.clientWidth||Infinity,spare=id=>Math.max(0,state.widths[id]-minima[id]);
-  const compact=room<190+state.columns.filter(id=>id!=='session').reduce((n,id)=>n+Math.min(state.widths[id],minima[id]),0);
-  const shown=compact?state.columns.filter(id=>id!=='cpu'&&id!=='memory'):state.columns,sum=shown.reduce((n,id)=>n+state.widths[id],0),slack=shown.reduce((n,id)=>n+spare(id),0);
-  const cut=sum>room&&slack>0?Math.min(1,(sum-room)/slack):0,width=id=>Math.floor(state.widths[id]-spare(id)*cut);
+  const fit=fitted(table),floor=id=>Math.max(minima[id],fit[id]||0),wanted=id=>Math.max(state.widths[id],fit[id]||0);
+  const room=table.parentElement?.clientWidth||Infinity,spare=id=>Math.max(0,wanted(id)-floor(id));
+  const compact=room<190+state.columns.filter(id=>id!=='session').reduce((n,id)=>n+Math.min(wanted(id),floor(id)),0);
+  const shown=compact?state.columns.filter(id=>id!=='cpu'&&id!=='memory'):state.columns,sum=shown.reduce((n,id)=>n+wanted(id),0),slack=shown.reduce((n,id)=>n+spare(id),0);
+  const cut=sum>room&&slack>0?Math.min(1,(sum-room)/slack):0,width=id=>Math.floor(wanted(id)-spare(id)*cut);
+  // Room left over goes to the terminal and project column, whose names would otherwise be cut first.
+  const total=shown.reduce((n,id)=>n+width(id),0),extra=Number.isFinite(room)?Math.max(0,room-total):0,final=id=>width(id)+(id==='session'?extra:0);
   table.classList.toggle('compact-columns',compact);
-  table.style.width=shown.reduce((n,id)=>n+width(id),0)+'px';table.style.minWidth='100%';
-  table.querySelectorAll('col[data-column]').forEach(c=>c.style.width=width(c.dataset.column)+'px');
+  table.style.width=total+extra+'px';table.style.minWidth='100%';
+  table.querySelectorAll('col[data-column]').forEach(c=>c.style.width=final(c.dataset.column)+'px');
  }
  function afterTable(){
   if(!initialized)return;const table=document.querySelector('.sessions-table');
