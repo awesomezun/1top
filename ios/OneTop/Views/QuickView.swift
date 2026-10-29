@@ -329,7 +329,8 @@ struct QuickView: View {
                             .pickerStyle(.inline)
                         }
                     } label: {
-                        Image(systemName: "circle.lefthalf.filled").font(.system(size: 13, weight: .semibold))
+                        // Hidden so the identifier below belongs to the button alone, not also to its icon.
+                        Image(systemName: "circle.lefthalf.filled").font(.system(size: 13, weight: .semibold)).accessibilityHidden(true)
                     }
                     .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.small)
                     .accessibilityLabel(L.t("Theme and language", "테마와 언어"))

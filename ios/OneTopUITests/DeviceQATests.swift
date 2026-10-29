@@ -152,12 +152,13 @@ final class DeviceQATests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo", "-qaGuard", "YES"]
         app.launch()
-        let menu = element(app, "display-menu")
+        let menu = app.buttons["display-menu"]
         XCTAssertTrue(menu.waitForExistence(timeout: 10))
         func choose(_ title: String) {
+            XCTAssertTrue(wait(menu, "isHittable == true", timeout: 10), "Theme and language menu cannot be tapped")
             menu.tap()
             let item = app.buttons[title]
-            XCTAssertTrue(item.waitForExistence(timeout: 5), "No menu item \(title)")
+            XCTAssertTrue(item.waitForExistence(timeout: 5) && wait(item, "isHittable == true", timeout: 5), "No menu item \(title)")
             item.tap()
             XCTAssertTrue(menu.waitForExistence(timeout: 5))
         }
@@ -233,11 +234,11 @@ final class DeviceQATests: XCTestCase {
                 let app = XCUIApplication()
                 app.launchArguments = ["--demo", "-qaGuard", "YES", "-appearance", look, "-language", language]
                 app.launch()
-                XCTAssertTrue(element(app, "display-menu").waitForExistence(timeout: 10))
+                XCTAssertTrue(app.buttons["display-menu"].waitForExistence(timeout: 10))
                 sleep(2)
                 shot(app, "20-\(look)-\(language)-dashboard")
                 guard (look == "dark" && language == "zh") || (look == "light" && language == "ko") || (look == "dark" && language == "en") else { continue }
-                element(app, "display-menu").tap(); sleep(1)
+                app.buttons["display-menu"].tap(); sleep(1)
                 shot(app, "20-\(look)-\(language)-display-menu")
                 app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).tap(); sleep(1)
                 element(app, "connection").tap(); sleep(1)
@@ -287,12 +288,12 @@ final class DeviceQATests: XCTestCase {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02)).tap()
         let dashboard = app.tabBars.buttons.element(boundBy: 0)
         if dashboard.waitForExistence(timeout: 10) { dashboard.tap() }
-        let menu = element(app, "display-menu")
+        let menu = app.buttons["display-menu"]
         guard menu.waitForExistence(timeout: 15) else { return }
         for title in ["한국어", "시스템"] {
             menu.tap()
             let item = app.buttons[title]
-            if item.waitForExistence(timeout: 5) { item.tap() }
+            if item.waitForExistence(timeout: 5), wait(item, "isHittable == true", timeout: 5) { item.tap() }
         }
     }
 
@@ -304,13 +305,14 @@ final class DeviceQATests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-qaGuard", "YES", "-qaSession", session]
         app.launch()
-        let connection = element(app, "connection"), menu = element(app, "display-menu")
+        let connection = element(app, "connection"), menu = app.buttons["display-menu"]
         XCTAssertTrue(connection.waitForExistence(timeout: 20) && wait(connection, Self.liveLabel, timeout: 45), "Not live; is this iPhone signed in?")
         let dashboardTab = app.tabBars.buttons.element(boundBy: 0), workspaceTab = app.tabBars.buttons.element(boundBy: 4)
         func choose(_ title: String, expect value: String, step: String) {
+            XCTAssertTrue(wait(menu, "isHittable == true", timeout: 10), "Theme and language menu cannot be tapped")
             menu.tap()
             let item = app.buttons[title]
-            XCTAssertTrue(item.waitForExistence(timeout: 5), "No menu item \(title)")
+            XCTAssertTrue(item.waitForExistence(timeout: 5) && wait(item, "isHittable == true", timeout: 5), "No menu item \(title)")
             item.tap()
             XCTAssertTrue(wait(menu, "value == '\(value)'", timeout: 5), "Expected \(value), got \(String(describing: menu.value))")
             check(step)
@@ -328,7 +330,7 @@ final class DeviceQATests: XCTestCase {
         }
         // Korean first, so the theme names below are known; nothing is chosen yet to check.
         menu.tap()
-        XCTAssertTrue(app.buttons["한국어"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["한국어"].waitForExistence(timeout: 5) && wait(app.buttons["한국어"], "isHittable == true", timeout: 5))
         app.buttons["한국어"].tap()
         XCTAssertTrue(wait(menu, "value ENDSWITH ' ko'", timeout: 5))
         element(app, "period-5h").tap()
