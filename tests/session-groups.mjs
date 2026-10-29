@@ -105,6 +105,12 @@ nodes.sort.value='rate';vm.runInContext('renderTable()',context);
 assert.deepEqual(rowIDs(),['b','new']); // Explicit alternate sorts still work within the working group.
 nodes.sort.value='period';vm.runInContext('renderTable()',context);
 assert.deepEqual(rowIDs(),['new','b']);
+// Every non-working session shares one usage order: states never split it into bands.
+vm.runInContext(`
+ data.sessions=[ranked('w',10,10,0),{...ranked('idle-big',900,0,0),status:'idle'},{...ranked('waiting-mid',500,0,0),status:'waiting'},{...ranked('paused-small',100,0,0),status:'idle',display_status:'paused'},{...ranked('parent',5,0,0),status:'idle',children_working:1}];
+ data.root_sessions=data.sessions;selectedPeriod='1h';OneTopDashboard.state.collapsed={};renderTable();`,context);
+assert.deepEqual(rowIDs(),['w','parent','idle-big','waiting-mid','paused-small']);
+assert.equal((nodes.sessionsBody.innerHTML.match(/class="group-row /g)||[]).length,2);
 const sortOptions=/<select id="sort"[^>]*>(.*?)<\/select>/.exec(html)[1];
 assert.match(sortOptions,/^<option value="period">/);
 console.log('Session ordering: selected-period tokens, immediate usage/period changes, insertion and removal.');
@@ -167,7 +173,7 @@ vm.runInContext(`idleHeavy.status='working';renderTable();`,context);
 assert.deepEqual(rowIDs(),['idle-heavy','active-codex','active-claude','child-active-group','idle-other']);
 vm.runInContext(`activeClaude.status='idle';renderTable();`,context);
 assert.deepEqual(rowIDs(),['idle-heavy','active-codex','child-active-group','idle-other','active-claude']);
-assert.match(nodes.sessionsBody.innerHTML,/<tr[^>]*data-session="active-claude"[^>]*data-group-of="idle"/);
+assert.match(nodes.sessionsBody.innerHTML,/<tr[^>]*data-session="active-claude"[^>]*data-group-of="rest"/);
 vm.runInContext(`selectedPeriod='30m';renderTable();`,context);
 assert.deepEqual(rowIDs(),['idle-heavy','child-active-group','active-codex','idle-other','active-claude']);
 vm.runInContext(`activeChild.children_working=0;renderTable();`,context);

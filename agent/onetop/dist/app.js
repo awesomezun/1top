@@ -221,6 +221,12 @@ function renderSidebar(orderedRows){
 }
 const SESSION_GROUPS=[['working','작업 중',['working','resuming']],['waiting','확인 필요',['waiting']],['paused','일시정지',['paused']],['idle','대기 중',['idle']],['other','상태 미확인',['unknown','interrupted']]];
 const sessionGroup=s=>SESSION_GROUPS.find(g=>g[2].includes(display(s)))?.[0]||'other';
+// The table has two bands, as the user asked: working roots first (a root with a working child
+// counts as working), then every other session together. Each band is in selected-period token
+// order, so waiting, paused and idle sessions never split the usage order. State chips still filter.
+const TABLE_BANDS=[['working','작업 중'],['rest','작업 중 아님']];
+const working=s=>display(s)==='working'||(s.children_working||0)>0;
+const tableBand=s=>working(s)?'working':'rest';
 const cleanTitle=t=>String(t||'').replace(/<[^>]*>?/g,' ').replace(/\s+/g,' ').trim();
 function renderSessionStats(scoped){
  const filter=$('stateFilter').value,counts=Object.fromEntries(SESSION_GROUPS.map(([k])=>[k,0]));for(const s of scoped)counts[sessionGroup(s)]++;
@@ -236,16 +242,16 @@ function renderTable(){
  const order={working:0,waiting:1,resuming:2,paused:3,interrupted:4,unknown:5,idle:6},sort=$('sort').value;
  // Compare the same token unit across accounts, regardless of the displayed quota estimate.
  const numeric=s=>sort==='period'?total(s.usage?.windows?.[selectedPeriod]):sort==='rate'?s.usage?.rate:sort==='total'?total(s.tokens):s.resources?.[sort];
- const compare=(a,b)=>Number(display(b)==='working')-Number(display(a)==='working')||
+ const compare=(a,b)=>Number(working(b))-Number(working(a))||
   (sort==='status'?(order[display(a)]-order[display(b)]):sort==='terminal'?(a.orca_terminal?.title||'').localeCompare(b.orca_terminal?.title||''):((numeric(b)??-1)-(numeric(a)??-1)))||
   ((total(b.usage?.windows?.[selectedPeriod])??-1)-(total(a.usage?.windows?.[selectedPeriod])??-1))||String(a.id).localeCompare(String(b.id));
  // Status and usage changes apply on the next snapshot, including working children.
  rows.sort(compare);
- const bandOf=sessionGroup;
+ const bandOf=tableBand;
  renderSidebar(rows);renderSessionStats(visibleSessions().filter(s=>provider==='all'||s.kind===provider));
  $('tableCount').textContent=rows.length;$('tableEmpty').hidden=rows.length>0;
  const active=document.activeElement?.closest('[data-action],[data-group-toggle]'),focus=active?{a:active.dataset.action,id:active.dataset.target,group:active.dataset.groupToggle}:null;
- // Groups keep the usage ranking inside each band; a search or status filter opens every band.
+ // A search or a filter opens both bands.
  const filtered=!!query||state!=='all'||modelFilter!=='all',collapsed=OneTopDashboard.state.collapsed||{};
  const cell=s=>{const r=s.resources,u=s.usage||{},pv=u.windows?.[selectedPeriod],period=periodMeta(),task=cleanTitle(s.title)||s.project;
   // The first line is whatever tells sessions apart: the terminal tab, else the conversation title.
@@ -253,9 +259,9 @@ function renderTable(){
   const place=s.kind==='Aside'?'Aside 앱 안에서 실행 · 별도 프로세스 없음':s.is_subagent?'하위 에이전트':s.pids.length===1?'PID '+s.pids[0]:'PID 연결 미확인';
   const second=[term?task:'',s.project].filter(Boolean);
   return `<tr class="${s.is_subagent?'subagent-row':''}" tabindex="0" data-session="${esc(s.id)}" data-group-of="${bandOf(s)}" aria-label="${esc(primary)} ${esc(s.project)} ${s.kind} ${labels[display(s)]}, 상세 보기"><td><div class="cell-line"><span class="cell-primary" title="${esc(s.terminal_note||primary)}" data-user-content>${s.is_subagent?'↳ ':''}${s.orca_terminal&&s.control_key&&!s.is_subagent?`<button type="button" class="terminal-rename" data-rename="${esc(s.id)}" title="터미널 제목 변경">${esc(term)}<span class="rename-pencil" aria-hidden="true">✎</span></button>`:esc(primary)}</span>${s.children_count?`<button class="children-toggle" data-children="${esc(s.id)}" aria-expanded="${expandedSessions.has(s.id)}" title="하위 사용량을 포함한 합계입니다"><span aria-hidden="true">${expandedSessions.has(s.id)?'▾':'▸'}</span> 하위 ${s.children_count}</button>`:''}</div><span class="cell-task" title="${esc(second.join(' · ')+'\n'+(s.cwd||'')+'\n'+place)}" data-user-content>${second.map((v,i)=>i===second.length-1&&second.length>1?`<span class="cell-project">${esc(v)}</span>`:esc(v)).join(' · ')}</span></td><td><span class="provider-cell">${s.kind==='Aside'?esc(model(s.model))+effortBadge(s):dot(s.kind)+esc(runtimeLabel(s))}</span><span class="cell-sub">${s.kind==='Aside'?'Aside 앱':esc(model(s.model))+effortBadge(s)}</span></td><td>${status(s)}</td><td class="num period-value" title="${pv?exact(total(pv))+' tokens':'사용량 미확인'}">${sessionWeeklyCell(s,pv,period)}</td><td class="num ${s.tokens?'':'unknown-value'}" title="${s.tokens?exact(total(s.tokens))+' tokens · 출력 '+fmt(s.tokens[3]):'유효한 사용량 보고 없음'}">${fmt(total(s.tokens))}</td><td class="num">${sessionBurnCell(s)}</td><td class="num" title="${r?r.count+'개 프로세스':s.kind==='Aside'?'Aside 앱 안에서 실행':'미귀속'}">${pct(r?.cpu)}</td><td class="num" title="${bytes(r?.rss)} / ${bytes(data.system?.host?.memory?.total)}">${memoryPercent(r?.rss)}</td><td>${actions(s)}</td></tr>`;};
- const html=SESSION_GROUPS.map(([key,label])=>{
+ const html=TABLE_BANDS.map(([key,label])=>{
   const members=rows.filter(s=>bandOf(s)===key);if(!members.length)return '';
-  const open=filtered||!(collapsed[key]??(key==='idle'||key==='other'));
+  const open=filtered||!(collapsed[key]??false);
   const tokens=members.reduce((n,s)=>n+(total(s.usage?.windows?.[selectedPeriod])||0),0),cpu=members.reduce((n,s)=>n+(s.resources?.cpu||0),0);
   const head=`<tr class="group-row ${key}" data-group="${key}"><td colspan="9"><div class="group-head"><button type="button" class="group-toggle" data-group-toggle="${key}" aria-expanded="${open}"><span class="group-chevron" aria-hidden="true"></span><i class="dot"></i><span>${label}</span><span class="count">${members.length}</span></button><span class="group-meta">${periodCaption()} ${fmt(tokens)} tokens · CPU ${pct(cpu)}</span></div></td></tr>`;
   return head+(open?members.flatMap(s=>[s,...(expandedSessions.has(s.id)?children(s):[])]).map(cell).join(''):'');
