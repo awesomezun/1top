@@ -18,14 +18,23 @@ import CoreGraphics
             {"ready":true,"sessions":[{"id":"idle-heavy","kind":"Claude","status":"idle","usage":{"windows":{"1h":[1000,0,0,0],"30m":[10,0,0,0]}}},{"id":"active-small","kind":"Codex","status":"working","usage":{"windows":{"1h":[100,0,0,0],"30m":[20,0,0,0]}}}]}
             """.data(using:.utf8)!)
         rankingModel.snapshot=rankingSnapshot;rankingModel.now=Date(timeIntervalSince1970:100)
-        precondition(rankingModel.sortedSessions.map(\.id)==["idle-heavy","active-small"])
+        precondition(rankingModel.sortedSessions.map(\.id)==["active-small","idle-heavy"])
         rankingSnapshot.sessions?[0].status="working";rankingSnapshot.sessions?[1].status="idle"
         rankingSnapshot.sessions?[1].usage?.windows?["1h"]=[2000,0,0,0]
         rankingModel.snapshot=rankingSnapshot;rankingModel.now=Date(timeIntervalSince1970:105)
         precondition(rankingModel.sortedSessions.map(\.id)==["idle-heavy","active-small"])
-        rankingModel.now=Date(timeIntervalSince1970:161)
+        rankingSnapshot.sessions?[1].status="working";rankingModel.snapshot=rankingSnapshot
         precondition(rankingModel.sortedSessions.map(\.id)==["active-small","idle-heavy"])
-        rankingModel.selectedPeriod="30m"
+        rankingSnapshot.sessions?[0].usage?.windows?["30m"]=[100,0,0,0]
+        rankingModel.snapshot=rankingSnapshot;rankingModel.selectedPeriod="30m"
+        precondition(rankingModel.sortedSessions.map(\.id)==["idle-heavy","active-small"])
+        rankingSnapshot.sessions?[0].display_status="paused";rankingModel.snapshot=rankingSnapshot
+        precondition(rankingModel.sortedSessions.map(\.id)==["active-small","idle-heavy"])
+        rankingSnapshot.sessions?[0].children_working=1;rankingModel.snapshot=rankingSnapshot
+        precondition(rankingModel.sortedSessions.map(\.id)==["idle-heavy","active-small"])
+        rankingSnapshot.sessions?[0].usage?.windows?["30m"]=nil
+        rankingSnapshot.sessions?[1].usage?.windows?["30m"]=[0,0,0,0]
+        rankingModel.snapshot=rankingSnapshot
         precondition(rankingModel.sortedSessions.map(\.id)==["active-small","idle-heavy"])
         let aside = model.sessions[1]
         precondition(aside.allows("pause") && aside.allows("focus") && !aside.allows("terminate") && !aside.allows("resume"))

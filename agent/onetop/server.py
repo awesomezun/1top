@@ -21,6 +21,7 @@ from .controls import Controller, ActionError, target_key, process_start
 from .resources import ResourceSampler
 from .usage import session_usage, window_usage, WINDOWS
 from .time_ranges import parse_period, extend_snapshot
+from .session_order import ordered_snapshot
 from . import weekly_usage
 from .discovery import inventory, context, applications, orca_executable, registry_status, claude_transcript
 from . import __version__
@@ -813,6 +814,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 with self.server.collector.lock:snapshot=self.server.collector.snapshot
             snapshot=self.server.controller.decorate(snapshot)
+            snapshot=ordered_snapshot(snapshot, period or '1h')
             bridge = getattr(self.server, 'bridge', None)
             if bridge:
                 snapshot = {**snapshot, 'workspace_usage': bridge.workspace_usage}
