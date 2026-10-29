@@ -46,11 +46,20 @@ enum Appearance: String, CaseIterable, Identifiable, Sendable {
     func save() { UserDefaults.standard.set(rawValue, forKey: "appearance") }
 }
 
+/// The language every label reads. Observable, so any view whose body calls `L.t` redraws when it
+/// changes, without rebuilding the tree: scroll positions, sheets and selections stay.
+@Observable final class LanguageBox: @unchecked Sendable {
+    var language = Language.saved
+}
+
 /// Every label goes through `L.t(english, korean)`. Chinese is looked up by the English text in
-/// `Chinese`, so the call sites stay two-language. The root view is rebuilt when the language
-/// changes, so helpers outside views read the same choice.
+/// `Chinese`, so the call sites stay two-language.
 enum L {
-    nonisolated(unsafe) static var language = Language.saved
+    static let box = LanguageBox()
+    static var language: Language {
+        get { box.language }
+        set { box.language = newValue }
+    }
     static func t(_ en: String, _ ko: String) -> String {
         switch language {
         case .ko: ko

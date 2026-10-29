@@ -51,6 +51,53 @@ final class DeviceQATests: XCTestCase {
         else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.11)).tap() }
     }
 
+    /// Taps once the element can be tapped, so a covering sheet or a reveal in progress fails clearly.
+    private func tapWhenReady(_ element: XCUIElement, _ what: String, timeout: TimeInterval = 10) {
+        XCTAssertTrue(element.waitForExistence(timeout: timeout) && wait(element, "isHittable == true", timeout: timeout), "\(what) cannot be tapped")
+        element.tap()
+    }
+
+    /// Opens a tab. After scrolling, the iOS 26 tab bar shrinks to the current tab alone; scroll back
+    /// and, if needed, tap it so all five tabs are there before choosing one.
+    private func openTab(_ app: XCUIApplication, _ index: Int) {
+        let bar = app.tabBars.firstMatch
+        if bar.buttons.count < 5 { app.swipeDown(velocity: .fast) }
+        if bar.buttons.count < 5 { bar.buttons.firstMatch.tap() }
+        XCTAssertTrue(wait(bar, "buttons.@count >= 5", timeout: 5) || bar.buttons.count >= 5, "Tab bar stayed minimized")
+        let tab = bar.buttons.element(boundBy: index)
+        tapWhenReady(tab, "tab \(index)")
+        XCTAssertTrue(wait(tab, "isSelected == true", timeout: 5), "Tab \(index) did not open")
+    }
+
+    /// The header's one-tap theme toggle, until the screen shows `look` ("dark" or "light").
+    private func showTheme(_ app: XCUIApplication, _ look: String) {
+        let toggle = app.buttons["theme-toggle"]
+        for _ in 0..<2 where (toggle.value as? String) != look {
+            tapWhenReady(toggle, "Theme toggle")
+            sleep(1)  // the reveal takes half a second
+        }
+        XCTAssertEqual(toggle.value as? String, look, "Theme did not become \(look)")
+    }
+
+    /// The header's one-tap language choice.
+    private func showLanguage(_ app: XCUIApplication, _ code: String) {
+        let segment = app.buttons["header-language-" + code]
+        tapWhenReady(segment, "Language \(code)")
+        XCTAssertTrue(wait(segment, "isSelected == true", timeout: 5), "Language \(code) not selected")
+        sleep(1)
+    }
+
+    /// The System theme is only in Workspace settings; choose it there and come back.
+    private func chooseSystemTheme(_ app: XCUIApplication) {
+        openTab(app, 4)
+        let picker = element(app, "settings-theme")
+        for _ in 0..<6 where !(picker.exists && picker.isHittable) { app.swipeUp() }
+        tapWhenReady(picker, "Theme setting")
+        let system = app.buttons.matching(NSPredicate(format: "label IN %@", ["시스템", "System", "跟随系统"])).firstMatch
+        tapWhenReady(system, "System theme")
+        openTab(app, 0)
+    }
+
     // MARK: Without a test session
 
     func test01_InstallLaunchLive() {
@@ -145,52 +192,54 @@ final class DeviceQATests: XCTestCase {
         shot(app, "07-control-off")
     }
 
-    /// Theme and language are changed through the dashboard menu, never pinned by launch arguments,
-    /// and must survive a relaunch from what the app saved. The chosen computer and period must
-    /// survive the switch itself.
+    /// Theme and language are changed with the header's one-tap controls, never pinned by launch
+    /// arguments, and come back after a relaunch from what the app saved. The chosen computer, the
+    /// period, the demo session and the scroll position survive each change.
     func test08_ThemeAndLanguagePersist() {
         let app = XCUIApplication()
         app.launchArguments = ["--demo", "-qaGuard", "YES"]
         app.launch()
-        let menu = app.buttons["display-menu"]
-        XCTAssertTrue(menu.waitForExistence(timeout: 10))
-        func choose(_ title: String) {
-            XCTAssertTrue(wait(menu, "isHittable == true", timeout: 10), "Theme and language menu cannot be tapped")
-            menu.tap()
-            let item = app.buttons[title]
-            XCTAssertTrue(item.waitForExistence(timeout: 5) && wait(item, "isHittable == true", timeout: 5), "No menu item \(title)")
-            item.tap()
-            XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        let toggle = app.buttons["theme-toggle"], connection = app.buttons["connection"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        showLanguage(app, "ko")
+        // One tap flips the theme, whatever it was.
+        let before = toggle.value as? String ?? ""
+        tapWhenReady(toggle, "Theme toggle")
+        XCTAssertTrue(wait(toggle, "value != '\(before)'", timeout: 3), "One tap did not flip the theme")
+        sleep(1)
+        // Choose a computer and a period, and scroll a little; the changes below must keep them.
+        tapWhenReady(element(app, "period-5h"), "5h")
+        tapWhenReady(connection, "Computer menu")
+        tapWhenReady(app.buttons["scope-demo-mini"], "Mac mini")
+        app.swipeUp(velocity: .slow)
+        sleep(1)
+        let row = app.buttons["session-m1"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        let top = row.frame.minY
+        func kept(_ step: String) {
+            XCTAssertTrue(element(app, "period-5h").isSelected, "Period lost after \(step)")
+            XCTAssertTrue(connection.label.contains("Mac mini"), "Computer lost after \(step): \(connection.label)")
+            XCTAssertTrue(connection.label.hasPrefix("데모") || connection.label.hasPrefix("Demo") || connection.label.hasPrefix("演示"), "Demo ended after \(step)")
+            XCTAssertLessThan(abs(row.frame.minY - top), 3, "Scroll moved after \(step)")
         }
-        // Start from Korean so the theme names are known; language names never change.
-        choose("한국어")
-        // Pick a computer and a period first; the switches below must keep them.
-        element(app, "period-5h").tap()
-        element(app, "connection").tap()
-        let mini = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Mac mini'")).firstMatch
-        XCTAssertTrue(mini.waitForExistence(timeout: 5))
-        mini.tap()
-        choose("다크")
-        XCTAssertEqual(menu.value as? String, "dark ko")
+        showTheme(app, "dark")
+        kept("dark")
         shot(app, "08a-dark-ko")
-        choose("라이트")
-        XCTAssertEqual(menu.value as? String, "light ko")
-        choose("中文")
-        XCTAssertEqual(menu.value as? String, "light zh")
-        XCTAssertTrue(element(app, "period-5h").isSelected, "Period lost on switching")
-        XCTAssertTrue((element(app, "connection").label).contains("Mac mini"), "Computer lost on switching")
-        XCTAssertFalse(app.buttons["1top 계정으로 연결"].exists || app.buttons["使用 1top 账户连接"].exists, "Signed out on switching")
+        showTheme(app, "light")
+        kept("light")
+        showLanguage(app, "zh")
+        kept("Chinese")
         shot(app, "08b-light-zh")
         app.terminate()
         app.launch()
-        XCTAssertTrue(menu.waitForExistence(timeout: 10))
-        XCTAssertEqual(menu.value as? String, "light zh", "Not kept after relaunch")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        XCTAssertEqual(toggle.value as? String, "light", "Theme not kept after relaunch")
+        XCTAssertTrue(app.buttons["header-language-zh"].isSelected, "Language not kept after relaunch")
         XCTAssertTrue(app.tabBars.buttons["会话"].exists, "Tabs not in Chinese after relaunch")
         shot(app, "08c-relaunched")
-        // Leave the simulator as it was: the iPhone's own theme, Korean.
-        choose("跟随系统")
-        choose("한국어")
-        XCTAssertEqual(menu.value as? String, "system ko")
+        // Leave the simulator as it was: Korean and the iPhone's own theme.
+        showLanguage(app, "ko")
+        chooseSystemTheme(app)
     }
 
     /// Every period changes the dashboard; the session detail still opens its messages and controls.
@@ -234,13 +283,10 @@ final class DeviceQATests: XCTestCase {
                 let app = XCUIApplication()
                 app.launchArguments = ["--demo", "-qaGuard", "YES", "-appearance", look, "-language", language]
                 app.launch()
-                XCTAssertTrue(app.buttons["display-menu"].waitForExistence(timeout: 10))
+                XCTAssertTrue(app.buttons["theme-toggle"].waitForExistence(timeout: 10))
                 sleep(2)
                 shot(app, "20-\(look)-\(language)-dashboard")
                 guard (look == "dark" && language == "zh") || (look == "light" && language == "ko") || (look == "dark" && language == "en") else { continue }
-                app.buttons["display-menu"].tap(); sleep(1)
-                shot(app, "20-\(look)-\(language)-display-menu")
-                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).tap(); sleep(1)
                 element(app, "connection").tap(); sleep(1)
                 shot(app, "20-\(look)-\(language)-computer-menu")
                 app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).tap(); sleep(1)
@@ -273,58 +319,89 @@ final class DeviceQATests: XCTestCase {
         sleep(2)
     }
 
+    /// Simulator only: a theme toggle and a language change, slow enough to film the reveal.
+    func test22_RevealForFilming() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Filmed in the simulator.")
+        #endif
+        let app = launch(["--demo"])
+        let toggle = app.buttons["theme-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        sleep(2)
+        toggle.tap()
+        sleep(2)
+        app.buttons["header-language-zh"].tap()
+        sleep(2)
+        toggle.tap()
+        sleep(2)
+        // Back to Korean, as the simulator was; the two toggles cancel out.
+        app.buttons["header-language-ko"].tap()
+        sleep(1)
+    }
+
+    /// Simulator only: rapid taps on the theme and language controls never leave a snapshot behind;
+    /// taps during a reveal are ignored, and the controls keep working afterwards.
+    func test23_RapidTapsDuringReveal() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Simulator only.")
+        #endif
+        let app = launch(["--demo"])
+        let toggle = app.buttons["theme-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        let start = toggle.value as? String ?? ""
+        for _ in 0..<4 { toggle.tap() }
+        for code in ["en", "zh", "ko", "en"] { app.buttons["header-language-" + code].tap() }
+        sleep(2)
+        shot(app, "23a-after-rapid-taps")
+        // Still responsive: one more tap flips the theme, and Korean can be chosen.
+        let now = toggle.value as? String ?? ""
+        tapWhenReady(toggle, "Theme toggle after rapid taps")
+        XCTAssertTrue(wait(toggle, "value != '\(now)'", timeout: 3), "Theme toggle stuck after rapid taps")
+        sleep(1)
+        showLanguage(app, "ko")
+        if (toggle.value as? String) != start { tapWhenReady(toggle, "Theme toggle back"); sleep(1) }
+        XCTAssertTrue(element(app, "period-1h").isHittable, "Dashboard covered after rapid taps")
+        shot(app, "23b-responsive")
+    }
+
     // MARK: Signed in, live (real device)
 
     private var restoreDisplay = false
     private static let liveLabel = "label BEGINSWITH '실시간' OR label BEGINSWITH 'Live' OR label BEGINSWITH '实时'"
 
-    /// Whatever happened, leave the iPhone in Korean with the system theme.
+    /// Whatever happened, leave the iPhone in Korean with the system theme. The System theme is
+    /// chosen in Workspace settings, as a person would; nothing is deleted from UserDefaults.
     override func tearDown() async throws {
         guard restoreDisplay else { return }
         restoreDisplay = false
         let app = XCUIApplication()
         app.launchArguments = ["-qaGuard", "YES", "-qaSession", session]
         if app.state != .runningForeground { app.launch() }
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02)).tap()
-        let dashboard = app.tabBars.buttons.element(boundBy: 0)
-        if dashboard.waitForExistence(timeout: 10) { dashboard.tap() }
-        let menu = app.buttons["display-menu"]
-        guard menu.waitForExistence(timeout: 15) else { return }
-        for title in ["한국어", "시스템"] {
-            menu.tap()
-            let item = app.buttons[title]
-            if item.waitForExistence(timeout: 5), wait(item, "isHittable == true", timeout: 5) { item.tap() }
-        }
+        if app.buttons["Sheet Grabber"].exists { app.swipeDown(velocity: .fast) }
+        openTab(app, 0)
+        if app.buttons["header-language-ko"].waitForExistence(timeout: 15) { showLanguage(app, "ko") }
+        chooseSystemTheme(app)
     }
 
-    /// Signed in and live, never pinned by launch arguments: theme and language changes keep the
-    /// computer chosen in the header menu, the chosen period and the live connection, and come back
-    /// after a relaunch. Everything happens on the dashboard; nothing is sent to any session.
+    /// Signed in and live, never pinned by launch arguments: the header's theme toggle and language
+    /// choice keep the computer chosen in the header menu, the chosen period and the live connection,
+    /// and come back after a relaunch. Everything happens on the dashboard; nothing is sent to any session.
     func test16_DisplayChangesKeepLiveSession() {
         restoreDisplay = true
         let app = XCUIApplication()
         app.launchArguments = ["-qaGuard", "YES", "-qaSession", session]
         app.launch()
-        let connection = app.buttons["connection"], menu = app.buttons["display-menu"]
+        let connection = app.buttons["connection"], toggle = app.buttons["theme-toggle"]
         XCTAssertTrue(connection.waitForExistence(timeout: 20) && wait(connection, Self.liveLabel, timeout: 45), "Not live; is this iPhone signed in?")
-        /// Opens a header menu and taps one of its items, each only once it can be tapped.
-        func pick(_ button: XCUIElement, _ item: XCUIElement, _ what: String) {
-            XCTAssertFalse(app.buttons["Sheet Grabber"].exists, "A sheet covers the dashboard before \(what)")
-            XCTAssertTrue(wait(button, "isHittable == true", timeout: 10), "Menu cannot be tapped before \(what)")
-            button.tap()
-            XCTAssertTrue(item.waitForExistence(timeout: 5) && wait(item, "isHittable == true", timeout: 5), "No menu item for \(what)")
-            item.tap()
-        }
         // The scope: the first computer in the header menu; its name then shows in the connection label.
         var computer = ""
         func chooseScope() {
             let first = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'scope-' AND identifier != 'scope-all'")).firstMatch
-            XCTAssertTrue(wait(connection, "isHittable == true", timeout: 10), "Computer menu cannot be tapped")
-            connection.tap()
+            tapWhenReady(connection, "Computer menu")
             XCTAssertTrue(first.waitForExistence(timeout: 5) && wait(first, "isHittable == true", timeout: 5), "No computer to choose")
             computer = first.label.components(separatedBy: " · ").first ?? first.label
             first.tap()
-            element(app, "period-5h").tap()
+            tapWhenReady(element(app, "period-5h"), "5h")
         }
         func check(_ step: String) {
             XCTAssertFalse(app.buttons["Sheet Grabber"].exists, "A sheet covers the dashboard after \(step)")
@@ -333,32 +410,25 @@ final class DeviceQATests: XCTestCase {
             XCTAssertTrue(element(app, "period-5h").isSelected, "Period lost after \(step)")
             shot(app, "16-" + step)
         }
-        func choose(_ title: String, expect value: String, step: String) {
-            pick(menu, app.buttons[title], title)
-            XCTAssertTrue(wait(menu, "value == '\(value)'", timeout: 5), "Expected \(value), got \(String(describing: menu.value))")
-            check(step)
-        }
-        // Korean first, so the theme names below are known.
-        pick(menu, app.buttons["한국어"], "한국어")
-        XCTAssertTrue(wait(menu, "value ENDSWITH ' ko'", timeout: 5))
+        showLanguage(app, "ko")
         chooseScope()
         check("01-scope-chosen")
-        choose("다크", expect: "dark ko", step: "02-dark")
-        choose("라이트", expect: "light ko", step: "03-light")
-        choose("English", expect: "light en", step: "04-english")
-        choose("中文", expect: "light zh", step: "05-chinese")
+        showTheme(app, "dark"); check("02-dark")
+        showTheme(app, "light"); check("03-light")
+        showLanguage(app, "en"); check("04-english")
+        showLanguage(app, "zh"); check("05-chinese")
         // Relaunch: theme and language come back from what the app saved, and it is live again.
         app.terminate()
         app.launch()
-        XCTAssertTrue(menu.waitForExistence(timeout: 20))
-        XCTAssertEqual(menu.value as? String, "light zh", "Not restored after relaunch")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20))
+        XCTAssertEqual(toggle.value as? String, "light", "Theme not restored after relaunch")
+        XCTAssertTrue(app.buttons["header-language-zh"].isSelected, "Language not restored after relaunch")
         XCTAssertTrue(wait(connection, Self.liveLabel, timeout: 45), "Not live after relaunch")
         shot(app, "16-06-relaunched")
         // The period and computer start over after a relaunch; choose them again for the last checks.
         chooseScope()
-        choose("한국어", expect: "light ko", step: "07-korean")
-        choose("시스템", expect: "system ko", step: "08-system")
-        restoreDisplay = false
+        showLanguage(app, "ko"); check("07-korean")
+        // The System theme is restored in tearDown, from Workspace settings.
     }
 
     // MARK: With the test session (QA_SESSION)

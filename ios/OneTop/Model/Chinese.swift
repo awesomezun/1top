@@ -189,6 +189,7 @@ enum Chinese {
         "Tell this AI what to do": "向此 AI 下达指令",
         "Theme": "主题",
         "Theme and language": "主题与语言",
+        "Toggle theme": "切换主题",
         "This computer was connected without remote control.": "此电脑在连接时未开启远程控制。",
         "This ends the CLI process. Unsaved work may be lost.": "这将结束 CLI 进程，未保存的工作可能会丢失。",
         "This session cannot receive messages right now.": "目前无法向此会话发送消息。",
@@ -240,5 +241,6 @@ enum Chinese {
         (try! Regex(#"^(\d+)d ago$"#), "{0}天前的报告"),
         (try! Regex(#"^(\d+) reported · (\d+) unknown · (\d+) zero$"#), "已报告 {0} · 未报告 {1} · 用量为 0 的会话 {2}"),
         (try! Regex(#"^(\d+) more$"#), "另外 {0} 个"),
+        (try! Regex(#"^All (\d+)$"#), "全部 {0}"),
     ]
 }

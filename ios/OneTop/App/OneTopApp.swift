@@ -33,8 +33,6 @@ struct RootView: View {
                 .tabBarMinimizeBehavior(.onScrollDown)
             }
         }
-        // Labels are read when views are built, so a language change rebuilds the tree.
-        .id(model.language)
         .preferredColorScheme(model.appearance.scheme)
         #if DEBUG
         // Screenshot runs open a screen directly: -screenTab usage, -screenDetail d1, -screenPane controls.
