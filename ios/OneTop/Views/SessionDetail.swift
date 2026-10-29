@@ -368,13 +368,20 @@ struct MailboxView: View {
 /// Every computer together, or one of them.
 struct ComputerPicker: View {
     @Environment(AppModel.self) private var model
+    // Buttons rather than a Picker, so each choice carries its own identifier (scope-all, scope-<id>).
     var body: some View {
-        Picker(L.t("Computer", "컴퓨터"), selection: Binding(get: { model.selectedDeviceID ?? "" }, set: { model.selectedDeviceID = $0.isEmpty ? nil : $0 })) {
-            Text(L.t("All computers", "모든 컴퓨터") + " · \(model.devices.count)").tag("")
-            ForEach(model.devices) { d in
-                Text(d.name + (model.isFresh(d) ? "" : L.t(" · offline", " · 오프라인"))).tag(d.id)
-            }
+        choice(L.t("All computers", "모든 컴퓨터") + " · \(model.devices.count)", id: nil, key: "scope-all")
+        ForEach(model.devices) { d in
+            choice(d.name + (model.isFresh(d) ? "" : L.t(" · offline", " · 오프라인")), id: d.id, key: "scope-" + d.id)
         }
+    }
+    private func choice(_ title: String, id: String?, key: String) -> some View {
+        let on = model.selectedDeviceID == id
+        return Button { model.selectedDeviceID = id } label: {
+            if on { Label(title, systemImage: "checkmark") } else { Text(title) }
+        }
+        .accessibilityIdentifier(key)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 

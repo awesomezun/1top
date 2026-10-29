@@ -298,48 +298,50 @@ final class DeviceQATests: XCTestCase {
     }
 
     /// Signed in and live, never pinned by launch arguments: theme and language changes keep the
-    /// chosen period and computer and the live connection, and come back after a relaunch.
-    /// Sends nothing to any session.
+    /// computer chosen in the header menu, the chosen period and the live connection, and come back
+    /// after a relaunch. Everything happens on the dashboard; nothing is sent to any session.
     func test16_DisplayChangesKeepLiveSession() {
         restoreDisplay = true
         let app = XCUIApplication()
         app.launchArguments = ["-qaGuard", "YES", "-qaSession", session]
         app.launch()
-        let connection = element(app, "connection"), menu = app.buttons["display-menu"]
+        let connection = app.buttons["connection"], menu = app.buttons["display-menu"]
         XCTAssertTrue(connection.waitForExistence(timeout: 20) && wait(connection, Self.liveLabel, timeout: 45), "Not live; is this iPhone signed in?")
-        let dashboardTab = app.tabBars.buttons.element(boundBy: 0), workspaceTab = app.tabBars.buttons.element(boundBy: 4)
-        func choose(_ title: String, expect value: String, step: String) {
-            XCTAssertTrue(wait(menu, "isHittable == true", timeout: 10), "Theme and language menu cannot be tapped")
-            menu.tap()
-            let item = app.buttons[title]
-            XCTAssertTrue(item.waitForExistence(timeout: 5) && wait(item, "isHittable == true", timeout: 5), "No menu item \(title)")
+        /// Opens a header menu and taps one of its items, each only once it can be tapped.
+        func pick(_ button: XCUIElement, _ item: XCUIElement, _ what: String) {
+            XCTAssertFalse(app.buttons["Sheet Grabber"].exists, "A sheet covers the dashboard before \(what)")
+            XCTAssertTrue(wait(button, "isHittable == true", timeout: 10), "Menu cannot be tapped before \(what)")
+            button.tap()
+            XCTAssertTrue(item.waitForExistence(timeout: 5) && wait(item, "isHittable == true", timeout: 5), "No menu item for \(what)")
             item.tap()
+        }
+        // The scope: the first computer in the header menu; its name then shows in the connection label.
+        var computer = ""
+        func chooseScope() {
+            let first = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'scope-' AND identifier != 'scope-all'")).firstMatch
+            XCTAssertTrue(wait(connection, "isHittable == true", timeout: 10), "Computer menu cannot be tapped")
+            connection.tap()
+            XCTAssertTrue(first.waitForExistence(timeout: 5) && wait(first, "isHittable == true", timeout: 5), "No computer to choose")
+            computer = first.label.components(separatedBy: " · ").first ?? first.label
+            first.tap()
+            element(app, "period-5h").tap()
+        }
+        func check(_ step: String) {
+            XCTAssertFalse(app.buttons["Sheet Grabber"].exists, "A sheet covers the dashboard after \(step)")
+            XCTAssertTrue(wait(connection, Self.liveLabel, timeout: 30), "Lost live after \(step): \(connection.label)")
+            XCTAssertTrue(connection.label.contains(computer), "Computer \(computer) lost after \(step): \(connection.label)")
+            XCTAssertTrue(element(app, "period-5h").isSelected, "Period lost after \(step)")
+            shot(app, "16-" + step)
+        }
+        func choose(_ title: String, expect value: String, step: String) {
+            pick(menu, app.buttons[title], title)
             XCTAssertTrue(wait(menu, "value == '\(value)'", timeout: 5), "Expected \(value), got \(String(describing: menu.value))")
             check(step)
         }
-        // The chosen scope: one computer from the Workspace list, read back by its selected trait.
-        var computer = ""
-        func check(_ step: String) {
-            XCTAssertTrue(wait(connection, Self.liveLabel, timeout: 30), "Lost live after \(step): \(connection.label)")
-            XCTAssertTrue(element(app, "period-5h").isSelected, "Period lost after \(step)")
-            workspaceTab.tap()
-            XCTAssertTrue(element(app, computer).waitForExistence(timeout: 10) && element(app, computer).isSelected, "Computer lost after \(step)")
-            dashboardTab.tap()
-            XCTAssertTrue(menu.waitForExistence(timeout: 10))
-            shot(app, "16-" + step)
-        }
-        // Korean first, so the theme names below are known; nothing is chosen yet to check.
-        menu.tap()
-        XCTAssertTrue(app.buttons["한국어"].waitForExistence(timeout: 5) && wait(app.buttons["한국어"], "isHittable == true", timeout: 5))
-        app.buttons["한국어"].tap()
+        // Korean first, so the theme names below are known.
+        pick(menu, app.buttons["한국어"], "한국어")
         XCTAssertTrue(wait(menu, "value ENDSWITH ' ko'", timeout: 5))
-        element(app, "period-5h").tap()
-        workspaceTab.tap()
-        let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'computer-' AND identifier != 'computer-all'")).firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 10), "No computer to choose")
-        computer = row.identifier
-        row.tap()
-        dashboardTab.tap()
+        chooseScope()
         check("01-scope-chosen")
         choose("다크", expect: "dark ko", step: "02-dark")
         choose("라이트", expect: "light ko", step: "03-light")
@@ -353,11 +355,7 @@ final class DeviceQATests: XCTestCase {
         XCTAssertTrue(wait(connection, Self.liveLabel, timeout: 45), "Not live after relaunch")
         shot(app, "16-06-relaunched")
         // The period and computer start over after a relaunch; choose them again for the last checks.
-        element(app, "period-5h").tap()
-        workspaceTab.tap()
-        XCTAssertTrue(element(app, computer).waitForExistence(timeout: 10))
-        element(app, computer).tap()
-        dashboardTab.tap()
+        chooseScope()
         choose("한국어", expect: "light ko", step: "07-korean")
         choose("시스템", expect: "system ko", step: "08-system")
         restoreDisplay = false
