@@ -41,6 +41,10 @@ export function useConnection(token:string|null){
  const [owner,setOwner]=useState(token);
  const socket=useRef<WebSocket|null>(null);
  const [mailbox,setMailbox]=useState<any>(null);
+ // Only the answer to the latest mailbox request is shown, so a late reply for another screen never mixes in.
+ const mailboxAsk=useRef<{request_id:string;device_id:string;session_id:string}|null>(null);
+ // Computers paired without remote control: their sessions offer no controls at all.
+ const noControl=useRef<Set<string>>(new Set());
  const [devices,setDevices]=useState<Device[]>([]),[state,setState]=useState('offline'),[error,setError]=useState(''),[account,setAccount]=useState<any>(null),[retryKey,setRetryKey]=useState(0),[active,setActive]=useState(AppState.currentState==='active'),[network,setNetwork]=useState(true),[receipt,setReceipt]=useState<any>(null);
  useEffect(()=>{const sub=AppState.addEventListener('change',v=>setActive(v==='active'));const off=NetInfo.addEventListener(v=>setNetwork(v.isConnected!==false));return()=>{sub.remove();off();};},[]);
  // Clear account-scoped external connection state before a new subscription is created.
@@ -52,17 +56,18 @@ export function useConnection(token:string|null){
   async function connect(){
    if(!alive)return;setState('connecting');
    try{const info=await api('/api/devices',token!);if(!alive)return;setAccount(info.account);
+    noControl.current=new Set((info.devices||[]).filter((d:any)=>d.allow_control===0||d.allow_control===false).map((d:any)=>d.id));
     const ticket=await api('/api/live-ticket',token!,{});if(!alive)return;
     if(new URL(ticket.socket_url).origin!==API.replace('https:','wss:')||new URL(ticket.socket_url).pathname!=='/api/live')throw Error('Unexpected relay socket address.');
     ws=new (WebSocket as any)(ticket.socket_url,['1top','ticket.'+ticket.ticket],{headers:{Origin:'https://1top.si'}} as any);
     socket.current=ws;
     ws!.onopen=()=>{if(alive){attempt=0;setState('live');setError('');}};
-    ws!.onmessage=(e:MessageEvent)=>{if(!alive)return;try{const m=JSON.parse(e.data);if(m.type==='state')setDevices(m.devices);if(m.type==='snapshot')setDevices(old=>[...old.filter(d=>d.id!==m.device.id),m.device]);if(m.type==='offline')setDevices(old=>old.map(d=>d.id===m.device_id?{...d,online:false}:d));if(m.type==='removed')setDevices(old=>old.filter(d=>d.id!==m.device_id));if(m.type==='result')setReceipt(m);if(m.type==='mailbox')setMailbox(m);}catch{setError('Invalid device report. Reconnect to try again.');}};
+    ws!.onmessage=(e:MessageEvent)=>{if(!alive)return;try{const m=JSON.parse(e.data);const scope=(d:Device):Device=>noControl.current.has(d.id)?{...d,allow_control:false,snapshot:d.snapshot&&{...d.snapshot,sessions:(d.snapshot.sessions||[]).map(s=>({...s,capabilities:[]}))}}:d;if(m.type==='state')setDevices((m.devices||[]).map(scope));if(m.type==='snapshot')setDevices(old=>[...old.filter(d=>d.id!==m.device.id),scope(m.device)]);if(m.type==='offline')setDevices(old=>old.map(d=>d.id===m.device_id?{...d,online:false}:d));if(m.type==='removed')setDevices(old=>old.filter(d=>d.id!==m.device_id));if(m.type==='result')setReceipt(m);if(m.type==='mailbox'){const ask=mailboxAsk.current;if(ask&&m.request_id===ask.request_id&&m.device_id===ask.device_id&&m.session_id===ask.session_id)setMailbox(m);}}catch{setError('Invalid device report. Reconnect to try again.');}};
     ws!.onerror=()=>{if(alive)setState('offline');};
     ws!.onclose=()=>{if(!alive)return;setState('offline');timer=setTimeout(connect,Math.min(30000,1000*2**attempt++));};
    }catch(e:any){if(!alive)return;setState(e.status===403?'restricted':'offline');setError(e.message);if(e.status!==400&&e.status!==401&&e.status!==403)timer=setTimeout(connect,Math.min(30000,1000*2**attempt++));}
   }
   connect();return()=>{alive=false;clearTimeout(timer);socket.current=null;if(ws){ws.onclose=null;ws.close();}};
  },[token,active,network,retryKey]);
- return {mailbox:owner===token?mailbox:null,readMailbox:(row:any)=>{if(!token||!active||!network||socket.current?.readyState!==1)return false;socket.current.send(JSON.stringify({type:'mailbox_request',request_id:Crypto.randomUUID(),device_id:row.device.id,session_id:row.id,control_key:row.control_key}));return true;},devices:owner===token?devices:[],state:token&&active&&network?state:'offline',error,account:owner===token?account:null,receipt:owner===token?receipt:null,retry:()=>setRetryKey(v=>v+1)};
+ return {mailbox:owner===token?mailbox:null,readMailbox:(row:any)=>{if(!token||!active||!network||socket.current?.readyState!==1)return false;const ask={request_id:Crypto.randomUUID(),device_id:row.device.id,session_id:row.id};mailboxAsk.current=ask;socket.current.send(JSON.stringify({type:'mailbox_request',...ask,control_key:row.control_key}));return true;},devices:owner===token?devices:[],state:token&&active&&network?state:'offline',error,account:owner===token?account:null,receipt:owner===token?receipt:null,retry:()=>setRetryKey(v=>v+1)};
 }
