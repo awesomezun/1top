@@ -79,6 +79,9 @@ export function scopeBeam(){
  return `<g class="scope-wake">${s}<line x1="${c}" y1="${f2(c-inner)}" x2="${c}" y2="${f2(c-outer-2)}" class="scope-beam"/></g>`;
 }
 
+/** How old a value that could not be refreshed is: "38m ago", "38분 전 보고". */
+function age(updated,now,t){const s=valid(updated)?Math.max(0,now/1000-updated):null;if(s===null)return t('Last report','마지막 보고');const [n,en,ko]=s<60?[0,'Just now','방금']:s<3600?[Math.floor(s/60),'m','분 전']:s<86400?[Math.floor(s/3600),'h','시간 전']:[Math.floor(s/86400),'d','일 전'];return n?t(n+en+' ago',n+ko+' 보고'):t(en,ko+' 보고');}
+
 /** The weekly % across the period, ending at the current report. */
 function spark(points,start,end,stroke,faded){
  const pts=(points||[]).filter(p=>Array.isArray(p)&&valid(p[0])&&p[0]<=end&&valid(p[1])&&p[1]<=100).sort((a,b)=>a[0]-b[0]),first=pts.findIndex(p=>p[0]>=start),use=first<0?[]:pts.slice(Math.max(0,first-1));
@@ -107,7 +110,7 @@ export function renderCockpit(root,{devices,rows,period,t,live,now}){
  const quotas=new Map();for(const d of online)for(const q of d.snapshot.account_quotas||[])if(!quotas.has(q.id))quotas.set(q.id,{q,d});
  const end=Math.max(...online.map(d=>d.snapshot.updated||0),now/1000)||now/1000,start=end-SECONDS[period];
  root.querySelector('[data-weekly]').innerHTML=quotas.size?[...quotas.values()].slice(0,4).map(({q})=>{const w=(q.windows||[]).find(x=>['주간','Weekly','7d'].includes(x.label)),p=q.weekly?.[period],rate=!q.stale&&valid(p?.used_pp)&&valid(p?.observed_seconds)&&p.observed_seconds>=120?p.used_pp/p.observed_seconds*3600:null,tag=String(q.account_label||'').split(' · ').pop();
-  return `<div class="weekly-tile" style="--tool:${color(q.kind)}"><div><i></i><b>${esc(toolName(q.kind))}</b><strong class="${q.stale?'stale':''}">${pct(w?.pct)}</strong></div><div><small>${esc(tag)}</small>${spark(q.usage_points,start,end,color(q.kind),q.stale)}<em class="${q.stale?'stale':''}">${q.stale?t('Last report','마지막 보고'):rate===null?t('Collecting','수집 중'):pct(rate)+t('/h','/시간')}</em></div></div>`;}).join('')
+  return `<div class="weekly-tile" style="--tool:${color(q.kind)}"><div><i></i><b>${esc(toolName(q.kind))}</b><strong class="${q.stale?'stale':''}">${pct(w?.pct)}</strong></div><div><small>${esc(tag)}</small>${spark(q.usage_points,start,end,color(q.kind),q.stale)}<em class="${q.stale?'stale':''}">${q.stale?age(q.updated,now,t):rate===null?t('Collecting','수집 중'):pct(rate)+t('/h','/시간')}</em></div></div>`;}).join('')
   :`<p class="cockpit-caption">${t('Connect subscription accounts in 1top on your computer.','컴퓨터의 1top에서 구독 계정을 연결하면 표시됩니다.')}</p>`;
  root.querySelector('[data-hosts]').innerHTML=online.map(d=>{const h=d.snapshot.host||{},mem=valid(h.used_memory)&&h.total_memory>0?h.used_memory/h.total_memory*100:null;
   return `<div class="host-row"><b>${esc(d.name)}</b>${[['CPU',h.cpu],[t('Memory','메모리'),mem]].map(([n,v])=>`<span><small>${n}</small><i><u style="width:${Math.min(100,Math.max(0,v||0))}%"></u></i><em>${pct(v)}</em></span>`).join('')}</div>`;}).join('')||`<p class="cockpit-caption">${t('Waiting for a computer to report.','컴퓨터의 보고를 기다립니다.')}</p>`;
