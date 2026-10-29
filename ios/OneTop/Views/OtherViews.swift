@@ -69,7 +69,7 @@ struct SessionsView: View {
             .accessibilityIdentifier("session-" + s.id)
             .swipeActions(edge: .trailing) {
                 if !model.isControlOff(s) {
-                    Button { detail = s } label: { Label(L.t("Messages", "메시지함"), systemImage: "bubble.left") }.tint(.blue)
+                    Button { detail = s } label: { Label(L.t("Conversation", "대화"), systemImage: "bubble.left") }.tint(.blue)
                 }
                 if s.can("terminate") {
                     Button { request = ControlRequest(session: s, action: "terminate") } label: { Label(AppModel.actionLabel("terminate"), systemImage: SessionDetail.icon("terminate")) }

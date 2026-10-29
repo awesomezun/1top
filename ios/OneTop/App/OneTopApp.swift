@@ -35,7 +35,7 @@ struct RootView: View {
         }
         .preferredColorScheme(model.appearance.scheme)
         #if DEBUG
-        // Screenshot runs open a screen directly: -screenTab usage, -screenDetail d1, -screenPane controls.
+        // Screenshot runs open a screen directly: -screenTab usage, -screenDetail d1.
         .task {
             let defaults = UserDefaults.standard
             if let tab = defaults.string(forKey: "screenTab").flatMap(Screen.init) { screen = tab }
@@ -48,7 +48,7 @@ struct RootView: View {
             }
         }
         .sheet(item: $launchDetail) { s in
-            SessionDetail(session: s, pane: UserDefaults.standard.string(forKey: "screenPane") == "controls" ? .controls : .messages)
+            SessionDetail(session: s)
                 .detailSource("launch", s.id)
         }
         #endif

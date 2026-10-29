@@ -230,6 +230,40 @@ struct MailMessage: Codable, Identifiable, Hashable, Sendable {
     var truncated: Bool?
     /// Sent from this phone and not yet in the computer's list.
     var local: Bool?
+    /// Photos sent with the message. The relay keeps no image data, so only these facts come back.
+    var attachments: [MailAttachment]?
+    /// The session is answering this request right now (contract v1.1.0): seen only after the
+    /// request reached the session and real activity followed it. Nil otherwise.
+    var activity: MailActivity?
+}
+
+struct MailActivity: Codable, Hashable, Sendable {
+    /// responding, working or writing.
+    var phase: String
+    var observedAt: Double?
+}
+
+struct MailAttachment: Codable, Hashable, Sendable {
+    var id: String?
+    var name: String?
+    var mime: String?
+    var bytes: Double?
+}
+
+/// `POST /api/action` for a message, with photos as base64 JPEG (mobile conversation contract v1.0.0).
+struct MessagePayload: Encodable {
+    struct Photo: Encodable { var mime: String; var data: String }
+    var action = "message"
+    var requestId: String
+    var deviceId: String
+    var sessionId: String
+    var controlKey: String
+    var prompt: String
+    var attachments: [Photo]?
+    enum CodingKeys: String, CodingKey {
+        case action, prompt, attachments
+        case requestId = "request_id", deviceId = "device_id", sessionId = "session_id", controlKey = "control_key"
+    }
 }
 
 struct RelayAccount: Decodable, Hashable, Sendable {

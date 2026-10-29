@@ -52,12 +52,21 @@ enum Relay {
     }
 
     static func request(_ path: String, token: String, body: [String: String]? = nil, relay: URL = current) async throws -> Data {
-        var request = URLRequest(url: relay.appending(path: path), timeoutInterval: 15)
+        try await send(path, token: token, body: try body.map { try JSONEncoder().encode($0) }, timeout: 15, relay: relay)
+    }
+
+    /// A JSON payload with nested values, such as a message with photo attachments.
+    static func request(_ path: String, token: String, payload: some Encodable, timeout: TimeInterval = 30, relay: URL = current) async throws -> Data {
+        try await send(path, token: token, body: try JSONEncoder().encode(payload), timeout: timeout, relay: relay)
+    }
+
+    private static func send(_ path: String, token: String, body: Data?, timeout: TimeInterval, relay: URL) async throws -> Data {
+        var request = URLRequest(url: relay.appending(path: path), timeoutInterval: timeout)
         request.httpMethod = body == nil ? "GET" : "POST"
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let body { request.httpBody = try JSONEncoder().encode(body) }
+        request.httpBody = body
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
