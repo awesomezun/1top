@@ -26,6 +26,17 @@ final class DeviceQATests: XCTestCase {
         add(attachment)
     }
 
+    /// A screenshot with the accessibility record beside it, and which detail sheet (if any) is open
+    /// and by which path, so a sheet that covers the screen can be traced to its cause.
+    private func evidence(_ app: XCUIApplication, _ name: String) {
+        shot(app, name)
+        let detail = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'detail-'")).firstMatch
+        let note = XCTAttachment(string: "sheet: \(app.buttons["Sheet Grabber"].exists)\ndetail: \(detail.exists ? detail.identifier : "none")\n\n" + app.debugDescription)
+        note.name = name + "-ax"
+        note.lifetime = .keepAlways
+        add(note)
+    }
+
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: id).firstMatch
     }
@@ -392,7 +403,9 @@ final class DeviceQATests: XCTestCase {
         app.launchArguments = ["-qaGuard", "YES", "-qaSession", session]
         app.launch()
         let connection = app.buttons["connection"], toggle = app.buttons["theme-toggle"]
+        evidence(app, "16-00a-launched")
         XCTAssertTrue(connection.waitForExistence(timeout: 20) && wait(connection, Self.liveLabel, timeout: 45), "Not live; is this iPhone signed in?")
+        evidence(app, "16-00b-live-before-first-tap")
         // The scope: the first computer in the header menu; its name then shows in the connection label.
         var computer = ""
         func chooseScope() {
@@ -411,6 +424,10 @@ final class DeviceQATests: XCTestCase {
             shot(app, "16-" + step)
         }
         showLanguage(app, "ko")
+        // Record the screen right after the first header tap and a few seconds later.
+        evidence(app, "16-00c-after-first-tap")
+        sleep(2); evidence(app, "16-00d-2s-later")
+        sleep(2); evidence(app, "16-00e-4s-later")
         chooseScope()
         check("01-scope-chosen")
         showTheme(app, "dark"); check("02-dark")

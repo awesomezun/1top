@@ -49,6 +49,7 @@ struct RootView: View {
         }
         .sheet(item: $launchDetail) { s in
             SessionDetail(session: s, pane: UserDefaults.standard.string(forKey: "screenPane") == "controls" ? .controls : .messages)
+                .detailSource("launch", s.id)
         }
         #endif
     }
