@@ -812,7 +812,13 @@ struct QuickDashboard: View {
         return out
     }
     @ViewBuilder private func accountChip(_ id: String?) -> some View {
-        if let id, let n = accountNumbers[id] {
+        let quota = model.snapshot?.account_quotas?.first { $0.id == id }
+        if let alias = quota?.alias, !alias.isEmpty {
+            Text(alias).font(m.font(.caption, .semibold)).foregroundStyle(theme.ink).lineLimit(1)
+                .padding(.horizontal, m(5)).frame(minHeight: m(15))
+                .background(theme.raised, in: RoundedRectangle(cornerRadius: m(4))).fixedSize()
+                .help(quota?.account_label ?? "")
+        } else if let id, let n = accountNumbers[id] {
             Text("\(n)").font(m.font(.caption, .semibold)).monospacedDigit().foregroundStyle(theme.ink)
                 .padding(.horizontal, m(4)).frame(minWidth: m(15), minHeight: m(15))
                 .background(theme.raised, in: RoundedRectangle(cornerRadius: m(4))).fixedSize()
@@ -855,6 +861,7 @@ struct QuickDashboard: View {
                 Text(quota.note).font(m.font(.caption)).foregroundStyle(theme.amber).fixedSize(horizontal: false, vertical: true)
             }
             if quota.needsReconnect { reconnectButton(quota) }
+            AccountNameField(quota: quota, model: model, m: m, theme: theme)
         }.padding(.horizontal, m(12)).padding(.vertical, m(10))
             .background(theme.card, in: RoundedRectangle(cornerRadius: m(8)))
             .overlay(RoundedRectangle(cornerRadius: m(8)).stroke(theme.line))
@@ -898,4 +905,26 @@ private struct WorkingWave: View {
             }.frame(width: size, height: size, alignment: .bottom)
         }.accessibilityHidden(true)
     }
+}
+
+/// Renames an account from its detail: up to 24 characters, saved empty to go back to the number.
+private struct AccountNameField: View {
+    let quota: AccountQuota
+    @ObservedObject var model: DashboardModel
+    let m: QuickMetrics
+    let theme: QuickTheme
+    @State private var name = ""
+    var body: some View {
+        HStack(spacing: m(6)) {
+            TextField("계정 이름(24자, 비우면 번호)", text: $name)
+                .textFieldStyle(.roundedBorder).font(m.font(.label))
+                .onChange(of: name) { value in if value.count > 24 { name = String(value.prefix(24)) } }
+                .onSubmit(save)
+            Button("저장", action: save).controlSize(.small)
+                .disabled(model.busy || !model.fresh || name.trimmingCharacters(in: .whitespaces) == (quota.alias ?? ""))
+        }
+        .padding(.top, m(2))
+        .onAppear { name = quota.alias ?? "" }
+    }
+    private func save() { model.renameAccount(quota.id, to: name) }
 }

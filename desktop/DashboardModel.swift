@@ -444,6 +444,29 @@ final class DashboardModel: ObservableObject {
         }.resume()
     }
     func stop() { task?.cancel(); session.invalidateAndCancel() }
+    /// Saves a name for an account; an empty name goes back to the account's number.
+    func renameAccount(_ id: String, to name: String) {
+        guard fresh, !busy, let token = snapshot?.action_token else { return }
+        busy = true
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/accounts/alias"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")), forHTTPHeaderField: "Origin")
+        request.setValue(token, forHTTPHeaderField: "X-Monitor-Token")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["account_id": id, "alias": String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))])
+        request.timeoutInterval = 10
+        session.dataTask(with: request) { [weak self] data, response, _ in
+            let value = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.busy = false
+                let ok = (response as? HTTPURLResponse)?.statusCode == 200 && value?["ok"] as? Bool != false
+                self.messageIsError = !ok
+                self.message = ok ? "계정 이름을 저장했습니다." : (value?["message"] as? String ?? "계정 이름을 저장하지 못했습니다.")
+                self.refresh()
+            }
+        }.resume()
+    }
     /// One explicit click asks macOS once for this account's saved sign-in. Never retried on its own.
     func authorizeAccount(_ id: String) {
         guard fresh, !busy, authorizing == nil, let token = snapshot?.action_token else { return }
@@ -491,6 +514,8 @@ struct AccountQuota: Decodable, Identifiable {
     var id: String; var kind: String; var account_label: String; var plan: String?
     var windows: [Window]; var updated: Double; var stale: Bool; var note: String
     var status: String?
+    /// A name the user gave this account ("개인"), shown in place of its number.
+    var alias: String?
     /// The limit cannot refresh until this account is connected again.
     var needsReconnect: Bool { stale && ["login_required", "login_expired", "credential_store_unavailable", "access_denied"].contains(status ?? "") }
     var statusLabel: String {

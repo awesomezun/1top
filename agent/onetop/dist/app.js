@@ -31,7 +31,8 @@ const kindName=k=>k==='Claude'?'Claude Code':k==='Antigravity'?'Agy CLI':k;
 // and its account's limit tile can be matched at a glance. A tool with one account shows no number.
 function accountNumbers(){const by={},out={};for(const q of data?.account_quotas||[])(by[q.kind]||=[]).push(q);
  for(const list of Object.values(by)){if(list.length<2)continue;const name=q=>String(q.account_label||q.id).toLowerCase();list.sort((a,b)=>name(a)<name(b)?-1:name(a)>name(b)?1:0).forEach((q,i)=>out[q.id]=i+1);}return out;}
-const accountChip=(id,label)=>{const n=id&&accountNumbers()[id];return n?` <span class="account-no" title="${esc(label||'')}">${n}</span>`:'';};
+const accountChip=(id,label)=>{const alias=id&&data?.account_quotas?.find(q=>q.id===id)?.alias,n=id&&accountNumbers()[id];
+ return alias?` <span class="account-no is-alias" title="${esc(label||'')}" data-user-content>${esc(alias)}</span>`:n?` <span class="account-no" title="${esc(label||'')}">${n}</span>`:'';};
 const sessionAccount=s=>s.usage?.weekly_estimate?.[selectedPeriod]?.account_id||s.usage?.weekly_account;
 const hostApp=s=>s.orca_terminal?'Orca':s.location?.app||'실행 앱 미확인';
 const runtimeLabel=s=>s.kind==='Aside'?'앱 내부 세션':s.kind==='Claude'||s.kind==='GLM'?'Claude Code':kindName(s.kind);
@@ -651,7 +652,27 @@ function sessionWeeklyCell(s,pv,period){
 // One explicit click asks macOS once for an account's saved sign-in; the server may wait up to two
 // minutes for that answer, so every reconnect button stays off until it returns. Never retried on its own.
 let authorizing=null;const authorizeNotes={};
+// Renaming an account: the draft survives the periodic redraw, and the server keeps the name (alias).
+let aliasEditing=null,aliasDraft='',aliasSaving=false,aliasNote='';
+function aliasMarkup(q){return `<form class="alias-form" data-alias-form="${esc(q.id)}"><label>계정 이름<input name="alias" maxlength="24" value="${esc(aliasDraft)}" placeholder="${esc(q.account_label||'')}" autocomplete="off"></label><button type="submit"${aliasSaving?' disabled':''}>저장</button><button type="button" data-alias-cancel>취소</button><small>${esc(aliasNote||'24자까지 쓸 수 있습니다. 비우고 저장하면 번호로 돌아갑니다.')}</small></form>`;}
 function reconnectMarkup(q){return `<div class="weekly-reconnect"><button type="button" data-account-authorize="${esc(q.id)}"${authorizing?' disabled':''}>${authorizing===q.id?'macOS 승인 기다리는 중…':'다시 연결'}</button><small>${esc(authorizeNotes[q.id]||'macOS가 저장된 로그인 사용을 한 번 묻습니다. 다시 묻지 않습니다.')}</small></div>`;}
+$('weeklyOverview').addEventListener('click',e=>{
+ const edit=e.target.closest('[data-alias-edit]');
+ if(edit){const q=data.account_quotas.find(q=>q.id===edit.dataset.aliasEdit);aliasEditing=q.id;aliasDraft=q.alias||'';aliasNote='';renderWeekly();document.querySelector('[data-alias-form] input')?.focus();return;}
+ if(e.target.closest('[data-alias-cancel]')){aliasEditing=null;aliasNote='';renderWeekly();}
+});
+$('weeklyOverview').addEventListener('input',e=>{if(e.target.closest('[data-alias-form]'))aliasDraft=e.target.value;});
+$('weeklyOverview').addEventListener('submit',async e=>{
+ const form=e.target.closest('[data-alias-form]');if(!form)return;e.preventDefault();if(aliasSaving)return;
+ const id=form.dataset.aliasForm,alias=aliasDraft.trim().slice(0,24);aliasSaving=true;renderWeekly();
+ try{
+  if(!data?.action_token||!data.ready)throw Error('수집기 연결을 확인한 뒤 다시 시도해 주세요.');
+  const r=await fetch('/api/accounts/alias',{method:'POST',headers:{'Content-Type':'application/json','X-Monitor-Token':data.action_token},body:JSON.stringify({account_id:id,alias}),signal:AbortSignal.timeout(10000)});
+  const result=await r.json().catch(()=>({}));if(!r.ok||result.ok===false)throw Error(result.message||'이름을 저장하지 못했습니다.');
+  const q=data.account_quotas.find(q=>q.id===id);if(q)q.alias=result.alias||alias||null;aliasEditing=null;aliasNote='';
+ }catch(error){aliasNote=error.name==='TimeoutError'?'저장 응답을 확인하지 못했습니다. 잠시 뒤 다시 확인해 주세요.':error.message;}
+ finally{aliasSaving=false;render();}
+});
 $('weeklyOverview').addEventListener('click',async e=>{
  const b=e.target.closest('[data-account-authorize]');if(!b||authorizing)return;
  const id=b.dataset.accountAuthorize;authorizing=id;renderWeekly();
@@ -672,7 +693,7 @@ function renderWeekly(){
   const current=valid&&!q.stale,delta=OneTopWeekly.valid(p?.used_pp),status=current?'제공자 보고':RECONNECT.has(q.status)?'재연결 필요':q.updated?reportAge(q.updated):'확인 필요';
   const rate=OneTopWeekly.accountBurn(p,q),rateKnown=OneTopWeekly.valid(rate);
   const rateNote=rateKnown?`최근 ${periodLabel}${p.partial?' 중 관측된 구간만 계산':''} · ${OneTopWeekly.duration(p.observed_seconds)} 관측에서 +${OneTopWeekly.number(p.used_pp)}%\n한도 증가량 ÷ 실제 관측 시간으로 계산한 평균입니다. 주간 한도 100%를 기준으로 한 시간당 소진 비율이며, 미래 소진량 예측이 아닙니다.`:'최소 2분의 유효한 한도 관측과 최신 계정 보고가 필요합니다.';
-  return `<article class="weekly-card ${current?'':'is-stale'}" style="--quota-color:${colors[q.kind]||'#8d9ba8'}"><div class="weekly-card-heading"><b>${dot(q.kind)}${esc(kindName(q.kind))}${accountChip(q.id,q.account_label)}</b><span>${esc(q.plan||'')} · ${status}</span></div><p class="weekly-account" title="${esc(q.account_label)}">${esc(q.account_label)}</p><div class="weekly-value"><strong>${valid?OneTopWeekly.percent(n):'—'}</strong><span>/ 100% 사용</span><b>${current?OneTopWeekly.percent(Math.max(0,100-n))+' 남음':''}</b></div><div class="track"><i style="width:${valid?Math.min(100,n):0}%;background:var(--quota-color)"></i></div><div class="weekly-period"><span>${periodCaption()}</span><strong>${delta?'+'+OneTopWeekly.number(p.used_pp)+'%':q.stale?'조회 필요':'다음 보고 대기'}</strong><span title="${esc(rateNote)}">${rateKnown?'평균 '+OneTopWeekly.burn(rate):delta?'소진 속도 확인 중':'한도 변화 기록 중'}</span></div><div class="weekly-chart" data-weekly-chart="${esc(q.id)}"></div><p class="weekly-note">${q.stale?esc(q.note):w?.reset?new Date(w.reset*1000).toLocaleString(OneTopI18n.locale(),{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화 · '+ago(q.updated)+' 확인':'주간 한도 확인 중'}</p>${q.stale&&RECONNECT.has(q.status)?reconnectMarkup(q):''}</article>`;
+  return `<article class="weekly-card ${current?'':'is-stale'}" style="--quota-color:${colors[q.kind]||'#8d9ba8'}"><div class="weekly-card-heading"><b>${dot(q.kind)}${esc(kindName(q.kind))}${accountChip(q.id,q.account_label)}<button type="button" class="alias-edit" data-alias-edit="${esc(q.id)}" title="계정 이름 바꾸기" aria-label="계정 이름 바꾸기">✎</button></b><span>${esc(q.plan||'')} · ${status}</span></div><p class="weekly-account" title="${esc(q.account_label)}">${esc(q.account_label)}</p><div class="weekly-value"><strong>${valid?OneTopWeekly.percent(n):'—'}</strong><span>/ 100% 사용</span><b>${current?OneTopWeekly.percent(Math.max(0,100-n))+' 남음':''}</b></div><div class="track"><i style="width:${valid?Math.min(100,n):0}%;background:var(--quota-color)"></i></div><div class="weekly-period"><span>${periodCaption()}</span><strong>${delta?'+'+OneTopWeekly.number(p.used_pp)+'%':q.stale?'조회 필요':'다음 보고 대기'}</strong><span title="${esc(rateNote)}">${rateKnown?'평균 '+OneTopWeekly.burn(rate):delta?'소진 속도 확인 중':'한도 변화 기록 중'}</span></div><div class="weekly-chart" data-weekly-chart="${esc(q.id)}"></div><p class="weekly-note">${q.stale?esc(q.note):w?.reset?new Date(w.reset*1000).toLocaleString(OneTopI18n.locale(),{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화 · '+ago(q.updated)+' 확인':'주간 한도 확인 중'}</p>${q.stale&&RECONNECT.has(q.status)?reconnectMarkup(q):''}${aliasEditing===q.id?aliasMarkup(q):''}</article>`;
  }).join('')||'<div class="empty">계정을 연결하면 제공자가 보고한 주간 사용률이 표시됩니다. 아래 계정 한도에서 계정을 추가하세요.</div>';
  drawWeeklyCharts();
 }
