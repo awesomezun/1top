@@ -12,13 +12,17 @@ import time
 import secrets
 import psutil
 import platform
+from contextlib import closing
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
 from .controls import Controller, ActionError, target_key, process_start
 from .resources import ResourceSampler
 from .usage import session_usage, window_usage, WINDOWS
+from .time_ranges import parse_period, extend_snapshot
+from .session_order import ordered_snapshot
+from .history import HistoryStore, initialize_capture
 from . import weekly_usage
 from .discovery import inventory, context, applications, orca_executable, registry_status, claude_transcript
 from . import __version__
@@ -26,6 +30,7 @@ from .context_usage import request_context, stored_context
 from .platform_support import data_directory
 from .hierarchy import codex_metadata, annotate as annotate_hierarchy, group_sessions
 from .effort import codex_level, backfill_codex, apply_statusline
+from .telemetry import TelemetryStore, session_index, bind_account, enrich
 
 BASE = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -160,6 +165,10 @@ class Ledger:
         s = self.s
         t = epoch(d.get('timestamp'))
         p = d.get('payload') or {}
+        if d.get('cwd'):
+            s['cwd'] = d['cwd']
+        if d.get('type') in ('session_meta', 'turn_context') and p.get('cwd'):
+            s['cwd'] = p['cwd']
         if s['kind'] == 'Codex':
             if d.get('type') == 'turn_context':
                 if p.get('model') and p['model']!=s['model']:
@@ -253,6 +262,8 @@ class Collector:
         from .accounts import AccountQuotaSampler
         self.accounts = AccountQuotaSampler()
         self.lock = threading.Lock()
+        self.range_lock = threading.Lock()
+        self.range_cache = {}
         self.snapshot = {'ready': False, 'version': __version__, 'updated': 0, 'sessions': [], 'error': None}
         self.agy_quota = {'kind': 'Antigravity', 'windows': [], 'note': '한도 확인 중', 'updated': 0}
         self.glm_quota = {'kind': 'GLM', 'windows': [], 'note': '연결된 GLM 계정 한도 확인 중', 'updated': 0}
@@ -268,9 +279,13 @@ class Collector:
         self.resources = None
         self.shared_roots = []
         self.session_metadata = {}
+        self.telemetry = None
+        self.history = None
 
     def initialize(self):
         DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:self.telemetry = TelemetryStore(DATA)
+        except (OSError, sqlite3.Error):pass  # Auxiliary intake must not stop JSONL collection.
         self.db = sqlite3.connect(DATA/'monitor.sqlite')
         self.db.executescript('''PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -279,10 +294,44 @@ class Collector:
                 fresh INTEGER, cached INTEGER, written INTEGER, output INTEGER);
             CREATE INDEX IF NOT EXISTS event_time ON events(t);''')
         weekly_usage.initialize(self.db)
+        initialize_capture(self.db)
         row = self.db.execute("SELECT value FROM meta WHERE key='started'").fetchone()
         self.started = float(row[0]) if row else time.time()
         self.db.execute("INSERT OR IGNORE INTO meta VALUES ('started',?)", (str(self.started),))
+        self.db.execute("INSERT OR IGNORE INTO meta VALUES ('history_started',?)",
+                        (str(max(self.started, time.time() - 86400)),))
+        self.history_started = float(self.db.execute("SELECT value FROM meta WHERE key='history_started'").fetchone()[0])
         self.db.commit()
+        self.history = HistoryStore(DATA)
+
+    def state_for_period(self, key):
+        duration = parse_period(key)
+        with self.lock:
+            snapshot = self.snapshot
+        if duration is None or not snapshot.get('ready'):
+            return snapshot
+        with self.range_lock:
+            cached = self.range_cache.get(key)
+            if cached and cached['updated'] == snapshot['updated']:
+                return cached
+            with closing(sqlite3.connect((DATA/'monitor.sqlite').as_uri() + '?mode=ro', uri=True, timeout=5)) as db:
+                db.execute('BEGIN')
+                result = extend_snapshot(db, snapshot, key)
+            if len(self.range_cache) >= 8:
+                self.range_cache.clear()
+            self.range_cache[key] = result
+            return result
+
+    def speed_for_cloud(self, snapshot):
+        from .fleet_usage import speed_windows
+        with self.range_lock:
+            cached = getattr(self, 'speed_cache', None)
+            if cached and 0 <= snapshot['updated'] - cached[0] < 30:
+                return cached[1]
+            with closing(sqlite3.connect((DATA/'monitor.sqlite').as_uri() + '?mode=ro', uri=True, timeout=5)) as db:
+                rows = speed_windows(db, snapshot)
+            self.speed_cache = (snapshot['updated'], rows)
+            return rows
 
     def processes(self):
         rows = {}
@@ -508,14 +557,15 @@ class Collector:
                         f.seek(pos)
                         break
                     # Avoid decoding tool output / embedded images / user prompts.
-                    interesting = b'"usage"' in line or b'"token_count"' in line or b'"turn_context"' in line or b'"event_msg"' in line
+                    interesting = b'"usage"' in line or b'"token_count"' in line or b'"turn_context"' in line or b'"event_msg"' in line or b'"session_meta"' in line
                     if interesting:
                         try:
                             event = tracker.consume(json.loads(line))
                             if event and event[0]>=self.started:
                                 t,v=event
-                                self.db.execute('INSERT INTO events(t,sid,kind,fresh,cached,written,output,account) VALUES(?,?,?,?,?,?,?,?)',
-                                                (t,spec['id'],spec['kind'],*v,weekly_usage.event_account(spec,t)))
+                                self.db.execute('INSERT INTO events(t,sid,kind,fresh,cached,written,output,account,model,cwd) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                                                (t,spec['id'],spec['kind'],*v,weekly_usage.event_account(spec,t),
+                                                 s.get('model') or None,s.get('cwd') or spec.get('cwd')))
                         except (ValueError, TypeError, KeyError):
                             pass
                 s['offset'] = f.tell()
@@ -590,15 +640,25 @@ class Collector:
         now=time.time()
         sessions=[]
         roots=self.accounts.roots()
+        try:telemetry = self.telemetry.snapshot(now) if self.telemetry else {'available':False}
+        except sqlite3.Error:telemetry = {'available':False}
+        telemetry_sessions = session_index(telemetry)
         for src in self.specs:
             s=dict(src)
             s['account_binding']=weekly_usage.account_for(s,roots)
+            from .claude_statusline import session_binding
+            captured_binding = session_binding(s, now=now)
+            if captured_binding:
+                s['account_binding'] = captured_binding
+                s['account_binding_source'] = 'claude_statusline_session'
+            bind_account(s, telemetry_sessions, roots, now)
             s.update(tokens=None,model=s.get('configured_model',''),last_usage=0,loading=False)
             if s['path']:
                 try:self.read_tracker(s)
                 except OSError:s['note']='세션 기록을 읽을 수 없습니다.'
             if s['kind'] in ('Claude', 'GLM'):
                 apply_statusline(s, now)
+            enrich(s, telemetry_sessions)
             # Registry states are reported, not inferred from CPU or a refreshing terminal clock.
             if s['status'] not in ('working','idle','waiting','interrupted'):
                 s['status']='unknown'
@@ -606,12 +666,14 @@ class Collector:
             sessions.append(s)
         from .aside import discover as aside_sessions
         for s in aside_sessions(now=now):
+            s['account_binding']=weekly_usage.bind_adapter(self.db,s,roots,now)
+            s.pop('billing_account',None)
             s.update(tokens=None,model=s.get('configured_model',''),last_usage=0,loading=False)
             if s['path']:
                 try:self.read_tracker(s)
                 except OSError:s['note']='Aside 사용량 기록을 읽을 수 없습니다.'
             sessions.append(s)
-        self.db.execute('DELETE FROM events WHERE t<?',(now-86400-weekly_usage.FRESH,))
+        # Retain local reports for user-selected ranges beyond 24 hours.
         self.db.commit()
         # The browser needs a chart, not a growing raw event log. Bound payloads by minute/provider.
         events=[dict(zip(['t','kind','fresh','cached','written','output'],r)) for r in
@@ -624,6 +686,7 @@ class Collector:
         periods,session_periods=window_usage(self.db,now,self.started,
                                             (s['kind'] for s in sessions if s['tokens'] is not None))
         account_quotas=self.accounts.snapshot(now)
+        weekly_usage.restore_bound_claude_accounts(self.db,account_quotas,sessions,now)
         weekly_usage.restore_claude_last_report(self.db,account_quotas,now)
         weekly_usage.record(self.db,account_quotas,now)
         weekly,estimates=weekly_usage.snapshot(self.db,account_quotas,now,
@@ -646,17 +709,20 @@ class Collector:
         system=self.resources.sample(sessions,self.shared_roots)
         roots = group_sessions(sessions)
         result={'ready':True,'version':__version__,'updated':now,'started':self.started,'sessions':sessions,
+                'history_started':getattr(self,'history_started',self.started),
                 'root_sessions':roots,
                 'events':events,'recent':recent,'period_usage':periods,'quotas':quotas,'process_counts':self.process_counts,
                 'orca_terminals':self.terminal_count,'error':None,'poll_seconds':3,
                 'applications':getattr(self,'apps',[]),'system':system,'operations':self.operations.sample(sessions),
                 'account_quotas':account_quotas,'weekly_usage':weekly,
+                'telemetry':{k:v for k,v in telemetry.items() if k!='sessions'},
                 'collection_ms':round((time.monotonic()-collect_started)*1000,1)}
         with self.lock:self.snapshot=result
 
     def loop(self):
         self.accounts.start()
         self.initialize()
+        self.history.start()
         while True:
             before=time.monotonic()
             try:self.collect()
@@ -733,13 +799,17 @@ class Collector:
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
+        if self.path in ('/v1/logs', '/v1/metrics', '/v1/traces'):
+            from .telemetry import handle_http
+            handle_http(self)
+            return
         host=self.headers.get('Host','')
         allowed={f'127.0.0.1:{self.server.server_port}',f'localhost:{self.server.server_port}'}
         if (host not in allowed or self.headers.get('Origin')!='http://'+host or
             not secrets.compare_digest(self.headers.get('X-Monitor-Token',''),self.server.action_token)):
             self.send_error(403);return
         route=urlsplit(self.path).path
-        if route not in ('/api/action','/api/accounts/login'):self.send_error(404);return
+        if route not in ('/api/action','/api/accounts/login','/api/accounts/authorize'):self.send_error(404);return
         try:
             length=int(self.headers.get('Content-Length','0'))
             if length<1 or length>4096 or self.headers.get('Content-Type')!='application/json':
@@ -748,6 +818,8 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(payload,dict):raise ValueError()
             if route=='/api/accounts/login':
                 result=self.server.account_login.start(payload.get('kind'))
+            elif route=='/api/accounts/authorize':
+                result=self.server.account_login.authorize_claude(payload.get('account_id'))
             else:result=self.server.controller.execute(payload)
             self.json_response(200,{'ok':True,**result})
         except (ValueError,TypeError):self.json_response(400,{'ok':False,'message':'잘못된 요청입니다.'})
@@ -765,14 +837,41 @@ class Handler(BaseHTTPRequestHandler):
         if host not in ('127.0.0.1','localhost'):
             self.send_error(403);return
         route=urlsplit(self.path).path
-        if route=='/api/state':
+        if route=='/api/history':
+            history=getattr(self.server.collector,'history',None)
+            if history is None:
+                self.json_response(503,{'ok':False,'message':'History collector is starting'});return
+            query=parse_qs(urlsplit(self.path).query)
             with self.server.collector.lock:snapshot=self.server.collector.snapshot
+            try:
+                result=history.response(query.get('period',['1h'])[0],query.get('step',['60'])[0],
+                                        query.get('kind',[None])[0],snapshot)
+            except (ValueError,OverflowError):
+                self.json_response(400,{'ok':False,'message':'Invalid history period or step; maximum 400 bins'});return
+            except sqlite3.Error:
+                self.json_response(503,{'ok':False,'message':'History collector is starting'});return
+            self.json_response(200,result);return
+        if route=='/api/state':
+            period = parse_qs(urlsplit(self.path).query).get('period', [None])[0]
+            if period is not None:
+                try:snapshot=self.server.collector.state_for_period(period)
+                except ValueError:
+                    self.json_response(400,{'ok':False,'message':'유효한 기간을 입력하세요. 최소 10분입니다.'});return
+            else:
+                with self.server.collector.lock:snapshot=self.server.collector.snapshot
             snapshot=self.server.controller.decorate(snapshot)
+            snapshot=ordered_snapshot(snapshot, period or '1h')
+            bridge = getattr(self.server, 'bridge', None)
+            if bridge:
+                snapshot = {**snapshot, 'workspace_usage': bridge.workspace_usage}
             data=json.dumps({**snapshot,'action_token':self.server.action_token},ensure_ascii=False).encode()
             mime='application/json; charset=utf-8'
+        elif route=='/api/telemetry':
+            telemetry=getattr(self.server.collector,'telemetry',None)
+            self.json_response(200,telemetry.snapshot() if telemetry else {'ready':False});return
         elif route=='/api/updates':
             self.json_response(200,getattr(self.server,'updates',None).value if getattr(self.server,'updates',None) else {});return
-        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/weekly.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js'):
+        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/ranges.js','/speed.js','/weekly.js','/history.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js'):
             name='index.html' if route=='/' else route[1:]
             data=(BASE/'dist'/name).read_bytes()
             mime={'html':'text/html','js':'application/javascript','css':'text/css','json':'application/json'}[name.rsplit('.',1)[1]]+'; charset=utf-8'

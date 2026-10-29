@@ -5,7 +5,8 @@ from .platform_support import lock_instance
 
 def main():
     parser=argparse.ArgumentParser(prog='1top',description='Your AI agents, across apps and computers.')
-    parser.add_argument('command',nargs='?',choices=['run','connect','local','version','statusline'],default='run')
+    parser.add_argument('command',nargs='?',choices=['run','connect','local','version','statusline','telemetry-enable','telemetry-disable','telemetry-status','authorize-claude'],default='run')
+    parser.add_argument('--profile',help='Exact existing 1top Claude profile to connect once')
     parser.add_argument('--config',help='Local statusline wrapper specification (statusline only)')
     parser.add_argument('--port',type=int,default=18766)
     parser.add_argument('--headless',action='store_true')
@@ -13,6 +14,17 @@ def main():
     args=parser.parse_args()
     if args.relay and args.command!='connect':parser.error('--relay requires connect')
     if args.command=='version':print(__version__);return
+    if args.command=='authorize-claude':
+        if not args.profile:parser.error('authorize-claude requires --profile')
+        from .credential_store import authorize
+        from .claude_profiles import CredentialError
+        try:print(json.dumps(authorize(args.profile)))
+        except CredentialError as error:print(json.dumps({'ok':False,'error':error.code}));sys.exit(1)
+        return
+    if args.profile:parser.error('--profile requires authorize-claude')
+    if args.command.startswith('telemetry-'):
+        from .telemetry_setup import command
+        print(json.dumps(command(args.command, args.port),ensure_ascii=False,indent=2));return
     if args.command=='statusline':
         if not args.config:parser.error('statusline requires --config')
         from .claude_statusline import run
@@ -31,12 +43,15 @@ def main():
         print('1top is already running.',file=sys.stderr);return
     server=DashboardHTTPServer(('127.0.0.1',args.port),Handler)
     collector=Collector();server.collector=collector;server.action_token=secrets.token_urlsafe(32)
+    from .telemetry import receiver_key
+    server.telemetry_key=receiver_key(DATA)
     from .account_login import AccountLogin
     server.account_login=AccountLogin()
     server.controller=Controller(collector,Collector,state_file=DATA/'controls-v5.json')
     threading.Thread(target=collector.loop,daemon=True).start()
     threading.Thread(target=server.serve_forever,daemon=True).start()
     bridge=CloudLink(collector,server.controller,DATA,relay=args.relay)
+    server.bridge=bridge
     from .updates import UpdateMonitor
     server.updates=UpdateMonitor()
     threading.Thread(target=server.updates.run,args=(bridge.stop,),daemon=True).start()

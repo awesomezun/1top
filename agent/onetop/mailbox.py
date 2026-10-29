@@ -82,13 +82,9 @@ class Mailbox:
             else:
                 self.records.append(row)
             self.save()
-        return (f'[1top-message:{rid}]\n{text}\n[/1top-message]\n\n'
-                'This is a separate message from the user through 1top. Reply to this message '
-                'in the current session. Do not interpret a status question as permission to '
-                'change or stop the existing task. Keep unrelated task output outside the reply. '
-                f'Put your answer exactly between [1top-reply:{rid}] and [/1top-reply]. '
-                'These delimiters route only this answer to the user’s message inbox. '
-                'Do not include private reasoning or tool dumps. Continue the existing task when appropriate.')
+        # Terminal transports have no separate instruction channel. Keep only the
+        # reply format needed to correlate this answer; do not append task policy.
+        return f'{text}\n\n1top reply: [1top-reply:{rid}]...[/1top-reply]'
 
     def enqueue(self, spec, rid, text):
         with self.lock:

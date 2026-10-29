@@ -1,0 +1,32 @@
+{
+  "version": "4.0.0",
+  "build": 3,
+  "device": "iPhone 15 Pro Max",
+  "environment": "physical device",
+  "tests": {
+    "01_install_launch_live": "passed",
+    "02_sign_in_survives_relaunch": "passed",
+    "03_live_reports_keep_arriving": "passed",
+    "04_reconnect": "passed",
+    "05_screens_and_confirmation": "passed",
+    "10_instruction": "passed",
+    "11_question_and_reply": "passed",
+    "12_pause": "passed",
+    "13_resume": "passed",
+    "14_terminate": "passed"
+  },
+  "receipt_evidence": [
+    "AI instruction sent",
+    "Work interruption confirmed",
+    "Resume request sent",
+    "CLI exit confirmed"
+  ],
+  "latest_ui_commit": "0a22a32",
+  "evidence_owner": "frontend-redesign",
+  "evidence_paths": [
+    "output/ios-qa/device-full/",
+    "output/ios-qa/device-controls3/",
+    "output/ios-qa/sheet-controls3.jpg"
+  ],
+  "distribution": "Personal Team development installation; no App Store or TestFlight distribution"
+}

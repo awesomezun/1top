@@ -74,6 +74,30 @@ class AccountLogin:
         self.directory = directory or managed_profiles_dir()
         self.lock = threading.Lock()
         self.last = 0
+        self.authorization_lock = threading.Lock()
+
+    def authorize_claude(self,account_id):
+        from .accounts import read_json,identity
+        from .credential_store import authorize
+        from .claude_profiles import CredentialError
+        from .controls import ActionError
+        if not isinstance(account_id,str) or not account_id.startswith('claude:'):
+            raise ActionError('연결할 Claude 계정을 선택하세요.',400)
+        if not self.authorization_lock.acquire(blocking=False):
+            raise ActionError('이미 열린 인증 연결 창을 확인해 주세요.',409)
+        try:
+            candidates=[]
+            for root in (self.directory/'claude').glob('*'):
+                if not root.is_dir() or root.is_symlink():continue
+                config=root/'.claude.json';a=read_json(config).get('oauthAccount') or {}
+                if a.get('accountUuid') and identity('Claude',a['accountUuid'],a.get('organizationUuid',''))==account_id:
+                    candidates.append((config.stat().st_mtime,root))
+            if not candidates:raise ActionError('이 계정의 저장된 로그인을 찾지 못했습니다. 계정을 다시 추가해 주세요.',409)
+            authorize(max(candidates)[1])
+            return {'message':'계정을 연결했습니다. 백그라운드에서는 인증창을 띄우지 않습니다.'}
+        except CredentialError:
+            raise ActionError('계정 연결이 완료되지 않았습니다. 자동으로 다시 요청하지 않습니다.',409) from None
+        finally:self.authorization_lock.release()
 
     def start(self, kind):
         from .controls import ActionError

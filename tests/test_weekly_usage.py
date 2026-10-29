@@ -23,6 +23,46 @@ class WeeklyUsageTests(unittest.TestCase):
     def test_migration_is_idempotent_and_does_not_assign_old_events(self):
         self.event(self.now-50,'old',99,None);w.initialize(self.db)
         self.assertIsNone(self.db.execute('SELECT account FROM events').fetchone()[0])
+    def test_adapter_matches_exact_account_and_preserves_binding_until_switch(self):
+        roots={Path('/pro'):('a','Codex',0),Path('/team'):('b','Codex',0)}
+        spec={'id':'aside:0:s','billing_account':'a','billing_kind':'Codex'}
+        self.assertEqual(w.bind_adapter(self.db,spec,roots,100),('a',100))
+        self.assertEqual(w.bind_adapter(self.db,spec,roots,200),('a',100))
+        spec['billing_account']='b'
+        self.assertEqual(w.bind_adapter(self.db,spec,roots,300),('b',300))
+        spec['account_binding']=('b',300)
+        self.assertIsNone(w.event_account(spec,250))
+        self.assertEqual(w.event_account(spec,310),'b')
+        spec['billing_account']='not-observed'
+        self.assertIsNone(w.bind_adapter(self.db,spec,roots,400))
+        spec.update(billing_account='a',billing_kind='Claude')
+        self.assertIsNone(w.bind_adapter(self.db,spec,roots,500))
+    def test_aside_tokens_calibrate_same_account_without_changing_runtime_kind(self):
+        self.point(self.now-240,20);self.point(self.now-120,22)
+        self.event(self.now-180,'cli',100)
+        self.db.execute('INSERT INTO events VALUES(?,?,?,?,?,?,?,?)',(self.now-160,'aside:0:s','Aside',300,0,0,0,'a'))
+        self.db.execute('INSERT INTO adapter_accounts VALUES(?,?,?,?)',('aside:0:s','a','Codex',self.now-300))
+        result,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex'}],self.now,bindings={'cli':'a','aside:0:s':'a'})
+        self.assertEqual(result['accounts'][0]['calibration']['tokens'],400)
+        self.assertEqual(shares['aside:0:s']['1h']['used_pp'],1.5)
+        self.assertEqual(shares['cli']['1h']['used_pp'],.5)
+        self.assertEqual(self.db.execute("SELECT kind FROM events WHERE sid='aside:0:s'").fetchone()[0],'Aside')
+    def test_old_aside_tokens_use_existing_calibration_without_rewriting_identity(self):
+        self.point(self.now-240,20);self.point(self.now-120,22)
+        self.event(self.now-180,'cli',100)
+        self.db.execute('INSERT INTO events VALUES(?,?,?,?,?,?,?,?)',(self.now-500,'aside:0:s','Aside',50,0,0,0,None))
+        self.db.execute('INSERT INTO adapter_accounts VALUES(?,?,?,?)',('aside:0:s','a','Codex',self.now))
+        _,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex'}],self.now,bindings={'aside:0:s':'a'})
+        self.assertEqual(shares['aside:0:s']['1h']['used_pp'],1)
+        self.assertEqual(shares['aside:0:s']['1h']['inferred_account_tokens'],50)
+        self.assertIsNone(self.db.execute("SELECT account FROM events WHERE sid='aside:0:s'").fetchone()[0])
+    def test_unbound_aside_activity_cannot_inflate_codex_calibration(self):
+        self.point(self.now-240,20);self.point(self.now-120,22)
+        self.event(self.now-180,'cli',100)
+        self.db.execute('INSERT INTO events VALUES(?,?,?,?,?,?,?,?)',(self.now-160,'aside:0:s','Aside',300,0,0,0,None))
+        self.db.execute('INSERT INTO adapter_accounts VALUES(?,?,?,?)',('aside:0:s','a','Codex',self.now))
+        result,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex'}],self.now,bindings={'aside:0:s':'a'})
+        self.assertIsNone(result['accounts'][0]['calibration']);self.assertEqual(shares,{})
     def test_single_sample_is_unknown_not_zero(self):
         self.point(self.now-30,24)
         self.assertIsNone(self.period()['used_pp']);self.assertTrue(self.period()['partial'])
@@ -73,6 +113,26 @@ class WeeklyUsageTests(unittest.TestCase):
         self.assertEqual(account['calibration']['from'],self.now-240)
         self.assertEqual(account['calibration']['used_pp'],1)
         self.assertEqual(account['calibration']['tokens'],100)
+    def test_claude_reuses_unaffected_same_cycle_interval_after_correction(self):
+        for age,pct in [(800,3),(680,3),(560,4),(440,5),(320,4),(200,4)]:
+            self.point(self.now-age,pct)
+        for age,tokens in [(740,100),(620,1000000),(500,9000000),(260,3000000)]:
+            self.event(self.now-age,'s',tokens)
+        self.db.execute("UPDATE events SET kind='Claude'")
+        self.db.execute("UPDATE weekly_samples SET kind='Claude'")
+        quota={'id':'a','kind':'Claude','source':'claude_statusline','stale':True,
+               'windows':[{'label':'주간','pct':4,'reset':self.now+86400}]}
+        result,_=w.snapshot(self.db,[quota],self.now)
+        c=result['accounts'][0]['calibration']
+        self.assertTrue(c['reused_before_correction'])
+        self.assertEqual(c['tokens'],1000000)
+        self.assertEqual(c['used_pp'],1)
+        self.assertEqual(c['to'],self.now-560)
+        self.assertEqual(c['source'],'historical_provider_calibration')
+        # A different reset cannot inherit that earlier cycle's conversion.
+        quota['windows'][0]['reset']+=1000
+        self.assertIsNone(w.snapshot(self.db,[quota],self.now)[0]['accounts'][0]['calibration'])
+
     def test_reconciliation_partial_reduction_is_net_change_not_sum_of_positive_spikes(self):
         self.point(self.now-360,4);self.point(self.now-240,6);self.point(self.now-120,5)
         account=self.result()[0]['accounts'][0]
@@ -267,6 +327,24 @@ class WeeklyUsageTests(unittest.TestCase):
         self.assertEqual(c['used_pp'],2)
         self.assertAlmostEqual(c['pp_per_token'],.0000005)
 
+    def test_delayed_quota_callback_keeps_preceding_token_denominator(self):
+        # The token log arrives while the integer quota is unchanged. A later
+        # provider callback increments the quota without another token report.
+        self.point(self.now-480,20);self.point(self.now-360,20)
+        self.point(self.now-240,21);self.point(self.now-120,21)
+        self.event(self.now-420,'s',3000000)
+        c=self.result()[0]['accounts'][0]['calibration']
+        self.assertEqual(c['tokens'],3000000)
+        self.assertEqual(c['used_pp'],1)
+        self.assertEqual(c['seconds'],360)
+        self.assertAlmostEqual(c['pp_per_token'],1/3000000)
+
+    def test_delayed_callback_does_not_cross_unattributed_work(self):
+        for age,pct in [(600,20),(480,20),(360,20),(240,21)]:self.point(self.now-age,pct)
+        self.event(self.now-540,'known',100)
+        self.event(self.now-420,'unknown',100,None)
+        self.assertIsNone(self.result()[0]['accounts'][0]['calibration'])
+
     def test_calibration_rejects_partial_account_token_coverage(self):
         self.point(self.now-240,20);self.point(self.now-120,22)
         self.event(self.now-180,'s',100)
@@ -277,6 +355,44 @@ class WeeklyUsageTests(unittest.TestCase):
         self.point(self.now-240,20);self.point(self.now-120,22);self.event(self.now-180,'s',100)
         result,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex','stale':True}],self.now)
         self.assertIsNone(result['accounts'][0]['calibration']);self.assertEqual(shares,{})
+
+    def test_explicit_switch_preserves_only_current_account_segment(self):
+        self.point(self.now-240,20);self.point(self.now-120,22)
+        self.event(self.now-180,'target',100)
+        self.event(self.now-500,'target',900,'old-account')
+        self.event(self.now-400,'target',50,None)
+        _,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex'}],self.now,
+                            bindings={'target':'a'},recording_started=self.now-86400)
+        value=shares['target']['1h']
+        self.assertEqual(value['tokens'],100);self.assertEqual(value['used_pp'],2)
+        self.assertEqual(value['excluded_account_tokens'],950);self.assertTrue(value['partial'])
+        self.assertEqual(value['inferred_account_tokens'],0)
+        self.assertEqual(self.db.execute("SELECT account FROM events WHERE fresh=900").fetchone()[0],'old-account')
+
+    def test_verified_old_session_keeps_quota_after_profile_is_removed(self):
+        self.db.execute('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',
+                        ('old','Claude',self.now-120,30,self.now+86400))
+        quotas=[{'id':'new','kind':'Claude'}]
+        sessions=[{'id':'old-session','kind':'Claude','account_binding':('old',self.now-1000),
+                   'account_binding_source':'claude_statusline_session'}]
+        w.restore_bound_claude_accounts(self.db,quotas,sessions,self.now)
+        w.restore_bound_claude_accounts(self.db,quotas,sessions,self.now)
+        self.assertEqual(len(quotas),2)
+        self.assertEqual(quotas[1]['windows'][0]['pct'],30)
+        self.assertTrue(quotas[1]['stale']);self.assertEqual(quotas[1]['updated'],self.now-120)
+        self.assertEqual(quotas[1]['source'],'historical_provider_report')
+        w.record(self.db,quotas,self.now)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM weekly_samples').fetchone()[0],1)
+        expired=[];w.restore_bound_claude_accounts(self.db,expired,sessions,self.now+86401)
+        self.assertEqual(expired,[])
+        sessions[0]['config_dir']='/old-profile'
+        report={'updated':self.now-10,'verified_activity':True,'source':'claude_statusline',
+                'windows':[{'label':'주간','pct':31,'reset':self.now+86400}]}
+        with patch('onetop.accounts.claude_statusline_report',return_value=report):
+            w.restore_bound_claude_accounts(self.db,quotas,sessions,self.now)
+        self.assertFalse(quotas[1]['stale']);self.assertEqual(quotas[1]['windows'][0]['pct'],31)
+        w.record(self.db,quotas,self.now)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM weekly_samples').fetchone()[0],2)
 
     def test_calibration_does_not_borrow_another_accounts_rate(self):
         self.point(self.now-240,20);self.point(self.now-120,22);self.event(self.now-180,'s',100)

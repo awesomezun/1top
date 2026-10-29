@@ -1,0 +1,19 @@
+{
+  "version": "4.0.0",
+  "version_code": 9,
+  "environment": "Android emulator API 36.1",
+  "package": "si.onetop.mobile",
+  "update_install": true,
+  "release_signing_certificate_matches_previous_release": true,
+  "screens_verified": [
+    "dashboard",
+    "sessions",
+    "session messages",
+    "session controls",
+    "native confirmation",
+    "demo receipt says no command sent"
+  ],
+  "physical_device": false,
+  "live_remote_command_test": false,
+  "screenshots_directory": "build/qa-android_v4.0.0"
+}

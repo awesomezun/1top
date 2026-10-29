@@ -4,7 +4,7 @@ WINDOWS = [('24h', '24시간', 86400), ('12h', '12시간', 43200),
            ('30m', '30분', 1800), ('10m', '10분', 600)]
 
 
-def window_usage(db, now, started, known_kinds=()):
+def window_usage(db, now, started, known_kinds=(), windows=None):
     """Rolling (now-duration, now] sums; include retained, now-closed sessions.
 
     Partial coverage describes the recording horizon, not guaranteed complete
@@ -14,7 +14,7 @@ def window_usage(db, now, started, known_kinds=()):
     periods = []
     sessions = {}
     known = set(known_kinds)
-    for key, label, seconds in WINDOWS:
+    for key, label, seconds in WINDOWS if windows is None else windows:
         beginning = max(started, now - seconds)
         grouped = db.execute('''SELECT sid,kind,SUM(fresh),SUM(cached),SUM(written),SUM(output)
             FROM events WHERE t>? AND t<=? AND t>=? GROUP BY sid,kind''',

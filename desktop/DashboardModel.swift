@@ -139,6 +139,8 @@ struct WeeklyUsage: Decodable {
         var id: String; var periods: [String: Period]
         var history: [[Double]]?
         var flow: [[Double]]?
+        // [time, weekly %, reset]: reconciled report points; preferred over history like the dashboard.
+        var usage_points: [[Double]]?
     }
     struct Period: Decodable {
         var used_pp: Double?; var partial: Bool; var observed_seconds: Double
@@ -345,15 +347,14 @@ final class DashboardModel: ObservableObject {
     @Published var busy = false
     @Published var message: String?
     @Published var messageIsError = false
+    /// The account whose one-time sign-in approval is in flight; macOS may wait up to two minutes for it.
+    @Published var authorizing: String?
     @Published var openAtLogin = false
     @Published var now = Date()
     let baseURL: URL
     private let session: URLSession
     private var fetching = false
     private var task: URLSessionDataTask?
-    private var sessionSortAmounts: [String: Double] = [:]
-    private var sessionSortUpdated: Double?
-    private var sessionSortPeriod: String?
     var onUpdate: (() -> Void)?
     init(baseURL: URL) {
         self.baseURL = baseURL
@@ -376,30 +377,19 @@ final class DashboardModel: ObservableObject {
         return DesktopFormat.total(window?.tokens)
     }
     var sortedSessions: [DesktopSession] {
-        let ranks = ["working":0, "waiting":1, "resuming":1, "paused":2, "interrupted":2, "unknown":2, "idle":2]
-        let rows = sessions, timestamp = now.timeIntervalSince1970
-        // Hold within-tier order for one minute. Activity changes still move a
-        // group immediately; changing the selected period refreshes its amounts.
-        if sessionSortPeriod != selectedPeriod || sessionSortUpdated == nil ||
-            timestamp - (sessionSortUpdated ?? timestamp) >= 60 || timestamp < (sessionSortUpdated ?? timestamp) {
-            sessionSortAmounts = [:]; sessionSortPeriod = selectedPeriod; sessionSortUpdated = timestamp
-        }
-        let ids = Set(rows.map(\.id))
-        sessionSortAmounts = sessionSortAmounts.filter { ids.contains($0.key) }
-        for row in rows where sessionSortAmounts[row.id] == nil {
+        // Recompute from the selected period; do not retain stale status or usage ranks.
+        func amount(_ row: DesktopSession) -> Double {
             let values = row.usage?.windows?[selectedPeriod] ?? nil
             let amount = values.flatMap { values -> Double? in
                 guard !values.isEmpty, values.allSatisfy({ $0.isFinite && $0 >= 0 }) else { return nil }
                 let total = values.reduce(0, +)
                 return total.isFinite ? total : nil
             }
-            sessionSortAmounts[row.id] = amount ?? -1
+            return amount ?? -1
         }
-        return rows.sorted {
-            let a = $0.isWorkingGroup ? 0 : ranks[$0.state] ?? 2
-            let b = $1.isWorkingGroup ? 0 : ranks[$1.state] ?? 2
-            if a != b { return a < b }
-            let ar = sessionSortAmounts[$0.id] ?? -1, br = sessionSortAmounts[$1.id] ?? -1
+        return sessions.sorted {
+            if $0.isWorkingGroup != $1.isWorkingGroup { return $0.isWorkingGroup }
+            let ar = amount($0), br = amount($1)
             if ar != br { return ar > br }
             return $0.id < $1.id
         }
@@ -454,6 +444,28 @@ final class DashboardModel: ObservableObject {
         }.resume()
     }
     func stop() { task?.cancel(); session.invalidateAndCancel() }
+    /// One explicit click asks macOS once for this account's saved sign-in. Never retried on its own.
+    func authorizeAccount(_ id: String) {
+        guard fresh, !busy, authorizing == nil, let token = snapshot?.action_token else { return }
+        authorizing = id
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/accounts/authorize"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")), forHTTPHeaderField: "Origin")
+        request.setValue(token, forHTTPHeaderField: "X-Monitor-Token")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["account_id": id])
+        request.timeoutInterval = 125
+        session.dataTask(with: request) { [weak self] data, response, _ in
+            let value = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.authorizing = nil
+                self.messageIsError = (response as? HTTPURLResponse)?.statusCode != 200
+                self.message = value?["message"] as? String ?? "연결 결과를 확인하지 못했습니다. 계정 상태가 바뀌었는지 먼저 확인해 주세요."
+                self.refresh()
+            }
+        }.resume()
+    }
     func addAccount(_ kind: String) {
         guard fresh, !busy, let token = snapshot?.action_token else { return }
         busy = true
@@ -479,18 +491,23 @@ struct AccountQuota: Decodable, Identifiable {
     var id: String; var kind: String; var account_label: String; var plan: String?
     var windows: [Window]; var updated: Double; var stale: Bool; var note: String
     var status: String?
+    /// The limit cannot refresh until this account is connected again.
+    var needsReconnect: Bool { stale && ["login_required", "login_expired", "credential_store_unavailable", "access_denied"].contains(status ?? "") }
     var statusLabel: String {
         if !stale { return "확인됨" }
         switch status {
-        case "last_report": return "마지막 보고"
+        case "last_report": return Self.reportAge(updated)
         case "report_pending": return "보고 대기"
-        case "login_required", "login_expired": return "재로그인 필요"
+        case "login_required", "login_expired", "credential_store_unavailable", "access_denied": return "재연결 필요"
         case "refresh_pending": return "갱신 중"
         case "rate_limited": return "조회 제한"
-        case "access_denied": return "권한 확인"
-        case "credential_store_unavailable": return "저장소 확인"
-        default: return updated > 0 ? "마지막 보고" : "조회 지연"
+        default: return updated > 0 ? Self.reportAge(updated) : "조회 지연"
         }
+    }
+    /// How old a value that could not be refreshed is, so an old % never reads as current: "38분 전 보고".
+    static func reportAge(_ updated: Double, now: Double = Date().timeIntervalSince1970) -> String {
+        let s = max(0, now - updated)
+        return (s < 60 ? "방금" : s < 3600 ? "\(Int(s / 60))분 전" : s < 86400 ? "\(Int(s / 3600))시간 전" : "\(Int(s / 86400))일 전") + " 보고"
     }
     struct Window: Decodable, Identifiable {
         var label: String; var pct: Double?; var reset: Double

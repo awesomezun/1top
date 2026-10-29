@@ -5,6 +5,28 @@ from onetop.bridge import CloudLink,export_snapshot,save_private
 from onetop.discovery import cli_kind,context,applications,app_from
 
 class BoundaryTests(unittest.TestCase):
+ def test_cockpit_exports_clock_aligned_flow_and_private_weekly_evidence(self):
+  now=3601
+  state={'updated':now,'started':0,'events':[
+      {'t':60,'kind':'Claude','fresh':10,'cached':20,'written':30,'output':40},
+      {'t':3600,'kind':'Codex','fresh':4}, {'t':3659,'kind':'Claude','fresh':999}],
+    'sessions':[{'id':'s','kind':'Claude','tokens':[1,2,3,4], 'root_session_id':'root','parent_session_id':'root',
+      'usage':{'rate':10,'weekly_account':'a','weekly_estimate':{'1h':{'used_pp':2,'partial':False,
+        'account_id':'a','calibration':{'pp_per_token':.01,'confidence':'early','private':'SECRET'}}}}}],
+    'account_quotas':[{'id':'a','kind':'Claude','account_label':'PRIVATE EMAIL'}],
+    'weekly_usage':{'accounts':[{'id':'a','periods':{'1h':{'used_pp':2,'observed_seconds':300,'partial':True}},
+       'usage_points':[[i,2,5000] for i in range(80)]}]}}
+  value=export_snapshot(state);flow=value['flow']['1h']
+  self.assertEqual((flow['start'],flow['end'],flow['step'],len(flow['bins'])),(60,3660,60,60))
+  self.assertEqual(flow['bins'][0],{'Claude':100});self.assertEqual(flow['bins'][-1],{'Codex':4})
+  self.assertEqual(value['flow']['24h']['step'],900);self.assertEqual(len(value['flow']['24h']['bins']),96)
+  self.assertEqual(value['account_quotas'][0]['weekly']['1h']['used_pp'],2)
+  self.assertEqual(len(value['account_quotas'][0]['usage_points']),60)
+  self.assertEqual(value['sessions'][0]['weekly_estimate']['1h']['calibration']['pp_per_token'],.01)
+  self.assertEqual(value['sessions'][0]['root_session_id'],'root')
+  self.assertNotIn('SECRET',json.dumps(value));self.assertNotIn('PRIVATE EMAIL',json.dumps(value))
+ def test_missing_event_history_is_not_reported_as_measured_zero(self):
+  self.assertFalse(export_snapshot({})['flow']['1h']['reported'])
  def test_operational_export_omits_goal_prompts_skill_paths_and_raw_events(self):
   state={'operations':{'goals':[{'objective':'PRIVATE GOAL','thread_id':'s','runtime':'Codex','status':'active','tokens_used':5}], 'skills':[{'path':'/private/skill','name':'PRIVATE SKILL'}], 'events':[{'text':'PRIVATE EVENT'}]}}
   value=export_snapshot(state);raw=json.dumps(value)

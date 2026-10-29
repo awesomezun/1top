@@ -5,13 +5,13 @@ PYTHON="${ONETOP_PYTHON:-.venv/bin/python}"
 VERSION="$("$PYTHON" -c 'from onetop import __version__; print(__version__)')"
 APP="build/1top_v${VERSION}/1top.app"
 if [[ -e "$APP" ]]; then echo "Versioned build already exists: $APP" >&2; exit 1; fi
-"$PYTHON" -m PyInstaller --noconfirm --clean --name onetop-agent --onedir --collect-data onetop --collect-data certifi --distpath build/agent-dist --workpath build/pyinstaller --specpath build scripts/agent_entry.py
+"$PYTHON" -m PyInstaller --noconfirm --clean --name onetop-agent --onedir --collect-data onetop --collect-data certifi --copy-metadata opentelemetry-proto --copy-metadata protobuf --distpath build/agent-dist --workpath build/pyinstaller --specpath build scripts/agent_entry.py
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/agent"
 cp -R build/agent-dist/onetop-agent/. "$APP/Contents/Resources/agent/"
 SWIFT_SDK="${ONETOP_MACOS_SDK:-$(xcrun --show-sdk-path)}"
-xcrun swiftc -O -sdk "$SWIFT_SDK" -framework AppKit -framework SwiftUI -framework WebKit -framework CoreText -target arm64-apple-macosx13.0 desktop/*.swift -o "$APP/Contents/MacOS/1top"
+xcrun swiftc -O -sdk "$SWIFT_SDK" -framework AppKit -framework SwiftUI -framework WebKit -target arm64-apple-macosx13.0 desktop/*.swift -o "$APP/Contents/MacOS/1top"
+xcrun swiftc -O -sdk "$SWIFT_SDK" -framework Security -target arm64-apple-macosx13.0 scripts/macos-credential-store.swift -o "$APP/Contents/Resources/agent/onetop-credential-store-v1.0.0"
 scripts/macos-icon.sh
-cp -R desktop/Fonts "$APP/Contents/Resources/Fonts"
 cp build/1top.icns "$APP/Contents/Resources/1top.icns"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict>

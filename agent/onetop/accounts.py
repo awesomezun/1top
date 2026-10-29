@@ -1,4 +1,4 @@
-"""Local account-scoped limits. Claude quotas come from nonsecret CLI reports."""
+"""Local account-scoped limits from CLI reports and verified provider queries."""
 import base64
 import copy
 import hashlib
@@ -125,17 +125,31 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):return None
 
 
-def claude_usage(token):
+def claude_api(token, resource):
+    from . import __version__
+    if resource not in ('usage','profile'):raise ValueError('Invalid account resource')
     # Credentials go only to this fixed provider endpoint, never the 1top relay.
     opener=urllib.request.build_opener(NoRedirect(),urllib.request.HTTPSHandler(context=ssl.create_default_context(cafile=certifi.where())))
-    req=urllib.request.Request('https://api.anthropic.com/api/oauth/usage',headers={
+    req=urllib.request.Request('https://api.anthropic.com/api/oauth/'+resource,headers={
         'Authorization':'Bearer '+token,'anthropic-beta':'oauth-2025-04-20',
-        'User-Agent':'1top/3.9.0','Accept':'application/json'})
+        'User-Agent':'1top/'+__version__,'Accept':'application/json','Cache-Control':'no-cache'})
     with opener.open(req,timeout=8) as response:
         data=response.read(512*1024)
         value=json.loads(data)
         if not isinstance(value,dict):raise ValueError('Invalid usage response')
         return value
+
+
+def claude_usage(token):
+    return claude_api(token,'usage')
+
+
+def claude_identity(token):
+    profile=claude_api(token,'profile')
+    account=profile.get('account') or {};organization=profile.get('organization') or {}
+    if not isinstance(account,dict) or not isinstance(organization,dict) or not account.get('uuid') or not organization.get('uuid'):
+        raise CredentialError('invalid_response')
+    return identity('Claude',account['uuid'],organization['uuid'])
 
 
 def codex_executable():
@@ -224,6 +238,9 @@ def profile_roots(home=Path.home()):
 
 
 def claude_credentials(root):
+    from .credential_store import enrolled_document
+    enrolled=enrolled_document(root)
+    if enrolled and isinstance(enrolled.get('claudeAiOauth'),dict):return enrolled['claudeAiOauth']
     fallback=read_json(root/'.credentials.json').get('claudeAiOauth') or {}
     if not isinstance(fallback,dict):fallback={}
     # Claude Code stores its current macOS login in Keychain. A migrated
@@ -242,6 +259,7 @@ class AccountQuotaSampler:
     def __init__(self):
         self.lock=threading.Lock();self.rows=[];self.cached={};self.thread=None;self.refresh_failures={};self.profile_accounts={};self.profile_jobs={};self.profile_timeout=25
         self.local_refresh_lock=threading.Lock();self.next_local_refresh=0
+        self.claude_verified={};self.claude_backoff={}
     def start(self):
         if self.thread:return
         self.thread=threading.Thread(target=self.loop,daemon=True);self.thread.start()
@@ -279,7 +297,8 @@ class AccountQuotaSampler:
                 current_ids={value[0] for root,value in self.profile_accounts.items() if bindings.get(root)==value}
                 for index,previous in enumerate(self.rows):
                     row=updates.get(previous['id'])
-                    if row and row['id'] in current_ids and row['updated']>=previous['updated']:
+                    if row and row['id'] in current_ids and (row['updated']>previous['updated'] or
+                            (row['updated']==previous['updated'] and previous['stale'] and not row['stale'])):
                         self.rows[index]=row;self.cached[row['id']]=copy.deepcopy(row)
         finally:self.local_refresh_lock.release()
     def roots(self):
@@ -291,8 +310,8 @@ class AccountQuotaSampler:
         account_id=account.get('accountUuid')
         if not account_id:return None
         key=identity('Claude',account_id,account.get('organizationUuid',''))
-        # Claude Code owns its login and refresh. Monitoring must never read its
-        # credentials or contact the subscription endpoint on the user's behalf.
+        # This fast path runs on snapshot reads and stays entirely local.
+        # The two-minute background sampler owns credential/provider access.
         row={'id':key,'kind':'Claude','account_label':account.get('emailAddress') or account.get('displayName') or 'Claude 계정 '+key[-6:],
              'plan':account.get('seatTier') or ('max' if '_claude_max_' in str(account.get('organizationRateLimitTier') or '') else ''),
              'windows':claude_windows({},now),'updated':0,'stale':True,'status':'report_pending',
@@ -316,7 +335,9 @@ class AccountQuotaSampler:
         for value in row['windows']:
             if value['reset'] and value['reset']<=now:value['pct']=None
         has_value=any(value['pct'] is not None for value in row['windows'])
-        if row.get('source')=='claude_statusline' and row.get('verified_activity') is True and now-row['updated']<=300 and has_value:
+        if row.get('source')=='claude_oauth' and now-row['updated']<=300 and has_value:
+            row.update(stale=False,note='Claude 계정 사용률 · 2분마다 확인');row.pop('status',None)
+        elif row.get('source')=='claude_statusline' and row.get('verified_activity') is True and now-row['updated']<=300 and has_value:
             row.update(stale=False,note='Claude Code 상태줄 보고')
             row.pop('status',None)
         elif row.get('source')=='claude_statusline' and row.get('verified_activity') is not True and row['updated']:
@@ -324,6 +345,62 @@ class AccountQuotaSampler:
         elif row['updated']:
             row['note']='Claude Code 상태줄 보고 · 마지막 보고값' if row.get('source')=='claude_statusline' else 'Claude 계정 캐시 · 마지막 보고값'
         return row
+    def claude_live(self,root,now):
+        row=self.claude(root,now)
+        if row is None or (not row['stale'] and now-row['updated']<120):return row
+        key=row['id'];failure_key=(str(root),key)
+        failure=self.refresh_failures.get(failure_key)
+        backoff=self.claude_backoff.get(key)
+        def failed(code):
+            row['status']=code
+            row['note']={
+                'credential_store_unavailable':'Claude 인증 저장소 접근 필요 · 마지막 보고값',
+                'login_required':'Claude 계정 재연결 필요 · 마지막 보고값',
+                'login_expired':'Claude 계정 재연결 필요 · 마지막 보고값',
+                'account_changed':'Claude 계정 확인 필요 · 마지막 보고값',
+                'rate_limited':'Claude 조회 대기 · 마지막 보고값',
+            }.get(code,'Claude 계정 조회 지연 · 마지막 보고값')
+            return row
+        if failure and now<failure[0]:return failed(failure[1])
+        if backoff and now<backoff:return failed('rate_limited')
+        try:
+            credentials=claude_credentials(root)
+            if not credentials.get('accessToken'):raise CredentialError('login_required')
+            if timestamp(credentials.get('expiresAt'))<=now+30:
+                credentials=refresh_managed(root,now)
+            token=credentials['accessToken'];fingerprint=hashlib.sha256(token.encode()).hexdigest()
+            # A profile's name/config does not prove who owns its stored token.
+            # Confirm with the provider before accepting any usage measurement.
+            if self.claude_verified.get(fingerprint)!=key:
+                if claude_identity(token)!=key:raise CredentialError('account_changed')
+                if len(self.claude_verified)>128:self.claude_verified.clear()
+                self.claude_verified[fingerprint]=key
+            usage=claude_usage(token)
+            after=self.claude(root,now)
+            if after is None or after['id']!=key:return None
+            windows=claude_windows(usage,now)
+            if not any(w['pct'] is not None for w in windows):raise CredentialError('invalid_response')
+            row.update(windows=windows,updated=now,stale=False,source='claude_oauth',
+                       note='Claude 계정 사용률 · 2분마다 확인')
+            row.pop('status',None);row.pop('verified_activity',None)
+            self.refresh_failures.pop(failure_key,None)
+            return row
+        except urllib.error.HTTPError as error:
+            code={401:'login_required',403:'access_denied',429:'rate_limited'}.get(error.code,'provider_unavailable')
+            retry=0
+            if error.headers:
+                try:retry=float(error.headers.get('Retry-After','0'))
+                except (ValueError,TypeError):
+                    from email.utils import parsedate_to_datetime
+                    try:retry=parsedate_to_datetime(error.headers['Retry-After']).timestamp()-now
+                    except (ValueError,TypeError,KeyError):pass
+            if not math.isfinite(retry):retry=0
+            error.close()
+            if code=='rate_limited':self.claude_backoff[key]=now+max(120,min(3600,retry or 300))
+        except CredentialError as error:code=error.code
+        except (OSError,ValueError,TypeError):code='provider_unavailable'
+        self.refresh_failures[failure_key]=(now+(600 if code in ('login_required','login_expired') else 120),code)
+        return failed(code)
     def codex(self,root,now):
         auth=read_json(root/'auth.json');tokens=auth.get('tokens') or {}
         account_id=tokens.get('account_id')
@@ -355,7 +432,7 @@ class AccountQuotaSampler:
             job={'done':threading.Event(),'row':None}
             self.profile_jobs[job_key]=job
             def query():
-                try:job['row']=self.claude(root,now) if kind=='Claude' else self.codex(root,now)
+                try:job['row']=self.claude_live(root,now) if kind=='Claude' else self.codex(root,now)
                 except Exception:pass
                 finally:job['done'].set()
             threading.Thread(target=query,daemon=True).start()
@@ -385,7 +462,10 @@ class AccountQuotaSampler:
                 config=Path.home()/'.claude.json' if root==Path.home()/'.claude' else root/'.claude.json'
                 account=read_json(config).get('oauthAccount') or {}
                 existing=rows.get(identity('Claude',account.get('accountUuid'),account.get('organizationUuid','')))
-                if existing and (not existing['stale'] or existing.get('status')=='refresh_pending'):
+                # A recent cached value can survive a failed credential lookup.
+                # Still try other profiles of the same account so an enrolled
+                # login can refresh it without another authorization prompt.
+                if existing and ((not existing['stale'] and not existing.get('status')) or existing.get('status')=='refresh_pending'):
                     bindings[root.resolve()]=(existing['id'],kind,now)
                     continue
             row=self.profile(kind,root,now)

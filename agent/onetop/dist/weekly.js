@@ -2,7 +2,7 @@
 (function(root){
  'use strict';
  const valid=n=>typeof n==='number'&&Number.isFinite(n)&&n>=0;
- const number=n=>!valid(n)?'—':n>0&&n<.01?'<0.01':Number(n.toFixed(2)).toLocaleString('ko-KR');
+ const number=n=>!valid(n)?'—':n>0&&n<.1?'<0.1':Number(n.toFixed(1)).toLocaleString('ko-KR');
  const percent=n=>number(n)+(valid(n)?'%':'');
  const estimate=e=>valid(e?.used_pp)?'≈'+percent(e.used_pp):'측정 중';
  const weekly=q=>q?.windows?.find(w=>w.label==='주간');
@@ -22,6 +22,8 @@
   return [true,false].includes(quota?.stale)&&quota.kind==='Claude'&&c?.kind==='Claude'&&c.source==='historical_provider_calibration'&&['claude_statusline','historical_provider_report'].includes(c.report_source)&&valid(now)&&valid(c.to)&&c.to>0&&c.to<=now&&valid(c.reset)&&c.reset>now&&valid(reset)&&Math.abs(reset-c.reset)<=60&&valid(c.valid_until)&&c.valid_until>now&&c.valid_until<=Math.min(c.reset,c.to+86400);
  };
  const sessionBurn=(estimate,tokensPerSecond,quota,now=Date.now()/1000)=>{
+  // A measured zero token rate is zero burn even before a positive quota step.
+  if(tokensPerSecond===0)return 0;
   const c=estimate?.calibration;
   if(!quota||(c?.source==='historical_provider_calibration'?!historicalCalibration(estimate,quota,now):quota.stale!==false)||estimate?.account_id!==quota.id||estimate?.basis!=='calibrated_token_equivalent'||!valid(tokensPerSecond)||!valid(c?.tokens)||c.tokens<=0||!valid(c?.used_pp)||c.used_pp<=0||!valid(c?.seconds)||c.seconds<120)return null;
   const rate=tokensPerSecond*(c.used_pp/c.tokens)*3600;

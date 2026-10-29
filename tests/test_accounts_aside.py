@@ -2,7 +2,7 @@ import json,sqlite3,tempfile,time,unittest
 from pathlib import Path
 from unittest.mock import patch
 from onetop.accounts import claude_windows,codex_windows,AccountQuotaSampler,identity,claude_credentials
-from onetop.aside import discover
+from onetop.aside import discover,billing_accounts
 from onetop.server import Ledger
 from onetop.bridge import export_snapshot
 from onetop.controls import Controller,ActionError
@@ -70,6 +70,47 @@ class AccountTests(unittest.TestCase):
         self.assertNotEqual(identity('Claude','same','org-a'),identity('Claude','same','org-b'))
 
 class AsideTests(unittest.TestCase):
+    def test_billing_identity_uses_provider_account_not_app_login_or_model(self):
+        with tempfile.TemporaryDirectory() as d:
+            directory=Path(d)
+            (directory/'credentials.json').write_text(json.dumps({
+                'openai-codex':{'accountId':'pro-account','access':'DO-NOT-EXPORT','refresh':'DO-NOT-EXPORT'},
+                'claude-code':{'access':'DO-NOT-EXPORT'}}))
+            result=billing_accounts(directory)
+            self.assertEqual(result,{'openai-codex':identity('Codex','pro-account')})
+            self.assertNotIn('DO-NOT-EXPORT',json.dumps(result))
+            (directory/'credentials.json').write_text('{"openai-codex":{"modelId":"gpt-6-astra"}}')
+            self.assertEqual(billing_accounts(directory),{})
+            (directory/'credentials.json').write_text('{"openai-codex":null}')
+            self.assertEqual(billing_accounts(directory),{})
+    def test_explicit_ancestry_includes_old_parent_and_collapses_nested_tasks(self):
+        from onetop.hierarchy import group_sessions
+        with tempfile.TemporaryDirectory() as d:
+            home=Path(d);base=home/'.aside/u/0';base.mkdir(parents=True)
+            c=sqlite3.connect(base/'state.db')
+            c.execute('CREATE TABLE sessions(id,title,status,model,cwd,created_at,updated_at,archived_at,incognito,ephemeral,parent_id,trigger,branched_from)')
+            for sid,parent,trigger,updated,private,branch in [
+                ('root',None,'user',1,0,None),('routine','root','routine',99995,0,None),
+                ('worker','routine','subagent',99995,0,None),('private',None,'user',1,1,None),
+                ('orphan','private','subagent',99995,0,None),('branch',None,'user',99995,0,'root')]:
+                c.execute('INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                    (sid,'Fixture','running' if sid!='root' else 'idle','{"modelId":"test"}','/tmp/project',1,updated,None,private,0,parent,json.dumps({'type':trigger}),branch))
+            c.commit();c.close()
+            rows=discover(home,100000,True)
+            self.assertNotIn('aside:0:private',{s['id'] for s in rows})
+            root=next(s for s in rows if s['aside_session']=='root')
+            worker=next(s for s in rows if s['aside_session']=='worker')
+            self.assertEqual(worker['root_session_id'],root['id'])
+            self.assertNotIn('control_key',worker)
+            self.assertFalse(next(s for s in rows if s['aside_session']=='branch')['is_subagent'])
+            for s in rows:s['tokens']=[1,0,0,0];s['usage']={'rate':2,'windows':{'1h':[1,0,0,0]}}
+            grouped=group_sessions(rows)
+            self.assertEqual(len(grouped),3)
+            group=next(s for s in grouped if s['id']==root['id'])
+            self.assertEqual(group['children_count'],2)
+            self.assertEqual(group['tokens'],[3,0,0,0])
+            self.assertEqual(group['usage']['rate'],6)
+
     def test_request_dedup_and_reasoning_not_double_counted(self):
         l=Ledger('Aside')
         x={'role':'assistant','responseId':'r','timestamp':1000000000000,'model':'test','usage':{'input':10,'cacheRead':20,'cacheWrite':3,'output':7,'reasoning':5,'totalTokens':40}}

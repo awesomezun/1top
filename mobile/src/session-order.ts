@@ -1,8 +1,9 @@
-import type {SessionRow} from './types';
+import type {SessionRow,WindowKey} from './types';
+import {total} from './metrics';
 
-const order:Record<string,number>={working:0,waiting:1,resuming:2,paused:3,idle:4,interrupted:5,unknown:6};
-// Keep ties stable so live token updates do not shuffle cards under the reader.
-export function sortSessions(rows:SessionRow[],now=Date.now()):SessionRow[]{
- const rank=(row:SessionRow)=>row.device.online&&now-row.device.received<30000?(order[row.status]??6):7;
- return [...rows].sort((a,b)=>rank(a)-rank(b));
+// Working sessions first, then every other session together, each by selected-period tokens.
+// Same order as the dashboard, the menu bar and the iPhone app; states never split the usage order.
+export function sortSessions(rows:SessionRow[],period:WindowKey='1h'):SessionRow[]{
+ const tokens=(row:SessionRow)=>total(row.windows?.[period])??-1;
+ return [...rows].sort((a,b)=>Number(b.status==='working')-Number(a.status==='working')||tokens(b)-tokens(a)||(a.key<b.key?-1:a.key>b.key?1:0));
 }

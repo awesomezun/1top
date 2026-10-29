@@ -10,7 +10,7 @@ from onetop.server import BASE, DashboardHTTPServer, Handler
 class DashboardAssetStartupTests(unittest.TestCase):
     def test_dependencies_survive_simultaneous_startup_connections(self):
         paths = ['maps.js', 'weekly.js', 'i18n.js', 'effects.js',
-                 'dashboard.js', 'app.js', 'style.css', 'dashboard.css'] * 4
+                 'dashboard.js', 'ranges.js', 'speed.js', 'app.js', 'style.css', 'dashboard.css'] * 4
         server = DashboardHTTPServer(('127.0.0.1', 0), Handler)
         sockets = []
         worker = None

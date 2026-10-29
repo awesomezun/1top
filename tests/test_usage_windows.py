@@ -64,6 +64,7 @@ class RollingUsageTests(unittest.TestCase):
         self.assertEqual(before,self.db.execute('SELECT count(*) FROM events').fetchone())
 
     def test_collector_preserves_unknown_and_known_zero_without_lifetime_injection(self):
+        self.event(90000,1,'retained-history')
         c=Collector();c.db=self.db;c.started=self.now-2000;c.discovery_at=self.now
         c.terminal_count=0;c.quotas=Mock(return_value=[])
         c.resources=Mock();c.resources.sample.return_value={}
@@ -79,6 +80,7 @@ class RollingUsageTests(unittest.TestCase):
         self.assertIsNone(unknown['usage']['windows']['24h'])
         self.assertEqual(c.snapshot['period_usage']['windows'][0]['tokens'],[0,0,0,0])
         self.assertEqual(c.snapshot['period_usage']['known_kinds'],['Codex'])
+        self.assertEqual(self.db.execute("SELECT count(*) FROM events WHERE sid='retained-history'").fetchone()[0],1)
 
 
 if __name__=='__main__':unittest.main()

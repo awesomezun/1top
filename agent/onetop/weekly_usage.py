@@ -32,12 +32,25 @@ def event_account(spec, timestamp):
     return binding[0] if binding and timestamp>=binding[1] else None
 
 
+def bind_adapter(db, spec, roots, now):
+    """Match an app's explicit provider identity to an already observed account."""
+    account=spec.get('billing_account');kind=spec.get('billing_kind')
+    known=any(value[:2]==(account,kind) for value in roots.values())
+    previous=db.execute('SELECT account,kind,since FROM adapter_accounts WHERE sid=?',(spec['id'],)).fetchone()
+    since=previous[2] if previous and previous[:2]==(account,kind) else now
+    db.execute('INSERT OR REPLACE INTO adapter_accounts VALUES(?,?,?,?)',
+               (spec['id'],account if known else None,kind,since))
+    return (account,since) if account and known else None
+
+
 def initialize(db):
     columns={r[1] for r in db.execute('PRAGMA table_info(events)')}
     if columns and 'account' not in columns:db.execute('ALTER TABLE events ADD COLUMN account TEXT')
     db.execute('''CREATE TABLE IF NOT EXISTS weekly_samples (
         account TEXT, kind TEXT, t REAL, pct REAL, reset REAL,
         PRIMARY KEY(account,t))''')
+    db.execute('''CREATE TABLE IF NOT EXISTS adapter_accounts (
+        sid TEXT PRIMARY KEY, account TEXT, kind TEXT, since REAL)''')
 
 
 def record(db, quotas, now):
@@ -51,6 +64,39 @@ def record(db, quotas, now):
         db.execute('INSERT OR IGNORE INTO weekly_samples VALUES(?,?,?,?,?)',
                    (q['id'],q['kind'],t,value,reset))
     db.execute('DELETE FROM weekly_samples WHERE t<?',(now-RETENTION,))
+
+
+def restore_bound_claude_accounts(db, quotas, sessions, now):
+    """Keep a verified running session's old quota after its profile logs out."""
+    from .accounts import claude_statusline_report
+    known = {q['id']:q for q in quotas}
+    for session in sessions:
+        binding = session.get('account_binding')
+        if (session.get('kind') != 'Claude' or not binding or
+                session.get('account_binding_source') not in ('claude_statusline_session','otel_session_identity')):
+            continue
+        account = binding[0]
+        report = (claude_statusline_report(Path(session['config_dir']),account,now)
+                  if session.get('config_dir') else None)
+        quota = known.get(account)
+        if (report and report.get('verified_activity') is True and
+                (not quota or report['updated'] >= quota.get('updated',0))):
+            if quota is None:
+                quota={'id':account,'kind':'Claude','account_label':'Claude · '+account[-6:],'plan':''}
+                quotas.append(quota);known[account]=quota
+            quota.update(report,stale=now-report['updated']>FRESH,note='Claude Code 상태줄 보고')
+            continue
+        if quota is not None:continue
+        row = db.execute('''SELECT t,pct,reset FROM weekly_samples WHERE account=?
+            AND kind='Claude' AND t>=? AND t<=? ORDER BY t DESC LIMIT 1''',
+            (account,now-RETENTION,now)).fetchone()
+        if not row or not all(valid_number(v) for v in row) or not 0<=row[1]<=100 or row[2]<=now:
+            continue
+        quotas.append({'id':account,'kind':'Claude','account_label':'Claude · '+account[-6:],
+            'plan':'','updated':row[0],'stale':True,'status':'last_report',
+            'source':'historical_provider_report','note':'Claude Code 마지막 보고값',
+            'windows':[{'label':'주간','pct':row[1],'reset':row[2]}]})
+        known[account]=quotas[-1]
 
 
 def restore_claude_last_report(db, quotas, now):
@@ -131,10 +177,17 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
     columns={r[1] for r in db.execute('PRAGMA table_info(events)')}
     events=collections.defaultdict(list);session_events=collections.defaultdict(list)
     unbound=collections.defaultdict(list)
+    adapter_kinds=dict(db.execute('SELECT sid,kind FROM adapter_accounts'))
     if 'account' in columns:
         for account,sid,kind,t,total in db.execute('''SELECT account,sid,kind,t,fresh+cached+written+output
                 FROM events WHERE t>? AND t<=? ORDER BY t''',(now-86400-FRESH,now)):
             if valid_number(total) and total>0:
+                # Runtime/app and billing provider are different dimensions.
+                # Account-attributed events retain their recorded identity even
+                # after the app changes provider. Unbound old reports remain
+                # unbound and cannot inflate a calibration's missing denominator.
+                if kind=='Aside':
+                    kind=next((q['kind'] for q in quotas if q['id']==account),adapter_kinds.get(sid) or 'Aside')
                 session_events[sid].append((t,account,kind,total))
                 if account:events[account].append((t,sid,total))
                 else:unbound[kind].append(t)
@@ -146,7 +199,7 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
     result=[];shares=collections.defaultdict(dict)
     for quota in quotas:
         account=quota['id'];points,corrections,excluded=reconciled_history(history[account]);observations=[];event_index=0
-        claude_history=(quota['kind']=='Claude' and quota.get('source') in ('claude_statusline','historical_provider_report'))
+        claude_history=(quota['kind']=='Claude' and quota.get('source') in ('claude_statusline','historical_provider_report','claude_oauth'))
         calibration_gap=CLAUDE_CALIBRATION_GAP if claude_history else FRESH
         for before,after in zip(points,points[1:]):
             t0,t1=before[0],after[0];delta,uncertain=interval(before,after)
@@ -163,7 +216,7 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
         # as if it represented all tokens in a longer selected period.
         current_reset=points[-1][2] if points else None
         account_observed_since=events[account][0][0] if events[account] else None
-        eligible=[]
+        eligible=[];earlier=[];pending_tokens=0;pending_end=None
         for index,o in enumerate(observations):
             t0,t1,delta,uncertain,weights=o
             same_cycle=(current_reset is not None and abs(points[index][2]-current_reset)<=60
@@ -171,8 +224,31 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
             missing=any(t0<t<=t1 for t in unbound[quota['kind']])
             after_correction=not corrections or t0>=corrections[-1]
             attribution_started=(not claude_history or (account_observed_since is not None and account_observed_since<=t0))
-            if same_cycle and after_correction and attribution_started and not uncertain and delta is not None and weights and not missing:
-                eligible.append(o)
+            # A provider percentage can arrive after the token log. Include the
+            # complete settled interval even if that individual callback has no
+            # tokens, so a delayed quota increment is paired with preceding
+            # account-attributed work. Require a measured token denominator below.
+            settled_interval=t1<=now-10 and t1-t0<=calibration_gap
+            complete=(same_cycle and attribution_started and settled_interval
+                      and not uncertain and delta is not None and not missing)
+            if not complete:
+                pending_tokens=0;pending_end=None;continue
+            if pending_end!=t0:pending_tokens=0
+            pending_tokens+=sum(weights.values());pending_end=t1
+            # Never attach an empty increment across a gap, an unbound event,
+            # or work already consumed by an earlier percentage increment.
+            if delta>0 and pending_tokens<=0:continue
+            (eligible if after_correction else earlier).append(o)
+            if delta>0:pending_tokens=0
+        # A correction rejects the affected span, not unrelated earlier
+        # account-attributed measurements that survive reconciliation. Prefer
+        # post-correction data; otherwise retain a bounded same-cycle Claude
+        # calibration until a new positive percentage movement is available.
+        ready=lambda rows: (sum(sum(o[4].values()) for o in rows)>0
+                            and sum(o[2] for o in rows)>=1
+                            and sum(o[1]-o[0] for o in rows)>=120)
+        reused_earlier=bool(claude_history and not ready(eligible) and ready(earlier))
+        if reused_earlier:eligible=earlier
         calibration_tokens=sum(sum(o[4].values()) for o in eligible)
         calibration_pp=sum(o[2] for o in eligible)
         calibration_seconds=sum(o[1]-o[0] for o in eligible)
@@ -195,7 +271,7 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
             calibration.update(source='historical_provider_calibration',kind='Claude',reset=reported_reset,
                                valid_until=min(reported_reset,calibration['to']+CLAUDE_CALIBRATION_AGE),
                                age_seconds=max(0,now-calibration['to']),report_source=quota.get('source'),
-                               account_observed_since=account_observed_since)
+                               account_observed_since=account_observed_since,reused_before_correction=reused_earlier)
         periods={}
         for key,_,seconds in WINDOWS:
             start=now-seconds
@@ -218,8 +294,12 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
                           'observed_to':chunks[-1][1] if chunks else None,'sample_count':len(chunks)+1 if chunks else len(points)}
             if calibration:
                 for sid,bound_account in bindings.items():
-                    if bound_account!=account or (session_accounts[sid] and session_accounts[sid]!={account}):continue
-                    rows=[r for r in session_events[sid] if start<r[0]<=now and r[2]==quota['kind']]
+                    if bound_account!=account:continue
+                    period_rows=[r for r in session_events[sid] if start<r[0]<=now and r[2]==quota['kind']]
+                    # A real login switch does not erase the new account's measured
+                    # segment. Keep the previous account's tokens out of this quota.
+                    other_accounts=any(r[1] is not None and r[1]!=account for r in period_rows)
+                    rows=[r for r in period_rows if r[1]==account or (r[1] is None and not other_accounts)]
                     tokens=sum(r[3] for r in rows)
                     if not rows:continue
                     inferred_tokens=sum(r[3] for r in rows if r[1] is None)
@@ -227,7 +307,8 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
                     if not math.isfinite(value):continue
                     shares[sid][key]={'used_pp':round(value,4),'account_id':account,
                                      'basis':'calibrated_token_equivalent','tokens':tokens,
-                                     'partial':(recording_started if recording_started is not None else now)>start,
+                                     'partial':other_accounts or (recording_started if recording_started is not None else now)>start,
+                                     'excluded_account_tokens':sum(r[3] for r in period_rows if r not in rows),
                                      'period_seconds':seconds,'calibration':calibration,
                                      'inferred_account_tokens':inferred_tokens}
         # Bound the chart independently of how long the collector has run.
