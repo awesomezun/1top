@@ -173,6 +173,18 @@ struct SessionDetail: View {
                     if !available { Text(L.t("Controls require a fresh report from this computer.", "이 컴퓨터의 최신 정보가 있어야 제어할 수 있습니다.")) }
                 }
 
+                // The result sits right under the buttons, where the eye already is after confirming.
+                if let note = model.notes[s.key] {
+                    Section {
+                        HStack(spacing: 8) {
+                            if !note.final { ProgressView() }
+                            Text(note.text).font(.callout)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("control-note")
+                    } header: { Text(L.t("Result", "결과")) }
+                }
+
                 Section {
                     TextField(L.t("Continue testing and fix the errors.", "이어서 테스트하고 오류 고쳐줘"), text: $instruction, axis: .vertical)
                         .lineLimit(4...10)
@@ -204,17 +216,6 @@ struct SessionDetail: View {
                         }
                     }
                 }
-            }
-
-            if let note = model.notes[s.key] {
-                Section {
-                    HStack(spacing: 8) {
-                        if !note.final { ProgressView() }
-                        Text(note.text).font(.callout)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("control-note")
-                } header: { Text(L.t("Result", "결과")) }
             }
 
             if let device = model.device(for: s) {
