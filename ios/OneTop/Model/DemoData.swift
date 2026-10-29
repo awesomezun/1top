@@ -11,8 +11,24 @@ enum DemoData {
     static let photoMessage = "00000000-0000-4000-8000-000000000002"
     /// When this demo began: the hours around it never rest, and sessions stopped before it stay stopped.
     static let anchor = Date().timeIntervalSince1970
-    /// Weekly limit percent per token, by tool.
-    static let perToken: [String: Double] = ["Codex": 1.1e-7, "Claude": 3.2e-8]
+
+    /// Two accounts per tool, as on Android (mobile/src/demo.ts) and the web demo. per: weekly percent per
+    /// token, set once from a typical week of this demo, so a limit is the tokens of its weekly window times
+    /// per and moves with the work. reset: seconds after the demo began (the window began 7 days before).
+    /// five: the 5-hour window's reset and its percent per weekly percent. ago: how old the report is;
+    /// stale: the computer could not refresh it.
+    struct Account {
+        let id: String, kind: String, label: String, plan: String, per: Double, reset: Double, five: (reset: Double, factor: Double)?, ago: Double
+        var stale = false, alias: String? = nil
+    }
+    static let accounts: [Account] = [
+        Account(id: "demo:claude-a", kind: "Claude", label: "Claude · 4f21a8", plan: "max", per: 9.4e-9, reset: 276_000, five: (9_400, 6), ago: 40),
+        Account(id: "demo:claude-b", kind: "Claude", label: "Claude · b7e3c1", plan: "pro", per: 5.4e-8, reset: 290_000, five: (14_200, 6), ago: 70, alias: "Team"),
+        Account(id: "demo:codex-a", kind: "Codex", label: "Codex · 9c03e2", plan: "pro", per: 2.4e-8, reset: 250_000, five: nil, ago: 55),
+        // A limit the computer could not refresh: it shows how old it is instead of a rate.
+        Account(id: "demo:codex-b", kind: "Codex", label: "Codex · 2d5f90", plan: "plus", per: 2e-7, reset: 337_000, five: nil, ago: 38 * 60, stale: true),
+    ]
+    static func account(_ id: String?) -> Account? { accounts.first { $0.id == id } }
 
     /// One demo session. weight is its usual share of its computer; mobile/src/demo.ts lists the same rows.
     struct Row {
@@ -49,29 +65,47 @@ enum DemoData {
 
     /// When a session takes part in its computer's work: working ones all along, the others until a
     /// while before the demo began (DemoUsage shapes the minutes).
-    static func stream(_ status: String, _ weight: Double, _ index: Int) -> DemoUsage.Stream {
+    static func stream(_ status: String, _ weight: Double, _ index: Int, anchor: Double) -> DemoUsage.Stream {
         let start = index % 4 == 3 ? anchor - Double(5 + index % 7) * 3600 : anchor - 30 * 3600
         let stop = status == "waiting" ? anchor - Double(2 + index % 4) * 60 : status == "paused" ? anchor - 12 * 60
             : status == "idle" ? anchor - Double(40 + index * 37 % 180) * 60 : Double.infinity
         return .init(weight: weight, start: start, stop: stop)
     }
 
-    struct Machine { let computer: Computer; let rows: [(row: Row, index: Int)]; let now: DemoUsage.Usage; let before: DemoUsage.Usage }
+    /// One computer's minutes. owners: the account of each stream (the shown sessions, then the earlier
+    /// ones); week: each stream's tokens from its account's weekly window start until the demo began.
+    struct Machine { let computer: Computer; let rows: [(row: Row, index: Int)]; let now: DemoUsage.Usage; let before: DemoUsage.Usage; let owners: [String?]; let week: [Double] }
+    /// What stays fixed while one demo runs: the day before it began and each weekly window then.
+    nonisolated(unsafe) private static var fixed: [String: (before: DemoUsage.Usage, week: [Double])] = [:]
 
-    static func devices(now: Double) -> [Device] {
+    static func devices(now: Double, anchor: Double = DemoData.anchor) -> [Device] {
         let machines = computers.map { c -> Machine in
             let mine = rows.enumerated().filter { $0.element.id.hasPrefix(c.prefix) }.map { (row: $0.element, index: $0.offset) }
-            let streams = mine.map { stream($0.row.status, $0.row.weight, $0.index) }
-            // Tokens from a day before the demo began until it began, fixed, so totals only grow.
+            // Earlier sessions of each account on this computer, closed before the shown ones began: they
+            // fill the weekly window and never show in the last day.
+            var ids: [String] = []
+            for pair in mine { if let a = pair.row.account, !ids.contains(a) { ids.append(a) } }
+            let earlier = ids.map { id in (id: id, weight: mine.reduce(0) { $0 + ($1.row.account == id ? $1.row.weight : 0) }) }
+            let streams = mine.map { stream($0.row.status, $0.row.weight, $0.index, anchor: anchor) }
+                + earlier.map { DemoUsage.Stream(weight: $0.weight, start: anchor - 8 * 86400, stop: anchor - 30 * 3600) }
+            let owners = mine.map(\.row.account) + earlier.map { Optional($0.id) }
+            let key = c.id + ":" + String(anchor)
+            if fixed[key] == nil {
+                // Tokens from a day before the demo began until it began, so totals only grow; and each
+                // stream's tokens from its account's weekly window start until the demo began.
+                let long = DemoUsage.usage(c.seed, c.scale, streams, now: anchor, anchor: anchor, rest: restSeed, duty: c.duty, span: 8 * 1440 + 15)
+                fixed[key] = (DemoUsage.usage(c.seed, c.scale, streams, now: anchor, anchor: anchor, rest: restSeed, duty: c.duty),
+                              owners.enumerated().map { j, id in account(id).map { DemoUsage.since(long, j, anchor + $0.reset - 604_800) } ?? 0 })
+            }
             return Machine(computer: c, rows: mine, now: DemoUsage.usage(c.seed, c.scale, streams, now: now, anchor: anchor, rest: restSeed, duty: c.duty),
-                           before: DemoUsage.usage(c.seed, c.scale, streams, now: anchor, anchor: anchor, rest: restSeed, duty: c.duty))
+                           before: fixed[key]!.before, owners: owners, week: fixed[key]!.week)
         }
         let sessions = machines.map { m in
             m.rows.enumerated().map { j, pair -> Session in
                 let row = pair.row, u = m.now
                 var windows: [String: [Double]?] = [:]
                 for p in Period.allCases { windows[p.rawValue] = DemoUsage.vector(DemoUsage.since(u, j, now - p.seconds)) }
-                let per = perToken[row.kind] ?? perToken["Claude"]!, lastMinute = u.minutes[j][u.minutes[j].count - 2]
+                let per = account(row.account)?.per ?? 0, lastMinute = u.minutes[j][u.minutes[j].count - 2]
                 let estimates = row.account.map { account in
                     Dictionary(uniqueKeysWithValues: Period.allCases.map { p in
                         (p.rawValue, WeeklyEstimate(usedPp: (windows[p.rawValue] ?? nil).map { $0.reduce(0, +) * per }, partial: false, accountId: account,
@@ -86,32 +120,34 @@ enum DemoData {
                                capabilities: row.capabilities, weeklyAccount: row.account, weeklyEstimate: estimates)
             }
         }
-        // An account's tokens since a moment, over both computers.
-        func used(_ account: String, _ from: Double) -> Double {
-            machines.reduce(0) { n, m in n + m.rows.enumerated().reduce(0) { k, e in k + (e.element.row.account == account ? DemoUsage.since(m.now, e.offset, from) : 0) } }
+        // An account's tokens since a moment over both computers, and its weekly percent: the tokens of its
+        // weekly window (before the demo began, then since) times its per-token percent.
+        func used(_ id: String, _ from: Double) -> Double {
+            machines.reduce(0) { n, m in n + m.owners.enumerated().reduce(0) { k, e in k + (e.element == id ? DemoUsage.since(m.now, e.offset, from) : 0) } }
         }
-        // weekly and five are the limits when the demo began; they rise with the tokens used since.
-        func quota(_ id: String, _ kind: String, _ label: String, _ plan: String, _ weekly: Double, _ weeklyReset: Double, _ five: Double?, _ fiveReset: Double,
-                   _ updated: Double, stale: Bool = false, alias: String? = nil) -> Quota {
-            let per = perToken[kind]!, pct = weekly + used(id, anchor) * per, reset = now + weeklyReset
+        func weekly(_ a: Account) -> Double {
+            (machines.reduce(0) { n, m in n + m.owners.enumerated().reduce(0) { k, e in k + (e.element == a.id ? m.week[e.offset] : 0) } } + used(a.id, anchor)) * a.per
+        }
+        func round(_ n: Double) -> Double { (n * 10).rounded() / 10 }
+        func quota(_ a: Account) -> Quota {
+            let exact = weekly(a), reset = anchor + a.reset
             var windows: [QuotaWindow] = []
-            if let five { windows.append(QuotaWindow(key: "5h", label: "5H", pct: min(100, five + used(id, anchor) * per * 4), reset: now + fiveReset)) }
-            windows.append(QuotaWindow(key: "7d", label: "주간", pct: pct, reset: reset))
-            let periods = Dictionary(uniqueKeysWithValues: Period.allCases.map { p in
-                (p.rawValue, WeeklyPeriod(usedPp: used(id, now - p.seconds) * per, observedSeconds: p.seconds, partial: false))
-            })
-            let points = (0..<24).map { i -> [Double] in
-                let at = now - Double(23 - i) * 3600
-                return [at, max(0, pct - used(id, at) * per), reset]
+            if let five = a.five {
+                windows.append(QuotaWindow(key: "5h", label: "5H", pct: min(100, round(used(a.id, anchor + five.reset - 18_000) * a.per * five.factor)), reset: anchor + five.reset))
             }
-            return Quota(id: id, kind: kind, accountLabel: label, plan: plan, updated: updated, stale: stale, note: nil, status: nil,
-                         windows: windows, weekly: periods, usagePoints: points, alias: alias)
+            windows.append(QuotaWindow(key: "7d", label: "주간", pct: round(exact), reset: reset))
+            let periods = Dictionary(uniqueKeysWithValues: Period.allCases.map { p in
+                (p.rawValue, WeeklyPeriod(usedPp: used(a.id, now - p.seconds) * a.per, observedSeconds: p.seconds, partial: false))
+            })
+            let points = (0..<145).map { i -> [Double] in
+                let at = now - 86400 + Double(i) * 600
+                return [at, max(0, round(exact - used(a.id, at) * a.per)), reset]
+            }
+            return Quota(id: a.id, kind: a.kind, accountLabel: a.label, plan: a.plan, updated: now - a.ago, stale: a.stale, note: nil, status: nil,
+                         windows: windows, weekly: periods, usagePoints: points, alias: a.alias)
         }
-        let claudeA = quota("demo:claude-a", "Claude", "Claude · 4f21a8", "max", 27, 290_000, 38, 9_400, now - 40)
-        let claudeB = quota("demo:claude-b", "Claude", "Claude · b7e3c1", "pro", 46, 350_000, 12, 14_200, now - 70, alias: "Team")
-        let codexA = quota("demo:codex-a", "Codex", "Codex · 9c03e2", "pro", 23, 410_000, nil, 0, now - 55)
-        // A limit the computer could not refresh: it shows how old it is instead of a rate.
-        let codexB = quota("demo:codex-b", "Codex", "Codex · 2d5f90", "plus", 64, 220_000, nil, 0, now - 38 * 60, stale: true)
+        let quotas = accounts.map(quota)
+        let (claudeA, claudeB, codexA, codexB) = (quotas[0], quotas[1], quotas[2], quotas[3])
         func flow(_ m: Machine) -> [String: FlowSeries] {
             var flow: [String: FlowSeries] = [:]
             for p in Period.allCases {

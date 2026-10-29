@@ -6,7 +6,7 @@ import {register} from 'node:module';
 register('data:text/javascript,'+encodeURIComponent("export async function resolve(s,c,n){if(s.startsWith('.')&&!/\\.[a-z]+$/.test(s)){try{return await n(s+'.ts',c);}catch{}}return n(s,c);}"));
 const {chinese}=await import('../src/chinese.ts');
 const {accountTags,sessionAccount}=await import('../src/fleet.ts');
-const {demoDevices,demoThread,DEMO_ROWS}=await import('../src/demo.ts');
+const {demoDevices,demoThread,DEMO_ROWS,DEMO_ACCOUNTS}=await import('../src/demo.ts');
 const {unit,usage,since,bins,UNIT_CHECK}=await import('../src/demo-usage.ts');
 const {translate,windowName}=await import('../src/i18n.ts');
 
@@ -53,9 +53,11 @@ test('the demo matches the iPhone demo: computers, sessions, models, names and a
  }
  // The session names are read through the language table at run time, so each needs a Chinese text.
  assert.deepEqual(DEMO_ROWS.filter(r=>chinese(r[4])===r[4]).map(r=>r[4]),[]);
- const iosQuotas=[...swift.matchAll(/quota\("([^"]+)", "(\w+)", "([^"]+)"/g)].map(m=>[m[1],m[2],m[3]]);
+ const iosAccounts=[...swift.matchAll(/Account\(id: "([^"]+)", kind: "(\w+)", label: "([^"]+)", plan: "(\w+)", per: ([\d.e-]+), reset: ([\d_]+), five: (?:\(([\d_]+), (\d+)\)|nil), ago: ([\d *]+)(?:, stale: true)?(?:, alias: "([^"]+)")?\)/g)]
+  .map(m=>({id:m[1],kind:m[2],label:m[3],plan:m[4],per:Number(m[5]),reset:Number(m[6].replace(/_/g,'')),five:m[7]?{reset:Number(m[7].replace(/_/g,'')),factor:Number(m[8])}:undefined,ago:eval(m[9]),alias:m[10]}));
+ assert.deepEqual(iosAccounts,DEMO_ACCOUNTS.map(({stale,...a})=>({...a,five:a.five,alias:a.alias})));
  const quotas=new Map(demoDevices().flatMap(d=>d.snapshot.account_quotas).map(q=>[q.id,[q.id,q.kind,q.account_label]]));
- assert.deepEqual([...quotas.values()].sort(),iosQuotas.sort());
+ assert.deepEqual([...quotas.values()].sort(),DEMO_ACCOUNTS.map(a=>[a.id,a.kind,a.label]).sort());
  assert.deepEqual(accountTags(demoDevices()),{'demo:claude-a':'1','demo:claude-b':'Team','demo:codex-b':'1','demo:codex-a':'2'});
  // An English screen shows no Korean, and the conversation follows the language too.
  const english=JSON.stringify([demoDevices((en)=>en),demoThread('d1',(en)=>en)]);
@@ -87,4 +89,19 @@ test('limit windows are named from their key in the chosen language',()=>{
  assert.equal(windowName({key:'5h',label:'5H'},ko),'5시간');
  assert.equal(windowName({key:'7d',label:'주간'},(en)=>en),'Weekly');
  assert.equal(windowName({key:'5h',label:'5H'},(en,k)=>translate('zh',en,k)),'5小时');
+});
+
+test('phone demo limits follow the web demo rules and give the iPhone values (DemoUsageTests.swift)',()=>{
+ // Over a week of start times: an account's sessions add up to its period use, which grows 1h ≤ 5h ≤ 24h,
+ // stays below the weekly percent, and is about a tenth to two fifths of it.
+ for(let k=0;k<28;k++){const anchor=1_793_200_000+k*21600,devices=demoDevices(undefined,anchor+600,anchor),sessions=devices.flatMap(d=>d.snapshot.sessions);
+  for(const q of new Map(devices.flatMap(d=>d.snapshot.account_quotas).map(q=>[q.id,q])).values()){
+   const week=q.windows.find(w=>w.key==='7d').pct,[h1,h5,day]=['1h','5h','24h'].map(p=>q.weekly[p].used_pp);
+   for(const p of ['1h','5h','24h'])assert.ok(Math.abs(sessions.filter(s=>s.weekly_account===q.id).reduce((n,s)=>n+s.weekly_estimate[p].used_pp,0)-q.weekly[p].used_pp)<1e-5,q.id+' '+p);
+   assert.ok(h1<=h5&&h5<=day&&day<=week,q.id+' at '+k);
+   assert.ok(day/week>=.1&&day/week<=.42,q.id+' day share '+(day/week).toFixed(2)+' at '+k);
+  }}
+ // The same start gives the same limits on both phones.
+ const at=1_793_200_000,limits=Object.fromEntries(new Map(demoDevices(undefined,at+600,at).flatMap(d=>d.snapshot.account_quotas).map(q=>[q.id,q.windows.map(w=>w.pct)])));
+ assert.deepEqual(limits,{'demo:claude-a':[6.9,31.7],'demo:claude-b':[12.2,61.7],'demo:codex-a':[28.9],'demo:codex-b':[69]});
 });

@@ -12,8 +12,19 @@ const PERIODS:[WindowKey,number][]=[['10m',600],['30m',1800],['1h',3600],['5h',1
 export const PHOTO_MESSAGE='00000000-0000-4000-8000-000000000002';
 /** When this demo began: the hours around it never rest, and sessions stopped before it stay stopped. */
 const ANCHOR=Date.now()/1000;
-// Weekly limit percent per token, by tool.
-const PER:Record<string,number>={Codex:1.1e-7,Claude:3.2e-8};
+/** Two accounts per tool, as on the iPhone (DemoData.swift) and the web demo (site/src/remote-demo.js).
+ *  per: weekly percent per token, set once from a typical week of this demo, so a limit is the tokens of its
+ *  weekly window times per and moves with the work. reset: seconds after the demo began (the window began
+ *  7 days before). five: the 5-hour window's reset and its percent per weekly percent. ago: how old the
+ *  report is; stale: the computer could not refresh it. */
+export const DEMO_ACCOUNTS:{id:string;kind:string;label:string;plan:string;per:number;reset:number;five?:{reset:number;factor:number};ago:number;stale?:boolean;alias?:string}[]=[
+ {id:'demo:claude-a',kind:'Claude',label:'Claude · 4f21a8',plan:'max',per:9.4e-9,reset:276_000,five:{reset:9_400,factor:6},ago:40},
+ {id:'demo:claude-b',kind:'Claude',label:'Claude · b7e3c1',plan:'pro',per:5.4e-8,reset:290_000,five:{reset:14_200,factor:6},ago:70,alias:'Team'},
+ {id:'demo:codex-a',kind:'Codex',label:'Codex · 9c03e2',plan:'pro',per:2.4e-8,reset:250_000,ago:55},
+ // A limit the computer could not refresh: it shows how old it is instead of a rate.
+ {id:'demo:codex-b',kind:'Codex',label:'Codex · 2d5f90',plan:'plus',per:2e-7,reset:337_000,ago:38*60,stale:true},
+];
+const ACCOUNT=Object.fromEntries(DEMO_ACCOUNTS.map(a=>[a.id,a]));
 
 /** [id, kind, model, project, terminal (en, ko), status, weight, account, capabilities]. weight is the
  *  session's usual share of its computer; the iPhone's DemoData.swift lists the same rows. */
@@ -39,45 +50,55 @@ const REST=7;
 
 // When a session takes part in its computer's work: working ones all along, the others until a while
 // before the demo began (demo-usage.ts shapes the minutes).
-function stream(status:string,weight:number,index:number):Stream{
- const start=index%4===3?ANCHOR-(5+index%7)*3600:ANCHOR-30*3600;
- const stop=status==='waiting'?ANCHOR-(2+index%4)*60:status==='paused'?ANCHOR-12*60:status==='idle'?ANCHOR-(40+index*37%180)*60:Infinity;
+function stream(status:string,weight:number,index:number,anchor:number):Stream{
+ const start=index%4===3?anchor-(5+index%7)*3600:anchor-30*3600;
+ const stop=status==='waiting'?anchor-(2+index%4)*60:status==='paused'?anchor-12*60:status==='idle'?anchor-(40+index*37%180)*60:Infinity;
  return {weight,start,stop};
 }
 
-function machine(c:typeof COMPUTERS[number],now:number){
+// What stays fixed while one demo runs: the day before it began and each account's weekly window then.
+const fixed=new Map<string,{before:ReturnType<typeof usage>;week:number[]}>();
+function machine(c:typeof COMPUTERS[number],now:number,anchor:number){
  const rows=DEMO_ROWS.map((row,i)=>({row,i})).filter(({row})=>row[0].startsWith(c.prefix));
- const streams=rows.map(({row,i})=>stream(row[6],row[7],i));
- // Tokens from a day before the demo began until it began, fixed, so totals only grow.
- const u=usage(c.seed,c.scale,streams,now,ANCHOR,REST,c.duty),before=usage(c.seed,c.scale,streams,ANCHOR,ANCHOR,REST,c.duty);
- return {rows,u,before};
+ // Earlier sessions of each account on this computer, closed before the shown ones began: they fill the
+ // weekly window and never show in the last day.
+ const earlier=[...new Set(rows.map(({row})=>row[8]).filter((a):a is string=>!!a))].map(id=>({id,weight:rows.reduce((n,{row})=>n+(row[8]===id?row[7]:0),0)}));
+ const streams=[...rows.map(({row,i})=>stream(row[6],row[7],i,anchor)),...earlier.map(({weight})=>({weight,start:anchor-8*86400,stop:anchor-30*3600}))];
+ const owners=[...rows.map(({row})=>row[8]),...earlier.map(({id})=>id)];
+ const u=usage(c.seed,c.scale,streams,now,anchor,REST,c.duty);
+ const key=c.id+':'+anchor;
+ if(!fixed.has(key)){
+  // Tokens from a day before the demo began until it began, so totals only grow; and each stream's tokens
+  // from its account's weekly window start until the demo began.
+  const long=usage(c.seed,c.scale,streams,anchor,anchor,REST,c.duty,true,8*1440+15);
+  fixed.set(key,{before:usage(c.seed,c.scale,streams,anchor,anchor,REST,c.duty),week:owners.map((id,j)=>id&&ACCOUNT[id]?since(long,j,anchor+ACCOUNT[id].reset-604800):0)});
+ }
+ return {rows,u,owners,...fixed.get(key)!};
 }
 
-export function demoDevices(t:T=(en)=>en):Device[]{
- const now=Date.now()/1000,machines=COMPUTERS.map(c=>({c,...machine(c,now)}));
+export function demoDevices(t:T=(en)=>en,now=Date.now()/1000,anchor=ANCHOR):Device[]{
+ const machines=COMPUTERS.map(c=>({c,...machine(c,now,anchor)}));
  const sessions=machines.map(({rows,u,before})=>rows.map(({row:[id,kind,model,project,en,ko,status,weight,account,capabilities]},j):Session=>{
   const windows=Object.fromEntries(PERIODS.map(([k,seconds])=>[k,vector(since(u,j,now-seconds))])) as Record<WindowKey,Vector>;
-  const per=PER[kind]??PER.Claude,lastMinute=u.minutes[j][u.minutes[j].length-2];
+  const per=account?ACCOUNT[account].per:0,lastMinute=u.minutes[j][u.minutes[j].length-2];
   const estimate=account?Object.fromEntries(PERIODS.map(([k])=>[k,{used_pp:windows[k].reduce((a,b)=>a+b,0)*per,partial:false,account_id:account,calibration:{pp_per_token:per,confidence:'stable'}}])):null;
   return {id,control_key:'demo',kind,app:kind==='Codex'?'Orca':'Terminal',terminal:t(en,ko),project,title:'',model,status,
-   tokens:vector(weight*4e7+since(before,j,ANCHOR-86400)+since(u,j,ANCHOR)),rate:status==='working'?since(u,j,now-600)/600:0,
+   tokens:vector(weight*4e7+since(before,j,anchor-86400)+since(u,j,anchor)),rate:status==='working'?since(u,j,now-600)/600:0,
    windows,cpu:status==='working'?Math.round((1.5+Math.min(30,lastMinute/4e4))*10)/10:.3,rss:410,capabilities,weekly_account:account,weekly_estimate:estimate};
  }));
- // An account's tokens since a moment, over both computers.
- const used=(account:string,from:number)=>machines.reduce((n,{rows,u})=>n+rows.reduce((k,{row},j)=>k+(row[8]===account?since(u,j,from):0),0),0);
- // weekly and five are the limits when the demo began; they rise with the tokens used since.
- const quota=(id:string,kind:string,label:string,plan:string,weekly:number,weeklyReset:number,five:number|null,fiveReset:number,updated:number,extra:Partial<Quota>={}):Quota=>{
-  const per=PER[kind],pct=weekly+used(id,ANCHOR)*per,reset=now+weeklyReset;
-  return {id,kind,account_label:label,plan,updated,stale:false,...extra,
-   windows:[...(five===null?[]:[{key:'5h',label:'5H',pct:Math.min(100,five+used(id,ANCHOR)*per*4),reset:now+fiveReset}]),{key:'7d',label:'주간',pct,reset}],
-   weekly:Object.fromEntries(PERIODS.map(([k,s])=>[k,{used_pp:used(id,now-s)*per,observed_seconds:s,partial:false}])),
-   usage_points:Array.from({length:24},(_,i)=>{const at=now-(23-i)*3600;return [at,Math.max(0,pct-used(id,at)*per),reset];})};
+ // An account's tokens since a moment over both computers, and its weekly percent: the tokens of its weekly
+ // window (before the demo began, then since) times its per-token percent.
+ const used=(id:string,from:number)=>machines.reduce((n,m)=>n+m.owners.reduce((k,owner,j)=>k+(owner===id?since(m.u,j,from):0),0),0);
+ const weekly=(a:typeof DEMO_ACCOUNTS[number])=>(machines.reduce((n,m)=>n+m.owners.reduce((k,owner,j)=>k+(owner===a.id?m.week[j]:0),0),0)+used(a.id,anchor))*a.per;
+ const round=(n:number)=>Math.round(n*10)/10;
+ const quota=(a:typeof DEMO_ACCOUNTS[number]):Quota=>{
+  const exact=weekly(a),reset=anchor+a.reset;
+  return {id:a.id,kind:a.kind,account_label:a.label,plan:a.plan,updated:now-a.ago,stale:!!a.stale,...(a.alias?{alias:a.alias}:{}),
+   windows:[...(a.five?[{key:'5h',label:'5H',pct:Math.min(100,round(used(a.id,anchor+a.five.reset-18000)*a.per*a.five.factor)),reset:anchor+a.five.reset}]:[]),{key:'7d',label:'주간',pct:round(exact),reset}],
+   weekly:Object.fromEntries(PERIODS.map(([k,s])=>[k,{used_pp:used(a.id,now-s)*a.per,observed_seconds:s,partial:false}])),
+   usage_points:Array.from({length:145},(_,i)=>{const at=now-86400+i*600;return [at,Math.max(0,round(exact-used(a.id,at)*a.per)),reset];})};
  };
- const claudeA=quota('demo:claude-a','Claude','Claude · 4f21a8','max',27,290_000,38,9_400,now-40);
- const claudeB=quota('demo:claude-b','Claude','Claude · b7e3c1','pro',46,350_000,12,14_200,now-70,{alias:'Team'});
- const codexA=quota('demo:codex-a','Codex','Codex · 9c03e2','pro',23,410_000,null,0,now-55);
- // A limit the computer could not refresh: it shows how old it is instead of a rate.
- const codexB=quota('demo:codex-b','Codex','Codex · 2d5f90','plus',64,220_000,null,0,now-38*60,{stale:true});
+ const [claudeA,claudeB,codexA,codexB]=DEMO_ACCOUNTS.map(quota);
  const flow=(m:typeof machines[number])=>Object.fromEntries(PERIODS.map(([k,seconds])=>{const step=seconds<=3600?60:seconds<=18000?300:900;
   return [k,{step,...bins(m.u,m.rows.map(({row})=>row[1]),now,seconds,step),reported:true} as Flow];}));
  // The host is as busy as its last minute of tokens.

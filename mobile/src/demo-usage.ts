@@ -74,11 +74,12 @@ export function computerMinutes(seed:number,scale:number,first:number,last:numbe
  *  streams: [{weight, start, stop}] in seconds; a session takes part from start until stop. Each active
  *  minute goes to one session, picked by its share, as one agent at a time does most of the work.
  *  anchor is when the demo began: with awake, the hours around it never rest. rest and duty are as in
- *  computerMinutes. The current minute counts for the part of it that has passed. */
+ *  computerMinutes. span is how many minutes before the current one to cover (a weekly window needs more
+ *  than a day). The current minute counts for the part of it that has passed. */
 export type Stream={weight:number,start:number,stop:number};
 export type Usage={first:number,last:number,minutes:number[][]};
-export function usage(seed:number,scale:number,streams:Stream[],now:number,anchor:number,rest=seed,duty=1,awake=true):Usage{
- const last=Math.floor(now/60),first=last-1455,anchorHour=Math.floor(anchor/3600);
+export function usage(seed:number,scale:number,streams:Stream[],now:number,anchor:number,rest=seed,duty=1,awake=true,span=1455):Usage{
+ const last=Math.floor(now/60),first=last-span,anchorHour=Math.floor(anchor/3600);
  const total=computerMinutes(seed,scale,first,last,awake?[anchorHour-1,anchorHour+1]:[0,0],rest,duty),part=(now-last*60)/60;
  const minutes:number[][]=streams.map(()=>new Array(total.length).fill(0));
  let hour:number|null=null,shares:number[]=[];

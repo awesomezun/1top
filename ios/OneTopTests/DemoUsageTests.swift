@@ -36,4 +36,28 @@ final class DemoUsageTests: XCTestCase {
         let all = day.values.reduce(0, +)
         XCTAssertGreaterThan((day["Claude"] ?? 0) / all, 0.6)
     }
+
+    /// The weekly limits follow the web demo's rules, and the same start gives the same limits as Android
+    /// (mobile/test/parity.test.mjs): an account's sessions add up to its period use, which grows
+    /// 1h ≤ 5h ≤ 24h, stays below the weekly percent and is about a tenth to two fifths of it.
+    func testWeeklyLimitsFollowTheWebRules() {
+        for k in stride(from: 0, to: 28, by: 3) {
+            let anchor = 1_793_200_000 + Double(k) * 21_600, devices = DemoData.devices(now: anchor + 600, anchor: anchor)
+            let sessions = devices.flatMap { $0.snapshot?.sessions ?? [] }
+            var seen = Set<String>()
+            for q in devices.flatMap({ $0.snapshot?.accountQuotas ?? [] }) where seen.insert(q.id).inserted {
+                let week = q.weeklyWindow?.pct ?? 0, use = ["1h", "5h", "24h"].map { q.weekly?[$0]?.usedPp ?? -1 }
+                for (i, p) in ["1h", "5h", "24h"].enumerated() {
+                    let sum = sessions.filter { $0.weeklyAccount == q.id }.reduce(0) { $0 + ($1.weeklyEstimate?[p]?.usedPp ?? 0) }
+                    XCTAssertEqual(sum, use[i], accuracy: 1e-5, "\(q.id) \(p)")
+                }
+                XCTAssertTrue(use[0] <= use[1] && use[1] <= use[2] && use[2] <= week, "\(q.id) at \(k)")
+                XCTAssertTrue(use[2] / week >= 0.1 && use[2] / week <= 0.42, "\(q.id) day share \(use[2] / week) at \(k)")
+            }
+        }
+        let at = 1_793_200_000.0
+        var limits: [String: [Double]] = [:]
+        for q in DemoData.devices(now: at + 600, anchor: at).flatMap({ $0.snapshot?.accountQuotas ?? [] }) { limits[q.id] = q.windows.compactMap(\.pct) }
+        XCTAssertEqual(limits, ["demo:claude-a": [6.9, 31.7], "demo:claude-b": [12.2, 61.7], "demo:codex-a": [28.9], "demo:codex-b": [69]])
+    }
 }

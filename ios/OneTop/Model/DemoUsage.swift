@@ -86,11 +86,12 @@ enum DemoUsage {
     /// The minutes of the last day (and a quarter hour more, for 15-minute bins) among a computer's
     /// sessions, each taking part from start until stop. Each active minute goes to one session, picked
     /// by its share, as one agent at a time does most of the work. anchor is when the demo began: with
-    /// awake, the hours around it never rest. rest and duty are as in computerMinutes. The current minute
+    /// awake, the hours around it never rest. rest and duty are as in computerMinutes. span is how many
+    /// minutes before the current one to cover (a weekly window needs more than a day). The current minute
     /// counts for the part of it that has passed.
     static func usage(_ seed: UInt32, _ scale: Double, _ streams: [Stream], now: Double, anchor: Double,
-                      rest: UInt32? = nil, duty: Double = 1, awake: Bool = true) -> Usage {
-        let last = Int(floor(now / 60)), first = last - 1455, anchorHour = Int(floor(anchor / 3600))
+                      rest: UInt32? = nil, duty: Double = 1, awake: Bool = true, span: Int = 1455) -> Usage {
+        let last = Int(floor(now / 60)), first = last - span, anchorHour = Int(floor(anchor / 3600))
         let total = computerMinutes(seed, scale, first, last, awake ? (anchorHour - 1, anchorHour + 1) : (0, 0), rest: rest, duty: duty)
         let part = (now - Double(last * 60)) / 60
         var minutes = streams.map { _ in [Double](repeating: 0, count: total.count) }
