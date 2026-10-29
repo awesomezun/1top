@@ -169,7 +169,7 @@ export function Dashboard(){
    <View style={{paddingHorizontal:16}}>
     <View style={st.titleRow}><Text style={st.title}>{t('Token usage','토큰 사용')}</Text><Text style={st.sub}>{t('Last ','최근 ')+periodName(period)}</Text></View>
     <View style={{flexDirection:'row',alignItems:'center',gap:16}}>
-     <Scope data={data} size={176} period={period}/>
+     <Scope data={data} size={182} period={period}/>
      <View style={{flex:1,gap:10}}>
       {slices.out.length?<><Text style={{color:quick.muted,fontSize:10.5}}>{t('By model','모델별')}</Text>
        <View style={{flexDirection:'row',gap:2,height:8}}>{slices.out.map(x=><View key={x.id} style={{flex:x.value,backgroundColor:x.color,opacity:x.opacity,transform:[{skewX:'-20deg'}]}}/>)}</View>

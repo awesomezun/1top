@@ -5,7 +5,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import {useWorkspace} from './workspace';
 import {SessionDetails} from './conversation';
-import {format,fresh,layout,usage} from './metrics';
+import {fresh,layout,usage} from './metrics';
 import {accountTags,sessionAccount,short} from './fleet';
 import {StateMark} from './state-mark';
 import {Icon} from './icons';
@@ -56,7 +56,9 @@ export function ComputerList({done}:{done?:()=>void}){const w=useWorkspace();con
 /** A tab's frame: large title, the computer menu when there are several computers, notices. */
 export function Screen({title,children}:{title:string;children:React.ReactNode}){const w=useWorkspace(),[choosing,setChoosing]=useState(false);
  return <SafeAreaView edges={['top','left','right']} style={s.fill}><ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-  <View style={s.titleRow}><Text style={s.hero}>{title}</Text><View style={{flex:1}}/>{(w.devices||[]).length>1&&<Pressable accessibilityRole="button" accessibilityLabel={w.t('Choose computer','컴퓨터 선택')} onPress={()=>setChoosing(true)} style={s.glassButton}><Icon name="computer" size={20} color={quick.ink}/></Pressable>}</View>
+  {/* As on the iPhone: the computer menu on the bar above, the large title below it. */}
+  <View style={[s.titleRow,{height:44,justifyContent:'flex-end'}]}>{(w.devices||[]).length>1&&<Pressable accessibilityRole="button" accessibilityLabel={w.t('Choose computer','컴퓨터 선택')} onPress={()=>setChoosing(true)} style={s.glassButton}><Icon name="computer" size={20} color={quick.ink}/></Pressable>}</View>
+  <Text style={[s.hero,{marginTop:-6}]}>{title}</Text>
   {!!w.message&&<Pressable onPress={()=>w.setMessage('')}><Text style={s.notice}>{w.message}</Text></Pressable>}
   {!w.demo&&w.connection.state!=='live'&&<View style={s.card}><Caption>{w.connection.error||w.t('Waiting for a connection. Previous reports stay visible with their timestamp.','연결을 기다립니다. 이전 정보는 수신 시각과 함께 표시됩니다.')}</Caption><Button label={w.t('Reconnect','다시 연결')} onPress={w.connection.retry}/></View>}
   {children}</ScrollView>
@@ -92,10 +94,10 @@ export function Sessions(){const w=useWorkspace(),[detail,setDetail]=useState<Se
   {!rows.length&&<Group header={query?w.t('No results','검색 결과 없음'):w.t('No sessions yet','아직 세션이 없습니다')} footer={query?undefined:w.t('Connect a computer to your account. Its active sessions appear here.','컴퓨터를 계정에 연결하면 활동 중인 세션이 표시됩니다.')}/>}
   <SessionDetails key={detail?.key||'none'} row={detail} close={()=>setDetail(null)}/></Screen>;}
 
-export function Map({items}:{items:Tile[]}){const [width,setWidth]=useState(0),[picked,setPicked]=useState<Tile|null>(null);const w=useWorkspace();return <><View onLayout={e=>setWidth(e.nativeEvent.layout.width)} style={{height:240}}>{layout(items,width,240).map(tile=>{const show=(tile.w||0)>110&&(tile.h||0)>82;return <Pressable key={tile.id} accessibilityRole="button" accessibilityLabel={tile.label+', '+tile.value.toLocaleString()+' tokens'} onPress={()=>setPicked(tile)} style={[s.tile,{left:tile.x,top:tile.y,width:Math.max(0,(tile.w||0)-3),height:Math.max(0,(tile.h||0)-3),borderColor:tile.color,backgroundColor:tile.free?quick.raised:tile.color+'30'}]}>{show&&<><Text style={s.tileLabel} numberOfLines={2}>{tile.label}</Text><Text style={[s.number,{color:tile.color}]}>{format(tile.value)}</Text></>}</Pressable>;})}</View><Caption>{w.t('Tap any area for the full label and exact token count.','영역을 누르면 전체 이름과 정확한 토큰 수가 표시됩니다.')}</Caption><Sheet visible={!!picked} close={()=>setPicked(null)} title={picked?.label||''}><Text style={s.metric}>{picked?.value.toLocaleString()}</Text><Caption>tokens · {picked?.share?.toFixed(2)}%</Caption><Text style={s.body}>{picked?.detail}</Text></Sheet></>;}
+export function Map({items}:{items:Tile[]}){const [width,setWidth]=useState(0),[picked,setPicked]=useState<Tile|null>(null);const w=useWorkspace();return <><View onLayout={e=>setWidth(e.nativeEvent.layout.width)} style={{height:260}}>{layout(items,width,260).map(tile=>{const show=(tile.w||0)>110&&(tile.h||0)>82;return <Pressable key={tile.id} accessibilityRole="button" accessibilityLabel={tile.label+', '+tile.value.toLocaleString()+' tokens'} onPress={()=>setPicked(tile)} style={[s.tile,{left:tile.x,top:tile.y,width:Math.max(0,(tile.w||0)-3),height:Math.max(0,(tile.h||0)-3),borderColor:tile.color,backgroundColor:tile.free?quick.raised:tile.color+'30'}]}>{show&&<><Text style={s.tileLabel} numberOfLines={2}>{tile.label}</Text><Text style={[s.number,{color:tile.color}]}>{short(tile.value)}</Text></>}</Pressable>;})}</View><Caption>{w.t('Tap any area for the full label and exact token count.','영역을 누르면 전체 이름과 정확한 토큰 수가 표시됩니다.')}</Caption><Sheet visible={!!picked} close={()=>setPicked(null)} title={picked?.label||''}><Text style={s.metric}>{picked?.value.toLocaleString()}</Text><Caption>tokens · {picked?.share?.toFixed(2)}%</Caption><Text style={s.body}>{picked?.detail}</Text></Sheet></>;}
 export function Usage(){const w=useWorkspace(),[group,setGroup]=useState('session');const data=usage(w.rows,w.period,group),label=periodLabel(w.period,w.t);
  return <Screen title={w.t('Usage share','사용량 비율')}><PeriodPicker/>
-  <View style={{gap:4,paddingHorizontal:4}}><Caption>{w.t(`Last ${label} · reported tokens, including cache`,`최근 ${label} · 보고된 토큰 · 캐시 포함`)}</Caption><Text style={s.metric}>{format(data.sum)}</Text></View>
+  <View style={{gap:4,paddingHorizontal:4}}><Caption>{w.t(`Last ${label} · reported tokens, including cache`,`최근 ${label} · 보고된 토큰 · 캐시 포함`)}</Caption><Text style={[s.metric,{fontSize:34,lineHeight:41}]}>{short(data.sum)}</Text></View>
   <Segments items={[['session',w.t('Sessions','세션')],['app',w.t('Apps','실행 앱')],['tool',w.t('Tools','실행 도구')],['model',w.t('Models','모델')]]} value={group} onChange={setGroup}/>
   {data.items.length?<Map items={data.items}/>:<Caption>{w.t('No positive reported usage in this period.','이 기간에 보고된 양의 사용량이 없습니다.')}</Caption>}
   <Caption>{w.t(`${data.known} reported · ${data.unknown} unknown · ${data.zero} zero`,`보고 ${data.known} · 미보고 ${data.unknown} · 사용량 0 세션 ${data.zero}`)}</Caption><Caption>{w.t('Current fresh sessions only. This is not a billing amount.','현재 최신 정보가 있는 세션 기준입니다. 청구 금액이 아닙니다.')}</Caption></Screen>;}
@@ -109,7 +111,7 @@ export function Accounts(){const w=useWorkspace(),tags=accountTags(w.devices||[]
   {!entries.length&&<Group header={w.t('No account report yet','계정 정보가 없습니다')} footer={w.t('Sign in to your AI tools on the computer. Available limits will appear here.','컴퓨터에서 AI 도구에 로그인하면 수집 가능한 한도가 표시됩니다.')}/>}
   {entries.map(({quota:q,computers,fresh:ok})=><Group key={q.id} header={<><View style={[s.dot,{backgroundColor:toolColor(q.kind)}]}/><Text style={[s.groupHead,{color:quick.ink}]}>{toolName(q.kind)}</Text><AccountChip text={tags[q.id]}/><Text style={s.groupHead}>{q.plan}</Text></>}
    footer={[q.account_label,computers.join(', '),q.stale||!ok?staleLabel(q,w.t):w.t('Updated ','업데이트 ')+w.when(q.updated*1000)].filter(Boolean).join(' · ')}>
-   {q.windows.map((win,i)=><View key={i}>{i>0&&<Hair/>}<View style={{paddingHorizontal:16,paddingVertical:12,gap:8}}><View style={{flexDirection:'row'}}><Text style={[s.body,{flex:1}]}>{windowName(win,w.t)}</Text><Text style={[s.body,{fontWeight:'600'}]}>{win.pct===null?w.t('Unknown','미확인'):Math.round(win.pct*10)/10+'%'+w.t(' used',' 사용')}</Text></View>
+   {q.windows.map((win,i)=><View key={i}>{i>0&&<Hair/>}<View style={{paddingHorizontal:16,paddingVertical:14,gap:9}}><View style={{flexDirection:'row'}}><Text style={[s.body,{flex:1}]}>{windowName(win,w.t)}</Text><Text style={[s.body,{fontWeight:'600'}]}>{win.pct===null?w.t('Unknown','미확인'):Math.round(win.pct*10)/10+'%'+w.t(' used',' 사용')}</Text></View>
     <View style={s.track}><View style={[s.bar,{width:Math.min(100,win.pct||0)+'%' as any,backgroundColor:(win.pct||0)>=85?quick.amber:toolColor(q.kind)}]}/></View><Text style={s.small}>{resetIn(win.reset,w.t)}</Text></View></View>)}
   </Group>)}
   <Text style={[s.small,{paddingHorizontal:16}]}>{w.t('Add or switch AI accounts in the desktop app. Provider credentials stay on that computer.','AI 계정 추가·전환은 데스크톱 앱에서 합니다. 제공업체 인증 정보는 해당 컴퓨터에 보관됩니다.')+' '+w.t('Account names are the ones given in the desktop app.','계정 이름은 데스크톱 앱에서 정한 이름을 따릅니다.')}</Text></Screen>;}
@@ -135,9 +137,9 @@ export function Settings(){const w=useWorkspace();const host=String(w.relay||'')
  </Screen>;}
 
 const make=()=>StyleSheet.create({fill:{flex:1,backgroundColor:quick.background},content:{padding:16,gap:18,paddingBottom:130,maxWidth:820,width:'100%',alignSelf:'center'},sheet:{padding:16,gap:14,paddingBottom:36},welcome:{padding:28,gap:16,maxWidth:560,width:'100%',alignSelf:'center',paddingTop:60},
- hero:{fontSize:32,fontWeight:'700',letterSpacing:-.6,lineHeight:40,color:quick.ink},logo:{fontSize:24,fontWeight:'700',color:quick.ink},body:{fontSize:16,lineHeight:22,color:quick.ink},caption:{fontSize:13.5,lineHeight:19,color:quick.muted},small:{fontSize:12.5,lineHeight:17,color:quick.muted},
- titleRow:{flexDirection:'row',alignItems:'center',gap:12},row:{flexDirection:'row',alignItems:'center',gap:10,paddingHorizontal:16,minHeight:48,paddingVertical:10},
- group:{backgroundColor:quick.card,borderRadius:16,overflow:'hidden'},groupHead:{fontSize:13,fontWeight:'600',color:quick.muted},hair:{height:StyleSheet.hairlineWidth,backgroundColor:quick.line,marginLeft:16},
+ hero:{fontSize:34,fontWeight:'700',letterSpacing:-.6,lineHeight:41,color:quick.ink},logo:{fontSize:24,fontWeight:'700',color:quick.ink},body:{fontSize:17,lineHeight:22,color:quick.ink},caption:{fontSize:13.5,lineHeight:19,color:quick.muted},small:{fontSize:12.5,lineHeight:17,color:quick.muted},
+ titleRow:{flexDirection:'row',alignItems:'center',gap:12},row:{flexDirection:'row',alignItems:'center',gap:10,paddingHorizontal:16,minHeight:52,paddingVertical:11},
+ group:{backgroundColor:quick.card,borderRadius:16,overflow:'hidden'},groupHead:{fontSize:15,fontWeight:'600',color:quick.muted},hair:{height:StyleSheet.hairlineWidth,backgroundColor:quick.line,marginLeft:16},
  card:{backgroundColor:quick.card,borderRadius:16,padding:16,gap:10},title:{fontSize:20,lineHeight:27,fontWeight:'600',color:quick.ink},
  button:{paddingVertical:13,paddingHorizontal:16,minHeight:46,borderRadius:14,backgroundColor:quick.card,justifyContent:'center'},buttonText:{fontSize:15,fontWeight:'600',color:quick.ink},
  round:{width:34,height:34,borderRadius:17,alignItems:'center',justifyContent:'center',backgroundColor:quick.raised},glassButton:{width:44,height:44,borderRadius:22,alignItems:'center',justifyContent:'center',backgroundColor:quick.glass,borderWidth:1,borderColor:quick.glassLine},
