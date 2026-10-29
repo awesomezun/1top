@@ -15,15 +15,21 @@ export function periodTokens(devices:Device[],period:WindowKey):number|null{
  return known?sum:null;
 }
 
-/** Fine bins summed across computers, aligned on the newest bin. Only when every computer sends
- *  bins of the same length; otherwise the caller falls back to the nested period totals. */
+/** Fine bins summed across computers on real time, not position: bin i of a report covers
+ *  start+i*step. Computers report at different moments, so the axis ends where every one of them
+ *  has reported; a bin some computer did not cover stays unknown (null), never zero. Only when every
+ *  computer sends the same step; otherwise the caller falls back to the nested period totals. */
 export function fleetFlow(devices:Device[],period:WindowKey):Flow|undefined{
  const flows=devices.map(d=>d.snapshot.flow?.[period]).filter((f):f is Flow=>!!f&&Array.isArray(f.bins)&&f.bins.length>0&&f.step>0);
  if(!flows.length||flows.length!==devices.length||flows.some(f=>f.step!==flows[0].step))return undefined;
  if(flows.length===1)return flows[0];
- const n=Math.max(...flows.map(f=>f.bins.length)),bins:Record<string,number>[]=Array.from({length:n},()=>({}));
- for(const f of flows)f.bins.forEach((bin,i)=>{const at=n-f.bins.length+i;for(const [k,v] of Object.entries(bin))if(valid(v))bins[at][k]=(bins[at][k]||0)+v;});
- return {step:flows[0].step,bins};
+ if(flows.some(f=>!valid(f.start)))return undefined;
+ const step=flows[0].step,end=Math.min(...flows.map(f=>valid(f.end)?f.end!:f.start!+f.bins.length*step)),n=Math.max(...flows.map(f=>f.bins.length));
+ const bins=Array.from({length:n},(_,k)=>{const from=end-(n-k)*step,by:Record<string,number>={};
+  for(const f of flows){const j=Math.round((from-f.start!)/step),bin=j>=0&&j<f.bins.length?f.bins[j]:null;if(!bin)return null;
+   for(const [key,v] of Object.entries(bin))if(valid(v))by[key]=(by[key]||0)+v;}
+  return by;});
+ return {step,start:end-n*step,end,bins};
 }
 
 /** Each subscription account once, from the freshest report that carries it. */

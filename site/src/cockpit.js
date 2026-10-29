@@ -22,16 +22,19 @@ export function orderSessions(rows,period){
 
 /** Bins for the radar, newest first: the collector's flow when every computer sends it, else the
  *  nested period totals (for the last hour: the last 10 minutes, 10–30 and 30–60 minutes ago). */
-function reading(devices,rows,period){
+export function reading(devices,rows,period){
  const seconds=SECONDS[period],periodTotals=devices.map(d=>(d.snapshot.periods||[]).find(p=>p.key===period)).filter(Boolean);
  const sums=rows.map(r=>total(r.windows?.[period])).filter(valid);
  const tokens=periodTotals.length?periodTotals.reduce((n,p)=>n+(total(p.tokens)||0),0):sums.length?sums.reduce((a,b)=>a+b,0):null;
  const average=tokens===null?null:tokens/seconds*3600;
+ // Several computers line up on real time (bin i covers start+i*step), not position: they report at
+ // different moments. The axis ends where every one has reported; a bin one of them lacks stays unknown.
  const flows=devices.map(d=>d.snapshot.flow?.[period]).filter(f=>f&&Array.isArray(f.bins)&&f.step>0);
- if(flows.length&&flows.length===devices.length&&flows.every(f=>f.step===flows[0].step)){
-  const step=flows[0].step,n=Math.max(...flows.map(f=>f.bins.length)),bins=[];
-  for(let i=0;i<n;i++){const by={};for(const f of flows){const v=f.bins[f.bins.length-1-i];if(v)for(const [k,x] of Object.entries(v))if(valid(x))by[k]=(by[k]||0)+x;}
-   const parts=Object.entries(by).sort((a,b)=>rank(a[0])-rank(b[0])).map(([k,x])=>[k,x/step*3600]);bins.push({start:i*step,end:Math.min(seconds,(i+1)*step),parts,total:parts.reduce((s,p)=>s+p[1],0)});}
+ if(flows.length&&flows.length===devices.length&&flows.every(f=>f.step===flows[0].step)&&(flows.length===1||flows.every(f=>valid(f.start)))){
+  const step=flows[0].step,n=Math.max(...flows.map(f=>f.bins.length)),end=flows.length>1?Math.min(...flows.map(f=>valid(f.end)?f.end:f.start+f.bins.length*step)):null,bins=[];
+  for(let i=0;i<n;i++){const by={};let known=true;
+   for(const f of flows){const j=end===null?f.bins.length-1-i:Math.round((end-(i+1)*step-f.start)/step),v=j>=0&&j<f.bins.length?f.bins[j]:null;if(!v){known=false;break;}for(const [k,x] of Object.entries(v))if(valid(x))by[k]=(by[k]||0)+x;}
+   const parts=known?Object.entries(by).sort((a,b)=>rank(a[0])-rank(b[0])).map(([k,x])=>[k,x/step*3600]):[];bins.push({start:i*step,end:Math.min(seconds,(i+1)*step),parts,total:known?parts.reduce((s,p)=>s+p[1],0):null});}
   return {average,bins};
  }
  const edges=[[0,null],...KEYS.filter(k=>SECONDS[k]<seconds).map(k=>[SECONDS[k],k]),[seconds,period]];

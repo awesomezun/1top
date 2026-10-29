@@ -36,7 +36,7 @@ const nameOf=(s:SessionRow)=>(s.terminal||'').trim()||display(s)||s.kind;
 function reading(rows:SessionRow[],period:WindowKey,periodTotal:number|null,flow?:Flow){
  const seconds=SECONDS[period],sum=rows.map(r=>total(r.windows[period])).filter(valid),totalTokens=periodTotal??(sum.length?sum.reduce((a,b)=>a+b,0):null),average=totalTokens===null?null:totalTokens/seconds*3600;
  // Fine bins from the collector when the relay carries them: oldest first, tokens per bin.
- if(flow?.bins?.length&&flow.step>0){const n=flow.bins.length;return {average,bins:flow.bins.map((values,i)=>{const parts=Object.entries(values).sort((a,b)=>(ORDER.indexOf(a[0])+99)%99-(ORDER.indexOf(b[0])+99)%99).map(([k,v])=>[k,Math.max(0,v)/flow.step*3600] as [string,number]);const ago=(n-1-i)*flow.step;return {start:ago,end:Math.min(seconds,ago+flow.step),parts,total:parts.reduce((a,p)=>a+p[1],0)};}).reverse()};}
+ if(flow?.bins?.length&&flow.step>0){const n=flow.bins.length;return {average,bins:flow.bins.map((values,i)=>{const parts=Object.entries(values||{}).sort((a,b)=>(ORDER.indexOf(a[0])+99)%99-(ORDER.indexOf(b[0])+99)%99).map(([k,v])=>[k,Math.max(0,v)/flow.step*3600] as [string,number]);const ago=(n-1-i)*flow.step;return {start:ago,end:Math.min(seconds,ago+flow.step),parts,total:parts.reduce((a,p)=>a+p[1],0)};}).reverse()};}
  const keys=PERIODS.map(([k])=>k).filter(k=>SECONDS[k]<seconds);
  const edges:[number,WindowKey|null][]=[[0,null],...keys.map(k=>[SECONDS[k],k] as [number,WindowKey]),[seconds,period]];
  const kinds=[...new Set(rows.map(r=>r.kind))].sort((a,b)=>(ORDER.indexOf(a)+99)%99-(ORDER.indexOf(b)+99)%99);
