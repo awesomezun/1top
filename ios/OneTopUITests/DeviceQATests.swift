@@ -178,7 +178,7 @@ final class DeviceQATests: XCTestCase {
         let field = element(app, "instruction")
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.tap()
-        field.typeText("1top QA instruction test. Reply with OK only and do not change any files.")
+        field.typeText("1top QA instruction test. Run sleep 150 in the shell, then reply OK only. Do not change any files.")
         shot(app, "10a-typed")
         let send = element(app, "instruction-send")
         XCTAssertTrue(wait(send, "isEnabled == true", timeout: 20))
