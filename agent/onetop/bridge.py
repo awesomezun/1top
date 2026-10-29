@@ -130,7 +130,7 @@ def export_snapshot(state):
         'operations':operations,
         'account_quotas':[{'id':q['id'],'kind':q['kind'],'account_label':q['kind']+' · '+q['id'][-6:],
             'plan':q.get('plan',''),'windows':[{k:w.get(k) for k in ('label','pct','reset')} for w in q.get('windows',[])[:8]],
-            'updated':q.get('updated',0),'stale':q.get('stale',True),'note':q.get('note',''),
+            'updated':q.get('updated',0),'stale':q.get('stale',True),'note':q.get('note',''),'status':q.get('status',''),
             'weekly':{key:{k:value.get(k) for k in ('used_pp','observed_seconds','partial')}
                       for key,value in weekly.get(q['id'],{}).get('periods',{}).items()},
             'usage_points':weekly.get(q['id'],{}).get('usage_points',[])[-60:]}

@@ -809,7 +809,7 @@ class Handler(BaseHTTPRequestHandler):
             not secrets.compare_digest(self.headers.get('X-Monitor-Token',''),self.server.action_token)):
             self.send_error(403);return
         route=urlsplit(self.path).path
-        if route not in ('/api/action','/api/accounts/login'):self.send_error(404);return
+        if route not in ('/api/action','/api/accounts/login','/api/accounts/authorize'):self.send_error(404);return
         try:
             length=int(self.headers.get('Content-Length','0'))
             if length<1 or length>4096 or self.headers.get('Content-Type')!='application/json':
@@ -818,6 +818,8 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(payload,dict):raise ValueError()
             if route=='/api/accounts/login':
                 result=self.server.account_login.start(payload.get('kind'))
+            elif route=='/api/accounts/authorize':
+                result=self.server.account_login.authorize_claude(payload.get('account_id'))
             else:result=self.server.controller.execute(payload)
             self.json_response(200,{'ok':True,**result})
         except (ValueError,TypeError):self.json_response(400,{'ok':False,'message':'잘못된 요청입니다.'})

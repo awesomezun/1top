@@ -83,6 +83,7 @@ class HistoryStore:
                     written INTEGER, output INTEGER);
                 CREATE INDEX IF NOT EXISTS history_time ON records(t);
                 CREATE INDEX IF NOT EXISTS history_kind_time ON records(kind,t);
+                CREATE INDEX IF NOT EXISTS history_coverage ON records(source,kind,t);
                 CREATE TABLE IF NOT EXISTS metadata(sid TEXT, t REAL, model TEXT, cwd TEXT,
                     PRIMARY KEY(sid,t));''')
             db.commit()

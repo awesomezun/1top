@@ -199,7 +199,7 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
     result=[];shares=collections.defaultdict(dict)
     for quota in quotas:
         account=quota['id'];points,corrections,excluded=reconciled_history(history[account]);observations=[];event_index=0
-        claude_history=(quota['kind']=='Claude' and quota.get('source') in ('claude_statusline','historical_provider_report'))
+        claude_history=(quota['kind']=='Claude' and quota.get('source') in ('claude_statusline','historical_provider_report','claude_oauth'))
         calibration_gap=CLAUDE_CALIBRATION_GAP if claude_history else FRESH
         for before,after in zip(points,points[1:]):
             t0,t1=before[0],after[0];delta,uncertain=interval(before,after)

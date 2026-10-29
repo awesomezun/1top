@@ -16,6 +16,7 @@ export interface WeeklyEstimate {
 }
 export interface AccountQuota {
   id:string;kind:string;account_label:string;plan:string;updated:number;stale:boolean;note:string;
+  status?:string;
   windows:Array<{label:string;pct:number|null;reset:number}>;
   weekly?:Record<string,{used_pp:number|null;observed_seconds:number;partial:boolean}>;
   usage_points?:Array<[number,number,number]>;
@@ -109,6 +110,7 @@ export function snapshot(value: any): DeviceSnapshot {
     account_quotas:Array.isArray(value.account_quotas)?value.account_quotas.slice(0,24).map((q:any)=>({
       id:text(q.id,100),kind:text(q.kind,40),account_label:text(q.kind,40)+' · '+text(q.id,100).slice(-6),
       plan:text(q.plan,40),updated:number(q.updated)||0,stale:q.stale!==false,note:text(q.note,180),
+      status:['login_required','login_expired','credential_store_unavailable','access_denied','account_changed','rate_limited','refresh_pending','last_report','report_pending'].includes(q.status)?q.status:'',
       windows:Array.isArray(q.windows)?q.windows.slice(0,8).map((w:any)=>({label:text(w.label,30),pct:number(w.pct,100),reset:number(w.reset)||0})):[],
       weekly:Object.fromEntries(KEYS.filter(k=>q.weekly?.[k]).map(k=>[k,{
         used_pp:number(q.weekly[k].used_pp,1e6),observed_seconds:number(q.weekly[k].observed_seconds,86400)||0,

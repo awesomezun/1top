@@ -197,6 +197,7 @@ def refresh_request(credentials):
 
 def refresh_managed(root, now=None):
     from .accounts import claude_credentials, read_json, timestamp
+    from .credential_store import enrolled_document, save_enrolled
     root = Path(root)
     if not managed(root):
         raise CredentialError('login_expired')
@@ -223,6 +224,11 @@ def refresh_managed(root, now=None):
                    'expiresAt': int((time.time() + result['expires_in'])*1000)}
         if isinstance(result.get('scope'), str):
             renewed['scopes'] = result['scope'].split()
+        enrolled=enrolled_document(root)
+        if enrolled is not None:
+            enrolled['claudeAiOauth']=renewed
+            save_enrolled(root,enrolled)
+            return renewed
         try:document = keychain_document(root)
         except CredentialError:
             # Continue only an existing, matching managed file login. Do not

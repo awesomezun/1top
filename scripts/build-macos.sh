@@ -10,6 +10,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/agent"
 cp -R build/agent-dist/onetop-agent/. "$APP/Contents/Resources/agent/"
 SWIFT_SDK="${ONETOP_MACOS_SDK:-$(xcrun --show-sdk-path)}"
 xcrun swiftc -O -sdk "$SWIFT_SDK" -framework AppKit -framework SwiftUI -framework WebKit -target arm64-apple-macosx13.0 desktop/*.swift -o "$APP/Contents/MacOS/1top"
+xcrun swiftc -O -sdk "$SWIFT_SDK" -framework Security -target arm64-apple-macosx13.0 scripts/macos-credential-store.swift -o "$APP/Contents/Resources/agent/onetop-credential-store-v1.0.0"
 scripts/macos-icon.sh
 cp build/1top.icns "$APP/Contents/Resources/1top.icns"
 cat > "$APP/Contents/Info.plist" <<PLIST
