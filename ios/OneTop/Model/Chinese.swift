@@ -19,6 +19,30 @@ enum Chinese {
     }
 
     static let exact: [String: String] = [
+        "Working…": "正在处理…",
+        "Preparing a reply…": "正在准备回复…",
+        "The computer is offline": "电脑已离线",
+        "The computer's report is stale": "电脑报告已过时",
+        "The session is idle": "会话空闲中",
+        "The session is paused": "会话已暂停",
+        "The session is waiting for input": "会话正在等待输入",
+        "Writing a reply…": "正在撰写回复…",
+        "Add photos": "添加照片",
+        "Conversation": "对话",
+        "Open": "打开",
+        "Open conversation": "打开对话",
+        "Pause": "暂停",
+        "Please inspect the attached image(s).": "请查看附上的图片。",
+        "Resume": "继续",
+        "Sends a message to this AI session; its reply appears here. It may use tokens.": "将向此 AI 会话发送消息，回复会显示在这里。可能消耗 token。",
+        "Stale report": "报告已过时",
+        "This photo could not be made small enough (512 KB) and was left out.": "此照片无法压缩到 512KB 以下，已排除。",
+        "This photo could not be read.": "无法读取此照片。",
+        "This session cannot receive photos. Remove them, or send them to a session that can.": "此会话无法接收照片。请删除照片，或发送到可以接收照片的会话。",
+        "This session cannot send replies, so only the instruction is delivered.": "此会话无法回复，只会送达指令。",
+        "Total ": "累计 ",
+        "Waiting for input": "等待输入",
+        "Write an instruction…": "输入指令…",
         " tokens/h": " tokens/小时",
         " used": " 已用",
         " · offline": " · 离线",
@@ -242,5 +266,7 @@ enum Chinese {
         (try! Regex(#"^(\d+) reported · (\d+) unknown · (\d+) zero$"#), "已报告 {0} · 未报告 {1} · 用量为 0 的会话 {2}"),
         (try! Regex(#"^(\d+) more$"#), "另外 {0} 个"),
         (try! Regex(#"^All (\d+)$"#), "全部 {0}"),
+        (try! Regex(#"^Photos: (\d+)$"#), "照片 {0} 张"),
+        (try! Regex(#"^Remove photo (\d+)$"#), "删除照片 {0}"),
     ]
 }

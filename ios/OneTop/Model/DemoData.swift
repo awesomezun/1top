@@ -2,7 +2,7 @@ import Foundation
 
 /// Two made-up computers for trying the app without an account. No real projects or accounts.
 enum DemoData {
-    private static let controls = ["focus", "pause", "resume", "terminate", "prompt", "message", "mailbox"]
+    private static let controls = ["focus", "pause", "resume", "terminate", "prompt", "message", "mailbox", "message_images"]
     /// The demo Mac mini is paired without remote control, so its sessions show usage only.
     static let controlOff: Set<String> = ["demo-mini"]
 
@@ -27,8 +27,10 @@ enum DemoData {
             session("d2", "Codex", "gpt-6-astra", "api-gateway", "요청 제한 테스트", "working", 31_800_000),
             session("d3", "Claude", "claude-opus-5-5", "docs-site", "문서 검색 개선", "working", 12_900_000),
             session("d4", "Codex", "gpt-6-astra", "ml-pipeline", "학습 데이터 정리", "waiting", 9_600_000),
-            session("d5", "GLM", "glm-5.3", "storefront", "번역 검수", "idle", 4_100_000, capabilities: ["focus"]),
-            session("d6", "Claude", "claude-sonnet-5-5", "mobile-app", "알림 설정 화면", "idle", 2_700_000),
+            // An older computer's session: instructions only, no reply reader.
+            session("d5", "GLM", "glm-5.3", "storefront", "번역 검수", "idle", 4_100_000, capabilities: ["focus", "prompt"]),
+            // Working, since a request is only answered by a working session (contract v1.1.0).
+            session("d6", "Claude", "claude-sonnet-5-5", "mobile-app", "알림 설정 화면", "working", 2_700_000),
             session("d7", "Codex", "gpt-6-astra", "infra", "배포 스크립트", "paused", 1_200_000),
             session("d8", "Claude", "claude-opus-5-5", "design-system", "토큰 정리", "idle", 0),
         ]
@@ -71,12 +73,32 @@ enum DemoData {
                 Device(id: "demo-mini", name: "데모 Mac mini", platform: "macOS", online: true, received: received - 4_000, snapshot: miniSnapshot)]
     }
 
-    /// One answered exchange, so the mailbox shows how replies read.
+    /// A conversation that shows every delivery state once, a reply, and photos the computer
+    /// listed by name (the relay returns no image data).
     static func mailboxes(now: Double) -> [String: AppModel.Mailbox] {
-        ["demo-mac:d1": .init(messages: [MailMessage(
-            id: "00000000-0000-4000-8000-000000000001", text: "지금 어디까지 진행됐어?", created: now - 600, status: "replied",
-            reply: "결제 화면의 카드 입력 단계를 새 컴포넌트로 옮겼고, 남은 작업은 영수증 화면과 테스트 두 개입니다.",
-            replyAt: now - 540, truncated: false)])]
+        func message(_ n: Int, _ text: String, _ status: String, ago: Double, reply: String? = nil, photos: [String] = [], activity: String? = nil) -> MailMessage {
+            MailMessage(id: String(format: "00000000-0000-4000-8000-%012d", n), text: text, created: now - ago, status: status, reply: reply,
+                        replyAt: reply == nil ? nil : now - ago + 60, truncated: false,
+                        attachments: photos.isEmpty ? nil : photos.map { MailAttachment(id: $0, name: $0, mime: "image/jpeg", bytes: 180_000) },
+                        activity: activity.map { MailActivity(phase: $0, observedAt: now - 3) })
+        }
+        return ["demo-mac:d1": .init(messages: [
+            message(1, "지금 어디까지 진행됐어?", "replied", ago: 1500,
+                    reply: "결제 화면의 카드 입력 단계를 새 컴포넌트로 옮겼고, 남은 작업은 영수증 화면과 테스트 두 개입니다."),
+            message(2, "이 두 화면에서 버튼 정렬이 어긋나 보여. 확인해 줘.", "replied", ago: 1200,
+                    reply: "두 사진 모두 확인했습니다. 결제 버튼의 아래 여백이 8pt 달라서 맞췄습니다.", photos: ["IMG_0412.jpg", "IMG_0413.jpg"]),
+            message(3, "영수증 화면도 같은 기준으로 맞춰 줘.", "awaiting_reply", ago: 900, activity: "writing"),
+            message(4, "테스트가 끝나면 알려 줘.", "queued", ago: 600),
+            message(5, "로그 파일 경로를 알려 줘.", "delivery_unconfirmed", ago: 420),
+            message(6, "이전 브랜치 결과도 비교해 줘.", "source_changed", ago: 300),
+            message(7, "어제 요청한 정리도 해 줘.", "not_delivered", ago: 200),
+            message(8, "지금 화면을 한 줄로 요약해 줘.", "sending", ago: 5),
+        ]),
+        // The other two response phases, one session each.
+        "demo-mac:d3": .init(messages: [message(10, "검색 결과 정렬 기준을 바꿔 줘.", "awaiting_reply", ago: 120, activity: "working")]),
+        "demo-mac:d6": .init(messages: [message(11, "알림 문구를 다듬어 줘.", "awaiting_reply", ago: 20, activity: "responding")]),
+        // Awaiting a reply with no reported activity: nothing claims the request is being answered.
+        "demo-mac:d4": .init(messages: [message(9, "데이터 정리 기준을 알려 줘.", "awaiting_reply", ago: 240)])]
     }
 
     private static func weekly(_ perHour: Double) -> [String: WeeklyPeriod] {
