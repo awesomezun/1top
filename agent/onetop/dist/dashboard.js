@@ -168,6 +168,8 @@ window.OneTopDashboard=(()=>{
    x.font=css.getPropertyValue('--type-tiny').trim()+' '+css.getPropertyValue('--font').trim();x.fillStyle=muted;x.textAlign='center';x.fillText('0',cx-r,h-1);x.fillText(number(max)+'%',cx+r,h-1);
   }
  }
+ // The table is measured before the page's language is applied; size it again once the text is translated.
+ document.addEventListener('onetop-translated',()=>{if(initialized)applyWidths();});
  function init(options){hooks=options;window.OneTopI18n?.setLanguage(state.lang);prefs();panelSetup();setupColumns();initialized=true;afterTable();new ResizeObserver(queueDraw).observe(document.getElementById('dashboardGrid'));}
  return {init,afterTable,rateCell,drawGauges,state,validPeriod,toggleGroup(key,open){state.collapsed={...(state.collapsed||{}),[key]:open};save();},rememberPeriod(value){if(validPeriod(value)){state.period=value;save();}},get interacting(){return dragging;}};
 })();

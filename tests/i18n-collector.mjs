@@ -6,7 +6,7 @@ import {readFileSync,readdirSync} from 'node:fs';
 import vm from 'node:vm';
 
 const dist=new URL('../agent/onetop/dist/',import.meta.url),agent=new URL('../agent/onetop/',import.meta.url);
-const context={document:{documentElement:{},body:null},MutationObserver:class{observe(){}disconnect(){}},NodeFilter:{SHOW_TEXT:4},queueMicrotask};
+const context={document:{documentElement:{},body:null,dispatchEvent(){}},Event:class{},MutationObserver:class{observe(){}disconnect(){}},NodeFilter:{SHOW_TEXT:4},queueMicrotask};
 context.window=context;vm.createContext(context);vm.runInContext(readFileSync(new URL('i18n.js',dist),'utf8'),context);
 const i18n=context.OneTopI18n,hangul=/[가-힣]/;
 
