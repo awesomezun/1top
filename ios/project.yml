@@ -1,0 +1,34 @@
+# Native iPhone app for 1top. Generate the Xcode project with `xcodegen generate` in this folder.
+name: OneTop
+options:
+  bundleIdPrefix: si.onetop
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: 2DY8KQ6H5F
+    MARKETING_VERSION: "2.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+targets:
+  OneTop:
+    type: application
+    platform: iOS
+    sources:
+      - path: OneTop
+    settings:
+      base:
+        # Development builds stay beside the store app (si.onetop.mobile) until release.
+        PRODUCT_BUNDLE_IDENTIFIER: si.onetop.mobile.dev
+        PRODUCT_NAME: 1top
+        INFOPLIST_KEY_CFBundleDisplayName: 1top
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
