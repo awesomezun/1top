@@ -45,6 +45,8 @@
 | 색과 상태 모양 | — | 계기판 숫자·빔·최신 구간·CPU·메모리 막대는 액정 초록(다크 #9dff3c/#e2ffc4, 라이트 #6aa800/#3d6300). 작업 중은 액정 초록 3막대 파형(동작 줄이기면 정지), 확인 필요는 앰버 마름모, 일시정지는 두 막대, 그 외는 빈 원. 상태 글자는 잉크·뮤트색 | 캡처 01, 02, 11 | 수정 |
 | 계정 재연결 필요 | — | `Quota.status`가 `login_required`, `login_expired`, `credential_store_unavailable`, `access_denied`이고 stale이면 "재연결 필요"/"Reconnect needed"(b179d59와 같은 규칙) | 빌드 확인 | 수정 |
 | 여러 컴퓨터의 흐름 합산 | — | `AppModel.flow`: 실제 시각으로 맞춤. 축 끝은 모든 컴퓨터가 보고한 `min(end)`이고, 어느 컴퓨터든 덮지 못한 구간은 미확인(nil)으로 그리지 않음. step이 다르거나 start가 없으면 중첩 기간 합계로 돌아감(`fleetFlow`, cockpit `reading`과 같음) | 빌드 확인 | 수정 |
+| 원격 제어 없이 연결된 컴퓨터 | — | `/api/devices`의 `allow_control`이 0/false인 기기 id를 기억합니다(`AppModel.controlOff`). 그 컴퓨터의 세션은 capabilities를 비워 제어·지시·메시지를 보이지 않습니다. 상세에는 "이 컴퓨터는 원격 제어 없이 연결되었습니다." 안내만 둡니다(Android f4cddcb와 같은 방식) | `output/ios-qa/sim/07-control-off.png`(`test07`) | 수정 |
+| 메일함 응답 대조 | `connection.ts` `mailboxAsk` | 가장 최근 `mailbox_request`의 request_id·device_id·session_id가 모두 같을 때만 `mailbox` 응답을 반영합니다. 재연결하면 초기화합니다 | 빌드 확인 | 수정 |
 | 대시보드 상단 겹침 | — | 머리말을 `safeAreaBar`로 고정하고 `scrollEdgeEffectStyle(.hard, for: .top)`을 적용. 스크롤해도 상태 막대 밑으로 내용이 비치지 않음 | `output/ios-qa/sim/06a-top.png`, `06b-scrolled.png` | 수정 |
 
 ## 실기기 확인
@@ -82,8 +84,9 @@ iPhone 15 Pro Max(00008130-000845A93A80011C)에 4.0.0 빌드 3(DEBUG)을 설치�
 
 이 Mac의 로컬 `/api/state` 세션에는 `capabilities` 필드가 없습니다. capability는 relay로 보내는 `bridge.py` 스냅숏에서만 계산되므로 정상입니다.
 
-## Codex에게 확인할 계약
+## Codex 계약 답변(반영 완료)
 
-1. 컴퓨터별 `allow_control`이 꺼져 있으면 `/api/action`이 404를 돌려줍니다. 휴대폰이 제어 버튼을 미리 감출 수 있도록 실시간 `state`/`snapshot`의 기기 항목에 이 값을 실어 줄 수 있을까요? 지금은 capability만 보고 버튼을 보여 줍니다.
-2. 자체 relay로 로그인할 때도 `https://1top.si/mobile-connect?relay=<자체 origin>` 승인 페이지가 그 origin을 받아 주는지 확인 부탁드립니다. Expo와 같은 흐름을 그대로 씁니다.
-3. `mailbox` 오류 응답에는 `session_id`가 실리지만, 응답이 늦게 오면 화면은 그 세션의 오류로만 표시합니다. 요청별 `request_id` 대조가 필요한지 확인 부탁드립니다. 지금은 Expo와 같이 device·session으로만 맞춥니다.
+1. 원격 제어 허용 여부는 `/api/devices`의 `devices[].allow_control`로 판단합니다. 실시간 스냅숏에는 없으므로 기기 id로 대조합니다.
+2. `1top.si/mobile-connect?relay=<자체 HTTPS origin>`을 지원합니다. 사이트가 origin 변경 동의 화면을 먼저 보여 줍니다. 토큰을 relay와 묶어 섞지 않는 지금 설계를 유지합니다.
+3. 메일함 응답은 가장 최근 요청의 request_id·device_id·session_id로 대조합니다.
+4. `snapshot.periods`에는 종료된 세션이 포함됩니다. quota id는 컴퓨터 사이에 같고, `quota.updated`는 Unix 초입니다.

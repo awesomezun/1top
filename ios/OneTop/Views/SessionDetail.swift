@@ -56,7 +56,8 @@ struct SessionActions: View {
     @Binding var request: ControlRequest?
 
     var body: some View {
-        Button(L.t("Messages and controls", "메시지·제어 열기"), systemImage: "bubble.left.and.text.bubble.right", action: open)
+        Button(model.isControlOff(session) ? L.t("Session details", "세션 정보 열기") : L.t("Messages and controls", "메시지·제어 열기"),
+               systemImage: "bubble.left.and.text.bubble.right", action: open)
         let available = model.canControl(session) && model.pending[session.key] == nil
         ForEach(SessionDetail.controls.filter(session.can), id: \.self) { action in
             Button(AppModel.actionLabel(action), systemImage: SessionDetail.icon(action), role: action == "terminate" ? .destructive : nil) {
@@ -92,18 +93,22 @@ struct SessionDetail: View {
     private var available: Bool { model.allSessions.contains { $0.key == session.key } && model.canControl(current) }
 
     var body: some View {
+        let remoteOff = model.isControlOff(current)
         NavigationStack {
             VStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(place).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
-                    Picker("", selection: $pane) {
-                        Text(L.t("Messages", "메시지함")).tag(Pane.messages)
-                        Text(L.t("Controls", "작업 제어")).tag(Pane.controls)
+                    if !remoteOff {
+                        Picker("", selection: $pane) {
+                            Text(L.t("Messages", "메시지함")).tag(Pane.messages)
+                            Text(L.t("Controls", "작업 제어")).tag(Pane.controls)
+                        }
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
                 }
                 .padding(.horizontal, 16).padding(.bottom, 8)
-                switch pane {
+                // A computer paired without remote control shows the session's usage only.
+                switch remoteOff ? .controls : pane {
                 case .messages: MailboxView(session: current)
                 case .controls: controlList
                 }
@@ -129,7 +134,7 @@ struct SessionDetail: View {
     }
 
     private var controlList: some View {
-        let s = current, busy = model.pending[s.key] != nil
+        let s = current, busy = model.pending[s.key] != nil, remoteOff = model.isControlOff(s)
         return List {
             Section {
                 LabeledContent(L.t("Reported total", "보고된 누적 토큰"), value: Format.tokens(s.total))
@@ -140,50 +145,58 @@ struct SessionDetail: View {
                 Text(L.t("Reported tokens include cache.", "보고된 토큰 · 캐시 포함"))
             }
 
-            Section {
-                let actions = Self.controls.filter(s.can)
-                ForEach(actions, id: \.self) { action in
-                    Button(role: action == "terminate" ? .destructive : nil) {
-                        request = ControlRequest(session: s, action: action)
-                    } label: {
-                        Label(AppModel.actionLabel(action), systemImage: Self.icon(action))
+            if remoteOff {
+                Section {
+                    Label(L.t("This computer was connected without remote control.", "이 컴퓨터는 원격 제어 없이 연결되었습니다."), systemImage: "lock")
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("control-off")
+                }
+            } else {
+                Section {
+                    let actions = Self.controls.filter(s.can)
+                    ForEach(actions, id: \.self) { action in
+                        Button(role: action == "terminate" ? .destructive : nil) {
+                            request = ControlRequest(session: s, action: action)
+                        } label: {
+                            Label(AppModel.actionLabel(action), systemImage: Self.icon(action))
+                        }
+                        .disabled(!available || busy)
+                        .accessibilityIdentifier("control-" + action)
                     }
-                    .disabled(!available || busy)
-                    .accessibilityIdentifier("control-" + action)
+                    if actions.isEmpty {
+                        Text(L.t("No controls reported for this session.", "이 세션에서 사용 가능한 제어가 없습니다.")).foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text(L.t("Session controls", "세션 제어"))
+                } footer: {
+                    if !available { Text(L.t("Controls require a fresh report from this computer.", "이 컴퓨터의 최신 정보가 있어야 제어할 수 있습니다.")) }
                 }
-                if actions.isEmpty {
-                    Text(L.t("No controls reported for this session.", "이 세션에서 사용 가능한 제어가 없습니다.")).foregroundStyle(.secondary)
-                }
-            } header: {
-                Text(L.t("Session controls", "세션 제어"))
-            } footer: {
-                if !available { Text(L.t("Controls require a fresh report from this computer.", "이 컴퓨터의 최신 정보가 있어야 제어할 수 있습니다.")) }
-            }
 
-            Section {
-                TextField(L.t("Continue testing and fix the errors.", "이어서 테스트하고 오류 고쳐줘"), text: $instruction, axis: .vertical)
-                    .lineLimit(4...10)
-                    .onChange(of: instruction) { _, value in if value.utf16.count > 4000 { instruction = String(value.utf16.prefix(4000)) ?? value } }
-                    .accessibilityLabel(L.t("AI instruction", "AI 지시 내용"))
-                    .accessibilityIdentifier("instruction")
-                Button {
-                    request = ControlRequest(session: s, action: "prompt", instruction: instruction)
-                } label: {
-                    Label(L.t("Send instruction", "지시 보내기"), systemImage: "paperplane")
-                }
-                .accessibilityIdentifier("instruction-send")
-                .disabled(!available || !s.can("prompt") || busy || instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            } header: {
-                Text(L.t("Tell this AI what to do", "이 AI에게 지시하기"))
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("\(instruction.utf16.count)/4,000 · " + L.t("A new instruction can use tokens.", "새 지시는 토큰을 사용할 수 있습니다."))
-                    if !s.can("prompt") {
-                        Text(L.t("Input is unavailable for this session right now. For a running terminal, pause the work first.",
-                                 "현재 이 세션의 입력 연결을 확인할 수 없습니다. 실행 중인 터미널은 먼저 작업을 중단한 뒤 확인하세요."))
+                Section {
+                    TextField(L.t("Continue testing and fix the errors.", "이어서 테스트하고 오류 고쳐줘"), text: $instruction, axis: .vertical)
+                        .lineLimit(4...10)
+                        .onChange(of: instruction) { _, value in if value.utf16.count > 4000 { instruction = String(value.utf16.prefix(4000)) ?? value } }
+                        .accessibilityLabel(L.t("AI instruction", "AI 지시 내용"))
+                        .accessibilityIdentifier("instruction")
+                    Button {
+                        request = ControlRequest(session: s, action: "prompt", instruction: instruction)
+                    } label: {
+                        Label(L.t("Send instruction", "지시 보내기"), systemImage: "paperplane")
                     }
-                    if s.kind == "Aside" && s.status == "working" {
-                        Text(L.t("Queued after the current step.", "현재 단계가 끝난 뒤 이어서 실행합니다."))
+                    .accessibilityIdentifier("instruction-send")
+                    .disabled(!available || !s.can("prompt") || busy || instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                } header: {
+                    Text(L.t("Tell this AI what to do", "이 AI에게 지시하기"))
+                } footer: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("\(instruction.utf16.count)/4,000 · " + L.t("A new instruction can use tokens.", "새 지시는 토큰을 사용할 수 있습니다."))
+                        if !s.can("prompt") {
+                            Text(L.t("Input is unavailable for this session right now. For a running terminal, pause the work first.",
+                                     "현재 이 세션의 입력 연결을 확인할 수 없습니다. 실행 중인 터미널은 먼저 작업을 중단한 뒤 확인하세요."))
+                        }
+                        if s.kind == "Aside" && s.status == "working" {
+                            Text(L.t("Queued after the current step.", "현재 단계가 끝난 뒤 이어서 실행합니다."))
+                        }
                     }
                 }
             }

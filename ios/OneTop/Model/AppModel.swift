@@ -26,6 +26,9 @@ final class AppModel {
     var pending: [String: String] = [:]
     var notes: [String: ControlNote] = [:]
     var mailboxes: [String: Mailbox] = [:]
+    /// Computers paired without remote control (`allow_control` 0 in /api/devices). Live snapshots do
+    /// not carry the flag, so the device list is matched by id.
+    var controlOff: Set<String> = []
     var busy = false
     private(set) var token: String?
     private var liveTask: Task<Void, Never>?
@@ -61,9 +64,13 @@ final class AppModel {
     }
     func device(for session: Session) -> Device? { devices.first { $0.id == session.deviceId } }
 
+    /// A computer paired without remote control offers no controls, instructions or messages.
     private func sessions(of list: [Device]) -> [Session] {
-        list.flatMap { d in (d.snapshot?.sessions ?? []).map { var s = $0; s.deviceId = d.id; return s } }
+        list.flatMap { d in
+            (d.snapshot?.sessions ?? []).map { var s = $0; s.deviceId = d.id; if controlOff.contains(d.id) { s.capabilities = [] }; return s }
+        }
     }
+    func isControlOff(_ s: Session) -> Bool { s.deviceId.map(controlOff.contains) ?? false }
     /// Sessions on the dashboard: the reporting computers.
     var sessions: [Session] { sessions(of: reportingDevices) }
     /// Sessions in the list: every computer in view, stale ones marked.
@@ -230,11 +237,17 @@ final class AppModel {
     }
 
     // MARK: Mailbox
+    /// The latest mailbox request; only its answer is applied, so a late reply for a screen that
+    /// has since closed never lands in another one.
+    private var mailboxAsk: (requestId: String, deviceId: String, sessionId: String)?
+
     /// Asks the computer for this session's latest messages; the answer arrives on the socket.
     @discardableResult
     func readMailbox(_ s: Session) -> Bool {
         guard connection == .live, let socket, let device = device(for: s), s.can("mailbox") else { return false }
-        let payload = ["type": "mailbox_request", "request_id": UUID().uuidString.lowercased(), "device_id": device.id,
+        let id = UUID().uuidString.lowercased()
+        mailboxAsk = (id, device.id, s.id)
+        let payload = ["type": "mailbox_request", "request_id": id, "device_id": device.id,
                        "session_id": s.id, "control_key": s.controlKey ?? ""]
         guard let data = try? JSONSerialization.data(withJSONObject: payload), let text = String(data: data, encoding: .utf8) else { return false }
         socket.send(.string(text)) { _ in }
@@ -282,7 +295,9 @@ final class AppModel {
     }
 
     private func applyMailbox(_ live: LiveMessage) {
-        guard let deviceId = live.deviceId, let sessionId = live.sessionId else { return }
+        guard let deviceId = live.deviceId, let sessionId = live.sessionId, let ask = mailboxAsk,
+              live.requestId == ask.requestId, deviceId == ask.deviceId, sessionId == ask.sessionId else { return }
+        mailboxAsk = nil
         let key = deviceId + ":" + sessionId
         var box = mailboxes[key] ?? Mailbox()
         if let error = live.error { box.error = error; mailboxes[key] = box; return }
@@ -328,7 +343,7 @@ final class AppModel {
     }
 
     private func resetAccountState() {
-        devices = []; account = nil; selectedDeviceID = nil; pending = [:]; notes = [:]; mailboxes = [:]
+        devices = []; account = nil; selectedDeviceID = nil; pending = [:]; notes = [:]; mailboxes = [:]; controlOff = []; mailboxAsk = nil
     }
 
     func showDemo() {
@@ -336,6 +351,7 @@ final class AppModel {
         resetAccountState()
         devices = DemoData.devices(now: Date().timeIntervalSince1970)
         mailboxes = DemoData.mailboxes(now: Date().timeIntervalSince1970)
+        controlOff = DemoData.controlOff
         connection = .demo
     }
 
@@ -356,9 +372,12 @@ final class AppModel {
                 self.connection = .connecting
                 do {
                     let data = try await Relay.request("/api/devices", token: token, relay: relay)
-                    if let account = try? JSONDecoder.relay().decode(AccountEnvelope.self, from: data).account { self.account = account }
+                    if let info = try? JSONDecoder.relay().decode(AccountEnvelope.self, from: data) {
+                        if let account = info.account { self.account = account }
+                        if let list = info.devices { self.controlOff = Set(list.filter { $0.allowControl == false }.map(\.id)) }
+                    }
                     let socket = try await Relay.liveSocket(token: token, relay: relay)
-                    self.socket = socket
+                    self.socket = socket; self.mailboxAsk = nil
                     self.connection = .live; self.message = nil; attempt = 0
                     while !Task.isCancelled {
                         let frame = try await socket.receive()
@@ -400,7 +419,20 @@ final class AppModel {
         }
     }
 
-    private struct AccountEnvelope: Decodable { var account: RelayAccount? }
+    private struct AccountEnvelope: Decodable { var account: RelayAccount?; var devices: [DeviceAccess]? }
+    /// A paired computer in /api/devices. D1 stores `allow_control` as 0/1; a boolean is accepted too.
+    private struct DeviceAccess: Decodable {
+        var id: String
+        var allowControl: Bool?
+        enum CodingKeys: String, CodingKey { case id, allowControl }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(String.self, forKey: .id)
+            if let flag = try? c.decode(Bool.self, forKey: .allowControl) { allowControl = flag }
+            else if let number = try? c.decode(Int.self, forKey: .allowControl) { allowControl = number != 0 }
+            else { allowControl = nil }
+        }
+    }
 }
 
 /// A root session and its subagents. Usage adds up across the family; weekly estimates add up only
