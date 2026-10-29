@@ -16,6 +16,7 @@ struct GlassSegments<Value: Hashable>: View {
     var items: [Item]
     @Binding var selection: Value
     var height: CGFloat = 32
+    var fontSize: CGFloat = 12.5
 
     @Namespace private var glass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -34,7 +35,7 @@ struct GlassSegments<Value: Hashable>: View {
                         if reduceMotion { selection = item.value } else { withAnimation(.bouncy(duration: 0.32)) { selection = item.value } }
                     } label: {
                         Text(item.label)
-                            .font(.system(size: 12.5, weight: selected ? .semibold : .medium))
+                            .font(.system(size: fontSize, weight: selected ? .semibold : .medium))
                             .lineLimit(1).minimumScaleFactor(0.7)
                             .foregroundStyle(selected ? Color.primary : Color.secondary)
                             // Only the capsule morphs. Interpolating the weight change drew Hangul half-way
