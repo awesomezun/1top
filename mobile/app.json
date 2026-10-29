@@ -2,7 +2,7 @@
   "expo": {
     "name": "1top",
     "slug": "onetop",
-    "version": "4.2.0",
+    "version": "4.3.0",
     "scheme": "onetop",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "si.onetop.mobile",
-      "versionCode": 10,
+      "versionCode": 11,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0d1218"

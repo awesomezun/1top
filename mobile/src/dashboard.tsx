@@ -5,28 +5,24 @@ import Svg,{Circle,G,Line,Path,Polygon} from 'react-native-svg';
 import {Text} from './typography';
 import {useWorkspace} from './workspace';
 import {fresh,total,valid} from './metrics';
-import {fleetFlow,fleetQuotas,hasEstimate,periodTokens,reporting,short} from './fleet';
-import {Button,SessionDetails,Sheet} from './ui';
+import {accountTags,fleetFlow,fleetQuotas,hasEstimate,periodTokens,reporting,sessionAccount,short} from './fleet';
+import {AccountChip,Button,ComputerList,LanguageButton,PeriodPicker,SessionDetails,Sheet,periodLabel} from './ui';
+import {Icon} from './icons';
+import {staleLabel} from './i18n';
+import {onTheme,quick,toolColor,toolName} from './theme';
 import {StateMark} from './state-mark';
 import type {Device,Flow,Quota,SessionRow,WindowKey} from './types';
 
 // The phone dashboard follows the Mac menu bar quick view: the same palette, sizes and order.
 // The period picker governs every number below it.
 // Instruments glow in LCD green, apart from every tool colour (Codex teal sat only ΔE 10–12 from the old mint).
-export const quick={background:'#0b0d0f',card:'#121518',raised:'#1c2125',line:'#23292e',ink:'#edf1f3',muted:'#9aa5ae',dim:'#6c7882',
- accent:'#9dff3c',segmentOn:'#9dff3c',segmentLead:'#e2ffc4',segmentOff:'#1d2327',grid:'#2b3238',amber:'#e9b25c',red:'#ff6450'};
-export const toolColor=(kind:string)=>({Claude:'#d4956b',Codex:'#3fae8c',GLM:'#8f98e0',Antigravity:'#619db9',Aside:'#a99bdb'} as Record<string,string>)[kind]||'#8b939f';
-export const toolName=(kind:string)=>kind==='Claude'?'Claude Code':kind==='Antigravity'?'Agy CLI':kind;
-const PERIODS:[WindowKey,string,string][]=[['10m','10분','10m'],['30m','30분','30m'],['1h','1시간','1h'],['5h','5시간','5h'],['12h','12시간','12h'],['24h','24시간','24h']];
+// The palette lives in theme.ts (dark and light, the iPhone's values); kept importable from here.
+export {quick,toolColor,toolName};
+const PERIODS:[WindowKey][]=[['10m'],['30m'],['1h'],['5h'],['12h'],['24h']];
 const SECONDS:Record<WindowKey,number>={'10m':600,'30m':1800,'1h':3600,'5h':18000,'12h':43200,'24h':86400};
 const ORDER=['Claude','Codex','GLM','Antigravity','Aside'];
 
 export function pct(n:number|null|undefined){if(!valid(n))return '—';if(n===0)return '0%';if(n<.05)return '<0.1%';const t=Math.round(n*10)/10;return (Number.isInteger(t)?String(t):t.toFixed(1))+'%';}
-/** A limit that cannot refresh until the account is connected again says so, not just how old it is. */
-const RECONNECT=new Set(['login_required','login_expired','credential_store_unavailable','access_denied']);
-/** How old a value that could not be refreshed is: "38m ago", "38분 전 보고". */
-export function age(updated:number|null|undefined,now:number,t:(en:string,ko:string)=>string){const s=valid(updated)?Math.max(0,now-updated):null;if(s===null)return t('Last report','마지막 보고');
- const [n,en,ko]:[number,string,string]=s<60?[0,'Just now','방금']:s<3600?[Math.floor(s/60),'m','분 전']:s<86400?[Math.floor(s/3600),'h','시간 전']:[Math.floor(s/86400),'d','일 전'];return n?t(n+en+' ago',n+ko+' 보고'):t(en,ko+' 보고');}
 export const shortModel=(s:SessionRow)=>{let m=(s.model||'').trim();if(!m)return toolName(s.kind);m=m.replace(/\[1m\]/ig,'');if(/^claude-/i.test(m))m=m.slice(7);if(/^gpt-/i.test(m))m='GPT-'+m.slice(4);return m;};
 const display=(s:SessionRow)=>s.project==='0'&&s.kind==='Aside'?'Aside workspace':s.project;
 const nameOf=(s:SessionRow)=>(s.terminal||'').trim()||display(s)||s.kind;
@@ -138,34 +134,38 @@ const nice=(v:number)=>{if(!(v>0))return 1;const p=10**Math.floor(Math.log10(v))
 
 export function Dashboard(){
  const w=useWorkspace(),t=w.t,period:WindowKey=w.period,rows:SessionRow[]=w.rows;
- const periodName=(k:WindowKey)=>{const p=PERIODS.find(x=>x[0]===k);return p?t(p[2],p[1]):k;};
- const [detail,setDetail]=useState<SessionRow|null>(null),[choosing,setChoosing]=useState(false);
+ const periodName=(k:WindowKey)=>periodLabel(k,t),tags=accountTags(w.devices||[]);
+ const [detail,setDetail]=useState<SessionRow|null>(null),[choosing,setChoosing]=useState(false),[more,setMore]=useState(false);
  const visible:Device[]=w.visible||[],basis=reporting(visible),live=w.demo||w.connection?.state==='live';
  // Every number in the instrument covers the computers in view, not just the first one.
  const scoped=rows.filter(r=>basis.includes(r.device));
  const data=reading(scoped,period,periodTokens(basis,period),fleetFlow(basis,period));
  const ordered=useMemo(()=>groups(rows).sort((a,b)=>{const wa=gWorking(a),wb=gWorking(b);if(wa!==wb)return wa?-1:1;const ta=gTokens(a,period)??-1,tb=gTokens(b,period)??-1;return ta!==tb?tb-ta:a.root.key<b.root.key?-1:1;}),[rows,period]);
  // Weekly % needs the collector's estimates; a collector that does not send them shows tokens.
- const tokensMode=!rows.some(hasEstimate);
+ const tokensMode=w.tokensChosen||!rows.some(hasEstimate);
  const slices=(()=>{const by=new Map<string,{kind:string;model:string;tokens:number}>();for(const s of scoped){const t=total(s.windows[period]);if(!valid(t)||t<=0)continue;const m=shortModel(s),k=s.kind+'|'+m;const o=by.get(k);if(o)o.tokens+=t;else by.set(k,{kind:s.kind,model:m,tokens:t});}
   const list=[...by.values()].sort((a,b)=>b.tokens-a.tokens),sum=list.reduce((n,x)=>n+x.tokens,0),shown=list.length<=4?list:list.slice(0,3),seen:Record<string,number>={};
   const out=shown.map(x=>{const i=seen[x.kind]||0;seen[x.kind]=i+1;return {id:x.kind+x.model,name:x.model,detail:toolName(x.kind),color:toolColor(x.kind),opacity:[1,.68,.46][Math.min(i,2)],value:x.tokens};});
-  const rest=sum-shown.reduce((n,x)=>n+x.tokens,0);if(rest>sum*.005)out.push({id:'rest',name:t('Other models','기타 모델'),detail:String(list.length-shown.length),color:quick.dim,opacity:1,value:rest});return {out,sum};})();
+  const rest=sum-shown.reduce((n,x)=>n+x.tokens,0);if(rest>sum*.005)out.push({id:'rest',name:t('Other models','기타 모델'),detail:t(`${list.length-shown.length} more`,`${list.length-shown.length}개`),color:quick.dim,opacity:1,value:rest});return {out,sum};})();
  const quotas:Quota[]=fleetQuotas(basis).slice(0,4),now:number=w.clock/1000;
  const hosts=basis.map(d=>{const h=d.snapshot.host;return {id:d.id,name:d.name,cpu:h?.cpu??null,memory:h&&valid(h.used_memory)&&valid(h.total_memory)&&h.total_memory>0?h.used_memory/h.total_memory*100:null};});
  const paces=ordered.map(g=>tokensMode?(()=>{const r=gRate(g);return r===null?null:r*3600;})():gPace(g,period)),scale=nice(Math.max(1,...paces.filter(valid)));
  const end=Math.max(0,...basis.map(d=>d.snapshot.updated||0))||now,start=end-SECONDS[period];
- const label=w.demo?t('Demo','데모'):live?t('Live','실시간'):w.connection?.state==='connecting'?t('Connecting','연결 중'):t('Offline · last report','오프라인 · 마지막 기록');
- const computer=w.selected==='all'?t('All computers','모든 컴퓨터')+' · '+visible.length:visible[0]?.name||t('Choose computer','컴퓨터 선택');
+ const computer=w.selected==='all'?((w.devices||[]).length===1?w.devices[0].name:t('All computers','모든 컴퓨터')+' · '+(w.devices||[]).length):visible[0]?.name||t('Choose computer','컴퓨터 선택');
+ const chip=live?computer:w.connection?.state==='connecting'?t('Connecting','연결 중'):t('Offline','오프라인');
  const lastReport=Math.max(0,...visible.map(d=>d.received||0));
  return <SafeAreaView edges={['top']} style={{flex:1,backgroundColor:quick.background}}>
-  <ScrollView contentContainerStyle={{paddingBottom:24}}>
+  <ScrollView contentContainerStyle={{paddingBottom:120}}>
+   {/* Logo on the left; on the right the computers in view, a one-tap theme toggle, a one-tap language
+       choice and more, as on the iPhone. */}
    <View style={st.header}><Image source={require('../assets/mark.png')} style={{width:22,height:22,borderRadius:5}}/><Text style={{color:quick.ink,fontSize:17,fontWeight:'600'}}>1top</Text><View style={{flex:1}}/>
-    <Pressable accessibilityRole="button" accessibilityLabel={t('Choose computer','컴퓨터 선택')} onPress={()=>setChoosing(true)} style={st.pill}><Text numberOfLines={1} style={{color:quick.ink,fontSize:11.5,fontWeight:'500',flexShrink:1}}>{computer}</Text><Text style={{color:quick.muted,fontSize:10}}>⌄</Text></Pressable>
-    <View style={st.pill}><View style={[st.dot,{backgroundColor:live?quick.accent:quick.amber}]}/><Text numberOfLines={1} style={{color:quick.muted,fontSize:11.5}}>{label}</Text></View></View>
-   {!!w.message&&<Pressable accessibilityRole="button" onPress={()=>w.setMessage('')} style={st.notice}><Text style={{color:'#b5eddb',fontSize:12.5,lineHeight:18}}>{w.message}</Text></Pressable>}
-   {!w.demo&&!live&&<View style={st.offline}><Text style={{color:quick.muted,fontSize:11.5,lineHeight:17,flex:1}}>{w.connection?.error||t('Waiting for a connection.','연결을 기다리고 있습니다.')}{lastReport?' '+t('Last report','마지막 보고')+' '+new Date(lastReport).toLocaleTimeString():''}</Text><Pressable accessibilityRole="button" onPress={w.connection?.retry} style={st.retry}><Text style={{color:quick.ink,fontSize:12,fontWeight:'600'}}>{t('Reconnect','다시 연결')}</Text></Pressable></View>}
-   <View style={st.picker}>{PERIODS.map(([key])=>{const on=key===period;return <Pressable key={key} accessibilityRole="button" accessibilityState={{selected:on}} onPress={()=>w.setPeriod(key)} style={[st.pickerItem,on&&{backgroundColor:quick.raised}]}><Text style={{fontSize:12.5,fontWeight:on?'600':'500',color:on?quick.ink:quick.muted}}>{periodName(key)}</Text></Pressable>;})}</View>
+    <Pressable accessibilityRole="button" accessibilityLabel={t('Choose computer','컴퓨터 선택')} onPress={()=>setChoosing(true)} style={[st.pill,{flexShrink:1}]}><View style={[st.dot,{backgroundColor:live?quick.mint:quick.amber}]}/><Text numberOfLines={1} style={{color:quick.muted,fontSize:11.5,flexShrink:1}}>{chip}</Text></Pressable>
+    <Pressable testID="theme-toggle" accessibilityRole="button" accessibilityLabel={t('Toggle theme','테마 전환')} accessibilityValue={{text:w.theme}} onPress={e=>w.toggleTheme(e.nativeEvent.pageX,e.nativeEvent.pageY)} style={st.circle}><Icon name={w.theme==='dark'?'moon':'sun'} size={15} color={quick.ink}/></Pressable>
+    <LanguageButton testID="header-language"/>
+    <Pressable accessibilityRole="button" accessibilityLabel={t('More','더 보기')} onPress={()=>setMore(true)} style={st.circle}><Icon name="more" size={15} color={quick.ink}/></Pressable></View>
+   {!!w.message&&<Pressable accessibilityRole="button" onPress={()=>w.setMessage('')} style={st.notice}><Text style={{color:quick.noticeInk,fontSize:12.5,lineHeight:18}}>{w.message}</Text></Pressable>}
+   {!w.demo&&!live&&<View style={st.offline}><Text style={{color:quick.muted,fontSize:11.5,lineHeight:17,flex:1}}>{w.connection?.error||t('Waiting for a connection.','연결을 기다리고 있습니다.')}{lastReport?' '+t('Last report','마지막 보고')+' '+w.when(lastReport):''}</Text><Pressable accessibilityRole="button" onPress={w.connection?.retry} style={st.retry}><Text style={{color:quick.ink,fontSize:12,fontWeight:'600'}}>{t('Reconnect','다시 연결')}</Text></Pressable></View>}
+   <View style={{marginHorizontal:14,marginBottom:10}}><PeriodPicker/></View>
    <View style={{paddingHorizontal:16}}>
     <View style={st.titleRow}><Text style={st.title}>{t('Token usage','토큰 사용')}</Text><Text style={st.sub}>{t('Last ','최근 ')+periodName(period)}</Text></View>
     <View style={{flexDirection:'row',alignItems:'center',gap:16}}>
@@ -180,11 +180,11 @@ export function Dashboard(){
    </View>
    <View style={{paddingHorizontal:14,paddingTop:14,gap:7}}>
     <View style={[st.titleRow,{paddingHorizontal:2,marginBottom:0}]}><Text style={st.title}>{t('Weekly limits','주간 한도')}</Text><Text style={st.sub}>{t('100% per account','계정별 100%')}</Text></View>
-    {quotas.length?<View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>{quotas.map(q=>{const wk=q.windows.find(x=>['주간','Weekly','7d'].includes(x.label)),color=toolColor(q.kind),mins=wk?.reset?Math.ceil((wk.reset-now)/60):0;
-      return <View key={q.id} style={[st.tile,{backgroundColor:color+'12'}]}><View style={{flexDirection:'row',alignItems:'center',gap:5}}><View style={[st.dot,{backgroundColor:color}]}/><Text style={{color:quick.ink,fontSize:12.5,fontWeight:'600'}}>{toolName(q.kind)}</Text><View style={{flex:1}}/><Text style={{color:q.stale?quick.muted:quick.ink,fontSize:17,fontWeight:'600'}}>{pct(wk?.pct)}</Text></View>
+    {quotas.length?<View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>{quotas.map(q=>{const wk=q.windows.find(x=>x.key==='7d'||x.key==='weekly'||['주간','Weekly','7d'].includes(x.label)),color=toolColor(q.kind),mins=wk?.reset?Math.ceil((wk.reset-now)/60):0;
+      return <View key={q.id} style={[st.tile,{backgroundColor:color+'12'}]}><View style={{flexDirection:'row',alignItems:'center',gap:5}}><View style={[st.dot,{backgroundColor:color}]}/><Text style={{color:quick.ink,fontSize:12.5,fontWeight:'600'}}>{toolName(q.kind)}</Text><AccountChip text={tags[q.id]}/><View style={{flex:1}}/><Text style={{color:q.stale?quick.muted:quick.ink,fontSize:17,fontWeight:'600'}}>{pct(wk?.pct)}</Text></View>
        <View style={{flexDirection:'row',alignItems:'center',gap:6}}><Text numberOfLines={1} style={{width:62,color:quick.muted,fontSize:10.5}}>{q.account_label.includes(' · ')?q.account_label.split(' · ').pop():q.account_label.split('@')[0]}</Text>
         <Spark points={q.usage_points||[]} start={start} end={end} color={color} faded={q.stale}/>
-        <Text numberOfLines={1} style={{width:q.stale?66:58,textAlign:'right',color:q.stale?quick.amber:color,fontSize:10.5,fontWeight:'500'}}>{q.stale?(RECONNECT.has(q.status||'')?t('Reconnect needed','재연결 필요'):age(q.updated,now,t)):(()=>{const p=q.weekly?.[period];return valid(p?.used_pp)&&valid(p?.observed_seconds)&&p.observed_seconds>=120?pct(p.used_pp/p.observed_seconds*3600)+t('/h','/시간'):mins>0?(mins>=1440?t(`in ${Math.floor(mins/1440)}d`,`${Math.floor(mins/1440)}일 후`):t(`in ${Math.floor(mins/60)}h`,`${Math.floor(mins/60)}시간 후`)):t('Collecting','수집 중');})()}</Text></View></View>;})}</View>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.75} style={{width:q.stale?78:62,textAlign:'right',color:q.stale?quick.amber:color,fontSize:10.5,fontWeight:'500'}}>{q.stale?staleLabel(q,t):(()=>{const p=q.weekly?.[period];return valid(p?.used_pp)&&valid(p?.observed_seconds)&&p.observed_seconds>=120?pct(p.used_pp/p.observed_seconds*3600)+t('/h','/시간'):mins>0?(mins>=1440?t(`in ${Math.floor(mins/1440)}d`,`${Math.floor(mins/1440)}일 후`):t(`in ${Math.floor(mins/60)}h`,`${Math.floor(mins/60)}시간 후`)):t('Collecting','수집 중');})()}</Text></View></View>;})}</View>
      :<Text style={{color:quick.muted,fontSize:11.5}}>{t('Connect subscription accounts in 1top on your computer.','컴퓨터의 1top에서 구독 계정을 연결하면 표시됩니다.')}</Text>}
    </View>
    <View style={{paddingHorizontal:16,paddingTop:12,paddingBottom:10,gap:8}}>
@@ -195,21 +195,24 @@ export function Dashboard(){
    {ordered.map((g,i)=>{const s=g.root,pace=live?paces[i]:null,hub=valid(pace)&&pace>0?quick.ink:quick.dim,state=gWorking(g)?'working':s.status,tokens=gTokens(g,period),est=gEstimate(g,period);
     const value=tokensMode?short(tokens):est!==null?'≈'+pct(est):tokens===0?'0%':'—',children=g.members.length-1;
     return <Pressable key={s.key} accessibilityRole="button" accessibilityHint={t('Opens messages and controls','메시지와 작업 제어를 엽니다')} onPress={()=>setDetail(s)} style={({pressed})=>[st.row,pressed&&{backgroundColor:quick.raised},!fresh(s.device)&&{opacity:.55}]}><View style={{width:54,alignItems:'center',gap:2}}><MiniGauge value={pace} scale={scale} color={toolColor(s.kind)} hub={hub}/><Text numberOfLines={1} style={{fontSize:9.5,color:pace===null?quick.dim:pace===0?quick.muted:quick.ink}}>{pace===null?'—':(tokensMode?short(pace):pct(pace))+t('/h','/시간')}</Text></View>
-     <View style={{flex:1,minWidth:0}}><View style={{flexDirection:'row',alignItems:'center',gap:6}}><StateMark status={state}/><Text numberOfLines={1} style={{flexShrink:1,color:quick.ink,fontSize:13,fontWeight:'600'}}>{nameOf(s)}</Text>{children>0&&<Text style={st.badge}>{t(`+${children}`,`하위 ${children}`)}</Text>}</View><Text numberOfLines={1} style={{fontSize:11.5}}><Text style={{color:toolColor(s.kind)}}>{toolName(s.kind)}</Text><Text style={{color:quick.muted}}>{display(s)?' · '+display(s):''}</Text></Text></View>
+     <View style={{flex:1,minWidth:0}}><View style={{flexDirection:'row',alignItems:'center',gap:6}}><StateMark status={state}/><Text numberOfLines={1} style={{flexShrink:1,color:quick.ink,fontSize:13,fontWeight:'600'}}>{nameOf(s)}</Text>{children>0&&<Text style={st.badge}>{t(`+${children}`,`하위 ${children}`)}</Text>}</View><View style={{flexDirection:'row',alignItems:'center',gap:4}}><Text style={{fontSize:11.5,color:toolColor(s.kind)}}>{toolName(s.kind)}</Text><AccountChip text={tags[sessionAccount(s,period)||'']}/><Text numberOfLines={1} style={{fontSize:11.5,color:quick.muted,flexShrink:1}}>{display(s)?'· '+display(s):''}{basis.length>1?' · '+s.device.name:''}</Text></View></View>
      <Text style={{width:70,textAlign:'right',color:value==='—'?quick.dim:quick.ink,fontSize:13,fontWeight:'600'}}>{value}</Text><Text style={{color:quick.dim,fontSize:13}}>›</Text></Pressable>;})}
    {!ordered.length&&<Text style={{color:quick.muted,fontSize:11.5,paddingHorizontal:16,paddingVertical:14}}>{t('Connect a computer to your account. Its sessions appear here.','컴퓨터를 계정에 연결하면 세션이 표시됩니다.')}</Text>}
   </ScrollView>
   <SessionDetails key={detail?.key||'none'} row={detail} close={()=>setDetail(null)}/>
-  <Sheet visible={choosing} close={()=>setChoosing(false)} title={t('Computers','컴퓨터')}><Button label={t('All computers','모든 컴퓨터')+' · '+(w.devices||[]).length} onPress={()=>{w.setSelected('all');setChoosing(false);}}/>{(w.devices||[]).map((d:Device)=><Button key={d.id} label={d.name+' · '+(fresh(d)?t('Online','온라인'):t('Offline','오프라인'))} onPress={()=>{w.setSelected(d.id);setChoosing(false);}}/>)}</Sheet>
+  <Sheet visible={choosing} close={()=>setChoosing(false)} title={t('Computers','컴퓨터')}><ComputerList done={()=>setChoosing(false)}/>{lastReport>0&&<Text style={{color:quick.muted,fontSize:12.5}}>{t('Last report ','마지막 보고 ')+w.when(lastReport)}</Text>}</Sheet>
+  <Sheet visible={more} close={()=>setMore(false)} title={t('More','더 보기')}>
+   <Button label={t('Reconnect now','지금 다시 연결')} disabled={w.demo} onPress={()=>{setMore(false);w.connection?.retry?.();}}/>
+   <Button label={w.tokensChosen?t('Show sessions as weekly limit %','세션을 주간 한도 %로 보기'):t('Show sessions as tokens','세션을 토큰으로 보기')} onPress={()=>{w.setTokensChosen(!w.tokensChosen);setMore(false);}}/>
+   {w.demo&&<Button label={t('Leave demo','데모 끝내기')} onPress={()=>{setMore(false);w.logout();}}/>}</Sheet>
  </SafeAreaView>;
 }
 
-const st=StyleSheet.create({
+const make=()=>StyleSheet.create({
  header:{flexDirection:'row',alignItems:'center',gap:8,paddingHorizontal:16,paddingTop:8,paddingBottom:10},
- pill:{flexDirection:'row',alignItems:'center',gap:6,height:24,paddingHorizontal:9,borderRadius:12,borderWidth:1,borderColor:quick.line,maxWidth:230},
+ pill:{flexDirection:'row',alignItems:'center',gap:6,height:30,paddingHorizontal:11,borderRadius:15,backgroundColor:quick.glass,borderWidth:1,borderColor:quick.glassLine,maxWidth:170},
+ circle:{width:30,height:30,borderRadius:15,alignItems:'center',justifyContent:'center',backgroundColor:quick.glass,borderWidth:1,borderColor:quick.glassLine},
  dot:{width:6,height:6,borderRadius:3},
- picker:{flexDirection:'row',gap:2,padding:3,marginHorizontal:14,marginBottom:10,borderRadius:9,borderWidth:1,borderColor:quick.line,backgroundColor:quick.card},
- pickerItem:{flex:1,height:28,alignItems:'center',justifyContent:'center',borderRadius:6},
  titleRow:{flexDirection:'row',alignItems:'baseline',gap:6,marginBottom:8},
  title:{color:quick.ink,fontSize:12.5,fontWeight:'600'},sub:{color:quick.muted,fontSize:11.5},
  tile:{width:'48.8%',gap:3,paddingHorizontal:10,paddingVertical:8,borderRadius:8},
@@ -218,7 +221,8 @@ const st=StyleSheet.create({
  count:{color:quick.muted,fontSize:11.5,fontWeight:'600',paddingHorizontal:6,borderRadius:5,backgroundColor:quick.raised,overflow:'hidden'},
  badge:{color:quick.muted,fontSize:10.5,paddingHorizontal:5,borderRadius:8,borderWidth:1,borderColor:quick.line},
  row:{flexDirection:'row',alignItems:'center',gap:9,height:50,paddingHorizontal:16,borderBottomWidth:1,borderBottomColor:quick.line+'b3'},
- notice:{marginHorizontal:14,marginBottom:10,padding:10,borderRadius:8,backgroundColor:'#253935'},
+ notice:{marginHorizontal:14,marginBottom:10,padding:10,borderRadius:8,backgroundColor:quick.notice},
  offline:{flexDirection:'row',alignItems:'center',gap:10,marginHorizontal:14,marginBottom:10,padding:10,borderRadius:8,borderWidth:1,borderColor:quick.line,backgroundColor:quick.card},
  retry:{paddingHorizontal:10,paddingVertical:6,borderRadius:6,backgroundColor:quick.raised},
 });
+let st=make();onTheme(()=>{st=make();});

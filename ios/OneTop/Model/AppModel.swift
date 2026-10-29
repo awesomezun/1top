@@ -21,7 +21,11 @@ final class AppModel {
     var account: RelayAccount?
     var relay: URL = Relay.current
     var language: Language = Language.saved {
-        didSet { language.save(); L.language = language }
+        didSet {
+            language.save(); L.language = language
+            // The demo's computers, sessions and conversation follow the language.
+            if connection == .demo { refreshDemoText() }
+        }
     }
     /// Light, dark or the iPhone's own setting, applied at the root.
     var appearance: Appearance = Appearance.saved {
@@ -89,6 +93,25 @@ final class AppModel {
         return devices.count == 1 ? devices[0].name : L.t("All computers", "모든 컴퓨터") + " · \(devices.count)"
     }
     func device(for session: Session) -> Device? { devices.first { $0.id == session.deviceId } }
+
+    /// The account a session's weekly estimate belongs to in the selected period.
+    func account(of session: Session) -> String? { session.weeklyEstimate?[period.rawValue]?.accountId ?? session.weeklyAccount }
+    /// What tells same-tool accounts apart, as on the desktop dashboard: the name given in the desktop
+    /// app, or 1, 2… by account label once a tool has two or more accounts. Nil for a tool's only account.
+    func accountTag(_ id: String?) -> String? {
+        guard let id else { return nil }
+        var all: [String: Quota] = [:]
+        for d in devices { for q in d.snapshot?.accountQuotas ?? [] where all[q.id] == nil || (q.updated ?? 0) > (all[q.id]?.updated ?? 0) { all[q.id] = q } }
+        guard let quota = all[id] else { return nil }
+        if let alias = quota.alias?.trimmingCharacters(in: .whitespaces), !alias.isEmpty { return alias }
+        let same = all.values.filter { $0.kind == quota.kind }.sorted { $0.accountLabel.lowercased() < $1.accountLabel.lowercased() }
+        guard same.count >= 2, let index = same.firstIndex(where: { $0.id == id }) else { return nil }
+        return String(index + 1)
+    }
+    /// "Claude Code 2", "Codex Team", or just the tool's name.
+    func toolName(_ session: Session) -> String {
+        [Tool.name(session.kind), accountTag(account(of: session))].compactMap { $0 }.joined(separator: " ")
+    }
 
     /// A computer paired without remote control offers no controls, instructions or messages.
     private func sessions(of list: [Device]) -> [Session] {
@@ -519,8 +542,19 @@ final class AppModel {
         resetAccountState()
         devices = DemoData.devices(now: Date().timeIntervalSince1970)
         mailboxes = DemoData.mailboxes(now: Date().timeIntervalSince1970)
+        sentPhotos[DemoData.photoMessage] = PhotoPrep.demo(2).map(\.preview)
         controlOff = DemoData.controlOff
         connection = .demo
+    }
+
+    /// Re-reads the demo in the current language; messages written here stay.
+    private func refreshDemoText() {
+        let now = Date().timeIntervalSince1970, seeded = DemoData.mailboxes(now: now)
+        devices = DemoData.devices(now: now)
+        for (key, box) in seeded {
+            let ids = Set(box.messages.map(\.id))
+            mailboxes[key] = .init(messages: box.messages + (mailboxes[key]?.messages ?? []).filter { !ids.contains($0.id) })
+        }
     }
 
     func leaveDemo() {

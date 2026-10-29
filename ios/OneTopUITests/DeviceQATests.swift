@@ -90,12 +90,14 @@ final class DeviceQATests: XCTestCase {
         XCTAssertEqual(toggle.value as? String, look, "Theme did not become \(look)")
     }
 
-    /// The header's one-tap language choice.
+    /// The header's one-tap language button: each tap moves on 한 → EN → 中, so tap until it shows `code`.
     private func showLanguage(_ app: XCUIApplication, _ code: String) {
-        let segment = app.buttons["header-language-" + code]
-        tapWhenReady(segment, "Language \(code)")
-        XCTAssertTrue(wait(segment, "isSelected == true", timeout: 5), "Language \(code) not selected")
-        sleep(1)
+        let button = app.buttons["header-language"]
+        for _ in 0..<3 where (button.value as? String) != code {
+            tapWhenReady(button, "Language button")
+            sleep(1)  // the reveal takes half a second
+        }
+        XCTAssertEqual(button.value as? String, code, "Language \(code) not shown")
     }
 
     /// The System theme is only in Workspace settings; choose it there and come back.
@@ -241,7 +243,7 @@ final class DeviceQATests: XCTestCase {
         app.launch()
         XCTAssertTrue(toggle.waitForExistence(timeout: 10))
         XCTAssertEqual(toggle.value as? String, "light", "Theme not kept after relaunch")
-        XCTAssertTrue(app.buttons["header-language-zh"].isSelected, "Language not kept after relaunch")
+        XCTAssertEqual(app.buttons["header-language"].value as? String, "zh", "Language not kept after relaunch")
         XCTAssertTrue(app.tabBars.buttons["会话"].exists, "Tabs not in Chinese after relaunch")
         shot(app, "08c-relaunched")
         // Leave the simulator as it was: Korean and the iPhone's own theme.
@@ -435,17 +437,16 @@ final class DeviceQATests: XCTestCase {
         sleep(2)
         toggle.tap()
         sleep(2)
-        app.buttons["header-language-zh"].tap()
-        sleep(2)
+        showLanguage(app, "zh")
+        sleep(1)
         toggle.tap()
         sleep(2)
         // Back to Korean, as the simulator was; the two toggles cancel out.
-        app.buttons["header-language-ko"].tap()
-        sleep(1)
+        showLanguage(app, "ko")
     }
 
-    /// Simulator only: rapid taps on the theme and language controls never leave a snapshot behind;
-    /// taps during a reveal are ignored, and the controls keep working afterwards.
+    /// Simulator only: rapid taps on the theme and language buttons never leave a snapshot behind;
+    /// taps during a reveal still count, so the language moves on in order, and the controls keep working.
     func test23_RapidTapsDuringReveal() throws {
         #if !targetEnvironment(simulator)
         throw XCTSkip("Simulator only.")
@@ -455,8 +456,12 @@ final class DeviceQATests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 10))
         let start = toggle.value as? String ?? ""
         for _ in 0..<4 { toggle.tap() }
-        for code in ["en", "zh", "ko", "en"] { app.buttons["header-language-" + code].tap() }
+        let language = app.buttons["header-language"], first = language.value as? String ?? "ko"
+        for _ in 0..<4 { language.tap() }
         sleep(2)
+        // Four taps from any language land one step on: 한 → EN → 中 → 한 → EN.
+        let order = ["ko", "en", "zh"], expected = order[((order.firstIndex(of: first) ?? 0) + 4) % 3]
+        XCTAssertEqual(language.value as? String, expected, "Rapid language taps skipped a step")
         shot(app, "23a-after-rapid-taps")
         // Still responsive: one more tap flips the theme, and Korean can be chosen.
         let now = toggle.value as? String ?? ""
@@ -484,7 +489,7 @@ final class DeviceQATests: XCTestCase {
         if app.state != .runningForeground { app.launch() }
         if app.buttons["Sheet Grabber"].exists { app.swipeDown(velocity: .fast) }
         openTab(app, 0)
-        if app.buttons["header-language-ko"].waitForExistence(timeout: 15) { showLanguage(app, "ko") }
+        if app.buttons["header-language"].waitForExistence(timeout: 15) { showLanguage(app, "ko") }
         chooseSystemTheme(app)
     }
 
@@ -533,7 +538,7 @@ final class DeviceQATests: XCTestCase {
         app.launch()
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
         XCTAssertEqual(toggle.value as? String, "light", "Theme not restored after relaunch")
-        XCTAssertTrue(app.buttons["header-language-zh"].isSelected, "Language not restored after relaunch")
+        XCTAssertEqual(app.buttons["header-language"].value as? String, "zh", "Language not restored after relaunch")
         XCTAssertTrue(wait(connection, Self.liveLabel, timeout: 45), "Not live after relaunch")
         shot(app, "16-06-relaunched")
         // The period and computer start over after a relaunch; choose them again for the last checks.

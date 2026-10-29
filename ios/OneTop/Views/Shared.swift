@@ -11,7 +11,7 @@ struct SessionRow: View {
             RoundedRectangle(cornerRadius: 2).fill(Tool.color(session.kind)).frame(width: 4, height: 46)
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.name).font(.subheadline.weight(.semibold)).lineLimit(1)
-                Text([Tool.name(session.kind), Tool.model(session.model), session.displayProject].compactMap { $0 }.joined(separator: " · "))
+                Text([model.toolName(session), Tool.model(session.model), session.displayProject].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 Text([device?.name, session.app, session.terminal == session.name ? nil : session.terminal].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
@@ -28,6 +28,18 @@ struct SessionRow: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Tells same-tool accounts apart, as the desktop dashboard does: "1", "2", or the account's name.
+struct AccountChip: View {
+    var text: String
+    var body: some View {
+        Text(text).font(.system(size: 10, weight: .semibold)).monospacedDigit().lineLimit(1)
+            .padding(.horizontal, 4.5).frame(minWidth: 16, minHeight: 15)
+            .background(Color.secondary.opacity(0.16), in: RoundedRectangle(cornerRadius: 4))
+            .fixedSize()
+            .accessibilityLabel(L.t("Account \(text)", "계정 \(text)"))
     }
 }
 

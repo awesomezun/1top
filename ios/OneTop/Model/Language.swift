@@ -13,6 +13,17 @@ enum Language: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// The mark on the one-tap language button: 한, EN, 中.
+    var mark: String {
+        switch self {
+        case .ko: "한"
+        case .en: "EN"
+        case .zh: "中"
+        }
+    }
+    /// One tap moves on in a fixed order, 한 → EN → 中 → 한, as on the desktop dashboard.
+    var next: Language { let all = Language.allCases; return all[(all.firstIndex(of: self)! + 1) % all.count] }
+
     static var saved: Language {
         if let raw = UserDefaults.standard.string(forKey: "language"), let value = Language(rawValue: raw) { return value }
         // Korean until chosen otherwise, as the app has always opened.

@@ -1,14 +1,14 @@
 import React,{useEffect,useState} from 'react';
 import {AccessibilityInfo,Animated,Easing,View} from 'react-native';
+import {quick} from './theme';
 
 // States read by shape and motion, never by a tool's hue (Codex is green, GLM indigo):
 // working is a moving wave in the LCD green, waiting an amber diamond, paused two bars, the rest a hollow ring.
-const lcd='#9dff3c',amber='#e9b25c',muted='#9aa5ae',dim='#6c7882';
 const WAVE=[[.4,1,.6,.4],[1,.5,.75,1],[.65,.85,.35,.65]];
 
 export function StateMark({status,size=9}:{status:string;size?:number}){
  const [phase]=useState(()=>new Animated.Value(0)),[still,setStill]=useState(false);
- const working=status==='working';
+ const working=status==='working',{segmentOn:lcd,amber,muted,dim}=quick;
  useEffect(()=>{let alive=true;AccessibilityInfo.isReduceMotionEnabled().then(v=>{if(alive)setStill(v);}).catch(()=>{});return()=>{alive=false;};},[]);
  useEffect(()=>{if(!working||still)return;const loop=Animated.loop(Animated.timing(phase,{toValue:1,duration:1200,easing:Easing.inOut(Easing.ease),useNativeDriver:false}));loop.start();return()=>{loop.stop();phase.setValue(0);};},[working,still,phase]);
  if(working)return <View accessibilityElementsHidden importantForAccessibility="no" style={{width:size+1,height:size,flexDirection:'row',alignItems:'flex-end',gap:2}}>

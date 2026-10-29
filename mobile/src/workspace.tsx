@@ -1,6 +1,9 @@
 import React,{createContext,useContext,useEffect,useRef,useState} from 'react';
-import {Alert} from 'react-native';
+import {AccessibilityInfo,Alert,Animated,Dimensions,Easing,useColorScheme,View} from 'react-native';
 import * as Crypto from 'expo-crypto';
+import * as SecureStore from 'expo-secure-store';
+import {nextLang,translate,when as clockText,type Lang} from './i18n';
+import {applyTheme,quick,type ThemeName} from './theme';
 import {API,selectRelay,api,loadToken,signIn,signOut,useConnection} from './connection';
 import {demoDevices} from './demo';
 import {fresh} from './metrics';
@@ -9,8 +12,11 @@ import {applyReceipts,checkAttachments,EMPTY,sendOutcome,TEXT_MAX,type Attachmen
 import type {Device,SessionRow,WindowKey} from './types';
 const Context=createContext<any>(null);
 export const useWorkspace=()=>useContext(Context);
+export type Appearance='system'|'light'|'dark';
+// Language, theme and the session value (weekly % or tokens) are remembered on this phone, as on the iPhone.
+const SAVED={lang:'onetop.language',appearance:'onetop.appearance',tokens:'onetop.sessionTokens'};
 export function WorkspaceProvider({children}:{children:React.ReactNode}){
- const [token,setToken]=useState<string|null>(null),[loading,setLoading]=useState(true),[demo,setDemo]=useState(false),[ko,setKo]=useState(false),[selected,setSelected]=useState('all'),[period,setPeriod]=useState<WindowKey>('24h'),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[pending,setPending]=useState<Record<string,string>>({}),[clock,setClock]=useState(()=>Date.now());
+ const [token,setToken]=useState<string|null>(null),[loading,setLoading]=useState(true),[demo,setDemo]=useState(false),[lang,setLangState]=useState<Lang>('ko'),[selected,setSelected]=useState('all'),[period,setPeriod]=useState<WindowKey>('1h'),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[pending,setPending]=useState<Record<string,string>>({}),[clock,setClock]=useState(()=>Date.now());
  const [relay,setRelay]=useState(API);
  const [controlMessages,setControlMessages]=useState<Record<string,{id:string;message:string;final:boolean}>>({});
  // Each session (device id : session id) keeps its own draft and timeline. A send that finishes late,
@@ -18,8 +24,35 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
  const [convos,setConvos]=useState<Record<string,Convo>>({});
  const seen=useRef(new Set<string>());
  function updateConvo(key:string,change:(c:Convo)=>Convo,seed?:Mail[]){setConvos(old=>({...old,[key]:change(old[key]??{draft:EMPTY,thread:seed??[]})}));}
- const connection=useConnection(token),t=(en:string,kr:string)=>ko?kr:en;
- useEffect(()=>{loadToken().then(value=>{setToken(value);setRelay(API);}).catch(()=>setMessage('Unable to read saved sign-in.')).finally(()=>setLoading(false));},[]);
+ const [appearance,setAppearanceState]=useState<Appearance>('system'),[tokensChosen,setTokensState]=useState(false);
+ const system=useColorScheme(),theme:ThemeName=appearance==='system'?(system==='light'?'light':'dark'):appearance;
+ // Every style sheet reads the palette when it renders, so the swap happens before this render's children.
+ applyTheme(theme);
+ const connection=useConnection(token),t=(en:string,kr:string)=>translate(lang,en,kr),when=(ms:number)=>clockText(ms,lang);
+ useEffect(()=>{
+  const prefs=Promise.all([SecureStore.getItemAsync(SAVED.lang),SecureStore.getItemAsync(SAVED.appearance),SecureStore.getItemAsync(SAVED.tokens)]).then(([l,a,k])=>{
+   if(l==='ko'||l==='en'||l==='zh')setLangState(l);if(a==='system'||a==='light'||a==='dark')setAppearanceState(a);setTokensState(k==='1');}).catch(()=>{});
+  Promise.all([prefs,loadToken().then(value=>{setToken(value);setRelay(API);}).catch(()=>setMessage('Unable to read saved sign-in.'))]).finally(()=>setLoading(false));},[]);
+ const setLang=(next:Lang)=>{setLangState(next);SecureStore.setItemAsync(SAVED.lang,next).catch(()=>{});};
+ const setAppearance=(next:Appearance)=>{setAppearanceState(next);SecureStore.setItemAsync(SAVED.appearance,next).catch(()=>{});};
+ const setTokensChosen=(next:boolean)=>{setTokensState(next);SecureStore.setItemAsync(SAVED.tokens,next?'1':'0').catch(()=>{});};
+ // A theme or language change spreads out in a circle from the control that was tapped, as on the iPhone.
+ const [cover,setCover]=useState<{x:number;y:number;r:number;color:string}|null>(null);
+ const [grow]=useState(()=>new Animated.Value(0)),[fade]=useState(()=>new Animated.Value(1));
+ function reveal(x:number,y:number,color:string,apply:()=>void){
+  AccessibilityInfo.isReduceMotionEnabled().catch(()=>false).then(still=>{
+   if(still){apply();return;}
+   const {width,height}=Dimensions.get('window'),r=Math.hypot(Math.max(x,width-x),Math.max(y,height-y));
+   grow.setValue(0);fade.setValue(1);setCover({x,y,r,color});
+   Animated.timing(grow,{toValue:1,duration:340,easing:Easing.out(Easing.cubic),useNativeDriver:true}).start(()=>{apply();
+    requestAnimationFrame(()=>Animated.timing(fade,{toValue:0,duration:220,easing:Easing.in(Easing.quad),useNativeDriver:true}).start(()=>setCover(null)));});});
+ }
+ const toggleTheme=(x:number,y:number)=>{const next=theme==='dark'?'light':'dark';reveal(x,y,next==='light'?'#f6f7f8':'#0b0d0f',()=>setAppearance(next));};
+ // Each tap on the language button moves one step on from the last tap, even while a change is still
+ // spreading out, so rapid taps never skip or repeat a language; the button shows where it is headed.
+ const headed=useRef<Lang|null>(null),[shownLang,setShownLang]=useState<Lang|null>(null);
+ const cycleLang=(x:number,y:number)=>{const first=headed.current===null,next=nextLang(headed.current??lang);headed.current=next;setShownLang(next);
+  if(first)reveal(x,y,quick.background,()=>{if(headed.current)setLang(headed.current);headed.current=null;setShownLang(null);});};
  useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),2000);return()=>clearInterval(timer);},[]);
  // Reset view state at the authentication boundary to prevent cross-account carryover.
  // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -31,8 +64,9 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
   setPending(old=>Object.fromEntries(Object.entries(old).filter(([,id])=>!ids.has(id))));setMessage(last.status+': '+(last.message||''));
   setControlMessages(old=>{const out={...old};for(const r of next)out[r.request.device_id+':'+r.request.session_id]={id:r.request.request_id,message:r.status+': '+(r.message||''),final:true};return out;});
   setConvos(old=>Object.fromEntries(Object.entries(old).map(([k,c])=>[k,{...c,thread:applyReceipts(c.thread,all)}])));},[connection.receipts]);
- const devices:Device[]=demo?demoDevices():connection.devices;
- const visible=devices.filter(d=>selected==='all'||d.id===selected);
+ const devices:Device[]=demo?demoDevices(t):connection.devices;
+ // Computers in view by name, as on the iPhone.
+ const visible=devices.filter(d=>selected==='all'||d.id===selected).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
  const rows:SessionRow[]=sortSessions(visible.flatMap(d=>d.snapshot.sessions.map(s=>({...s,device:d,key:d.id+':'+s.id}))),period);
  async function changeRelay(value:string){if(token)throw Error(t('Sign out before changing servers.','서버 변경 전에 로그아웃하세요.'));setRelay(await selectRelay(value));setMessage(t('Server saved. Sign in to connect.','서버를 저장했습니다. 로그인하여 연결하세요.'));}
  async function login(){setBusy(true);setMessage('');try{setToken(await signIn());setDemo(false);}catch(e:any){setMessage(e.message);}finally{setBusy(false);}}
@@ -61,5 +95,7 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
    setTimeout(()=>setPending(old=>{if(old[row.key]!==id)return old;const next={...old};delete next[row.key];report(t('Result unconfirmed. Check the computer before retrying.','결과 미확인. 다시 요청하기 전에 컴퓨터를 확인하세요.'),true);return next;}),25000);
   }}]);
  }
- return <Context.Provider value={{relay,changeRelay,token,loading,demo,setDemo,ko,setKo,t,selected,setSelected,period,setPeriod,busy,message,setMessage,pending,controlMessages,clock,devices,visible,rows,connection,login,logout,control,sendMessage,convos,updateConvo}}>{children}</Context.Provider>;
+ return <Context.Provider value={{relay,changeRelay,token,loading,demo,setDemo,lang,setLang,shownLang:shownLang??lang,ko:lang==='ko',appearance,setAppearance,theme,toggleTheme,cycleLang,tokensChosen,setTokensChosen,when,t,selected,setSelected,period,setPeriod,busy,message,setMessage,pending,controlMessages,clock,devices,visible,rows,connection,login,logout,control,sendMessage,convos,updateConvo}}><View style={{flex:1}}>{children}
+  {cover&&<Animated.View pointerEvents="none" style={{position:'absolute',left:cover.x-cover.r,top:cover.y-cover.r,width:cover.r*2,height:cover.r*2,borderRadius:cover.r,backgroundColor:cover.color,opacity:fade,transform:[{scale:grow}]}}/>}
+ </View></Context.Provider>;
 }
