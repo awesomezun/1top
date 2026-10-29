@@ -21,6 +21,7 @@ from .controls import Controller, ActionError, target_key, process_start
 from .resources import ResourceSampler
 from .usage import session_usage, window_usage, WINDOWS
 from .time_ranges import parse_period, extend_snapshot
+from .session_order import ordered_snapshot
 from . import weekly_usage
 from .discovery import inventory, context, applications, orca_executable, registry_status, claude_transcript
 from . import __version__
@@ -28,6 +29,7 @@ from .context_usage import request_context, stored_context
 from .platform_support import data_directory
 from .hierarchy import codex_metadata, annotate as annotate_hierarchy, group_sessions
 from .effort import codex_level, backfill_codex, apply_statusline
+from .telemetry import TelemetryStore, session_index, bind_account, enrich
 
 BASE = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -272,9 +274,12 @@ class Collector:
         self.resources = None
         self.shared_roots = []
         self.session_metadata = {}
+        self.telemetry = None
 
     def initialize(self):
         DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:self.telemetry = TelemetryStore(DATA)
+        except (OSError, sqlite3.Error):pass  # Auxiliary intake must not stop JSONL collection.
         self.db = sqlite3.connect(DATA/'monitor.sqlite')
         self.db.executescript('''PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -626,15 +631,20 @@ class Collector:
         now=time.time()
         sessions=[]
         roots=self.accounts.roots()
+        try:telemetry = self.telemetry.snapshot(now) if self.telemetry else {'available':False}
+        except sqlite3.Error:telemetry = {'available':False}
+        telemetry_sessions = session_index(telemetry)
         for src in self.specs:
             s=dict(src)
             s['account_binding']=weekly_usage.account_for(s,roots)
+            bind_account(s, telemetry_sessions, roots, now)
             s.update(tokens=None,model=s.get('configured_model',''),last_usage=0,loading=False)
             if s['path']:
                 try:self.read_tracker(s)
                 except OSError:s['note']='세션 기록을 읽을 수 없습니다.'
             if s['kind'] in ('Claude', 'GLM'):
                 apply_statusline(s, now)
+            enrich(s, telemetry_sessions)
             # Registry states are reported, not inferred from CPU or a refreshing terminal clock.
             if s['status'] not in ('working','idle','waiting','interrupted'):
                 s['status']='unknown'
@@ -690,6 +700,7 @@ class Collector:
                 'orca_terminals':self.terminal_count,'error':None,'poll_seconds':3,
                 'applications':getattr(self,'apps',[]),'system':system,'operations':self.operations.sample(sessions),
                 'account_quotas':account_quotas,'weekly_usage':weekly,
+                'telemetry':{k:v for k,v in telemetry.items() if k!='sessions'},
                 'collection_ms':round((time.monotonic()-collect_started)*1000,1)}
         with self.lock:self.snapshot=result
 
@@ -772,6 +783,10 @@ class Collector:
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
+        if self.path in ('/v1/logs', '/v1/metrics', '/v1/traces'):
+            from .telemetry import handle_http
+            handle_http(self)
+            return
         host=self.headers.get('Host','')
         allowed={f'127.0.0.1:{self.server.server_port}',f'localhost:{self.server.server_port}'}
         if (host not in allowed or self.headers.get('Origin')!='http://'+host or
@@ -813,11 +828,15 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 with self.server.collector.lock:snapshot=self.server.collector.snapshot
             snapshot=self.server.controller.decorate(snapshot)
+            snapshot=ordered_snapshot(snapshot, period or '1h')
             bridge = getattr(self.server, 'bridge', None)
             if bridge:
                 snapshot = {**snapshot, 'workspace_usage': bridge.workspace_usage}
             data=json.dumps({**snapshot,'action_token':self.server.action_token},ensure_ascii=False).encode()
             mime='application/json; charset=utf-8'
+        elif route=='/api/telemetry':
+            telemetry=getattr(self.server.collector,'telemetry',None)
+            self.json_response(200,telemetry.snapshot() if telemetry else {'ready':False});return
         elif route=='/api/updates':
             self.json_response(200,getattr(self.server,'updates',None).value if getattr(self.server,'updates',None) else {});return
         elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/ranges.js','/speed.js','/weekly.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js'):
