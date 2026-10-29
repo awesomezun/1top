@@ -70,17 +70,24 @@ def extend_snapshot(db, snapshot, key):
         # Match the existing conversion contract; never relabel another account's history.
         if not known or session.get('loading') or not calibration or not rows:
             continue
-        if any(a is not None and a != account for a, _, _ in rows):
+        provider = accounts[account].get('kind') or session.get('billing_kind') or session['kind']
+        rows = [(a, accounts.get(a, {}).get('kind', provider) if kind == 'Aside' else kind, n)
+                for a, kind, n in rows]
+        other_accounts = any(a is not None and a != account for a, kind, _ in rows if kind == provider)
+        accepted = [(a, n) for a, kind, n in rows if kind == provider and
+                    (a == account or a is None and not other_accounts)]
+        if not accepted:
             continue
-        tokens = sum(n for _, kind, n in rows if kind == session['kind'])
+        tokens = sum(n for _, n in accepted)
         converted = tokens * calibration['pp_per_token']
         if not math.isfinite(converted):
             continue
         u.setdefault('weekly_estimate', {})[key] = {
             'used_pp': round(converted, 4), 'account_id': account,
             'basis': 'calibrated_token_equivalent', 'tokens': tokens,
-            'partial': started > start, 'period_seconds': seconds, 'calibration': calibration,
-            'inferred_account_tokens': sum(n for a, kind, n in rows if a is None and kind == session['kind'])}
+            'partial': other_accounts or started > start, 'period_seconds': seconds, 'calibration': calibration,
+            'inferred_account_tokens': sum(n for a, n in accepted if a is None),
+            'excluded_account_tokens': sum(n for a, kind, n in rows if kind == provider and (a, n) not in accepted)}
     result['root_sessions'] = group_sessions(result['sessions'])
     # The provider-history retention is separate from token history. Missing
     # quota history stays partial rather than extrapolating it from token totals.

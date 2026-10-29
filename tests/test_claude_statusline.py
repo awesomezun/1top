@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from onetop.claude_statusline import capture, sanitize_limits, run, MAX_INPUT
+from onetop.claude_statusline import capture, sanitize_limits, run, session_binding, MAX_INPUT
 from onetop.accounts import identity
 
 
@@ -85,6 +85,35 @@ class ClaudeStatuslineTests(unittest.TestCase):
         with patch('onetop.claude_statusline._account',side_effect=[('a','max'),('b','max')]):
             self.assertIsNone(self.save())
         self.assertFalse(list(self.directory.glob('*.json')))
+
+    def test_verified_session_identity_survives_another_profile_login(self):
+        self.save();self.payload['cost']['total_api_duration_ms']=20;self.save(now=1100)
+        (self.root/'.claude.json').write_text(json.dumps({'oauthAccount':{'accountUuid':'account-b'}}))
+        self.assertIsNone(self.save(now=1200))
+        spec={'id':'session-a','kind':'Claude','config_dir':str(self.root)}
+        self.assertEqual(session_binding(spec,self.directory,1300),(identity('Claude','account-a','org-a'),1000))
+        self.assertIsNone(session_binding({**spec,'id':'unrelated'},self.directory,1300))
+        self.payload['cost']['total_api_duration_ms']=30
+        self.payload['rate_limits']['seven_day']['used_percentage']=14
+        report=json.loads(self.save(now=1400).read_text())
+        self.assertEqual(report['account_id'],identity('Claude','account-a','org-a'))
+        self.assertEqual(report['t'],1400);self.assertEqual(report['account_since'],1000)
+
+    def test_actual_session_login_switch_requires_new_work_and_known_new_cycle(self):
+        import copy
+        self.save();self.payload['cost']['total_api_duration_ms']=20;self.save(now=1100)
+        (self.root/'.claude.json').write_text(json.dumps({'oauthAccount':{'accountUuid':'account-b'}}))
+        witness=copy.deepcopy(self.payload);witness['session_id']='account-b-session'
+        witness['rate_limits']['seven_day']['resets_at']=5000
+        self.save(witness,1200);witness['cost']['total_api_duration_ms']=30;self.save(witness,1250)
+        self.payload['rate_limits']['seven_day']['resets_at']=5000
+        self.assertIsNone(self.save(now=1300))  # no API work after login
+        self.payload['cost']['total_api_duration_ms']=40
+        path=self.save(now=1400);self.assertIsNotNone(path)
+        self.assertFalse(json.loads(path.read_text())['verified_activity'])
+        self.payload['cost']['total_api_duration_ms']=50;self.save(now=1500)
+        spec={'id':'session-a','kind':'Claude','config_dir':str(self.root)}
+        self.assertEqual(session_binding(spec,self.directory,1500),(identity('Claude','account-b',''),1400))
 
     def test_explicit_cli_profile_environment_wins(self):
         other=self.home/'other';other.mkdir()

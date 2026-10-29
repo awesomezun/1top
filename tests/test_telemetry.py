@@ -111,6 +111,24 @@ class TelemetryTests(unittest.TestCase):
         bind_account(spec,index,{},self.now+1)
         self.assertIsNone(spec['account_binding'])
 
+    def test_login_switch_uses_latest_request_identity_not_old_cumulative_metrics(self):
+        self.now -= 180
+        for offset,account in [(0,'old'),(60,'new')]:
+            self.store.ingest('logs',logs({'user.account_uuid':account,'organization.id':'o',
+                'request_id':f'request-{offset}'},now=self.now+offset))
+        data={'resourceMetrics':[{'resource':{'attributes':attributes({'service.name':'claude-code',
+            'session.id':'session-1','user.account_uuid':'old','organization.id':'o'})},'scopeMetrics':[{'metrics':[
+            {'name':'claude_code.token.usage','sum':{'aggregationTemporality':2,'dataPoints':[
+                {'timeUnixNano':str(int((self.now+120)*1e9)),'asInt':'1000'}]}}]}]}]}
+        self.store.ingest('metrics',data)
+        report=self.store.snapshot(self.now+130)['sessions'][0]
+        self.assertEqual(report['account_id'],identity('Claude','new','o'))
+        self.assertEqual(report['account_since'],self.now+60)
+        spec={'id':'session-1','kind':'Claude','account_binding':('wrong',0)}
+        bind_account(spec,session_index(self.store.snapshot(self.now+3600)),
+                     {Path('/profile'):(identity('Claude','new','o'),'Claude',0)},self.now+3600)
+        self.assertEqual(spec['account_binding'],(identity('Claude','new','o'),self.now+60))
+
     def test_conflicting_accounts_disable_profile_guess(self):
         for i in range(2):
             self.store.ingest('logs', logs({'user.account_uuid':str(i),'request_id':f'req-{i}'},now=self.now+i))

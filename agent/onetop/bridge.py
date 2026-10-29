@@ -1,5 +1,5 @@
 """Outbound-only cloud connection. No inbound ports exposed to the network."""
-import json,os,platform,secrets,socket,threading,time,urllib.request,urllib.error,ssl,webbrowser,subprocess
+import json,math,os,platform,secrets,socket,threading,time,urllib.request,urllib.error,ssl,webbrowser,subprocess
 from urllib.parse import urlsplit
 from pathlib import Path
 import certifi
@@ -51,6 +51,44 @@ def save_private(path,value):
     tmp.replace(path)
 
 
+def export_flow(state):
+    """Same snapshot clock and buckets as DesktopFlow; no session double counting."""
+    from .usage import WINDOWS
+    now = state.get('updated', 0)
+    if not isinstance(now, (int, float)) or not math.isfinite(now):return {}
+    finish = math.floor(now / 60) * 60 + 60
+    result = {}
+    for key, _, seconds in WINDOWS:
+        step = 900 if seconds > 18000 else 300 if seconds > 3600 else 60
+        start = finish - seconds
+        bins = [{} for _ in range(seconds // step)]
+        for event in state.get('events') or []:
+            t = event.get('t', 0)
+            if not isinstance(t, (int, float)) or not start <= t < finish or t > now:continue
+            values = [event.get(k, 0) for k in ('fresh', 'cached', 'written', 'output')]
+            if any(not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 for v in values):continue
+            kind = event.get('kind') or 'unknown'; total = sum(values)
+            bucket = bins[min(len(bins)-1, int((t-start)//step))]
+            bucket[kind] = bucket.get(kind, 0) + total
+        result[key] = {'step':step,'start':start,'end':finish,'as_of':now,
+                       'reported':state.get('events') is not None,'bins':bins}
+    return result
+
+
+def export_weekly(usage):
+    """Only numeric conversion evidence crosses the relay boundary."""
+    result = {}
+    for key, value in (usage.get('weekly_estimate') or {}).items():
+        if not isinstance(value, dict):continue
+        estimate = {k:value.get(k) for k in ('used_pp','partial','period_seconds','tokens','account_id')}
+        calibration = value.get('calibration')
+        if isinstance(calibration, dict):
+            estimate['calibration'] = {k:calibration.get(k) for k in
+                ('pp_per_token','confidence','from','to','valid_until','source')}
+        result[key] = estimate
+    return result
+
+
 def export_snapshot(state):
     sessions=[]
     for s in state.get('sessions',[]):
@@ -76,6 +114,9 @@ def export_snapshot(state):
             'status':s.get('display_status') or status,'tokens':s.get('tokens'),
             'context_usage':{k:s['context_usage'].get(k) for k in ('basis','input_tokens','capacity','parts','observed_at','model')} if isinstance(s.get('context_usage'),dict) else None,
             'rate':u.get('rate'),'windows':u.get('windows',{}),'cpu':r.get('cpu'),'rss':r.get('rss'),
+            'weekly_estimate':export_weekly(u),'weekly_account':u.get('weekly_account'),
+            'root_session_id':s.get('root_session_id',s['id']),
+            'parent_session_id':s.get('parent_session_id'),
             'capabilities':capabilities})
     host=state.get('system',{}).get('host',{});memory=host.get('memory',{})
     ops=state.get('operations',{})
@@ -83,11 +124,17 @@ def export_snapshot(state):
         'observed_events':len(ops.get('events',[])) if ops else None,
         'goals':[{k:g.get(k) for k in ('thread_id','runtime','status','tokens_used','time_used_seconds','session_connected','evidence')}
                  for g in ops.get('goals',[])], 'loop_state':'not_verified','skill_runtime':'partial'}
+    weekly = {a['id']:a for a in state.get('weekly_usage',{}).get('accounts',[])}
     return {'version':__version__,'updated':state.get('updated',0),'recording_started':state.get('started',0),
+        'flow':export_flow(state),
         'operations':operations,
         'account_quotas':[{'id':q['id'],'kind':q['kind'],'account_label':q['kind']+' · '+q['id'][-6:],
             'plan':q.get('plan',''),'windows':[{k:w.get(k) for k in ('label','pct','reset')} for w in q.get('windows',[])[:8]],
-            'updated':q.get('updated',0),'stale':q.get('stale',True),'note':q.get('note','')} for q in state.get('account_quotas',[])[:24]],
+            'updated':q.get('updated',0),'stale':q.get('stale',True),'note':q.get('note',''),
+            'weekly':{key:{k:value.get(k) for k in ('used_pp','observed_seconds','partial')}
+                      for key,value in weekly.get(q['id'],{}).get('periods',{}).items()},
+            'usage_points':weekly.get(q['id'],{}).get('usage_points',[])[-60:]}
+            for q in state.get('account_quotas',[])[:24]],
         'sessions':sessions,'applications':[{'name':a['name'],'evidence':a['evidence']} for a in state.get('applications',[])],'host':{'cpu':host.get('cpu'),'used_memory':memory.get('used',0),
         'total_memory':memory.get('total',0),'cores':host.get('cores',0)},
         'periods':[{k:w[k] for k in ('key','label','tokens','partial','observed_seconds')} for w in state.get('period_usage',{}).get('windows',[])]}

@@ -276,7 +276,18 @@ class TelemetryStore:
                 s['signals'].add(item['signal'])
                 if item['account_id']:
                     s['account_ids'].add(item['account_id'])
-                    s.setdefault('account_since', item['t'])
+                    # Metrics may re-export an old account's cumulative series.
+                    # Request/trace identities outrank those periodic counters.
+                    priority = 0 if item['signal'] == 'metrics' else 1
+                    previous_priority = s.get('identity_priority', -1)
+                    if priority >= previous_priority:
+                        at = s.get('identity_at', 0)
+                        if priority > previous_priority or item['t'] > at:
+                            if s.get('account_id') != item['account_id']:
+                                s['account_since'] = item['t']
+                            s.update(account_id=item['account_id'], identity_at=item['t'], identity_priority=priority)
+                        elif item['t'] == at and s.get('account_id') != item['account_id']:
+                            s['account_id'] = None  # Conflicting identities at the same instant.
                 for field in ('model', 'effort', 'parent_session_id', 'agent_id', 'parent_agent_id', 'duration_ms', 'ttft_ms'):
                     # Periodic counters can describe an OLD model; their export
                     # timestamp is not evidence that it is the current model.
@@ -293,7 +304,8 @@ class TelemetryStore:
             for s in sessions.values():
                 s['signals'] = sorted(s['signals'])
                 s['account_ids'] = sorted(s['account_ids'])
-                s['account_id'] = s['account_ids'][0] if len(s['account_ids']) == 1 else None
+                s.setdefault('account_id', None)
+                s.pop('identity_priority', None)
                 if not s['token_reports']:
                     s['tokens_24h'] = None
                 result.append(s)
@@ -315,9 +327,13 @@ def bind_account(spec, index, roots, now):
     starts at the actual observation, never rewrites earlier usage events.
     """
     report = index.get((spec.get('kind'), spec.get('id')))
-    if not report or now - report['last_seen'] > 300 or not report['account_ids']:
+    if not report or not report['account_ids']:
         return
     known = {v[0] for v in roots.values() if v[1] == spec['kind']}
+    # A session-scoped verified statusline can outlive the profile login that
+    # originally introduced the account. Do not discard the corroborating OTel ID.
+    if spec.get('account_binding_source') == 'claude_statusline_session' and spec.get('account_binding'):
+        known.add(spec['account_binding'][0])
     account = report['account_id']
     spec['account_binding'] = (account, report['account_since']) if account in known else None
     spec['account_binding_source'] = 'otel_session_identity'

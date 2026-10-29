@@ -78,7 +78,10 @@ class CustomTimeRanges(unittest.TestCase):
     def test_earlier_account_is_never_assigned_to_current_account(self):
         self.event(27*3600, 5, 'root', 'different-account')
         result = extend_snapshot(self.db, self.snapshot, 'custom:129600')
-        self.assertNotIn('custom:129600', result['sessions'][0]['usage'].get('weekly_estimate', {}))
+        estimate = result['sessions'][0]['usage']['weekly_estimate']['custom:129600']
+        self.assertEqual(estimate['used_pp'], .2)
+        self.assertTrue(estimate['partial'])
+        self.assertEqual(estimate['excluded_account_tokens'], 5)
         self.assertEqual(result['sessions'][0]['usage']['windows']['custom:129600'][0], 25)
 
     def test_aside_equivalent_and_grouping_survive_week_and_all_ranges(self):

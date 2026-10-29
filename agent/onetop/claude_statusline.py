@@ -111,6 +111,54 @@ def _capture_session(payload, root, session, directory, now):
     return _write_report(target/(key + '.json'), report)
 
 
+def session_binding(spec, directory=None, now=None):
+    """A session's last verified identity survives unrelated profile logins.
+
+    The callback's identity is session-scoped. A profile file describes the next
+    login and must not retroactively move idle or running sessions to it.
+    OTel's explicit session identity, when available, takes precedence later.
+    """
+    if spec.get('kind') != 'Claude' or not spec.get('config_dir'):
+        return None
+    root = Path(spec['config_dir']).expanduser().resolve()
+    sid = spec['id']
+    key = hashlib.sha256((str(root) + '|' + sid).encode()).hexdigest()
+    directory = Path(directory) if directory is not None else data_directory()/'claude-statusline'
+    report = _read_object(directory/(key+'.json'))
+    now = time.time() if now is None else now
+    if (report.get('schema') != 1 or report.get('session_id') != sid or
+            report.get('profile') != str(root) or report.get('verified_activity') is not True or
+            not _number(report.get('t')) or not 0 < report['t'] <= now or
+            not _literal(report.get('account_id'), 128)):
+        return None
+    since = report.get('account_since', report['t'])
+    return (report['account_id'], since if _number(since) and 0 < since <= now else report['t'])
+
+
+def _verified_switch(previous, payload, limits, account_id, directory, now):
+    """Accept a real in-session login only with new API work and a known reset.
+
+    A changed profile alone is insufficient. Match the newly reported weekly
+    cycle to a previously verified callback from the new account. An unmatched
+    switch remains unknown until explicit OTel identity or a new session.
+    """
+    work = (payload.get('cost') or {}).get('total_api_duration_ms')
+    old = previous.get('api_work_ms')
+    reset = (limits.get('seven_day') or {}).get('resets_at')
+    if not (_number(work) and _number(old) and work > old and _number(reset) and reset > now):
+        return False
+    prior_reset = (previous.get('rl', {}).get('seven_day') or {}).get('resets_at')
+    if _number(prior_reset) and abs(prior_reset-reset) <= 60:
+        return False
+    for path in directory.glob('*.json'):
+        known = _read_object(path)
+        known_reset = (known.get('rl', {}).get('seven_day') or {}).get('resets_at')
+        if (known.get('account_id') == account_id and known.get('verified_activity') is True and
+                _number(known_reset) and abs(known_reset-reset) <= 60):
+            return True
+    return False
+
+
 def capture(payload, profile=None, directory=None, now=None):
     """Write a bounded, allowlisted report, returning its path or None.
 
@@ -149,7 +197,22 @@ def capture(payload, profile=None, directory=None, now=None):
     if (previous.get('schema') == 1 and previous.get('profile') == str(root)
             and previous.get('session_id') == session
             and previous.get('account_id') != account_id):
-        return None  # Require a new session after switching this profile's login.
+        work = (payload.get('cost') or {}).get('total_api_duration_ms')
+        prior_work = previous.get('api_work_ms')
+        reset = (limits.get('seven_day') or {}).get('resets_at')
+        prior_reset = (previous.get('rl', {}).get('seven_day') or {}).get('resets_at')
+        continuing = (previous.get('verified_activity') is True and _number(work) and
+                      _number(prior_work) and work > prior_work and _number(reset) and
+                      reset > now and _number(prior_reset) and abs(reset-prior_reset) <= 60)
+        if continuing:
+            # Another terminal's login changes the shared profile on disk, but
+            # this process can keep its prior login. New work in its verified
+            # quota cycle remains attributed to that session's existing account.
+            account_id = previous['account_id']; plan = previous.get('plan', '')
+        elif _verified_switch(previous, payload, limits, account_id, directory, now):
+            previous = {}  # A real switch starts a new observation interval.
+        else:
+            return None
     # Only local observations generated for this exact account/session apply.
     same = (previous.get('schema') == 1 and previous.get('profile') == str(root)
             and previous.get('account_id') == account_id and previous.get('session_id') == session)
@@ -170,6 +233,7 @@ def capture(payload, profile=None, directory=None, now=None):
               't': now if changed else prior_t, 'observed_at': now,
               'profile': str(root), 'account_id': account_id,
               'session_id': session, 'plan': plan, 'rl': limits}
+    report['account_since'] = previous.get('account_since', prior_t) if same and valid_previous else now
     if work is not None or prior_work is not None:
         report['api_work_ms'] = max(v for v in (work, prior_work) if v is not None)
     # A concurrent account switch must not bind an old callback to a new account.

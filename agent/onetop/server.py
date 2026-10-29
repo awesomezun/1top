@@ -22,6 +22,7 @@ from .resources import ResourceSampler
 from .usage import session_usage, window_usage, WINDOWS
 from .time_ranges import parse_period, extend_snapshot
 from .session_order import ordered_snapshot
+from .history import HistoryStore, initialize_capture
 from . import weekly_usage
 from .discovery import inventory, context, applications, orca_executable, registry_status, claude_transcript
 from . import __version__
@@ -164,6 +165,10 @@ class Ledger:
         s = self.s
         t = epoch(d.get('timestamp'))
         p = d.get('payload') or {}
+        if d.get('cwd'):
+            s['cwd'] = d['cwd']
+        if d.get('type') in ('session_meta', 'turn_context') and p.get('cwd'):
+            s['cwd'] = p['cwd']
         if s['kind'] == 'Codex':
             if d.get('type') == 'turn_context':
                 if p.get('model') and p['model']!=s['model']:
@@ -275,6 +280,7 @@ class Collector:
         self.shared_roots = []
         self.session_metadata = {}
         self.telemetry = None
+        self.history = None
 
     def initialize(self):
         DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -288,6 +294,7 @@ class Collector:
                 fresh INTEGER, cached INTEGER, written INTEGER, output INTEGER);
             CREATE INDEX IF NOT EXISTS event_time ON events(t);''')
         weekly_usage.initialize(self.db)
+        initialize_capture(self.db)
         row = self.db.execute("SELECT value FROM meta WHERE key='started'").fetchone()
         self.started = float(row[0]) if row else time.time()
         self.db.execute("INSERT OR IGNORE INTO meta VALUES ('started',?)", (str(self.started),))
@@ -295,6 +302,7 @@ class Collector:
                         (str(max(self.started, time.time() - 86400)),))
         self.history_started = float(self.db.execute("SELECT value FROM meta WHERE key='history_started'").fetchone()[0])
         self.db.commit()
+        self.history = HistoryStore(DATA)
 
     def state_for_period(self, key):
         duration = parse_period(key)
@@ -549,14 +557,15 @@ class Collector:
                         f.seek(pos)
                         break
                     # Avoid decoding tool output / embedded images / user prompts.
-                    interesting = b'"usage"' in line or b'"token_count"' in line or b'"turn_context"' in line or b'"event_msg"' in line
+                    interesting = b'"usage"' in line or b'"token_count"' in line or b'"turn_context"' in line or b'"event_msg"' in line or b'"session_meta"' in line
                     if interesting:
                         try:
                             event = tracker.consume(json.loads(line))
                             if event and event[0]>=self.started:
                                 t,v=event
-                                self.db.execute('INSERT INTO events(t,sid,kind,fresh,cached,written,output,account) VALUES(?,?,?,?,?,?,?,?)',
-                                                (t,spec['id'],spec['kind'],*v,weekly_usage.event_account(spec,t)))
+                                self.db.execute('INSERT INTO events(t,sid,kind,fresh,cached,written,output,account,model,cwd) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                                                (t,spec['id'],spec['kind'],*v,weekly_usage.event_account(spec,t),
+                                                 s.get('model') or None,s.get('cwd') or spec.get('cwd')))
                         except (ValueError, TypeError, KeyError):
                             pass
                 s['offset'] = f.tell()
@@ -637,6 +646,11 @@ class Collector:
         for src in self.specs:
             s=dict(src)
             s['account_binding']=weekly_usage.account_for(s,roots)
+            from .claude_statusline import session_binding
+            captured_binding = session_binding(s, now=now)
+            if captured_binding:
+                s['account_binding'] = captured_binding
+                s['account_binding_source'] = 'claude_statusline_session'
             bind_account(s, telemetry_sessions, roots, now)
             s.update(tokens=None,model=s.get('configured_model',''),last_usage=0,loading=False)
             if s['path']:
@@ -672,6 +686,7 @@ class Collector:
         periods,session_periods=window_usage(self.db,now,self.started,
                                             (s['kind'] for s in sessions if s['tokens'] is not None))
         account_quotas=self.accounts.snapshot(now)
+        weekly_usage.restore_bound_claude_accounts(self.db,account_quotas,sessions,now)
         weekly_usage.restore_claude_last_report(self.db,account_quotas,now)
         weekly_usage.record(self.db,account_quotas,now)
         weekly,estimates=weekly_usage.snapshot(self.db,account_quotas,now,
@@ -707,6 +722,7 @@ class Collector:
     def loop(self):
         self.accounts.start()
         self.initialize()
+        self.history.start()
         while True:
             before=time.monotonic()
             try:self.collect()
@@ -819,6 +835,20 @@ class Handler(BaseHTTPRequestHandler):
         if host not in ('127.0.0.1','localhost'):
             self.send_error(403);return
         route=urlsplit(self.path).path
+        if route=='/api/history':
+            history=getattr(self.server.collector,'history',None)
+            if history is None:
+                self.json_response(503,{'ok':False,'message':'History collector is starting'});return
+            query=parse_qs(urlsplit(self.path).query)
+            with self.server.collector.lock:snapshot=self.server.collector.snapshot
+            try:
+                result=history.response(query.get('period',['1h'])[0],query.get('step',['60'])[0],
+                                        query.get('kind',[None])[0],snapshot)
+            except (ValueError,OverflowError):
+                self.json_response(400,{'ok':False,'message':'Invalid history period or step; maximum 400 bins'});return
+            except sqlite3.Error:
+                self.json_response(503,{'ok':False,'message':'History collector is starting'});return
+            self.json_response(200,result);return
         if route=='/api/state':
             period = parse_qs(urlsplit(self.path).query).get('period', [None])[0]
             if period is not None:
@@ -839,7 +869,7 @@ class Handler(BaseHTTPRequestHandler):
             self.json_response(200,telemetry.snapshot() if telemetry else {'ready':False});return
         elif route=='/api/updates':
             self.json_response(200,getattr(self.server,'updates',None).value if getattr(self.server,'updates',None) else {});return
-        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/ranges.js','/speed.js','/weekly.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js'):
+        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/ranges.js','/speed.js','/weekly.js','/history.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js'):
             name='index.html' if route=='/' else route[1:]
             data=(BASE/'dist'/name).read_bytes()
             mime={'html':'text/html','js':'application/javascript','css':'text/css','json':'application/json'}[name.rsplit('.',1)[1]]+'; charset=utf-8'

@@ -356,6 +356,44 @@ class WeeklyUsageTests(unittest.TestCase):
         result,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex','stale':True}],self.now)
         self.assertIsNone(result['accounts'][0]['calibration']);self.assertEqual(shares,{})
 
+    def test_explicit_switch_preserves_only_current_account_segment(self):
+        self.point(self.now-240,20);self.point(self.now-120,22)
+        self.event(self.now-180,'target',100)
+        self.event(self.now-500,'target',900,'old-account')
+        self.event(self.now-400,'target',50,None)
+        _,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex'}],self.now,
+                            bindings={'target':'a'},recording_started=self.now-86400)
+        value=shares['target']['1h']
+        self.assertEqual(value['tokens'],100);self.assertEqual(value['used_pp'],2)
+        self.assertEqual(value['excluded_account_tokens'],950);self.assertTrue(value['partial'])
+        self.assertEqual(value['inferred_account_tokens'],0)
+        self.assertEqual(self.db.execute("SELECT account FROM events WHERE fresh=900").fetchone()[0],'old-account')
+
+    def test_verified_old_session_keeps_quota_after_profile_is_removed(self):
+        self.db.execute('INSERT INTO weekly_samples VALUES(?,?,?,?,?)',
+                        ('old','Claude',self.now-120,30,self.now+86400))
+        quotas=[{'id':'new','kind':'Claude'}]
+        sessions=[{'id':'old-session','kind':'Claude','account_binding':('old',self.now-1000),
+                   'account_binding_source':'claude_statusline_session'}]
+        w.restore_bound_claude_accounts(self.db,quotas,sessions,self.now)
+        w.restore_bound_claude_accounts(self.db,quotas,sessions,self.now)
+        self.assertEqual(len(quotas),2)
+        self.assertEqual(quotas[1]['windows'][0]['pct'],30)
+        self.assertTrue(quotas[1]['stale']);self.assertEqual(quotas[1]['updated'],self.now-120)
+        self.assertEqual(quotas[1]['source'],'historical_provider_report')
+        w.record(self.db,quotas,self.now)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM weekly_samples').fetchone()[0],1)
+        expired=[];w.restore_bound_claude_accounts(self.db,expired,sessions,self.now+86401)
+        self.assertEqual(expired,[])
+        sessions[0]['config_dir']='/old-profile'
+        report={'updated':self.now-10,'verified_activity':True,'source':'claude_statusline',
+                'windows':[{'label':'주간','pct':31,'reset':self.now+86400}]}
+        with patch('onetop.accounts.claude_statusline_report',return_value=report):
+            w.restore_bound_claude_accounts(self.db,quotas,sessions,self.now)
+        self.assertFalse(quotas[1]['stale']);self.assertEqual(quotas[1]['windows'][0]['pct'],31)
+        w.record(self.db,quotas,self.now)
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM weekly_samples').fetchone()[0],2)
+
     def test_calibration_does_not_borrow_another_accounts_rate(self):
         self.point(self.now-240,20);self.point(self.now-120,22);self.event(self.now-180,'s',100)
         _,shares=w.snapshot(self.db,[{'id':'a','kind':'Codex'},{'id':'b','kind':'Codex'}],self.now,bindings={'s':'b'})

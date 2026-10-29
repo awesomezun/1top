@@ -66,6 +66,39 @@ def record(db, quotas, now):
     db.execute('DELETE FROM weekly_samples WHERE t<?',(now-RETENTION,))
 
 
+def restore_bound_claude_accounts(db, quotas, sessions, now):
+    """Keep a verified running session's old quota after its profile logs out."""
+    from .accounts import claude_statusline_report
+    known = {q['id']:q for q in quotas}
+    for session in sessions:
+        binding = session.get('account_binding')
+        if (session.get('kind') != 'Claude' or not binding or
+                session.get('account_binding_source') not in ('claude_statusline_session','otel_session_identity')):
+            continue
+        account = binding[0]
+        report = (claude_statusline_report(Path(session['config_dir']),account,now)
+                  if session.get('config_dir') else None)
+        quota = known.get(account)
+        if (report and report.get('verified_activity') is True and
+                (not quota or report['updated'] >= quota.get('updated',0))):
+            if quota is None:
+                quota={'id':account,'kind':'Claude','account_label':'Claude · '+account[-6:],'plan':''}
+                quotas.append(quota);known[account]=quota
+            quota.update(report,stale=now-report['updated']>FRESH,note='Claude Code 상태줄 보고')
+            continue
+        if quota is not None:continue
+        row = db.execute('''SELECT t,pct,reset FROM weekly_samples WHERE account=?
+            AND kind='Claude' AND t>=? AND t<=? ORDER BY t DESC LIMIT 1''',
+            (account,now-RETENTION,now)).fetchone()
+        if not row or not all(valid_number(v) for v in row) or not 0<=row[1]<=100 or row[2]<=now:
+            continue
+        quotas.append({'id':account,'kind':'Claude','account_label':'Claude · '+account[-6:],
+            'plan':'','updated':row[0],'stale':True,'status':'last_report',
+            'source':'historical_provider_report','note':'Claude Code 마지막 보고값',
+            'windows':[{'label':'주간','pct':row[1],'reset':row[2]}]})
+        known[account]=quotas[-1]
+
+
 def restore_claude_last_report(db, quotas, now):
     """Validate initial CLI reports and preserve verified Claude history as stale."""
     for quota in quotas:
@@ -261,8 +294,12 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
                           'observed_to':chunks[-1][1] if chunks else None,'sample_count':len(chunks)+1 if chunks else len(points)}
             if calibration:
                 for sid,bound_account in bindings.items():
-                    if bound_account!=account or (session_accounts[sid] and session_accounts[sid]!={account}):continue
-                    rows=[r for r in session_events[sid] if start<r[0]<=now and r[2]==quota['kind']]
+                    if bound_account!=account:continue
+                    period_rows=[r for r in session_events[sid] if start<r[0]<=now and r[2]==quota['kind']]
+                    # A real login switch does not erase the new account's measured
+                    # segment. Keep the previous account's tokens out of this quota.
+                    other_accounts=any(r[1] is not None and r[1]!=account for r in period_rows)
+                    rows=[r for r in period_rows if r[1]==account or (r[1] is None and not other_accounts)]
                     tokens=sum(r[3] for r in rows)
                     if not rows:continue
                     inferred_tokens=sum(r[3] for r in rows if r[1] is None)
@@ -270,7 +307,8 @@ def snapshot(db, quotas, now, bindings=None, recording_started=None):
                     if not math.isfinite(value):continue
                     shares[sid][key]={'used_pp':round(value,4),'account_id':account,
                                      'basis':'calibrated_token_equivalent','tokens':tokens,
-                                     'partial':(recording_started if recording_started is not None else now)>start,
+                                     'partial':other_accounts or (recording_started if recording_started is not None else now)>start,
+                                     'excluded_account_tokens':sum(r[3] for r in period_rows if r not in rows),
                                      'period_seconds':seconds,'calibration':calibration,
                                      'inferred_account_tokens':inferred_tokens}
         # Bound the chart independently of how long the collector has run.
