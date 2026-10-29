@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node tests/weekly.mjs && node tests/maps.mjs && node tests/relay-settings.mjs && node tests/session-groups.mjs && node tests/dashboard-gauges.mjs && node tests/ranges.mjs && node tests/speed.mjs && node tests/history.mjs && node tests/conversation.mjs && node tests/remote-adapter.mjs && node tests/quick-view.mjs && node site/scripts/check-zh.mjs
+      - run: node tests/weekly.mjs && node tests/maps.mjs && node tests/relay-settings.mjs && node tests/session-groups.mjs && node tests/dashboard-gauges.mjs && node tests/ranges.mjs && node tests/speed.mjs && node tests/history.mjs && node tests/conversation.mjs && node tests/remote-adapter.mjs && node tests/demo-usage.mjs && node tests/quick-view.mjs && node site/scripts/check-zh.mjs
       - run: npm ci --legacy-peer-deps && npm test && npm run check
         working-directory: cloud
       - run: npm ci && npm run build

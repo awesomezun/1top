@@ -1,5 +1,6 @@
 import type {Device,Flow,Quota,Session,Vector,WindowKey} from './types';
 import type {Mail} from './thread';
+import {usage,since,bins,vector,type Stream} from './demo-usage';
 type T=(en:string,ko:string)=>string;
 
 // Two made-up computers for trying the app without an account. No real projects or accounts.
@@ -7,63 +8,88 @@ type T=(en:string,ko:string)=>string;
 // and conversation, so both phones show the same thing. Names follow the chosen language.
 const CONTROLS=['focus','pause','resume','terminate','prompt','message','mailbox','message_images'];
 const PERIODS:[WindowKey,number][]=[['10m',600],['30m',1800],['1h',3600],['5h',18000],['12h',43200],['24h',86400]];
-const SHARE:Record<WindowKey,number>={'10m':.21,'30m':.55,'1h':1,'5h':3.6,'12h':7.4,'24h':12.8};
 /** The message of the first conversation that carries two photos, shown as sent pictures. */
 export const PHOTO_MESSAGE='00000000-0000-4000-8000-000000000002';
+/** When this demo began: the hours around it never rest, and sessions stopped before it stay stopped. */
+const ANCHOR=Date.now()/1000;
+// Weekly limit percent per token, by tool.
+const PER:Record<string,number>={Codex:1.1e-7,Claude:3.2e-8};
 
-const vector=(total:number):Vector=>[total*.01,total*.92,total*.04,total*.03];
-function session(id:string,kind:string,model:string,project:string,terminal:string,status:string,hour:number,account:string|null,capabilities=CONTROLS):Session{
- const windows=Object.fromEntries(PERIODS.map(([k])=>[k,vector(hour*SHARE[k])])) as Record<WindowKey,Vector>;
- const per=kind==='Codex'?1.1e-7:3.2e-8;
- const estimate=account?Object.fromEntries(PERIODS.map(([k])=>[k,{used_pp:windows[k].reduce((a,b)=>a+b,0)*per,partial:false,account_id:account,calibration:{pp_per_token:per,confidence:'stable'}}])):null;
- return {id,control_key:'demo',kind,app:kind==='Codex'?'Orca':'Terminal',terminal,project,title:'',model,status,tokens:vector(hour*40),rate:status==='working'?hour/3600:0,
-  windows,cpu:status==='working'?12.4:.3,rss:410,capabilities,weekly_account:account,weekly_estimate:estimate};
+/** [id, kind, model, project, terminal (en, ko), status, weight, account, capabilities]. weight is the
+ *  session's usual share of its computer; the iPhone's DemoData.swift lists the same rows. */
+export const DEMO_ROWS:[string,string,string,string,string,string,string,number,string|null,string[]][]=[
+ ['d1','Claude','claude-opus-5-5','storefront','Checkout redesign','결제 화면 개편','working',52,'demo:claude-a',CONTROLS],
+ ['d2','Codex','gpt-6-astra','api-gateway','Rate limit tests','요청 제한 테스트','working',12,'demo:codex-a',CONTROLS],
+ ['d3','Claude','claude-opus-5-5','docs-site','Better docs search','문서 검색 개선','working',13,'demo:claude-b',CONTROLS],
+ ['d4','Codex','gpt-6.1-sol','ml-pipeline','Training data cleanup','학습 데이터 정리','waiting',4,'demo:codex-b',CONTROLS],
+ // An older computer's session: instructions only, no reply reader.
+ ['d5','GLM','glm-5.3[1m]','storefront','Translation review','번역 검수','idle',3,null,['focus','prompt']],
+ // Working, since a request is only answered by a working session (contract v1.1.0).
+ ['d6','Claude','claude-sonnet-5-5','mobile-app','Notification settings','알림 설정 화면','working',6,'demo:claude-a',CONTROLS],
+ ['d7','Codex','gpt-6-astra','infra','Deploy script','배포 스크립트','paused',2,'demo:codex-a',CONTROLS],
+ ['d8','Claude','claude-opus-5-5','design-system','Design token cleanup','토큰 정리','idle',0,'demo:claude-b',CONTROLS],
+ ['m1','Codex','gpt-6.1-sol','data-sync','Nightly sync','야간 동기화','working',8,'demo:codex-b',CONTROLS],
+ ['m2','Claude','claude-sonnet-5-5','billing','Invoice template','청구서 템플릿','idle',3,'demo:claude-a',CONTROLS],
+];
+/** The demo computers: id, rows by id prefix, hash seed, the median tokens of an active minute and how
+ *  often the computer works next to the main one. */
+const COMPUTERS=[{id:'demo-mac',prefix:'d',seed:23,scale:1.2e6,duty:1},{id:'demo-mini',prefix:'m',seed:61,scale:.25e6,duty:.3}];
+// One person's computers rest together.
+const REST=7;
+
+// When a session takes part in its computer's work: working ones all along, the others until a while
+// before the demo began (demo-usage.ts shapes the minutes).
+function stream(status:string,weight:number,index:number):Stream{
+ const start=index%4===3?ANCHOR-(5+index%7)*3600:ANCHOR-30*3600;
+ const stop=status==='waiting'?ANCHOR-(2+index%4)*60:status==='paused'?ANCHOR-12*60:status==='idle'?ANCHOR-(40+index*37%180)*60:Infinity;
+ return {weight,start,stop};
 }
-const weekly=(perHour:number)=>Object.fromEntries(PERIODS.map(([k,s])=>[k,{used_pp:perHour*s/3600,observed_seconds:s,partial:false}]));
-const points=(from:number,to:number,reset:number,now:number)=>Array.from({length:24},(_,i)=>[now-(23-i)*3600,from+(to-from)*i/23+(i%5===0?.4:0),reset]);
-function flow(claudeRate:number,codexRate:number,now:number){
- return Object.fromEntries(PERIODS.map(([k,seconds])=>{const step=seconds<=3600?60:seconds<=18000?300:900,count=Math.floor(seconds/step);
-  return [k,{step,start:now-seconds,end:now,reported:true,bins:Array.from({length:count},(_,i)=>{const wave=.55+.45*Math.sin(i/4.3)*Math.cos(i/11),busy=i%17<3?.25:1,scale=step/60;
-   return {Claude:claudeRate*scale*Math.max(.05,wave)*busy,Codex:codexRate*scale*Math.max(.05,1-wave*.6)};})} as Flow];}));
+
+function machine(c:typeof COMPUTERS[number],now:number){
+ const rows=DEMO_ROWS.map((row,i)=>({row,i})).filter(({row})=>row[0].startsWith(c.prefix));
+ const streams=rows.map(({row,i})=>stream(row[6],row[7],i));
+ // Tokens from a day before the demo began until it began, fixed, so totals only grow.
+ const u=usage(c.seed,c.scale,streams,now,ANCHOR,REST,c.duty),before=usage(c.seed,c.scale,streams,ANCHOR,ANCHOR,REST,c.duty);
+ return {rows,u,before};
 }
 
 export function demoDevices(t:T=(en)=>en):Device[]{
- const now=Date.now()/1000;
- // Two accounts per tool, numbered 1 and 2 the way the desktop dashboard numbers them; one has a name
- // given in the desktop app.
- const studio=[
-  session('d1','Claude','claude-opus-5-5','storefront',t('Checkout redesign','결제 화면 개편'),'working',52_400_000,'demo:claude-a'),
-  session('d2','Codex','gpt-6-astra','api-gateway',t('Rate limit tests','요청 제한 테스트'),'working',31_800_000,'demo:codex-a'),
-  session('d3','Claude','claude-opus-5-5','docs-site',t('Better docs search','문서 검색 개선'),'working',12_900_000,'demo:claude-b'),
-  session('d4','Codex','gpt-6.1-sol','ml-pipeline',t('Training data cleanup','학습 데이터 정리'),'waiting',9_600_000,'demo:codex-b'),
-  // An older computer's session: instructions only, no reply reader.
-  session('d5','GLM','glm-5.3[1m]','storefront',t('Translation review','번역 검수'),'idle',4_100_000,null,['focus','prompt']),
-  // Working, since a request is only answered by a working session (contract v1.1.0).
-  session('d6','Claude','claude-sonnet-5-5','mobile-app',t('Notification settings','알림 설정 화면'),'working',2_700_000,'demo:claude-a'),
-  session('d7','Codex','gpt-6-astra','infra',t('Deploy script','배포 스크립트'),'paused',1_200_000,'demo:codex-a'),
-  session('d8','Claude','claude-opus-5-5','design-system',t('Design token cleanup','토큰 정리'),'idle',0,'demo:claude-b'),
- ];
- const mini=[
-  session('m1','Codex','gpt-6.1-sol','data-sync',t('Nightly sync','야간 동기화'),'working',8_400_000,'demo:codex-b'),
-  session('m2','Claude','claude-sonnet-5-5','billing',t('Invoice template','청구서 템플릿'),'idle',1_900_000,'demo:claude-a'),
- ];
- const claudeA:Quota={id:'demo:claude-a',kind:'Claude',account_label:'Claude · 4f21a8',plan:'max',updated:now-40,stale:false,
-  windows:[{key:'5h',label:'5H',pct:38,reset:now+9_400},{key:'7d',label:'주간',pct:27,reset:now+290_000}],weekly:weekly(4.2),usage_points:points(21.5,27,now+290_000,now)};
- const claudeB:Quota={id:'demo:claude-b',kind:'Claude',account_label:'Claude · b7e3c1',plan:'pro',updated:now-70,stale:false,alias:'Team',
-  windows:[{key:'5h',label:'5H',pct:12,reset:now+14_200},{key:'7d',label:'주간',pct:46,reset:now+350_000}],weekly:weekly(1.4),usage_points:points(43,46,now+350_000,now)};
- const codexA:Quota={id:'demo:codex-a',kind:'Codex',account_label:'Codex · 9c03e2',plan:'pro',updated:now-55,stale:false,
-  windows:[{key:'7d',label:'주간',pct:23,reset:now+410_000}],weekly:weekly(2.1),usage_points:points(19.5,23,now+410_000,now)};
+ const now=Date.now()/1000,machines=COMPUTERS.map(c=>({c,...machine(c,now)}));
+ const sessions=machines.map(({rows,u,before})=>rows.map(({row:[id,kind,model,project,en,ko,status,weight,account,capabilities]},j):Session=>{
+  const windows=Object.fromEntries(PERIODS.map(([k,seconds])=>[k,vector(since(u,j,now-seconds))])) as Record<WindowKey,Vector>;
+  const per=PER[kind]??PER.Claude,lastMinute=u.minutes[j][u.minutes[j].length-2];
+  const estimate=account?Object.fromEntries(PERIODS.map(([k])=>[k,{used_pp:windows[k].reduce((a,b)=>a+b,0)*per,partial:false,account_id:account,calibration:{pp_per_token:per,confidence:'stable'}}])):null;
+  return {id,control_key:'demo',kind,app:kind==='Codex'?'Orca':'Terminal',terminal:t(en,ko),project,title:'',model,status,
+   tokens:vector(weight*4e7+since(before,j,ANCHOR-86400)+since(u,j,ANCHOR)),rate:status==='working'?since(u,j,now-600)/600:0,
+   windows,cpu:status==='working'?Math.round((1.5+Math.min(30,lastMinute/4e4))*10)/10:.3,rss:410,capabilities,weekly_account:account,weekly_estimate:estimate};
+ }));
+ // An account's tokens since a moment, over both computers.
+ const used=(account:string,from:number)=>machines.reduce((n,{rows,u})=>n+rows.reduce((k,{row},j)=>k+(row[8]===account?since(u,j,from):0),0),0);
+ // weekly and five are the limits when the demo began; they rise with the tokens used since.
+ const quota=(id:string,kind:string,label:string,plan:string,weekly:number,weeklyReset:number,five:number|null,fiveReset:number,updated:number,extra:Partial<Quota>={}):Quota=>{
+  const per=PER[kind],pct=weekly+used(id,ANCHOR)*per,reset=now+weeklyReset;
+  return {id,kind,account_label:label,plan,updated,stale:false,...extra,
+   windows:[...(five===null?[]:[{key:'5h',label:'5H',pct:Math.min(100,five+used(id,ANCHOR)*per*4),reset:now+fiveReset}]),{key:'7d',label:'주간',pct,reset}],
+   weekly:Object.fromEntries(PERIODS.map(([k,s])=>[k,{used_pp:used(id,now-s)*per,observed_seconds:s,partial:false}])),
+   usage_points:Array.from({length:24},(_,i)=>{const at=now-(23-i)*3600;return [at,Math.max(0,pct-used(id,at)*per),reset];})};
+ };
+ const claudeA=quota('demo:claude-a','Claude','Claude · 4f21a8','max',27,290_000,38,9_400,now-40);
+ const claudeB=quota('demo:claude-b','Claude','Claude · b7e3c1','pro',46,350_000,12,14_200,now-70,{alias:'Team'});
+ const codexA=quota('demo:codex-a','Codex','Codex · 9c03e2','pro',23,410_000,null,0,now-55);
  // A limit the computer could not refresh: it shows how old it is instead of a rate.
- const codexB:Quota={id:'demo:codex-b',kind:'Codex',account_label:'Codex · 2d5f90',plan:'plus',updated:now-38*60,stale:true,
-  windows:[{key:'7d',label:'주간',pct:64,reset:now+220_000}],weekly:weekly(.9),usage_points:points(61,64,now+220_000,now)};
- const received=now*1000;
+ const codexB=quota('demo:codex-b','Codex','Codex · 2d5f90','plus',64,220_000,null,0,now-38*60,{stale:true});
+ const flow=(m:typeof machines[number])=>Object.fromEntries(PERIODS.map(([k,seconds])=>{const step=seconds<=3600?60:seconds<=18000?300:900;
+  return [k,{step,...bins(m.u,m.rows.map(({row})=>row[1]),now,seconds,step),reported:true} as Flow];}));
+ // The host is as busy as its last minute of tokens.
+ const busy=(m:typeof machines[number])=>Math.min(1,m.u.minutes.reduce((n,row)=>n+row[row.length-2],0)/(m.c.scale*3));
+ const received=now*1000,[mac,mini]=machines;
  return [
-  {id:'demo-mac',name:t('Demo Mac Studio','데모 Mac Studio'),platform:'macOS',online:true,received:received-2000,snapshot:{version:'4.0.0',updated:now,sessions:studio,
-   host:{cpu:31.5,used_memory:61.4e9,total_memory:128e9,cores:16},account_quotas:[claudeA,claudeB,codexA],flow:flow(1_150_000,520_000,now),
+  {id:'demo-mac',name:t('Demo Mac Studio','데모 Mac Studio'),platform:'macOS',online:true,received:received-2000,snapshot:{version:'4.0.0',updated:now,sessions:sessions[0],
+   host:{cpu:Math.round((8+48*busy(mac))*10)/10,used_memory:61.4e9,total_memory:128e9,cores:16},account_quotas:[claudeA,claudeB,codexA],flow:flow(mac),
    operations:{installed_skills:18,observed_events:7,goals:[{runtime:'Codex',status:'active',tokens_used:1_240_000,session_connected:true}]}}},
   // Paired without remote control, so its sessions show usage only.
-  {id:'demo-mini',name:t('Demo Mac mini','데모 Mac mini'),platform:'macOS',online:true,allow_control:false,received:received-4000,snapshot:{version:'4.0.0',updated:now-3,sessions:mini,
-   host:{cpu:12.2,used_memory:9.8e9,total_memory:24e9,cores:10},account_quotas:[codexB,claudeA],flow:flow(40_000,120_000,now),
+  {id:'demo-mini',name:t('Demo Mac mini','데모 Mac mini'),platform:'macOS',online:true,allow_control:false,received:received-4000,snapshot:{version:'4.0.0',updated:now-3,sessions:sessions[1],
+   host:{cpu:Math.round((4+48*busy(mini))*10)/10,used_memory:9.8e9,total_memory:24e9,cores:10},account_quotas:[codexB,claudeA],flow:flow(mini),
    operations:{installed_skills:6,observed_events:2,goals:[]}}},
  ];
 }
