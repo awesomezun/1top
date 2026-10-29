@@ -44,6 +44,10 @@ struct Session: Codable, Identifiable, Hashable, Sendable {
     var cpu: Double?
     var rss: Double?
     var capabilities: [String]?
+    var weeklyAccount: String?
+    var weeklyEstimate: [String: WeeklyEstimate]?
+    var rootSessionId: String?
+    var parentSessionId: String?
 
     func tokens(in period: Period) -> Double? {
         guard let vector = windows?[period.rawValue] ?? nil, !vector.isEmpty,
@@ -64,6 +68,36 @@ struct Session: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+/// A session's selected-period tokens converted to its account's weekly limit (percentage points).
+struct WeeklyEstimate: Codable, Hashable, Sendable {
+    struct Calibration: Codable, Hashable, Sendable { var ppPerToken: Double?; var confidence: String? }
+    var usedPp: Double?
+    var partial: Bool?
+    var accountId: String?
+    var calibration: Calibration?
+}
+
+/// An account's weekly-limit change over a period, as the provider reported it.
+struct WeeklyPeriod: Codable, Hashable, Sendable {
+    var usedPp: Double?
+    var observedSeconds: Double?
+    var partial: Bool?
+    /// Percentage points per hour over the observed part, once at least two minutes are observed.
+    var burnPerHour: Double? {
+        guard let usedPp, let observedSeconds, usedPp.isFinite, usedPp >= 0, observedSeconds >= 120 else { return nil }
+        return usedPp / observedSeconds * 3600
+    }
+}
+
+/// Token bins over a period, oldest first, by tool.
+struct FlowSeries: Codable, Hashable, Sendable {
+    var step: Double
+    var start: Double?
+    var end: Double?
+    var reported: Bool?
+    var bins: [[String: Double]]
+}
+
 struct QuotaWindow: Codable, Hashable, Sendable {
     var key: String?
     var label: String
@@ -80,9 +114,16 @@ struct Quota: Codable, Identifiable, Hashable, Sendable {
     var stale: Bool
     var note: String?
     var windows: [QuotaWindow]
-    var weekly: QuotaWindow? { windows.first { $0.label == "주간" || $0.key == "7d" || $0.key == "weekly" } }
+    var weekly: [String: WeeklyPeriod]?
+    /// [time, weekly %, reset] report points, newest last.
+    var usagePoints: [[Double]]?
+    var weeklyWindow: QuotaWindow? { windows.first { $0.label == "주간" || $0.key == "7d" || $0.key == "weekly" } }
     var fiveHour: QuotaWindow? { windows.first { $0.label == "5H" || $0.key == "5h" } }
-    var handle: String { accountLabel.split(separator: "@").first.map(String.init) ?? accountLabel }
+    /// The relay masks accounts as "Claude · 4f21a8"; the tool is already the tile title, so keep the tag.
+    var handle: String {
+        if let tag = accountLabel.components(separatedBy: " · ").last, accountLabel.contains(" · ") { return tag }
+        return accountLabel.split(separator: "@").first.map(String.init) ?? accountLabel
+    }
 }
 
 struct Host: Codable, Hashable, Sendable {
@@ -110,6 +151,7 @@ struct DeviceSnapshot: Codable, Hashable, Sendable {
     var host: Host?
     var accountQuotas: [Quota]?
     var periods: [PeriodTotal]?
+    var flow: [String: FlowSeries]?
 }
 
 struct Device: Codable, Identifiable, Hashable, Sendable {
