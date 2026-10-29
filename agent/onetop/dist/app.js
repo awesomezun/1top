@@ -642,6 +642,20 @@ function sessionWeeklyCell(s,pv,period){
  const estimated=OneTopWeekly.valid(e?.used_pp),value=estimated?OneTopWeekly.estimate(e):fmt(total(pv))+(pv?' tokens':'');
  return `<strong title="${esc(label+'\n'+OneTopWeekly.explanation+'\n'+OneTopWeekly.basis(e))}">${value}</strong>`;
 }
+// One explicit click asks macOS once for an account's saved sign-in; the server may wait up to two
+// minutes for that answer, so every reconnect button stays off until it returns. Never retried on its own.
+let authorizing=null;const authorizeNotes={};
+function reconnectMarkup(q){return `<div class="weekly-reconnect"><button type="button" data-account-authorize="${esc(q.id)}"${authorizing?' disabled':''}>${authorizing===q.id?'macOS 승인 기다리는 중…':'다시 연결'}</button><small>${esc(authorizeNotes[q.id]||'macOS가 저장된 로그인 사용을 한 번 묻습니다. 다시 묻지 않습니다.')}</small></div>`;}
+$('weeklyOverview').addEventListener('click',async e=>{
+ const b=e.target.closest('[data-account-authorize]');if(!b||authorizing)return;
+ const id=b.dataset.accountAuthorize;authorizing=id;renderWeekly();
+ try{
+  if(!data?.action_token||!data.ready)throw Error('수집기 연결을 확인한 뒤 다시 시도해 주세요.');
+  const r=await fetch('/api/accounts/authorize',{method:'POST',headers:{'Content-Type':'application/json','X-Monitor-Token':data.action_token},body:JSON.stringify({account_id:id}),signal:AbortSignal.timeout(125000)});
+  const result=await r.json().catch(()=>({}));authorizeNotes[id]=result.message||(r.ok?'연결했습니다.':'연결하지 못했습니다.');
+ }catch(error){authorizeNotes[id]=error.name==='TimeoutError'?'승인 응답을 확인하지 못했습니다. 계정 상태가 바뀌었는지 먼저 확인해 주세요.':error.message;}
+ finally{authorizing=null;renderWeekly();}
+});
 function renderWeekly(){
  $('summary').hidden=false;$('weeklyOverview').hidden=false;
  document.querySelectorAll('[data-unit]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.unit===usageUnit)));
@@ -652,7 +666,7 @@ function renderWeekly(){
   const current=valid&&!q.stale,delta=OneTopWeekly.valid(p?.used_pp),status=current?'제공자 보고':RECONNECT.has(q.status)?'재연결 필요':q.updated?reportAge(q.updated):'확인 필요';
   const rate=OneTopWeekly.accountBurn(p,q),rateKnown=OneTopWeekly.valid(rate);
   const rateNote=rateKnown?`최근 ${periodLabel}${p.partial?' 중 관측된 구간만 계산':''} · ${OneTopWeekly.duration(p.observed_seconds)} 관측에서 +${OneTopWeekly.number(p.used_pp)}%\n한도 증가량 ÷ 실제 관측 시간으로 계산한 평균입니다. 주간 한도 100%를 기준으로 한 시간당 소진 비율이며, 미래 소진량 예측이 아닙니다.`:'최소 2분의 유효한 한도 관측과 최신 계정 보고가 필요합니다.';
-  return `<article class="weekly-card ${current?'':'is-stale'}" style="--quota-color:${colors[q.kind]||'#8d9ba8'}"><div class="weekly-card-heading"><b>${dot(q.kind)}${esc(kindName(q.kind))}</b><span>${esc(q.plan||'')} · ${status}</span></div><p class="weekly-account" title="${esc(q.account_label)}">${esc(q.account_label)}</p><div class="weekly-value"><strong>${valid?OneTopWeekly.percent(n):'—'}</strong><span>/ 100% 사용</span><b>${current?OneTopWeekly.percent(Math.max(0,100-n))+' 남음':''}</b></div><div class="track"><i style="width:${valid?Math.min(100,n):0}%;background:var(--quota-color)"></i></div><div class="weekly-period"><span>${periodCaption()}</span><strong>${delta?'+'+OneTopWeekly.number(p.used_pp)+'%':q.stale?'조회 필요':'다음 보고 대기'}</strong><span title="${esc(rateNote)}">${rateKnown?'평균 '+OneTopWeekly.burn(rate):delta?'소진 속도 확인 중':'한도 변화 기록 중'}</span></div><div class="weekly-chart" data-weekly-chart="${esc(q.id)}"></div><p class="weekly-note">${q.stale?esc(q.note):w?.reset?new Date(w.reset*1000).toLocaleString(OneTopI18n.locale(),{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화 · '+ago(q.updated)+' 확인':'주간 한도 확인 중'}</p></article>`;
+  return `<article class="weekly-card ${current?'':'is-stale'}" style="--quota-color:${colors[q.kind]||'#8d9ba8'}"><div class="weekly-card-heading"><b>${dot(q.kind)}${esc(kindName(q.kind))}</b><span>${esc(q.plan||'')} · ${status}</span></div><p class="weekly-account" title="${esc(q.account_label)}">${esc(q.account_label)}</p><div class="weekly-value"><strong>${valid?OneTopWeekly.percent(n):'—'}</strong><span>/ 100% 사용</span><b>${current?OneTopWeekly.percent(Math.max(0,100-n))+' 남음':''}</b></div><div class="track"><i style="width:${valid?Math.min(100,n):0}%;background:var(--quota-color)"></i></div><div class="weekly-period"><span>${periodCaption()}</span><strong>${delta?'+'+OneTopWeekly.number(p.used_pp)+'%':q.stale?'조회 필요':'다음 보고 대기'}</strong><span title="${esc(rateNote)}">${rateKnown?'평균 '+OneTopWeekly.burn(rate):delta?'소진 속도 확인 중':'한도 변화 기록 중'}</span></div><div class="weekly-chart" data-weekly-chart="${esc(q.id)}"></div><p class="weekly-note">${q.stale?esc(q.note):w?.reset?new Date(w.reset*1000).toLocaleString(OneTopI18n.locale(),{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화 · '+ago(q.updated)+' 확인':'주간 한도 확인 중'}</p>${q.stale&&RECONNECT.has(q.status)?reconnectMarkup(q):''}</article>`;
  }).join('')||'<div class="empty">계정을 연결하면 제공자가 보고한 주간 사용률이 표시됩니다. 아래 계정 한도에서 계정을 추가하세요.</div>';
  drawWeeklyCharts();
 }

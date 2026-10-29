@@ -347,6 +347,8 @@ final class DashboardModel: ObservableObject {
     @Published var busy = false
     @Published var message: String?
     @Published var messageIsError = false
+    /// The account whose one-time sign-in approval is in flight; macOS may wait up to two minutes for it.
+    @Published var authorizing: String?
     @Published var openAtLogin = false
     @Published var now = Date()
     let baseURL: URL
@@ -442,6 +444,28 @@ final class DashboardModel: ObservableObject {
         }.resume()
     }
     func stop() { task?.cancel(); session.invalidateAndCancel() }
+    /// One explicit click asks macOS once for this account's saved sign-in. Never retried on its own.
+    func authorizeAccount(_ id: String) {
+        guard fresh, !busy, authorizing == nil, let token = snapshot?.action_token else { return }
+        authorizing = id
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/accounts/authorize"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")), forHTTPHeaderField: "Origin")
+        request.setValue(token, forHTTPHeaderField: "X-Monitor-Token")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["account_id": id])
+        request.timeoutInterval = 125
+        session.dataTask(with: request) { [weak self] data, response, _ in
+            let value = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.authorizing = nil
+                self.messageIsError = (response as? HTTPURLResponse)?.statusCode != 200
+                self.message = value?["message"] as? String ?? "연결 결과를 확인하지 못했습니다. 계정 상태가 바뀌었는지 먼저 확인해 주세요."
+                self.refresh()
+            }
+        }.resume()
+    }
     func addAccount(_ kind: String) {
         guard fresh, !busy, let token = snapshot?.action_token else { return }
         busy = true
@@ -467,6 +491,8 @@ struct AccountQuota: Decodable, Identifiable {
     var id: String; var kind: String; var account_label: String; var plan: String?
     var windows: [Window]; var updated: Double; var stale: Bool; var note: String
     var status: String?
+    /// The limit cannot refresh until this account is connected again.
+    var needsReconnect: Bool { stale && ["login_required", "login_expired", "credential_store_unavailable", "access_denied"].contains(status ?? "") }
     var statusLabel: String {
         if !stale { return "확인됨" }
         switch status {
