@@ -572,15 +572,10 @@ dialog h2{font-size:var(--type-heading);font-weight:650}
 .rail #views .nav,.rail #views .nav[data-view=sessions]{min-height:31px;padding:0 10px 0 18px;column-gap:9px;grid-template-columns:15px minmax(0,1fr);font-size:var(--type-body)}
 .rail #views .nav .nav-icon,.rail #views .nav[data-view=sessions] .nav-icon,.rail #views .nav-icon svg{width:15px;height:15px}
 .rail #providers .provider-nav,.rail #hostApps .provider-nav{min-height:28px;padding:0 10px 0 18px;font-size:var(--type-label)}
-/* One language button with a short menu instead of three side-by-side choices. */
-.pref-language{position:relative}
-.language-button{display:inline-flex;align-items:center;justify-content:center;gap:5px;width:54px;height:32px;padding:0 8px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel);color:var(--ink);font-size:var(--type-label);font-weight:600}
-.language-button span{color:var(--dim);font-size:9px}
-.language-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:40;display:grid;gap:2px;min-width:128px;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:0 12px 32px rgba(0,0,0,.28)}
-.language-menu[hidden]{display:none}
-.language-menu button{height:30px;padding:0 10px;border:0;border-radius:6px;background:none;color:var(--muted);font-size:var(--type-label);text-align:left}
-.language-menu button:hover{background:var(--hover);color:var(--ink)}
-.language-menu button[aria-checked=true]{background:var(--raised);color:var(--ink);font-weight:600}
+/* One language button that moves to the next language on each tap, like the theme switch. A fixed
+   width keeps the header still while the mark changes between 한, EN and 中. */
+.language-button{display:inline-flex;align-items:center;justify-content:center;width:40px;height:32px;padding:0;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel);color:var(--ink);font-size:var(--type-label);font-weight:600}
+.language-button:hover{border-color:var(--muted)}
 /* Session conversation (conversation.js): the phone's conversation screen in the desktop tokens. Messages to
    the session sit on the right in the accent tint, replies on the left; the composer stays in view. */
 .conversation{margin:4px 0 22px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding-top:14px}

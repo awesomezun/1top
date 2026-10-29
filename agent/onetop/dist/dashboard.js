@@ -32,17 +32,17 @@ window.OneTopDashboard=(()=>{
  const queueDraw=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{hooks.layout?.();applyWidths();drawGauges();});};
  function move(array,from,to){const a=array.indexOf(from),b=array.indexOf(to);if(a<0||b<0||a===b)return;array.splice(a,1);array.splice(b,0,from);}
  const LANGS=[['ko','한','한국어'],['en','EN','English'],['zh','中','中文']];
- // Close the language menu on any outside click or Escape.
- document.addEventListener('click',e=>{const menu=document.querySelector('.language-menu');if(menu&&!menu.hidden&&!e.target.closest('.pref-language')){menu.hidden=true;document.querySelector('[data-language-menu]')?.setAttribute('aria-expanded','false');}});
- document.addEventListener('keydown',e=>{const menu=document.querySelector('.language-menu');if(e.key==='Escape'&&menu&&!menu.hidden){menu.hidden=true;const b=document.querySelector('[data-language-menu]');b?.setAttribute('aria-expanded','false');b?.focus();}});
+ // The language the newest tap asked for, so quick taps keep moving forward before the page has switched.
+ let langTarget=null;
  function prefs(){
   const toolbar=document.getElementById('dashboardPreferences');if(!toolbar)return;
-  toolbar.innerHTML=`<button class="theme-switch" type="button" aria-label="${t(state.theme==='dark'?'화이트 모드':'다크 모드')}" title="${t(state.theme==='dark'?'화이트 모드':'다크 모드')}" data-theme-switch>${state.theme==='dark'?'☀':'☾'}</button><div class="pref-language"><button class="language-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="${t('언어')}: ${LANGS.find(l=>l[0]===state.lang)?.[2]||'한국어'}" data-language-menu lang="${state.lang}" data-user-content>${LANGS.find(l=>l[0]===state.lang)?.[1]||'한'}<span aria-hidden="true">▾</span></button><div class="language-menu" role="menu" hidden>${LANGS.map(([v,,n])=>`<button type="button" role="menuitemradio" data-language="${v}" lang="${v}" aria-checked="${state.lang===v}" data-user-content>${n}</button>`).join('')}</div></div><button class="edit-dashboard" type="button" aria-pressed="${editing}" id="editDashboard">${editing?'Done':'Edit'}</button>`;
+  const at=Math.max(0,LANGS.findIndex(l=>l[0]===state.lang)),[,mark,name]=LANGS[at],next=LANGS[(at+1)%LANGS.length];
+  toolbar.innerHTML=`<button class="theme-switch" type="button" aria-label="${t(state.theme==='dark'?'화이트 모드':'다크 모드')}" title="${t(state.theme==='dark'?'화이트 모드':'다크 모드')}" data-theme-switch>${state.theme==='dark'?'☀':'☾'}</button><button class="language-button" type="button" aria-label="${t('언어')}: ${name} → ${next[2]}" title="${t('언어')}: ${name} → ${next[2]}" data-language-switch lang="${state.lang}" data-user-content>${mark}</button><button class="edit-dashboard" type="button" aria-pressed="${editing}" id="editDashboard">${editing?'Done':'Edit'}</button>`;
   toolbar.querySelector('[data-theme-switch]').onclick=e=>window.OneTopEffects.reveal(e.currentTarget,()=>{state.theme=state.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=state.theme;document.documentElement.style.colorScheme=state.theme;save();prefs();hooks.layout?.();drawGauges();});
-  // One language button: it opens a short menu, and the change spreads from the button itself.
-  const langButton=toolbar.querySelector('[data-language-menu]'),langMenu=toolbar.querySelector('.language-menu');
-  langButton.onclick=e=>{e.stopPropagation();const open=langMenu.hidden;langMenu.hidden=!open;langButton.setAttribute('aria-expanded',String(open));if(open)langMenu.querySelector('[aria-checked=true]')?.focus();};
-  toolbar.querySelectorAll('[data-language]').forEach(b=>b.onclick=()=>{const next=b.dataset.language;langMenu.hidden=true;langButton.setAttribute('aria-expanded','false');if(next===state.lang&&!window.OneTopEffects.running)return;window.OneTopEffects.reveal(langButton,()=>{state.lang=next;save();window.OneTopI18n.setLanguage(state.lang);prefs();hooks.refresh?.();afterTable();},next);});
+  // One language button, like the theme switch: each tap moves to the next language (한 → EN → 中),
+  // and the change spreads from the button itself. No menu.
+  toolbar.querySelector('[data-language-switch]').onclick=e=>{const from=Math.max(0,LANGS.findIndex(l=>l[0]===(langTarget||state.lang))),to=LANGS[(from+1)%LANGS.length][0];langTarget=to;
+   window.OneTopEffects.reveal(e.currentTarget,()=>{state.lang=to;if(langTarget===to)langTarget=null;save();window.OneTopI18n.setLanguage(state.lang);prefs();hooks.refresh?.();afterTable();},to);};
   document.getElementById('editDashboard').onclick=()=>{editing=!editing;document.getElementById('dashboardGrid').classList.toggle('editing',editing);prefs();queueDraw();};
  }
  function panelSetup(){

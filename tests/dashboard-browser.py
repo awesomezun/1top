@@ -14,10 +14,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
 
 
+LANG_ORDER = ['ko', 'en', 'zh']
+
+
 def pick_language(page,lang):
-    # One language button opens a short menu; pick the language from it.
-    page.locator('[data-language-menu]').click()
-    page.locator(f'[data-language="{lang}"]').click()
+    # One language button moves to the next language on each tap (한 → EN → 中); tap until the target.
+    now = page.locator('[data-language-switch]').get_attribute('lang')
+    for _ in range((LANG_ORDER.index(lang) - LANG_ORDER.index(now)) % len(LANG_ORDER)):
+        page.wait_for_function('!document.documentElement.dataset.preferenceTransition')
+        page.locator('[data-language-switch]').click()
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / 'agent/onetop/dist'
@@ -301,7 +306,7 @@ try:
         assert_range_geometry()
         assert abs(page.locator('[data-theme-switch]').bounding_box()['x']-pref_x)<1
         pick_language(page,'ko');finish_transition();assert page.locator('#pageTitle').inner_text()=='대시보드'
-        page.evaluate("for(const lang of ['en','zh','ko'])document.querySelector('[data-language='+lang+']').click()")
+        page.evaluate("for(let i=0;i<3;i++)document.querySelector('[data-language-switch]').click()")
         finish_transition();assert page.locator('#pageTitle').inner_text()=='대시보드'
         assert page.locator('canvas[style*="onetop-matrix"]').count()==0
         page.emulate_media(reduced_motion='reduce')
