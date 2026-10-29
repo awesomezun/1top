@@ -16,7 +16,7 @@ const context=vm.createContext({
  document:{getElementById:id=>nodes[id]||null,querySelectorAll:()=>[],querySelector:()=>null,addEventListener(){}},
  window:{addEventListener(){}},fetch:()=>new Promise(()=>{}),setInterval(){},setTimeout(){},clearTimeout(){},
  AbortSignal,URL,Date,OneTopWeekly:weekly,OneTopRanges:ranges,OneTopSpeed:speed,
- OneTopDashboard:{init(){},afterTable(){},rateCell:(rate)=>JSON.stringify({rate}),interacting:false,validPeriod:()=>true,state:{period:'1h'},rememberPeriod(){}},
+ OneTopDashboard:{init(){},afterTable(){},rateCell:(rate)=>JSON.stringify({rate}),interacting:false,validPeriod:()=>true,state:{period:'1h',collapsed:{idle:false,other:false}},rememberPeriod(){}},
  OneTopI18n:{locale:()=> 'ko-KR',t:s=>s,language:'ko'}
 });
 vm.runInContext(source,context);
@@ -91,31 +91,29 @@ vm.runInContext(`
 `,context);
 nodes.sort.value='period';nodes.stateFilter.value='all';
 vm.runInContext('renderTable()',context);
-assert.deepEqual(rowIDs(),['a','b']); // Selected-period cumulative usage, not the instantaneous rate.
+assert.deepEqual(rowIDs(),['a','b']); // Selected-period tokens, not lifetime, percent or burn rate.
 vm.runInContext(`data.sessions[1].usage.windows['1h']=[500,0,0,0];renderTable();`,context);
-assert.deepEqual(rowIDs(),['a','b']);
-assert.match(nodes.sessionsBody.innerHTML,/<strong>500<\/strong>/); // Values remain live while rank is frozen.
-rankingClock+=59000;
-vm.runInContext('renderTable()',context);
-assert.deepEqual(rowIDs(),['a','b']);
-rankingClock+=1000;
-vm.runInContext('renderTable()',context);
-assert.deepEqual(rowIDs(),['b','a']);
+assert.deepEqual(rowIDs(),['b','a']); // Usage updates reorder immediately.
+assert.match(nodes.sessionsBody.innerHTML,/<strong>500<\/strong>/);
 vm.runInContext(`data.sessions[0].usage.windows['30m']=[1000,0,0,0];selectedPeriod='30m';renderTable();`,context);
-assert.deepEqual(rowIDs(),['a','b']); // A period change takes effect immediately.
+assert.deepEqual(rowIDs(),['a','b']);
 vm.runInContext(`data.sessions.push(ranked('new',2000,2000,0));renderTable();`,context);
-assert.deepEqual(rowIDs(),['a','b','new']); // A new high-usage root does not reshuffle the current ranking.
+assert.deepEqual(rowIDs(),['new','a','b']);
 vm.runInContext(`data.sessions=data.sessions.filter(s=>s.id!=='a');data.root_sessions=data.sessions;renderTable();`,context);
-assert.deepEqual(rowIDs(),['b','new']);
-nodes.sort.value='rate';
-vm.runInContext('renderTable()',context);
-assert.deepEqual(rowIDs(),['b','new']);
-nodes.sort.value='period';
-vm.runInContext('renderTable()',context);
-assert.deepEqual(rowIDs(),['new','b']); // Explicit sorting recalculates without waiting a minute.
+assert.deepEqual(rowIDs(),['new','b']);
+nodes.sort.value='rate';vm.runInContext('renderTable()',context);
+assert.deepEqual(rowIDs(),['b','new']); // Explicit alternate sorts still work within the working group.
+nodes.sort.value='period';vm.runInContext('renderTable()',context);
+assert.deepEqual(rowIDs(),['new','b']);
+// Every non-working session shares one usage order: states never split it into bands.
+vm.runInContext(`
+ data.sessions=[ranked('w',10,10,0),{...ranked('idle-big',900,0,0),status:'idle'},{...ranked('waiting-mid',500,0,0),status:'waiting'},{...ranked('paused-small',100,0,0),status:'idle',display_status:'paused'},{...ranked('parent',5,0,0),status:'idle',children_working:1}];
+ data.root_sessions=data.sessions;selectedPeriod='1h';OneTopDashboard.state.collapsed={};renderTable();`,context);
+assert.deepEqual(rowIDs(),['w','parent','idle-big','waiting-mid','paused-small']);
+assert.equal((nodes.sessionsBody.innerHTML.match(/class="group-row /g)||[]).length,2);
 const sortOptions=/<select id="sort"[^>]*>(.*?)<\/select>/.exec(html)[1];
 assert.match(sortOptions,/^<option value="period">/);
-console.log('Session ordering: selected-period default, live values, 60-second ranks and immediate period/sort changes.');
+console.log('Session ordering: selected-period tokens, immediate usage/period changes, insertion and removal.');
 
 const allIDs=[...html.matchAll(/\bid="([^"]+)"/g)].map(([,id])=>id);
 assert.equal(new Set(allIDs).size,allIDs.length);
@@ -168,19 +166,20 @@ vm.runInContext(`
  data.sessions=[idleHeavy,idleOther,activeCodex,activeClaude,activeChild];data.root_sessions=data.sessions;
  renderTable();
 `,context);
-assert.deepEqual(rowIDs(),['idle-other','idle-heavy','active-claude','child-active-group','active-codex']);
+assert.deepEqual(rowIDs(),['active-claude','child-active-group','active-codex','idle-other','idle-heavy']);
 vm.runInContext(`activeCodex.usage.windows['1h']=[999,0,0,0];renderTable();`,context);
-assert.deepEqual(rowIDs(),['idle-other','idle-heavy','active-claude','child-active-group','active-codex']);
+assert.deepEqual(rowIDs(),['active-codex','active-claude','child-active-group','idle-other','idle-heavy']);
 vm.runInContext(`idleHeavy.status='working';renderTable();`,context);
-assert.deepEqual(rowIDs(),['idle-other','idle-heavy','active-claude','child-active-group','active-codex']);
+assert.deepEqual(rowIDs(),['idle-heavy','active-codex','active-claude','child-active-group','idle-other']);
 vm.runInContext(`activeClaude.status='idle';renderTable();`,context);
-assert.deepEqual(rowIDs(),['idle-other','idle-heavy','active-claude','child-active-group','active-codex']);
-rankingClock+=60000;
-vm.runInContext('renderTable()',context);
-assert.deepEqual(rowIDs(),['idle-other','idle-heavy','active-codex','active-claude','child-active-group']);
+assert.deepEqual(rowIDs(),['idle-heavy','active-codex','child-active-group','idle-other','active-claude']);
+assert.match(nodes.sessionsBody.innerHTML,/<tr[^>]*data-session="active-claude"[^>]*data-group-of="rest"/);
 vm.runInContext(`selectedPeriod='30m';renderTable();`,context);
-assert.deepEqual(rowIDs(),['idle-other','idle-heavy','child-active-group','active-codex','active-claude']);
-console.log('Default ordering: selected-period usage across all statuses; status changes preserve stable 60-second ranks.');
+assert.deepEqual(rowIDs(),['idle-heavy','child-active-group','active-codex','idle-other','active-claude']);
+vm.runInContext(`activeChild.children_working=0;renderTable();`,context);
+assert.deepEqual(rowIDs(),['idle-heavy','active-codex','idle-other','child-active-group','active-claude']);
+console.log('Working roots first, including working children; status changes move bands immediately and each band follows selected-period tokens.');
+
 
 vm.runInContext(`
  selectedPeriod='1h';usageUnit='weekly';
@@ -254,7 +253,7 @@ assert.match(css,/\.range-toolbar\{[^}]*justify-content:flex-start/);
 console.log('Actual clicks: provider/host tags toggle off, other filters persist, child groups stay collapsed by default and retain explicit toggles across polls.');
 
 vm.runInContext(`
- provider='all';selectedPeriod='1h';sessionOrder={key:null,at:0,ids:[]};expandedSessions.clear();
+ provider='all';selectedPeriod='1h';expandedSessions.clear();
  const tagClaude={...ranked('tag-claude',300,1000,0),kind:'Claude',location:{app:'Zed'}};
  const tagCodex={...ranked('tag-codex',200,30,0),kind:'Codex',orca_terminal:{title:'Test'}};
  const tagOtherCodex={...ranked('tag-codex-2',100,20,0),kind:'Codex',location:{app:'Terminal'}};
@@ -265,20 +264,20 @@ vm.runInContext(`
 `,context);
 const providerTags=()=>[...nodes.providers.innerHTML.matchAll(/data-provider="([^"]+)"/g)].map(([,kind])=>kind);
 const appTags=()=>[...nodes.hostApps.innerHTML.matchAll(/data-app-filter="([^"]+)"/g)].map(([,app])=>app);
-assert.deepEqual(providerTags(),['GLM','Claude','Codex']); // Neither count-descending nor backend arrival order.
-assert.deepEqual(appTags(),['Aside','Zed','Orca','Terminal']);
+assert.deepEqual(providerTags(),['Claude','Codex','GLM']); // Same working-first order as the table.
+assert.deepEqual(appTags(),['Zed','Orca','Terminal','Aside']);
 assert.match(nodes.providers.innerHTML,/data-provider="Codex"[^>]*>[\s\S]*?<small>2<\/small>/);
 vm.runInContext(`tagCodex.usage.windows['1h']=[5000,0,0,0];render();`,context);
-assert.deepEqual(providerTags(),['GLM','Claude','Codex']); // Same frozen rank as the table.
+assert.deepEqual(providerTags(),['Codex','Claude','GLM']); // Same immediate order as the table.
 rankingClock+=60000;vm.runInContext('render()',context);
-assert.deepEqual(providerTags(),['GLM','Codex','Claude']);
+assert.deepEqual(providerTags(),['Codex','Claude','GLM']);
 vm.runInContext(`selectedPeriod='30m';render();`,context);
-assert.deepEqual(providerTags(),['GLM','Claude','Codex']);
-assert.deepEqual(appTags(),['Aside','Zed','Orca','Terminal']);
+assert.deepEqual(providerTags(),['Claude','Codex','GLM']);
+assert.deepEqual(appTags(),['Zed','Orca','Terminal','Aside']);
 assert.match(html,/<img class="brand-mark" src="\/brand-mark_v1\.1\.0\.png"/);
 assert.deepEqual(fs.readFileSync(new URL('../agent/onetop/dist/brand-mark_v1.1.0.png',import.meta.url)),fs.readFileSync(new URL('../site/public/brand/v1.1.0/mark.png',import.meta.url)));
 assert.match(css,/\.session-summary \.summary-mini-track\{position:absolute;/);
-console.log('Sidebar follows actual stable root order and period changes; canonical logo and compact absolute-positioned summary bars preserved.');
+console.log('Sidebar follows actual working-first root order and period changes; canonical logo and compact absolute-positioned summary bars preserved.');
 
 const flow=(events,minutes,updated=3600)=>{context.flowEvents=events;context.flowMinutes=minutes;context.flowUpdated=updated;return JSON.parse(vm.runInContext('JSON.stringify(tokenFlowData(flowEvents,flowMinutes,flowUpdated))',context));};
 const flowFixture=[{t:3060,kind:'Codex',n:200},{t:3060,kind:'Claude',n:100},{t:3659,kind:' Zeta ',n:20},{t:3659,kind:'Alpha',n:10},{t:3659,kind:' ',n:5},{t:3660,kind:'GLM',n:900},{t:3059,kind:'Aside',n:700},{t:3060,kind:'Bad',n:NaN}];

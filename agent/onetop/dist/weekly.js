@@ -2,7 +2,7 @@
 (function(root){
  'use strict';
  const valid=n=>typeof n==='number'&&Number.isFinite(n)&&n>=0;
- const number=n=>!valid(n)?'—':n>0&&n<.01?'<0.01':Number(n.toFixed(2)).toLocaleString('ko-KR');
+ const number=n=>!valid(n)?'—':n>0&&n<.1?'<0.1':Number(n.toFixed(1)).toLocaleString('ko-KR');
  const percent=n=>number(n)+(valid(n)?'%':'');
  const estimate=e=>valid(e?.used_pp)?'≈'+percent(e.used_pp):'측정 중';
  const weekly=q=>q?.windows?.find(w=>w.label==='주간');

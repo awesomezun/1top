@@ -139,6 +139,8 @@ struct WeeklyUsage: Decodable {
         var id: String; var periods: [String: Period]
         var history: [[Double]]?
         var flow: [[Double]]?
+        // [time, weekly %, reset]: reconciled report points; preferred over history like the dashboard.
+        var usage_points: [[Double]]?
     }
     struct Period: Decodable {
         var used_pp: Double?; var partial: Bool; var observed_seconds: Double
@@ -351,9 +353,6 @@ final class DashboardModel: ObservableObject {
     private let session: URLSession
     private var fetching = false
     private var task: URLSessionDataTask?
-    private var sessionSortAmounts: [String: Double] = [:]
-    private var sessionSortUpdated: Double?
-    private var sessionSortPeriod: String?
     var onUpdate: (() -> Void)?
     init(baseURL: URL) {
         self.baseURL = baseURL
@@ -376,25 +375,19 @@ final class DashboardModel: ObservableObject {
         return DesktopFormat.total(window?.tokens)
     }
     var sortedSessions: [DesktopSession] {
-        let rows = sessions, timestamp = now.timeIntervalSince1970
-        // Hold period usage ranks for one minute; status changes do not reorder.
-        if sessionSortPeriod != selectedPeriod || sessionSortUpdated == nil ||
-            timestamp - (sessionSortUpdated ?? timestamp) >= 60 || timestamp < (sessionSortUpdated ?? timestamp) {
-            sessionSortAmounts = [:]; sessionSortPeriod = selectedPeriod; sessionSortUpdated = timestamp
-        }
-        let ids = Set(rows.map(\.id))
-        sessionSortAmounts = sessionSortAmounts.filter { ids.contains($0.key) }
-        for row in rows where sessionSortAmounts[row.id] == nil {
+        // Recompute from the selected period; do not retain stale status or usage ranks.
+        func amount(_ row: DesktopSession) -> Double {
             let values = row.usage?.windows?[selectedPeriod] ?? nil
             let amount = values.flatMap { values -> Double? in
                 guard !values.isEmpty, values.allSatisfy({ $0.isFinite && $0 >= 0 }) else { return nil }
                 let total = values.reduce(0, +)
                 return total.isFinite ? total : nil
             }
-            sessionSortAmounts[row.id] = amount ?? -1
+            return amount ?? -1
         }
-        return rows.sorted {
-            let ar = sessionSortAmounts[$0.id] ?? -1, br = sessionSortAmounts[$1.id] ?? -1
+        return sessions.sorted {
+            if $0.isWorkingGroup != $1.isWorkingGroup { return $0.isWorkingGroup }
+            let ar = amount($0), br = amount($1)
             if ar != br { return ar > br }
             return $0.id < $1.id
         }

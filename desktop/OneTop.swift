@@ -2,6 +2,28 @@ import AppKit
 import SwiftUI
 import WebKit
 
+// One zoom for the whole app: the dashboard window's page zoom and the quick view's sizes.
+// UI tests keep it in memory so they never change the saved setting.
+final class AppZoom: ObservableObject {
+    static let range = 0.8...1.6
+    @Published private(set) var value: Double
+    var onChange: (() -> Void)?
+    private let persist: Bool
+    init(persist: Bool) {
+        self.persist = persist
+        let saved = persist ? UserDefaults.standard.double(forKey: "dashboardZoom") : 0
+        value = saved == 0 ? 1 : min(Self.range.upperBound, max(Self.range.lowerBound, saved))
+    }
+    // Tenths only, so repeated steps land on 0.8, 0.9 … 1.6.
+    func set(_ next: Double) {
+        let clamped = min(Self.range.upperBound, max(Self.range.lowerBound, (next * 10).rounded() / 10))
+        guard clamped != value else { return }
+        value = clamped
+        if persist { UserDefaults.standard.set(clamped, forKey: "dashboardZoom") }
+        onChange?()
+    }
+}
+
 @main
 final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, NSToolbarDelegate {
     static func main() {
@@ -14,6 +36,8 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
     let dataDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/1top")
     let loginAgent = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents/si.1top.companion.plist")
     let testing = CommandLine.arguments.contains("--ui-test")
+    lazy var zoom = AppZoom(persist: !testing)
+    var popoverScreen: NSScreen?
     lazy var model: DashboardModel = {
         // Test fixtures never run the collector or control real sessions.
         let value = testing ? ProcessInfo.processInfo.environment["ONETOP_UI_TEST_PORT"] : nil
@@ -35,12 +59,16 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         model.openAtLogin = FileManager.default.fileExists(atPath: loginAgent.path)
         popover = NSPopover(); popover.behavior = .transient; popover.animates = true
         popover.appearance = NSAppearance(named: .darkAqua)
-        popover.contentViewController = NSHostingController(rootView: QuickDashboard(
-            model: model, openDashboard: { [weak self] in self?.showDashboard() },
+        let quick = NSHostingController(rootView: QuickDashboard(
+            model: model, zoom: zoom, openDashboard: { [weak self] in self?.showDashboard() },
             openBrowser: { [weak self] in self?.openBrowser() }, remoteOptions: { [weak self] in self?.remoteDashboard() },
             connectRemote: { [weak self] in self?.connectDialog() }, toggleLogin: { [weak self] in self?.toggleLogin() },
             restart: { [weak self] in self?.launch(pair: false) }, quit: { NSApp.terminate(nil) },
             control: { [weak self] action, session in self?.control(action, session: session) }))
+        // The popover size comes from the zoom and the screen, not from the SwiftUI content.
+        quick.sizingOptions = []
+        popover.contentViewController = quick
+        zoom.onChange = { [weak self] in self?.zoomChanged() }
         model.onUpdate = { [weak self] in self?.updated() }
         if !testing { launch(pair: false) }
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -111,16 +139,23 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
     func showPopover() {
         guard let button = statusItem.button else { return }
         let point = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(point) } ?? button.window?.screen ?? NSScreen.main
+        popoverScreen = NSScreen.screens.first { $0.frame.contains(point) } ?? button.window?.screen ?? NSScreen.main
         model.refresh(); NSApp.activate(ignoringOtherApps: true)
-        popover.contentSize = QuickDashboard.panelSize
+        popover.contentSize = quickPanelSize()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
-        // SwiftUI resolves its intrinsic height after presentation. AppKit can otherwise
-        // anchor that resized popover above the menu bar on vertically stacked displays.
+        placePopover(near: point)
+    }
+    func quickPanelSize() -> NSSize {
+        QuickDashboard.panelSize(zoom: zoom.value, room: (popoverScreen ?? NSScreen.main).map { $0.visibleFrame.height - 16 } ?? .greatestFiniteMagnitude)
+    }
+    // AppKit can anchor a resized popover above the menu bar on vertically stacked displays,
+    // so keep it below the status item and on the screen it opened on.
+    func placePopover(near point: NSPoint) {
+        guard let button = statusItem.button else { return }
         for delay in [0.0, 0.12, 0.35] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                guard let self, self.popover.isShown, let panel = self.popover.contentViewController?.view.window, let screen else { return }
+                guard let self, self.popover.isShown, let panel = self.popover.contentViewController?.view.window, let screen = self.popoverScreen else { return }
                 let visible = screen.visibleFrame.insetBy(dx: 8, dy: 8)
                 let anchor = button.window?.convertToScreen(button.convert(button.bounds, to: nil))
                 var frame = panel.frame
@@ -151,8 +186,7 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         // No privileged native bridge. The renderer uses the existing guarded HTTP controls.
         let web = WKWebView(frame: .zero, configuration: config); web.navigationDelegate = self; web.uiDelegate = self
         web.underPageBackgroundColor = w.backgroundColor; web.translatesAutoresizingMaskIntoConstraints = false
-        let zoom = testing ? 1 : UserDefaults.standard.double(forKey: "dashboardZoom")
-        web.pageZoom = zoom == 0 ? 1 : min(1.6, max(0.8, zoom))
+        web.pageZoom = zoom.value
         w.contentView!.addSubview(web)
         NSLayoutConstraint.activate([web.leadingAnchor.constraint(equalTo: w.contentView!.leadingAnchor), web.trailingAnchor.constraint(equalTo: w.contentView!.trailingAnchor), web.topAnchor.constraint(equalTo: w.contentView!.topAnchor), web.bottomAnchor.constraint(equalTo: w.contentView!.bottomAnchor)])
         let label = NSTextField(wrappingLabelWithString: "이 Mac의 대시보드를 여는 중…")
@@ -174,9 +208,14 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
     @objc func openBrowser() { NSWorkspace.shared.open(model.baseURL) }
     func remoteDashboard() { NSWorkspace.shared.open(URL(string: "https://1top.si/app")!) }
     @objc func closeDashboard() { window?.performClose(nil) }
-    @objc func zoomIn() { changeZoom(0.1) }; @objc func zoomOut() { changeZoom(-0.1) }
-    @objc func resetZoom() { webView?.pageZoom = 1; if !testing { UserDefaults.standard.set(1, forKey: "dashboardZoom") } }
-    func changeZoom(_ delta: Double) { guard let webView else { return }; webView.pageZoom = min(1.6, max(0.8, webView.pageZoom + delta)); if !testing { UserDefaults.standard.set(webView.pageZoom, forKey: "dashboardZoom") } }
+    // 보기 › 확대·축소 works from the dashboard window and from the quick view alike.
+    @objc func zoomIn() { zoom.set(zoom.value + 0.1) }; @objc func zoomOut() { zoom.set(zoom.value - 0.1) }
+    @objc func resetZoom() { zoom.set(1) }
+    func zoomChanged() {
+        webView?.pageZoom = zoom.value
+        guard popover.isShown else { return }
+        popover.contentSize = quickPanelSize(); placePopover(near: NSEvent.mouseLocation)
+    }
     func windowWillClose(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         webView?.navigationDelegate = nil; webView?.stopLoading()
