@@ -98,7 +98,8 @@ try:
         assert page.locator('#views [data-view=maps] span').inner_text()=='사용량 맵'
         menu_x=page.locator('#views button>span').evaluate_all('(xs)=>xs.map(x=>x.getBoundingClientRect().x)')
         assert max(menu_x)-min(menu_x)<1,menu_x
-        assert page.locator('#views [data-view=sessions]').evaluate('(e)=>getComputedStyle(e).fontWeight')=='650'
+        assert page.locator('#views .nav.active').evaluate('(e)=>getComputedStyle(e).fontWeight')=='600'
+        assert page.locator('#views .nav:not(.active)').first.evaluate('(e)=>getComputedStyle(e).fontWeight')=='500'
         assert page.locator('.session-actions [data-action]').count()>0
         assert page.locator('#sessionsBody td[data-column="memory"]').all_text_contents()
         assert all('%' in v or v.strip()=='—' for v in page.locator('#sessionsBody td[data-column="memory"]').all_text_contents())
@@ -115,18 +116,18 @@ try:
         checks.append('all session burn cells retain percent per hour; measured idle is zero and missing data keeps the unit')
         assert page.locator('#fleetSpeed').is_visible()
         assert page.locator('#fleetSpeedValue').inner_text()!='—'
-        assert page.locator('#fleetSpeedBand').evaluate('(c)=>c.tagName')=='CANVAS'
+        assert page.locator('#fleetSpeedBand').evaluate('(c)=>c.tagName.toLowerCase()')=='svg'
         assert page.locator('#fleetSpeedUnit').inner_text()=='tokens/시간'
         assert page.locator('#fleetSpeedTotal').count()==0
         assert page.locator('#fleetSpeedBand').evaluate('(c)=>Math.abs(Number(c.getAttribute("aria-valuenow"))-OneTopSpeed.measure(data,selectedPeriod).rate*3600)<.001')
-        assert page.locator('#fleetSpeedBand').evaluate('(c)=>c.getContext("2d").getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0)')
+        assert page.locator('#fleetSpeedBand').evaluate('(c)=>c.querySelectorAll(".fs-off").length>30&&c.querySelectorAll(".fs-digit polygon").length>0')
         assert page.locator('#fleetSpeedTitle').inner_text()=='토큰 사용 속도'
         assert page.locator('#sessionsView .range-toolbar').evaluate('(e)=>e.getBoundingClientRect().left>document.querySelector("#fleetSpeed").getBoundingClientRect().right')
-        geometry=page.locator('.cockpit-overview').evaluate('(e)=>{const a=e.querySelector("#fleetSpeed").getBoundingClientRect(),b=e.querySelector("#cockpitSummary").getBoundingClientRect();return {square:Math.abs(a.width-a.height),aligned:Math.abs(a.top-b.top)+Math.abs(a.bottom-b.bottom)}}')
-        assert geometry['square']<2 and geometry['aligned']<2,geometry
+        geometry=page.locator('.cockpit-overview').evaluate('(e)=>{const a=e.querySelector("#fleetSpeed").getBoundingClientRect(),b=e.querySelector("#cockpitSummary").getBoundingClientRect();return {ratio:Math.max(a.width,a.height)/Math.min(a.width,a.height),aligned:Math.abs(a.top-b.top)+Math.abs(a.bottom-b.bottom)}}')
+        assert geometry['ratio']<1.25 and geometry['aligned']<2,geometry
         assert page.locator('#sessionsView .range-toolbar').bounding_box()['height']<=75
-        assert page.locator('#fleetSpeed').bounding_box()['width']<=261
-        checks.append('Boost square instrument at left, duration and resource/account rows aligned at right')
+        assert page.locator('#fleetSpeed').bounding_box()['width']<=300
+        checks.append('near-square segment instrument at left, duration and resource/account rows aligned at right')
         page.screenshot(path=str(ROOT/'build/boost-preview-v3.26.2.png'),full_page=False)
         assert page.locator('#sessionsView .range-buttons').evaluate('(e)=>getComputedStyle(e).borderTopWidth==="0px"')
         before_speed=page.locator('#fleetSpeedValue').inner_text()
@@ -303,7 +304,8 @@ try:
         page.locator('[data-language="ko"]').click()
         page.emulate_media(reduced_motion='no-preference')
         checks.append('circular theme reveal, rendered matrix language ring, rapid picks and reduced motion')
-        assert page.locator('.brand-wordmark').evaluate('(e)=>getComputedStyle(e).color')=='rgb(25, 38, 43)'
+        # The wordmark follows the theme's ink colour rather than a fixed value.
+        assert page.locator('.brand-wordmark').evaluate('(e)=>{const probe=document.createElement("i");probe.style.color="var(--ink)";document.body.append(probe);const ink=getComputedStyle(probe).color;probe.remove();return getComputedStyle(e).color===ink}')
         checks.append('light, dark, Korean, English and Chinese')
         rename=page.locator('[data-rename]').first
         if rename.count():

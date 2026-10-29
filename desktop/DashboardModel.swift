@@ -139,6 +139,8 @@ struct WeeklyUsage: Decodable {
         var id: String; var periods: [String: Period]
         var history: [[Double]]?
         var flow: [[Double]]?
+        // [time, weekly %, reset]: reconciled report points; preferred over history like the dashboard.
+        var usage_points: [[Double]]?
     }
     struct Period: Decodable {
         var used_pp: Double?; var partial: Bool; var observed_seconds: Double

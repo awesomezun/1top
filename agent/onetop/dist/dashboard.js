@@ -3,7 +3,8 @@ window.OneTopDashboard=(()=>{
  'use strict';
  const key='onetop.dashboard.v1',ids=['session','model','status','period','total','rate','cpu','memory','controls'];
  const defaults={session:210,model:145,status:85,period:110,total:95,rate:120,cpu:65,memory:75,controls:155};
- const minima={session:120,model:100,status:75,period:95,total:85,rate:120,cpu:65,memory:75,controls:150};
+ // The narrowest each column can be without cutting its header, a product name or a control.
+ const minima={session:130,model:140,status:80,period:105,total:95,rate:115,cpu:58,memory:64,controls:110};
  const panels=['speed','summary','flow','map','sessions','shared'];
  const state={theme:'dark',lang:'ko',period:'1h',columns:[...ids],widths:{...defaults},panels:[...panels],spans:{summary:9,speed:3,flow:6,map:6,sessions:12,shared:12},heights:{}};
  let hooks={},editing=false,dragging=false,frame,initialized=false;
@@ -16,6 +17,8 @@ window.OneTopDashboard=(()=>{
   if(validPeriod(saved.period))state.period=saved.period;
   if(saved.rangeScale==='fixed-v1')state.rangeScale=saved.rangeScale;
   if(saved.cockpit==='boost-v1')state.cockpit=saved.cockpit;
+  if(['sweep','scope'].includes(saved.instrument))state.instrument=saved.instrument;
+  if(saved.collapsed&&typeof saved.collapsed==='object')state.collapsed=Object.fromEntries(Object.entries(saved.collapsed).filter(([k,v])=>['working','waiting','paused','idle','other'].includes(k)&&typeof v==='boolean'));
   if(Number.isFinite(saved.instrumentWidth))state.instrumentWidth=Math.max(200,Math.min(600,saved.instrumentWidth));
   for(const id of ids)if(Number.isFinite(saved.widths?.[id]))state.widths[id]=Math.max(minima[id],Math.min(700,saved.widths[id]));
   for(const id of panels){if(Number.isInteger(saved.spans?.[id]))state.spans[id]=Math.max(id==='summary'?6:3,Math.min(12,saved.spans[id]));if(Number.isFinite(saved.heights?.[id]))state.heights[id]=Math.max(150,Math.min(1200,saved.heights[id]));}
@@ -26,7 +29,7 @@ window.OneTopDashboard=(()=>{
  const save=()=>{try{localStorage.setItem(key,JSON.stringify(state));}catch{}};
  const t=s=>window.OneTopI18n?.t(s)||s;
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const queueDraw=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{hooks.layout?.();drawGauges();});};
+ const queueDraw=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{hooks.layout?.();applyWidths();drawGauges();});};
  function move(array,from,to){const a=array.indexOf(from),b=array.indexOf(to);if(a<0||b<0||a===b)return;array.splice(a,1);array.splice(b,0,from);}
  function prefs(){
   const toolbar=document.getElementById('dashboardPreferences');if(!toolbar)return;
@@ -41,9 +44,10 @@ window.OneTopDashboard=(()=>{
   const summary=document.createElement('div');summary.id='cockpitSummary';summary.className='cockpit-summary';summary.append(range,document.getElementById('sessionSummary'));
   const elements={summary,speed:document.getElementById('fleetSpeed'),flow:root.querySelector('.token-flow-panel'),map:root.querySelector('.session-map-panel'),sessions:root.querySelector('.session-panel'),shared:root.querySelector('.shared-backend-panel')};
   for(const id of panels){const panel=elements[id];panel.dataset.panel=id;grid.append(panel);
-   const tools=document.createElement('div');tools.className='panel-edit-tools';tools.innerHTML=`<button type="button" draggable="true" class="panel-drag" data-panel-drag="${id}" aria-label="패널 이동">⠿ <span>패널 이동</span></button><div>${id==='speed'?'<button type="button" data-span="3">25%</button>':id==='summary'?'<button type="button" data-span="9">75%</button>':''}<button type="button" data-span="6">50%</button><button type="button" data-span="12">100%</button></div>`;
+   const tools=document.createElement('div');tools.className='panel-edit-tools';tools.innerHTML=`<button type="button" draggable="true" class="panel-drag" data-panel-drag="${id}" aria-label="패널 이동">⠿ <span>패널 이동</span></button><div>${id==='speed'?`<span class="instrument-choice" role="group" aria-label="계기 모양">${[['sweep','회전계'],['scope','스코프']].map(([v,n])=>`<button type="button" data-instrument="${v}" aria-pressed="${(state.instrument||'sweep')===v}">${n}</button>`).join('')}</span><button type="button" data-span="3">25%</button>`:id==='summary'?'<button type="button" data-span="9">75%</button>':''}<button type="button" data-span="6">50%</button><button type="button" data-span="12">100%</button></div>`;
    panel.prepend(tools);const resize=document.createElement('button');resize.type='button';resize.className='panel-resize';resize.setAttribute('aria-label','패널 크기 조절');panel.append(resize);
    tools.querySelectorAll('[data-span]').forEach(b=>b.onclick=()=>{state.spans[id]=Number(b.dataset.span);applyPanels();save();});
+   tools.querySelectorAll('[data-instrument]').forEach(b=>b.onclick=()=>{state.instrument=b.dataset.instrument;tools.querySelectorAll('[data-instrument]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));save();hooks.layout?.();});
    const handle=tools.querySelector('.panel-drag');handle.ondragstart=e=>{if(!editing){e.preventDefault();return;}e.dataTransfer.setData('application/onetop-panel',id);};
    handle.onkeydown=e=>{if(!editing||!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();const i=state.panels.indexOf(id),j=Math.max(0,Math.min(panels.length-1,i+(['ArrowUp','ArrowLeft'].includes(e.key)?-1:1)));move(state.panels,id,state.panels[j]);applyPanels();save();handle.focus();};
    panel.ondragover=e=>{if(editing&&[...e.dataTransfer.types].includes('application/onetop-panel'))e.preventDefault();};
@@ -62,7 +66,7 @@ window.OneTopDashboard=(()=>{
   const paired=state.panels.indexOf('summary')===state.panels.indexOf('speed')+1&&state.spans.speed===3&&state.spans.summary===9;
   let cockpit=grid.querySelector('.cockpit-overview');
   if(reorder||(!dragging&&paired!==!!cockpit)){for(const id of state.panels)grid.append(elements[id]);cockpit?.remove();cockpit=null;if(paired){cockpit=document.createElement('div');cockpit.className='cockpit-overview';elements.speed.before(cockpit);cockpit.append(elements.speed,elements.summary);}}
-  if(cockpit)cockpit.style.setProperty('--instrument-width',state.instrumentWidth?state.instrumentWidth+'px':'clamp(240px,20vw,260px)');
+  if(cockpit)cockpit.style.setProperty('--instrument-width',state.instrumentWidth?state.instrumentWidth+'px':'clamp(280px,19vw,340px)');
   for(const id of state.panels){const panel=elements[id];panel.style.gridColumn='span '+state.spans[id];if(state.heights[id])panel.style.minHeight=state.heights[id]+'px';
    if(id==='sessions'&&state.heights[id])panel.style.height=Math.max(250,state.heights[id])+'px';
    const chart=panel.querySelector('.chart-wrap'),map=panel.querySelector('.map-surface');if(chart&&state.heights[id])chart.style.height=Math.max(130,state.heights[id]-90)+'px';if(map&&state.heights[id])map.style.height=Math.max(130,state.heights[id]-62)+'px';
@@ -84,19 +88,31 @@ window.OneTopDashboard=(()=>{
    resize.onpointerdown=e=>{e.preventDefault();e.stopPropagation();dragging=true;const x=e.clientX,w=state.widths[id];resize.setPointerCapture(e.pointerId);const onmove=ev=>{state.widths[id]=Math.max(minima[id],Math.min(700,Math.round(w+ev.clientX-x)));applyWidths();};const end=()=>{dragging=false;resize.removeEventListener('pointermove',onmove);save();afterTable();};resize.addEventListener('pointermove',onmove);resize.addEventListener('pointerup',end,{once:true});resize.addEventListener('pointercancel',end,{once:true});};
   });
  }
- function applyWidths(){const table=document.querySelector('.sessions-table');if(!table)return;table.style.width=state.columns.reduce((n,id)=>n+state.widths[id],0)+'px';table.style.minWidth='100%';table.querySelectorAll('col[data-column]').forEach(c=>c.style.width=state.widths[c.dataset.column]+'px');}
+ // Saved widths stay as they are. When the panel is narrower than their sum (a narrow window or app
+ // zoom), CPU and memory give way before session names drop under about 190px, then each column
+ // gives back its room above the minimum.
+ function applyWidths(){
+  const table=document.querySelector('.sessions-table');if(!table)return;
+  const room=table.parentElement?.clientWidth||Infinity,spare=id=>Math.max(0,state.widths[id]-minima[id]);
+  const compact=room<190+state.columns.filter(id=>id!=='session').reduce((n,id)=>n+Math.min(state.widths[id],minima[id]),0);
+  const shown=compact?state.columns.filter(id=>id!=='cpu'&&id!=='memory'):state.columns,sum=shown.reduce((n,id)=>n+state.widths[id],0),slack=shown.reduce((n,id)=>n+spare(id),0);
+  const cut=sum>room&&slack>0?Math.min(1,(sum-room)/slack):0,width=id=>Math.floor(state.widths[id]-spare(id)*cut);
+  table.classList.toggle('compact-columns',compact);
+  table.style.width=shown.reduce((n,id)=>n+width(id),0)+'px';table.style.minWidth='100%';
+  table.querySelectorAll('col[data-column]').forEach(c=>c.style.width=width(c.dataset.column)+'px');
+ }
  function afterTable(){
   if(!initialized)return;const table=document.querySelector('.sessions-table');
-  [...table.tBodies[0].rows].forEach(row=>{[...row.cells].forEach((td,i)=>{if(!td.dataset.column)td.dataset.column=ids[i];});for(const id of state.columns){const td=row.querySelector(`td[data-column="${id}"]`);if(td)row.append(td);}});
+  [...table.tBodies[0].rows].filter(row=>!row.classList.contains('group-row')).forEach(row=>{[...row.cells].forEach((td,i)=>{if(!td.dataset.column)td.dataset.column=ids[i];});for(const id of state.columns){const td=row.querySelector(`td[data-column="${id}"]`);if(td)row.append(td);}});
   for(const id of state.columns){table.tHead.rows[0].append(table.tHead.querySelector(`[data-column="${id}"]`));table.querySelector('colgroup').append(table.querySelector(`col[data-column="${id}"]`));}
   applyWidths();drawGauges();window.OneTopI18n?.apply();
  }
- function number(n){const digits=2;return n>0&&n<10**-digits?'<' +(10**-digits):Number(n.toFixed(digits)).toLocaleString(state.lang==='ko'?'ko-KR':state.lang==='zh'?'zh-CN':'en-US');}
+ function number(n){const digits=1;return n>0&&n<10**-digits?'<' +(10**-digits):Number(n.toFixed(digits)).toLocaleString(state.lang==='ko'?'ko-KR':state.lang==='zh'?'zh-CN':'en-US');}
  const rateSuffix=()=>state.lang==='ko'?'%/시간':state.lang==='zh'?'%/小时':'%/h';
  function rateCell(rate,kind,note=''){
   const suffix=rateSuffix();
   if(!Number.isFinite(rate)||rate<0)return `<span class="burn-unavailable" title="${esc(note||t('환산 기준 수집 중'))}">—<small>${suffix}</small></span>`;
-  return `<div class="burn-gauge" title="${esc(note)}"><canvas width="96" height="46" data-burn-rate="${rate}" data-kind="${esc(kind)}" role="img" aria-label="${esc(number(rate))}${suffix}"></canvas><strong>${esc(number(rate))}<small>${suffix}</small></strong></div>`;
+  return `<div class="burn-gauge${rate>0?'':' is-zero'}" title="${esc(note)}"><canvas width="72" height="36" data-burn-rate="${rate}" data-kind="${esc(kind)}" role="img" aria-label="${esc(number(rate))}${suffix}"></canvas><strong>${esc(number(rate))}<small>${suffix}</small></strong></div>`;
  }
  function nice(n){if(n<=0)return 1;const power=10**Math.floor(Math.log10(n)),ratio=n/power;return (ratio<=1?1:ratio<=2?2:ratio<=5?5:10)*power;}
  function sharedGaugeMax(peak,scope){
@@ -115,11 +131,17 @@ window.OneTopDashboard=(()=>{
   const scope=state.period+'|'+canvases.map(c=>c.closest('tr')?.dataset.session||'').sort().join('|');
   const max=sharedGaugeMax(Math.max(0,...canvases.map(c=>Number(c.dataset.burnRate))),scope),range='0–'+number(max)+rateSuffix(),css=getComputedStyle(document.documentElement);
   if(label)label.textContent=range;
-  for(const c of canvases){const {width:w,height:h}=c.getBoundingClientRect();if(!w||!h)continue;const dpr=devicePixelRatio||1;c.width=w*dpr;c.height=h*dpr;const x=c.getContext('2d');x.scale(dpr,dpr);const cx=w/2,cy=h-11,r=Math.min(29,w/2-13),n=Number(c.dataset.burnRate),a=Math.PI+Math.PI*Math.min(1,n/max),color=c.dataset.kind==='Claude'?'#bd8965':'#378d76';
+  for(const c of canvases){const {width:w,height:h}=c.getBoundingClientRect();if(!w||!h)continue;const dpr=devicePixelRatio||1;c.width=w*dpr;c.height=h*dpr;const x=c.getContext('2d');x.scale(dpr,dpr);const n=Number(c.dataset.burnRate),a=Math.PI+Math.PI*Math.min(1,n/max),color=c.dataset.kind==='Claude'?'#d4956b':'#3fae8c';
    c.dataset.burnMax=String(max);c.setAttribute('aria-label',number(n)+rateSuffix()+' ('+range+')');
-   x.lineWidth=5;x.strokeStyle=css.getPropertyValue('--line');x.beginPath();x.arc(cx,cy,r,Math.PI,Math.PI*2);x.stroke();x.strokeStyle=color;x.beginPath();x.arc(cx,cy,r,Math.PI,a);x.stroke();x.lineWidth=1.5;x.beginPath();x.moveTo(cx,cy);x.lineTo(cx+Math.cos(a)*(r-8),cy+Math.sin(a)*(r-8));x.stroke();x.font='11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';x.fillStyle=css.getPropertyValue('--muted');x.textAlign='left';x.fillText('0',4,h-1);x.textAlign='right';x.fillText(number(max)+'%',w-2,h-1);
+   // A small speedometer: track, filled arc and needle, with 0 and the shared maximum under the arc ends.
+   const cx=w/2,cy=h-12,r=Math.min(w/2-16,h-15),ink=css.getPropertyValue('--ink'),muted=css.getPropertyValue('--muted');
+   x.lineCap='round';x.lineWidth=4;x.strokeStyle=css.getPropertyValue('--line');x.beginPath();x.arc(cx,cy,r,Math.PI,Math.PI*2);x.stroke();
+   x.strokeStyle=color;x.beginPath();x.arc(cx,cy,r,Math.PI,a);x.stroke();
+   x.lineWidth=1.6;x.strokeStyle=n>0?ink:muted;x.beginPath();x.moveTo(cx,cy);x.lineTo(cx+Math.cos(a)*(r-6),cy+Math.sin(a)*(r-6));x.stroke();
+   x.fillStyle=n>0?ink:muted;x.beginPath();x.arc(cx,cy,2.2,0,Math.PI*2);x.fill();
+   x.font=css.getPropertyValue('--type-tiny').trim()+' '+css.getPropertyValue('--font').trim();x.fillStyle=muted;x.textAlign='center';x.fillText('0',cx-r,h-1);x.fillText(number(max)+'%',cx+r,h-1);
   }
  }
  function init(options){hooks=options;window.OneTopI18n?.setLanguage(state.lang);prefs();panelSetup();setupColumns();initialized=true;afterTable();new ResizeObserver(queueDraw).observe(document.getElementById('dashboardGrid'));}
- return {init,afterTable,rateCell,drawGauges,state,validPeriod,rememberPeriod(value){if(validPeriod(value)){state.period=value;save();}},get interacting(){return dragging;}};
+ return {init,afterTable,rateCell,drawGauges,state,validPeriod,toggleGroup(key,open){state.collapsed={...(state.collapsed||{}),[key]:open};save();},rememberPeriod(value){if(validPeriod(value)){state.period=value;save();}},get interacting(){return dragging;}};
 })();

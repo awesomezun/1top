@@ -12,7 +12,7 @@ function fixture(rates){
    closest:()=>({dataset:{session:String(i)}}),
    getBoundingClientRect(){return {width:this.hidden?0:96,height:46};},
    setAttribute:(k,v)=>attrs[k]=v,
-   getContext:()=>({scale(){},beginPath(){},stroke(){},moveTo(){},lineTo(){},arc:(...v)=>arcs.push(v),fillText:(...v)=>labels.push(v)})};
+   getContext:()=>({scale(){},beginPath(){},stroke(){},fill(){},moveTo(){},lineTo(){},arc:(...v)=>arcs.push(v),fillText:(...v)=>labels.push(v)})};
  });
  const context=vm.createContext({window:{},localStorage:{getItem:()=>null},performance:{now:()=>now},devicePixelRatio:1,
   document:{documentElement:{dataset:{},style:{}},querySelectorAll:()=>canvases,querySelector:()=>label},
