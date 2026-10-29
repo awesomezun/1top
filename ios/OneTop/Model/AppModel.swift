@@ -26,6 +26,19 @@ final class AppModel {
     var sessions: [Session] { device?.snapshot?.sessions ?? [] }
     var quotas: [Quota] { device?.snapshot?.accountQuotas ?? [] }
 
+    /// Root sessions with their subagents folded in, in the shared order.
+    var groups: [SessionGroup] {
+        let byRoot = Dictionary(grouping: sessions) { $0.rootSessionId ?? $0.id }
+        return byRoot.map { key, members in
+            SessionGroup(root: members.first { $0.id == key } ?? members[0], members: members)
+        }
+        .sorted {
+            if $0.isWorking != $1.isWorking { return $0.isWorking }
+            let a = $0.tokens(in: period) ?? -1, b = $1.tokens(in: period) ?? -1
+            return a != b ? a > b : $0.id < $1.id
+        }
+    }
+
     /// Working sessions first, then every other session together, each by selected-period tokens.
     /// Same order as the dashboard and the menu bar; states never split the usage order.
     var orderedSessions: [Session] {
@@ -114,3 +127,41 @@ final class AppModel {
 
     private struct DeviceList: Decodable { var devices: [Device]? }
 }
+
+/// A root session and its subagents. Usage adds up across the family; weekly estimates add up only
+/// within the root's account, since another account's limit is a different 100%.
+struct SessionGroup: Identifiable {
+    var root: Session
+    var members: [Session]
+    var id: String { root.id }
+    var childCount: Int { members.count - 1 }
+    var isWorking: Bool { members.contains(where: \.isWorking) }
+
+    func tokens(in period: Period) -> Double? {
+        let known = members.compactMap { $0.tokens(in: period) }
+        return known.isEmpty ? nil : known.reduce(0, +)
+    }
+    var rate: Double? {
+        let known = members.compactMap { $0.rate }.filter { $0.isFinite && $0 >= 0 }
+        return known.isEmpty ? nil : known.reduce(0, +)
+    }
+    private func account(_ period: Period) -> String? { root.weeklyEstimate?[period.rawValue]?.accountId ?? root.weeklyAccount }
+    private func sameAccount(_ period: Period) -> [(Session, WeeklyEstimate)] {
+        guard let account = account(period) else { return [] }
+        return members.compactMap { s in s.weeklyEstimate?[period.rawValue].flatMap { $0.accountId == account ? (s, $0) : nil } }
+    }
+    /// ≈ percentage points of the weekly limit used in the period.
+    func estimate(in period: Period) -> Double? {
+        let values = sameAccount(period).compactMap(\.1.usedPp).filter { $0.isFinite && $0 >= 0 }
+        return values.isEmpty ? nil : values.reduce(0, +)
+    }
+    /// Current pace in weekly-limit percentage points per hour: tokens per second × points per token.
+    func pace(in period: Period) -> Double? {
+        let values = sameAccount(period).compactMap { s, e -> Double? in
+            guard let rate = s.rate, let per = e.calibration?.ppPerToken, rate.isFinite, per.isFinite, rate >= 0, per >= 0 else { return nil }
+            return rate * per * 3600
+        }
+        return values.isEmpty ? nil : values.reduce(0, +)
+    }
+}
+

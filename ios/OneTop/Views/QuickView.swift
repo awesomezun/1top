@@ -32,8 +32,21 @@ struct SpeedReading {
     var average: Double?
     var bins: [Bin]
 
-    init(sessions: [Session], period: Period, periodTotal: Double?) {
+    init(sessions: [Session], period: Period, periodTotal: Double?, flow: FlowSeries? = nil) {
         let seconds = period.seconds
+        let sum = sessions.compactMap { $0.tokens(in: period) }
+        let total = periodTotal ?? (sum.isEmpty ? nil : sum.reduce(0, +))
+        average = total.map { $0 / seconds * 3600 }
+        // Fine bins from the collector when the relay carries them: oldest first, tokens per bin.
+        if let flow, !flow.bins.isEmpty, flow.step > 0 {
+            let count = flow.bins.count
+            bins = flow.bins.enumerated().reversed().map { index, values in
+                let parts = values.sorted { Self.order($0.key) < Self.order($1.key) }.map { ($0.key, max(0, $0.value) / flow.step * 3600) }
+                let ago = Double(count - 1 - index) * flow.step
+                return Bin(start: ago, end: min(seconds, ago + flow.step), byKind: parts, total: parts.reduce(0) { $0 + $1.1 })
+            }
+            return
+        }
         let edges = [0.0] + Period.allCases.map(\.seconds).filter { $0 < seconds } + [seconds]
         let kinds = Array(Set(sessions.map(\.kind))).sorted { Self.order($0) < Self.order($1) }
         func tokens(_ s: Session, within limit: Double) -> Double {
@@ -48,9 +61,6 @@ struct SpeedReading {
             bins.append(Bin(start: a, end: b, byKind: parts, total: parts.reduce(0) { $0 + $1.1 }))
         }
         self.bins = bins
-        let sum = sessions.compactMap { $0.tokens(in: period) }
-        let total = periodTotal ?? (sum.isEmpty ? nil : sum.reduce(0, +))
-        average = total.map { $0 / seconds * 3600 }
     }
     static func order(_ kind: String) -> Int { ["Claude", "Codex", "GLM", "Antigravity", "Aside"].firstIndex(of: kind) ?? 9 }
 }
@@ -163,6 +173,39 @@ private struct Slanted: Shape {
     }
 }
 
+/// The weekly % across the period, ending at the current report.
+private struct WeeklySpark: View {
+    var points: [(t: Double, pct: Double)]
+    var start: Double
+    var end: Double
+    var color: Color
+    var faded: Bool
+    var body: some View {
+        Canvas { ctx, size in
+            guard let first = points.first, let last = points.last, end > start else { return }
+            let plot = CGRect(x: 0, y: 5, width: size.width - 6, height: size.height - 10)
+            var lo = points.map(\.pct).min() ?? 0, hi = points.map(\.pct).max() ?? 0
+            if hi - lo < 2 { let mid = (hi + lo) / 2; lo = mid - 1; hi = mid + 1 }
+            let pad = (hi - lo) * 0.15; lo -= pad; hi += pad
+            if lo < 0 { hi -= lo; lo = 0 }
+            func point(_ p: (t: Double, pct: Double)) -> CGPoint {
+                CGPoint(x: plot.minX + CGFloat((max(start, p.t) - start) / (end - start)) * plot.width, y: plot.maxY - CGFloat((p.pct - lo) / (hi - lo)) * plot.height)
+            }
+            var line = Path()
+            for (i, p) in points.enumerated() { i == 0 ? line.move(to: point(p)) : line.addLine(to: point(p)) }
+            var area = line
+            area.addLine(to: CGPoint(x: point(last).x, y: plot.maxY)); area.addLine(to: CGPoint(x: point(first).x, y: plot.maxY)); area.closeSubpath()
+            ctx.fill(area, with: .linearGradient(Gradient(colors: [color.opacity(0.3), color.opacity(0.02)]), startPoint: CGPoint(x: 0, y: plot.minY), endPoint: CGPoint(x: 0, y: plot.maxY)))
+            ctx.stroke(line, with: .color(color), style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+            let tip = point(last)
+            ctx.fill(Path(ellipseIn: CGRect(x: tip.x - 4.5, y: tip.y - 4.5, width: 9, height: 9)), with: .color(color.opacity(0.25)))
+            ctx.fill(Path(ellipseIn: CGRect(x: tip.x - 2.4, y: tip.y - 2.4, width: 4.8, height: 4.8)), with: .color(color))
+        }
+        .opacity(faded ? 0.5 : 1)
+        .accessibilityHidden(true)
+    }
+}
+
 /// A small speedometer that leads each session row: current tokens per hour on one shared scale,
 /// with the hub showing the state.
 private struct MiniGauge: View {
@@ -192,6 +235,9 @@ private struct MiniGauge: View {
 struct QuickView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.colorScheme) private var scheme
+    @AppStorage("weeklyTokensMode") private var tokensChosen = false
+    /// Weekly % needs the collector's estimates; a collector that does not send them shows tokens.
+    private var tokensMode: Bool { tokensChosen || !model.sessions.contains { $0.weeklyEstimate != nil } }
     private static let paceColumn: CGFloat = 54, valueColumn: CGFloat = 70
     private var theme: QuickTheme { QuickTheme(light: scheme == .light) }
 
@@ -243,6 +289,7 @@ struct QuickView: View {
                     }
                 }
                 Button("지금 새로고침") { model.connect() }.disabled(model.connection == .demo)
+                Button(tokensChosen ? "세션을 주간 한도 %로 보기" : "세션을 토큰으로 보기") { tokensChosen.toggle() }
                 if model.connection == .demo { Button("데모 끝내기") { model.leaveDemo() } }
             } label: { Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).frame(width: 30, height: 30) }
         }
@@ -270,7 +317,8 @@ struct QuickView: View {
     }
 
     private var tokenSection: some View {
-        let reading = SpeedReading(sessions: model.sessions, period: model.period, periodTotal: periodTotal), usage = modelSlices()
+        let reading = SpeedReading(sessions: model.sessions, period: model.period, periodTotal: periodTotal,
+                                   flow: model.device?.snapshot?.flow?[model.period.rawValue]), usage = modelSlices()
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("토큰 사용").font(.system(size: 12.5, weight: .semibold))
@@ -369,7 +417,9 @@ struct QuickView: View {
     }
 
     private func weeklyTile(_ q: Quota) -> some View {
-        let w = q.weekly, color = Tool.color(q.kind)
+        let w = q.weeklyWindow, color = Tool.color(q.kind), rate = fresh && !q.stale ? q.weekly?[model.period.rawValue]?.burnPerHour : nil
+        let end = model.device?.snapshot?.updated ?? Date().timeIntervalSince1970, start = end - model.period.seconds
+        let points = sparkPoints(q.usagePoints, start: start, end: end)
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Circle().fill(color).frame(width: 6, height: 6).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
@@ -378,11 +428,14 @@ struct QuickView: View {
                 Text(Format.percent(w?.pct)).font(.system(size: 17, weight: .semibold)).monospacedDigit().fixedSize()
                     .foregroundStyle(q.stale ? theme.muted : theme.ink)
             }
+            // Fixed slots keep the small trend line in the same place in every tile.
             HStack(spacing: 6) {
                 Text(q.handle).font(.system(size: 10.5)).foregroundStyle(theme.muted).lineLimit(1).truncationMode(.middle)
-                Spacer(minLength: 4)
-                Text(q.stale ? "마지막 보고" : Format.reset(w?.reset).replacingOccurrences(of: " 후 초기화", with: " 후"))
+                    .frame(width: 78, alignment: .leading)
+                WeeklySpark(points: points, start: start, end: end, color: color, faded: q.stale).frame(maxWidth: .infinity).frame(height: 14)
+                Text(q.stale ? "마지막 보고" : rate.map { Format.percent($0) + "/시간" } ?? "수집 중")
                     .font(.system(size: 10.5, weight: .medium)).foregroundStyle(q.stale ? theme.amber : color).lineLimit(1)
+                    .frame(width: 54, alignment: .trailing)
             }
         }
         .padding(.horizontal, 10).padding(.vertical, 8).frame(maxWidth: .infinity)
@@ -409,10 +462,14 @@ struct QuickView: View {
     }
 
     // MARK: Sessions
+    private func pace(_ g: SessionGroup) -> Double? {
+        guard fresh else { return nil }
+        return tokensMode ? g.rate.map { $0 * 3600 } : g.pace(in: model.period)
+    }
+
     private var sessionList: some View {
-        let rows = model.orderedSessions
-        let paces = rows.compactMap { s in s.rate.flatMap { $0.isFinite && $0 >= 0 ? $0 * 3600 : nil } }
-        let paceScale = niceMaximum(max(1, paces.max() ?? 0))
+        let rows = model.groups
+        let paceScale = niceMaximum(max(1, rows.compactMap(pace).max() ?? 0))
         return VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text("세션").font(.system(size: 12.5, weight: .semibold))
@@ -423,7 +480,8 @@ struct QuickView: View {
                     Text(fresh ? "작업 중 \(rows.filter(\.isWorking).count)" : "마지막 기록")
                 }.font(.system(size: 11.5, weight: .medium)).foregroundStyle(fresh ? theme.accent : theme.amber).padding(.leading, 4)
                 Spacer(minLength: 4)
-                Text("토큰").font(.system(size: 10.5)).foregroundStyle(theme.muted).frame(width: Self.valueColumn, alignment: .trailing)
+                Text(tokensMode ? "토큰" : "주간 한도 사용량").font(.system(size: 10.5)).foregroundStyle(theme.muted)
+                    .fixedSize().frame(width: Self.valueColumn, alignment: .trailing)
             }
             .padding(.horizontal, 16).padding(.vertical, 8)
             .overlay(alignment: .top) { Rectangle().fill(theme.line).frame(height: 1) }
@@ -434,8 +492,8 @@ struct QuickView: View {
                 }.frame(maxWidth: .infinity).padding(.vertical, 32)
             } else {
                 LazyVStack(spacing: 0) {
-                    ForEach(rows) { session in
-                        sessionRow(session, paceScale: paceScale)
+                    ForEach(rows) { group in
+                        sessionRow(group, paceScale: paceScale)
                         Rectangle().fill(theme.line.opacity(0.7)).frame(height: 1).padding(.leading, 16 + Self.paceColumn + 9)
                     }
                 }
@@ -443,30 +501,48 @@ struct QuickView: View {
         }
     }
 
-    private func sessionRow(_ s: Session, paceScale: Double) -> some View {
-        let pace = fresh ? s.rate.flatMap { $0.isFinite && $0 >= 0 ? $0 * 3600 : nil } : nil
-        let hub = s.isWorking ? theme.accent : s.status == "waiting" ? theme.amber : theme.dim
-        let value = s.tokens(in: model.period)
+    private func sessionRow(_ g: SessionGroup, paceScale: Double) -> some View {
+        let s = g.root, burn = pace(g)
+        let hub = g.isWorking ? theme.accent : s.status == "waiting" ? theme.amber : theme.dim
+        let tokens = g.tokens(in: model.period)
+        let value = tokensMode ? Format.tokens(tokens) : g.estimate(in: model.period).map { "≈" + Format.percent($0) } ?? (tokens == 0 ? "0%" : "—")
         return HStack(alignment: .center, spacing: 9) {
             VStack(spacing: 2) {
-                MiniGauge(value: pace, scale: paceScale, color: Tool.color(s.kind), hub: hub, theme: theme)
-                Text(pace.map { Format.tokens($0) + "/시간" } ?? "—").font(.system(size: 9.5)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.85)
-                    .foregroundStyle(pace == nil ? theme.dim : pace == 0 ? theme.muted : theme.ink)
+                MiniGauge(value: burn, scale: paceScale, color: Tool.color(s.kind), hub: hub, theme: theme)
+                Text(burn.map { tokensMode ? Format.tokens($0) + "/시간" : Format.percent($0) + "/시간" } ?? "—")
+                    .font(.system(size: 9.5)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.85)
+                    .foregroundStyle(burn == nil ? theme.dim : burn == 0 ? theme.muted : theme.ink)
             }
             .frame(width: Self.paceColumn)
             VStack(alignment: .leading, spacing: 2) {
-                Text(s.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(s.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    if g.childCount > 0 {
+                        Text("하위 \(g.childCount)").font(.system(size: 10.5)).foregroundStyle(theme.muted).padding(.horizontal, 5).frame(height: 16)
+                            .overlay(Capsule().stroke(theme.line)).fixedSize()
+                    }
+                }
                 HStack(spacing: 4) {
                     Text(Tool.name(s.kind)).foregroundStyle(Tool.color(s.kind))
                     if let project = s.displayProject { Text("· " + project).foregroundStyle(theme.muted) }
                 }.font(.system(size: 11.5)).lineLimit(1)
             }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-            Text(Format.tokens(value)).font(.system(size: 13, weight: .semibold)).monospacedDigit().lineLimit(1)
-                .foregroundStyle(value == nil ? theme.dim : theme.ink)
+            Text(value).font(.system(size: 13, weight: .semibold)).monospacedDigit().lineLimit(1)
+                .foregroundStyle(value == "—" ? theme.dim : theme.ink)
                 .frame(width: Self.valueColumn, alignment: .trailing)
         }
         .padding(.horizontal, 16).frame(height: 50)
         .accessibilityElement(children: .combine)
+    }
+
+    /// Weekly % reports inside the period plus the one before it, so the line starts at the edge.
+    private func sparkPoints(_ source: [[Double]]?, start: Double, end: Double) -> [(t: Double, pct: Double)] {
+        let points = (source ?? []).compactMap { p -> (t: Double, pct: Double)? in
+            guard p.count >= 2, p[0].isFinite, p[0] <= end, p[1].isFinite, p[1] >= 0, p[1] <= 100 else { return nil }
+            return (p[0], p[1])
+        }.sorted { $0.t < $1.t }
+        guard let first = points.firstIndex(where: { $0.t >= start }) else { return [] }
+        return Array(points[max(0, first - 1)...])
     }
 
     private func niceMaximum(_ value: Double) -> Double {
