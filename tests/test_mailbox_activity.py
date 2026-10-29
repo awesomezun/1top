@@ -45,3 +45,20 @@ class ActivityTests(unittest.TestCase):
   self.add(type='response_item',payload={'type':'function_call','arguments':'PRIVATE'})
   self.assertEqual(self.row()['activity']['phase'],'working');self.assertNotIn('PRIVATE',json.dumps(self.row()))
   self.add(type='event_msg',payload={'type':'turn_aborted'});self.assertIsNone(self.row()['activity'])
+ def test_aside_milliseconds_and_actual_turn_lifecycle(self):
+  self.spec['kind']='Aside';self.box.records[0]['kind']='Aside'
+  def event(**record):self.add(timestamp=time.time()*1000,**record)
+  event(role='turn-lifecycle',event='started');self.assertIsNone(self.row()['activity'])
+  event(role='user',content=f'[1top-reply:{RID}]');self.assertIsNone(self.row()['activity'])
+  event(role='turn-lifecycle',event='started');self.assertEqual(self.row()['activity']['phase'],'responding')
+  event(role='assistant',content=[{'type':'thinking','thinking':'PRIVATE'},{'type':'toolCall','arguments':{'secret':'PRIVATE'}}])
+  row=self.row();self.assertEqual(row['activity']['phase'],'working');self.assertNotIn('PRIVATE',json.dumps(row))
+  self.assertLess(abs(row['activity']['observed_at']-time.time()),2)
+  event(role='turn-lifecycle',event='final-started');self.assertEqual(self.row()['activity']['phase'],'writing')
+  event(role='turn-lifecycle',event='finished');self.assertIsNone(self.row()['activity'])
+  event(role='assistant',content=[{'type':'text','text':'Late text'}]);self.assertIsNone(self.row()['activity'])
+ def test_aside_copied_history_is_not_current_activity(self):
+  self.spec['kind']='Aside';self.box.records[0]['kind']='Aside'
+  self.add(timestamp=(time.time()-100)*1000,role='user',content=f'[1top-reply:{RID}]')
+  self.add(timestamp=time.time()*1000,role='assistant',content=[{'type':'toolCall'}])
+  self.assertIsNone(self.row()['activity'])

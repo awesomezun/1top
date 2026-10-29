@@ -51,6 +51,8 @@ def track_activity(row, record, kind):
     try:
         stamp = record.get('timestamp', record.get('createdAt'))
         stamp = datetime.fromisoformat(stamp.replace('Z','+00:00')).timestamp() if isinstance(stamp,str) else float(stamp)
+        # Aside's persisted message and turn-lifecycle timestamps are milliseconds.
+        if kind == 'Aside' and stamp > 100_000_000_000:stamp /= 1000
         if not row.get('started_at') or stamp < row['started_at']-1 or stamp > time.time()+60:return
         if stamp < row.get('_activity_at',0):return
     except (TypeError,ValueError):return
@@ -69,10 +71,15 @@ def track_activity(row, record, kind):
         return
     if not row.get('_activity_seen') or row.get('_activity_done'):return
     phase = None
-    if record.get('type')=='api-request' or kind=='Codex' and message.get('type')=='task_started':phase='responding'
+    aside_event = record.get('event') if kind == 'Aside' and record.get('role') == 'turn-lifecycle' else None
+    if aside_event == 'finished':
+        row.update(_activity_done=True,activity=None,_activity_at=stamp)
+        return
+    if aside_event == 'final-started':phase='writing'
+    elif aside_event == 'started' or record.get('type')=='api-request' or kind=='Codex' and message.get('type')=='task_started':phase='responding'
     elif record.get('type')=='assistant' or kind=='Aside' and message.get('role')=='assistant':
         blocks = content if isinstance(content,list) else []
-        if any(isinstance(b,dict) and b.get('type')=='tool_use' for b in blocks):phase='working'
+        if any(isinstance(b,dict) and b.get('type') in (('toolCall',) if kind == 'Aside' else ('tool_use',)) for b in blocks):phase='working'
         elif assistant_text(record,kind):phase='writing'
     elif kind=='Codex' and record.get('type')=='response_item':
         if message.get('type') in ('function_call','custom_tool_call','local_shell_call'):phase='working'
