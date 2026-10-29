@@ -121,7 +121,7 @@ def session_binding(spec, directory=None, now=None):
     if spec.get('kind') != 'Claude' or not spec.get('config_dir'):
         return None
     root = Path(spec['config_dir']).expanduser().resolve()
-    sid = spec['id']
+    sid = spec.get('active_session_id') or spec['id']
     key = hashlib.sha256((str(root) + '|' + sid).encode()).hexdigest()
     directory = Path(directory) if directory is not None else data_directory()/'claude-statusline'
     report = _read_object(directory/(key+'.json'))

@@ -112,36 +112,49 @@ class Mailbox:
             for row in rows:
                 if row['status'] in ('replied', 'queued', 'not_delivered') or not row.get('path'):
                     continue
-                try:
-                    path = Path(row['path']); stat = path.stat()
-                    if stat.st_ino != row['inode'] or stat.st_size < row['offset']:
-                        if row['status'] != 'source_changed':
-                            row['status'] = 'source_changed'; changed = True
-                        continue
-                    with path.open('rb') as f:
-                        f.seek(row['offset'])
-                        data = f.read(4 * 1024 * 1024)
-                    complete = data.rfind(b'\n') + 1
-                    if not complete:
-                        # Skip a bounded chunk of an oversized JSONL record (for example an image).
-                        # Its remainder will fail JSON parsing; later complete records remain readable.
-                        if len(data)==4*1024*1024:
-                            row['offset']+=len(data);changed=True
-                        continue
-                    for line in data[:complete].splitlines():
-                        try:
-                            record = json.loads(line)
-                            visible = assistant_text(record, row['kind'])
-                        except (ValueError, TypeError, AttributeError):
+                paths = [source.get('path') for source in spec.get('continuation_sources', [])]
+                if row['path'] in paths and spec.get('path') in paths:
+                    readers = row.setdefault('continuation_readers', [])
+                    known = {row['path'], *(r['path'] for r in readers)}
+                    for source in paths[:17]:
+                        if source and source not in known:
+                            try:
+                                stat = Path(source).stat()
+                                readers.append({'path': source, 'inode': stat.st_ino, 'offset': 0})
+                                known.add(source); changed = True
+                            except OSError:
+                                pass
+                for cursor in [row, *row.get('continuation_readers', [])]:
+                    try:
+                        path = Path(cursor['path']); stat = path.stat()
+                        if stat.st_ino != cursor['inode'] or stat.st_size < cursor['offset']:
+                            if row['status'] != 'source_changed':
+                                row['status'] = 'source_changed'; changed = True
                             continue
-                        for match in REPLY.finditer(visible):
-                            if match[1] == row['id'] and match[2].strip():
-                                row.update(reply=match[2].strip()[:MAX_REPLY], status='replied',
-                                           reply_at=time.time(), truncated=len(match[2].strip()) > MAX_REPLY)
-                    row['offset'] += complete
-                    changed = True
-                except OSError:
-                    continue
+                        with path.open('rb') as f:
+                            f.seek(cursor['offset'])
+                            data = f.read(4 * 1024 * 1024)
+                        complete = data.rfind(b'\n') + 1
+                        if not complete:
+                            if len(data)==4*1024*1024:
+                                cursor['offset']+=len(data);changed=True
+                            continue
+                        for line in data[:complete].splitlines():
+                            try:
+                                record = json.loads(line)
+                                visible = assistant_text(record, row['kind'])
+                            except (ValueError, TypeError, AttributeError):
+                                continue
+                            for match in REPLY.finditer(visible):
+                                if match[1] == row['id'] and match[2].strip():
+                                    row.update(reply=match[2].strip()[:MAX_REPLY], status='replied',
+                                               reply_at=time.time(), truncated=len(match[2].strip()) > MAX_REPLY)
+                        cursor['offset'] += complete
+                        changed = True
+                    except OSError:
+                        continue
+                    if row['status'] == 'replied':
+                        break
             if changed:
                 self.save()
             return [{k: row[k] for k in ('id', 'text', 'created', 'status', 'reply', 'reply_at', 'truncated')

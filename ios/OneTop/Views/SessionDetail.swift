@@ -100,11 +100,9 @@ struct SessionDetail: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(place).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
                     if !remoteOff {
-                        Picker("", selection: $pane) {
-                            Text(L.t("Messages", "메시지함")).tag(Pane.messages)
-                            Text(L.t("Controls", "작업 제어")).tag(Pane.controls)
-                        }
-                        .pickerStyle(.segmented)
+                        GlassSegments(items: [.init(value: Pane.messages, label: L.t("Messages", "메시지함")),
+                                              .init(value: Pane.controls, label: L.t("Controls", "작업 제어"))],
+                                      selection: $pane)
                     }
                 }
                 .padding(.horizontal, 16).padding(.bottom, 8)
@@ -155,17 +153,29 @@ struct SessionDetail: View {
             } else {
                 Section {
                     let actions = Self.controls.filter(s.can)
-                    ForEach(actions, id: \.self) { action in
-                        Button(role: action == "terminate" ? .destructive : nil) {
-                            request = ControlRequest(session: s, action: action)
-                        } label: {
-                            Label(AppModel.actionLabel(action), systemImage: Self.icon(action))
-                        }
-                        .disabled(!available || busy)
-                        .accessibilityIdentifier("control-" + action)
-                    }
                     if actions.isEmpty {
                         Text(L.t("No controls reported for this session.", "이 세션에서 사용 가능한 제어가 없습니다.")).foregroundStyle(.secondary)
+                    } else {
+                        // Glass buttons, two to a row; quitting the CLI is tinted red.
+                        GlassEffectContainer(spacing: 8) {
+                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                                ForEach(actions, id: \.self) { action in
+                                    Button(role: action == "terminate" ? .destructive : nil) {
+                                        request = ControlRequest(session: s, action: action)
+                                    } label: {
+                                        Label(AppModel.actionLabel(action), systemImage: Self.icon(action))
+                                            .font(.subheadline.weight(.medium)).lineLimit(1).minimumScaleFactor(0.8)
+                                            .frame(maxWidth: .infinity).padding(.vertical, 4)
+                                    }
+                                    .buttonStyle(.glass)
+                                    .tint(action == "terminate" ? .red : nil)
+                                    .disabled(!available || busy)
+                                    .accessibilityIdentifier("control-" + action)
+                                }
+                            }
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                     }
                 } header: {
                     Text(L.t("Session controls", "세션 제어"))
@@ -199,7 +209,11 @@ struct SessionDetail: View {
                         Task { @MainActor in try? await Task.sleep(for: .milliseconds(350)); request = ask }
                     } label: {
                         Label(L.t("Send instruction", "지시 보내기"), systemImage: "paperplane")
+                            .font(.body.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 4)
                     }
+                    .buttonStyle(.glassProminent)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                     .accessibilityIdentifier("instruction-send")
                     .disabled(!available || !s.can("prompt") || busy || instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 } header: {
@@ -352,15 +366,34 @@ struct MailboxView: View {
 }
 
 /// Every computer together, or one of them.
+extension View {
+    /// Debug builds name each detail sheet by the path that opened it (row, sessions, launch) and its
+    /// session, so a UI test's accessibility record shows why a sheet is on screen.
+    @ViewBuilder func detailSource(_ source: String, _ id: String) -> some View {
+        #if DEBUG
+        self.accessibilityElement(children: .contain).accessibilityIdentifier("detail-\(source)-\(id)")
+        #else
+        self
+        #endif
+    }
+}
+
 struct ComputerPicker: View {
     @Environment(AppModel.self) private var model
+    // Buttons rather than a Picker, so each choice carries its own identifier (scope-all, scope-<id>).
     var body: some View {
-        Picker(L.t("Computer", "컴퓨터"), selection: Binding(get: { model.selectedDeviceID ?? "" }, set: { model.selectedDeviceID = $0.isEmpty ? nil : $0 })) {
-            Text(L.t("All computers", "모든 컴퓨터") + " · \(model.devices.count)").tag("")
-            ForEach(model.devices) { d in
-                Text(d.name + (model.isFresh(d) ? "" : L.t(" · offline", " · 오프라인"))).tag(d.id)
-            }
+        choice(L.t("All computers", "모든 컴퓨터") + " · \(model.devices.count)", id: nil, key: "scope-all")
+        ForEach(model.devices) { d in
+            choice(d.name + (model.isFresh(d) ? "" : L.t(" · offline", " · 오프라인")), id: d.id, key: "scope-" + d.id)
         }
+    }
+    private func choice(_ title: String, id: String?, key: String) -> some View {
+        let on = model.selectedDeviceID == id
+        return Button { model.selectedDeviceID = id } label: {
+            if on { Label(title, systemImage: "checkmark") } else { Text(title) }
+        }
+        .accessibilityIdentifier(key)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 

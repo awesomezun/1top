@@ -78,7 +78,7 @@ def apply_statusline(spec, now, directory=None):
     """Read one exact profile/session report; missing or conflicting reports stay unknown."""
     for key in ('effort', 'effort_source', 'effort_updated'):
         spec.pop(key, None)
-    profile, session = spec.get('config_dir'), spec.get('id')
+    profile, session = spec.get('config_dir'), spec.get('active_session_id') or spec.get('id')
     if not isinstance(profile, str) or not profile or not isinstance(session, str) or not session:
         return
     try:

@@ -245,6 +245,9 @@ struct QuickView: View {
     private var tokensMode: Bool { tokensChosen || !model.sessions.contains(where: \.hasEstimate) }
     @State private var detail: Session?
     @State private var request: ControlRequest?
+    @State private var narrow = false
+    @State private var themeFrame = CGRect.zero
+    @State private var languageFrame = CGRect.zero
     private static let paceColumn: CGFloat = 54, valueColumn: CGFloat = 70
     private var theme: QuickTheme { QuickTheme(light: scheme == .light) }
 
@@ -268,7 +271,7 @@ struct QuickView: View {
         .background(theme.background.ignoresSafeArea())
         .foregroundStyle(theme.ink)
         .refreshable { if model.connection != .demo { model.connect() } }
-        .sheet(item: $detail) { SessionDetail(session: $0) }
+        .sheet(item: $detail) { SessionDetail(session: $0).detailSource("row", $0.id) }
         .controlConfirmation($request)
     }
 
@@ -292,42 +295,104 @@ struct QuickView: View {
         return L.t("Last report ", "마지막 보고 ") + date.formatted(Date.FormatStyle(date: .omitted, time: .standard).locale(L.locale))
     }
 
+    /// The computers in view for the header: the chosen computer's name, or all of them, in a long
+    /// and a short form; the chip shows the long one when it fits.
+    private func scope(short: Bool) -> String {
+        if let selected = model.selectedDevice { return selected.name }
+        if model.devices.count == 1 { return model.devices[0].name }
+        return short ? L.t("All \(model.devices.count)", "전체 \(model.devices.count)")
+            : L.t("All computers", "모든 컴퓨터") + " · \(model.devices.count)"
+    }
+    /// What the chip shows: the scope while reports flow, otherwise the connection state. The full
+    /// state stays in the chip's accessibility label.
+    private func chipText(short: Bool) -> String {
+        switch model.connection {
+        case .live, .demo: scope(short: short)
+        case .connecting: L.t("Connecting", "연결 중")
+        case .offline: L.t("Offline", "오프라인")
+        case .restricted: L.t("Access required", "권한 필요")
+        case .signedOut: L.t("Sign-in required", "로그인 필요")
+        }
+    }
+
+    /// Logo on the left; on the right, in one glass group: the computers in view, a one-tap theme
+    /// toggle, a one-tap language choice, and more. On narrow iPhones the logo text goes first.
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: "waveform.path").font(.system(size: 17, weight: .semibold)).foregroundStyle(theme.accent)
-            Text("1top").font(.system(size: 17, weight: .semibold))
-            Spacer()
-            HStack(spacing: 6) {
-                Circle().fill(fresh ? theme.accent : theme.amber).frame(width: 6, height: 6)
-                Text(connectionLabel).font(.system(size: 11.5)).foregroundStyle(theme.muted).lineLimit(1)
-            }.padding(.horizontal, 9).frame(height: 24).overlay(Capsule().stroke(theme.line))
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("connection")
-            .accessibilityValue(lastReport)
-            Menu {
-                if model.devices.count > 1 { ComputerPicker() }
-                Button(L.t("Reconnect now", "지금 다시 연결")) { model.connect() }.disabled(model.connection == .demo)
-                Button(tokensChosen ? L.t("Show sessions as weekly limit %", "세션을 주간 한도 %로 보기") : L.t("Show sessions as tokens", "세션을 토큰으로 보기")) { tokensChosen.toggle() }
-                if model.connection == .demo { Button(L.t("Leave demo", "데모 끝내기")) { model.leaveDemo() } }
-            } label: { Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).frame(width: 30, height: 30) }
-            .accessibilityLabel(L.t("More", "더 보기")).accessibilityIdentifier("more-menu")
+            if !narrow { Text("1top").font(.system(size: 17, weight: .semibold)).fixedSize() }
+            Spacer(minLength: 4)
+            GlassEffectContainer(spacing: 6) {
+                HStack(spacing: 6) {
+                    Menu {
+                        ComputerPicker()
+                        if !lastReport.isEmpty { Text(lastReport) }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Circle().fill(fresh ? theme.accent : theme.amber).frame(width: 6, height: 6)
+                            ViewThatFits(in: .horizontal) {
+                                ForEach([false, true], id: \.self) { short in
+                                    Text(chipText(short: short)).font(.system(size: 11.5)).foregroundStyle(theme.muted).lineLimit(1).truncationMode(.tail)
+                                }
+                            }
+                        }
+                    }
+                    .buttonStyle(.glass).controlSize(.small)
+                    .accessibilityLabel(connectionLabel)
+                    .accessibilityIdentifier("connection")
+                    .accessibilityValue(lastReport)
+                    .layoutPriority(-1)
+                    Button { toggleTheme() } label: {
+                        Image(systemName: scheme == .dark ? "moon.fill" : "sun.max.fill").font(.system(size: 13, weight: .semibold))
+                            .accessibilityHidden(true)
+                    }
+                    .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.small)
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { themeFrame = $0 }
+                    .accessibilityLabel(L.t("Toggle theme", "테마 전환"))
+                    .accessibilityIdentifier("theme-toggle")
+                    .accessibilityValue(scheme == .dark ? "dark" : "light")
+                    .fixedSize()
+                    GlassSegments(items: Language.allCases.map { .init(value: $0, label: Self.languageMark[$0] ?? $0.name, spoken: $0.name, identifier: "header-language-" + $0.rawValue) },
+                                  selection: Binding(get: { model.language }, set: { chooseLanguage($0) }), height: 30, fontSize: 11.5)
+                        .frame(width: 102)
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { languageFrame = $0 }
+                    Menu {
+                        Button(L.t("Reconnect now", "지금 다시 연결")) { model.connect() }.disabled(model.connection == .demo)
+                        Button(tokensChosen ? L.t("Show sessions as weekly limit %", "세션을 주간 한도 %로 보기") : L.t("Show sessions as tokens", "세션을 토큰으로 보기")) { tokensChosen.toggle() }
+                        if model.connection == .demo { Button(L.t("Leave demo", "데모 끝내기")) { model.leaveDemo() } }
+                    } label: {
+                        Image(systemName: "ellipsis").font(.system(size: 13, weight: .semibold))
+                    }
+                    .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.small)
+                    .accessibilityLabel(L.t("More", "더 보기")).accessibilityIdentifier("more-menu")
+                    .fixedSize()
+                }
+            }
         }
         .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 10)
+        .onGeometryChange(for: Bool.self) { $0.size.width < 390 } action: { narrow = $0 }
+    }
+
+    private static let languageMark: [Language: String] = [.ko: "한", .en: "EN", .zh: "中"]
+
+    /// Dark and light in one tap, from what is on screen now (a System setting flips to the other
+    /// side). The System choice itself lives in Workspace settings.
+    private func toggleTheme() {
+        let next: Appearance = scheme == .dark ? .light : .dark
+        Reveal.perform(at: CGPoint(x: themeFrame.midX, y: themeFrame.midY)) { model.appearance = next }
+    }
+
+    /// The new language spreads out from the segment that was tapped.
+    private func chooseLanguage(_ next: Language) {
+        guard next != model.language else { return }
+        let index = CGFloat(Language.allCases.firstIndex(of: next) ?? 0), count = CGFloat(Language.allCases.count)
+        let point = CGPoint(x: languageFrame.minX + languageFrame.width * (index + 0.5) / count, y: languageFrame.midY)
+        Reveal.perform(at: point) { model.language = next }
     }
 
     private var periodPicker: some View {
-        HStack(spacing: 2) {
-            ForEach(Period.allCases) { period in
-                let selected = model.period == period
-                Button { model.period = period } label: {
-                    Text(period.label).font(.system(size: 12.5, weight: selected ? .semibold : .medium)).frame(maxWidth: .infinity).frame(height: 28)
-                        .foregroundStyle(selected ? theme.ink : theme.muted)
-                        .background(selected ? theme.raised : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-                        .contentShape(Rectangle())
-                }.buttonStyle(.plain).accessibilityLabel(L.t("Last \(period.label)", "최근 \(period.label)")).accessibilityAddTraits(selected ? .isSelected : [])
-            }
-        }
-        .padding(3).background(theme.card, in: RoundedRectangle(cornerRadius: 9)).overlay(RoundedRectangle(cornerRadius: 9).stroke(theme.line))
+        @Bindable var model = model
+        return GlassSegments.periods($model.period)
     }
 
     // MARK: Tokens · average speed on the radar, split by model
