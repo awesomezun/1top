@@ -1,5 +1,5 @@
 export const ACTIONS = ['focus', 'pause', 'resume', 'terminate', 'prompt', 'message'] as const;
-export const CAPABILITIES = [...ACTIONS, 'mailbox'] as const;
+export const CAPABILITIES = [...ACTIONS, 'mailbox', 'message_images'] as const;
 export type Action = typeof ACTIONS[number];
 export interface AgentSession {
   id: string; control_key?: string; kind: string; app: string; terminal: string;
@@ -15,7 +15,7 @@ export interface WeeklyEstimate {
   calibration?:{pp_per_token:number;confidence:string;from:number|null;to:number|null;valid_until:number|null;source:string};
 }
 export interface AccountQuota {
-  id:string;kind:string;account_label:string;plan:string;updated:number;stale:boolean;note:string;
+  id:string;kind:string;account_label:string;alias?:string;plan:string;updated:number;stale:boolean;note:string;
   status?:string;
   windows:Array<{label:string;pct:number|null;reset:number}>;
   weekly?:Record<string,{used_pp:number|null;observed_seconds:number;partial:boolean}>;
@@ -108,7 +108,7 @@ export function snapshot(value: any): DeviceSnapshot {
     updated:number(value.updated)||0,recording_started:number(value.recording_started)||0,
     sessions,version:text(value.version,30),
     account_quotas:Array.isArray(value.account_quotas)?value.account_quotas.slice(0,24).map((q:any)=>({
-      id:text(q.id,100),kind:text(q.kind,40),account_label:text(q.kind,40)+' · '+text(q.id,100).slice(-6),
+      id:text(q.id,100),kind:text(q.kind,40),account_label:text(q.kind,40)+' · '+text(q.id,100).slice(-6),alias:text(q.alias,24),
       plan:text(q.plan,40),updated:number(q.updated)||0,stale:q.stale!==false,note:text(q.note,180),
       status:['login_required','login_expired','credential_store_unavailable','access_denied','account_changed','rate_limited','refresh_pending','last_report','report_pending'].includes(q.status)?q.status:'',
       windows:Array.isArray(q.windows)?q.windows.slice(0,8).map((w:any)=>({label:text(w.label,30),pct:number(w.pct,100),reset:number(w.reset)||0})):[],
@@ -135,13 +135,30 @@ function contextUsage(c:any):AgentSession['context_usage'] {
   return {basis:'last_request_input',input_tokens:c.input_tokens,capacity:number(c.capacity)||null,
     parts,observed_at:number(c.observed_at)||0,model:text(c.model,80)};
 }
+export function imageAttachments(value: any) {
+  if(value===undefined)return [];
+  if(!Array.isArray(value)||value.length>3)throw Error('Attach up to 3 images');
+  return value.map(item=>{
+    if(!['image/jpeg','image/png'].includes(item?.mime)||typeof item?.data!=='string'||item.data.length>699052||!item.data.length||item.data.length%4||!/^[A-Za-z0-9+/]*={0,2}$/.test(item.data))throw Error('Invalid photo');
+    let bytes:string;try{bytes=atob(item.data);}catch{throw Error('Invalid photo');}
+    if(!bytes.length||bytes.length>524288)throw Error('Photo too large');
+    const jpeg=bytes.startsWith('\xff\xd8')&&bytes.endsWith('\xff\xd9');
+    const png=bytes.startsWith('\x89PNG\r\n\x1a\n')&&bytes.endsWith('\x00\x00\x00\x00IEND\xaeB\x60\x82');
+    if(item.mime==='image/jpeg'?!jpeg:!png)throw Error('Invalid photo format');
+    return {mime:item.mime as 'image/jpeg'|'image/png',data:item.data as string};
+  });
+}
+
 export function action(value: any) {
   if (!value || !ACTIONS.includes(value.action) || !/^[a-f0-9-]{36}$/.test(value.request_id||'') ||
       !text(value.session_id,200) || !text(value.control_key,200) || !/^[a-f0-9-]{36}$/.test(value.device_id||'')) throw new Error('Invalid action');
   if(['prompt','message'].includes(value.action)&&(typeof value.prompt!=='string'||!value.prompt.trim()||value.prompt.length>4000||/[\x00-\x08\x0b-\x1f\x7f]/.test(value.prompt)))throw new Error('Invalid instruction');
+  const attachments=imageAttachments(value.attachments);
+  if(attachments.length&&value.action!=='message')throw Error('Photos require a conversation message');
   return {action:value.action as Action,request_id:value.request_id as string,device_id:value.device_id as string,
     session_id:text(value.session_id,200),control_key:text(value.control_key,200),
-    ...(['prompt','message'].includes(value.action)?{prompt:value.prompt as string}:{})};
+    ...(['prompt','message'].includes(value.action)?{prompt:value.prompt as string}:{}),
+    ...(attachments.length?{attachments}:{})};
 }
 
 export function mailboxRows(value:any) {
@@ -149,7 +166,9 @@ export function mailboxRows(value:any) {
   const statuses=['sending','queued','awaiting_reply','replied','delivery_unconfirmed','source_changed','not_delivered'];
   return value.map(row=>{
     if(!/^[a-f0-9-]{36}$/.test(row?.id||'')||!statuses.includes(row.status))throw Error('Invalid message');
-    return {id:row.id,text:text(row.text,4000),created:number(row.created)||0,status:row.status,
+    const attachments=Array.isArray(row.attachments)?row.attachments.slice(0,3).filter((v:any)=>/^[a-f0-9]{64}$/.test(v?.id||'')&&['image/jpeg','image/png'].includes(v?.mime)&&Number.isInteger(v?.bytes)&&v.bytes>0&&v.bytes<=524288).map((v:any)=>({id:v.id,name:text(v.name,80),mime:v.mime,bytes:v.bytes})):[];
+    const a=row.activity,activity=row.status==='awaiting_reply'&&['responding','working','writing'].includes(a?.phase)&&number(a?.observed_at)?{phase:a.phase,observed_at:number(a.observed_at)}:null;
+    return {id:row.id,text:text(row.text,4000),created:number(row.created)||0,status:row.status,attachments,activity,
       reply:text(row.reply,8000),reply_at:number(row.reply_at),truncated:row.truncated===true};
   });
 }

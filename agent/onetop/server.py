@@ -32,6 +32,7 @@ from .hierarchy import codex_metadata, annotate as annotate_hierarchy, group_ses
 from .effort import codex_level, backfill_codex, apply_statusline
 from .telemetry import TelemetryStore, session_index, bind_account, enrich
 from . import claude_continuation
+from . import account_aliases
 
 BASE = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -767,6 +768,7 @@ class Collector:
         account_quotas=self.accounts.snapshot(now)
         weekly_usage.restore_bound_claude_accounts(self.db,account_quotas,sessions,now)
         weekly_usage.restore_claude_last_report(self.db,account_quotas,now)
+        account_aliases.apply(account_quotas,DATA)
         weekly_usage.record(self.db,account_quotas,now)
         weekly,estimates=weekly_usage.snapshot(self.db,account_quotas,now,
             bindings={s['id']:s['account_binding'][0] for s in sessions if s.get('account_binding')},
@@ -888,10 +890,10 @@ class Handler(BaseHTTPRequestHandler):
             not secrets.compare_digest(self.headers.get('X-Monitor-Token',''),self.server.action_token)):
             self.send_error(403);return
         route=urlsplit(self.path).path
-        if route not in ('/api/action','/api/accounts/login','/api/accounts/authorize'):self.send_error(404);return
+        if route not in ('/api/action','/api/accounts/login','/api/accounts/authorize','/api/accounts/alias'):self.send_error(404);return
         try:
             length=int(self.headers.get('Content-Length','0'))
-            if length<1 or length>4096 or self.headers.get('Content-Type')!='application/json':
+            if length<1 or length>(2200000 if route=='/api/action' else 4096) or self.headers.get('Content-Type')!='application/json':
                 self.send_error(400);return
             payload=json.loads(self.rfile.read(length))
             if not isinstance(payload,dict):raise ValueError()
@@ -899,6 +901,13 @@ class Handler(BaseHTTPRequestHandler):
                 result=self.server.account_login.start(payload.get('kind'))
             elif route=='/api/accounts/authorize':
                 result=self.server.account_login.authorize_claude(payload.get('account_id'))
+            elif route=='/api/accounts/alias':
+                collector=self.server.collector
+                with collector.lock:
+                    rows=collector.snapshot.get('account_quotas',[])
+                    alias=account_aliases.set_alias(DATA,payload.get('account_id'),payload.get('alias'),{r['id'] for r in rows})
+                    account_aliases.apply(rows,DATA)
+                result={'alias':alias}
             else:result=self.server.controller.execute(payload)
             self.json_response(200,{'ok':True,**result})
         except (ValueError,TypeError):self.json_response(400,{'ok':False,'message':'잘못된 요청입니다.'})

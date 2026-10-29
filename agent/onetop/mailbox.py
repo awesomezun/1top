@@ -5,6 +5,8 @@ import re
 import threading
 import time
 from pathlib import Path
+from datetime import datetime
+from .message_images import public_images, image_prompt
 
 ID = re.compile(r'^[a-f0-9-]{36}$')
 REPLY = re.compile(r'\[1top-reply:([a-f0-9-]{36})\]([\s\S]*?)\[/1top-reply\]')
@@ -41,6 +43,46 @@ def assistant_text(record, kind):
                      and isinstance(block.get('text'), str))
 
 
+def track_activity(row, record, kind):
+    """Only phase/timestamp, scoped to this request's visible user marker.
+
+    Never store or export reasoning, tool arguments/results, or ordinary text.
+    """
+    try:
+        stamp = record.get('timestamp', record.get('createdAt'))
+        stamp = datetime.fromisoformat(stamp.replace('Z','+00:00')).timestamp() if isinstance(stamp,str) else float(stamp)
+        if not row.get('started_at') or stamp < row['started_at']-1 or stamp > time.time()+60:return
+        if stamp < row.get('_activity_at',0):return
+    except (TypeError,ValueError):return
+    message = record.get('payload') if kind=='Codex' else record if kind=='Aside' else record.get('message')
+    message = message if isinstance(message,dict) else {}
+    content = message.get('content')
+    text = content if isinstance(content,str) else '\n'.join(b.get('text','') for b in content if isinstance(b,dict) and b.get('type') in ('text','input_text') and isinstance(b.get('text'),str)) if isinstance(content,list) else ''
+    is_user = record.get('type')=='user' or message.get('role')=='user'
+    if kind=='Codex' and record.get('type')=='event_msg' and message.get('type')=='user_message':
+        is_user=True;text=message.get('message') if isinstance(message.get('message'),str) else ''
+    if is_user and text:
+        if f'[1top-reply:{row["id"]}]' in text:
+            row.update(_activity_seen=True,_activity_done=False,_activity_at=stamp)
+        elif row.get('_activity_seen'):
+            row.update(_activity_done=True,activity=None,_activity_at=stamp)
+        return
+    if not row.get('_activity_seen') or row.get('_activity_done'):return
+    phase = None
+    if record.get('type')=='api-request' or kind=='Codex' and message.get('type')=='task_started':phase='responding'
+    elif record.get('type')=='assistant' or kind=='Aside' and message.get('role')=='assistant':
+        blocks = content if isinstance(content,list) else []
+        if any(isinstance(b,dict) and b.get('type')=='tool_use' for b in blocks):phase='working'
+        elif assistant_text(record,kind):phase='writing'
+    elif kind=='Codex' and record.get('type')=='response_item':
+        if message.get('type') in ('function_call','custom_tool_call','local_shell_call'):phase='working'
+        elif assistant_text(record,kind):phase='writing'
+    if record.get('type')=='system' and record.get('subtype')=='turn_duration' or kind=='Codex' and message.get('type') in ('task_complete','turn_complete','turn_aborted'):
+        row.update(_activity_done=True,activity=None,_activity_at=stamp)
+    elif phase:
+        row.update(activity={'phase':phase,'observed_at':stamp},_activity_at=stamp)
+
+
 class Mailbox:
     def __init__(self, path=None):
         self.path = Path(path) if path else None
@@ -62,7 +104,7 @@ class Mailbox:
             json.dump(self.records, f, ensure_ascii=False)
         tmp.replace(self.path)
 
-    def begin(self, spec, rid, text):
+    def begin(self, spec, rid, text, images=()):
         if not ID.fullmatch(rid) or not readable(spec):
             raise ValueError('This session has no verified reply reader.')
         with self.lock:
@@ -76,7 +118,7 @@ class Mailbox:
             row = {'id': rid, 'session_id': spec['id'], 'text': text,
                                  'created': previous['created'] if previous else time.time(), 'status': 'sending', 'reply': '',
                                  'path': str(path), 'inode': stat.st_ino, 'offset': stat.st_size,
-                                 'kind': spec['kind']}
+                                 'kind': spec['kind'], 'attachments':public_images(images), 'started_at':time.time()}
             if previous:
                 previous.update(row)
             else:
@@ -84,14 +126,15 @@ class Mailbox:
             self.save()
         # Terminal transports have no separate instruction channel. Keep only the
         # reply format needed to correlate this answer; do not append task policy.
-        return f'{text}\n\n1top reply: [1top-reply:{rid}]...[/1top-reply]'
+        return f'{image_prompt(text,images)}\n\n1top reply: [1top-reply:{rid}]...[/1top-reply]'
 
-    def enqueue(self, spec, rid, text):
+    def enqueue(self, spec, rid, text, images=()):
         with self.lock:
             if any(r['id'] == rid for r in self.records):
                 raise ValueError('Message ID already used.')
             self.records.append({'id':rid,'session_id':spec['id'],'control_key':spec['control_key'],
-                                 'text':text,'created':time.time(),'status':'queued','reply':''})
+                                 'text':text,'created':time.time(),'status':'queued','reply':'',
+                                 'attachments':public_images(images)})
             self.save()
 
     def queued(self):
@@ -143,6 +186,7 @@ class Mailbox:
                             try:
                                 record = json.loads(line)
                                 visible = assistant_text(record, row['kind'])
+                                track_activity(row,record,row['kind'])
                             except (ValueError, TypeError, AttributeError):
                                 continue
                             for match in REPLY.finditer(visible):
@@ -157,5 +201,5 @@ class Mailbox:
                         break
             if changed:
                 self.save()
-            return [{k: row[k] for k in ('id', 'text', 'created', 'status', 'reply', 'reply_at', 'truncated')
-                     if k in row} for row in rows]
+            return [{**{k: row[k] for k in ('id', 'text', 'created', 'status', 'reply', 'reply_at', 'truncated', 'attachments') if k in row},
+                     'activity':row.get('activity') if row['status']=='awaiting_reply' and spec.get('status')=='working' and not row.get('_activity_done') else None} for row in rows]

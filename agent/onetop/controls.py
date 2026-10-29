@@ -11,6 +11,8 @@ import time
 from pathlib import Path
 from .discovery import orca_executable
 from .mailbox import Mailbox, readable as mailbox_readable
+from .message_images import ImageStore, decode_images, public_images
+from .platform_support import data_directory
 
 
 class ActionError(Exception):
@@ -90,6 +92,7 @@ class Controller:
         self.state_lock=threading.Lock()
         self.state_file=state_file
         self.mailbox=Mailbox(Path(state_file).with_name('session-mailbox.json') if state_file else None)
+        self.images=ImageStore(Path(state_file).parent/'attachments' if state_file else data_directory()/'attachments')
         self.paused={};self.audit=[]
         if state_file:
             try:
@@ -219,9 +222,15 @@ class Controller:
             raise ActionError('잘못된 동작 요청입니다.',400)
         prompt=instruction_text(payload.get('prompt')) if action in ('prompt','message') else None
         title=terminal_title(payload.get('title')) if action=='rename' else None
+        queued = next((r for r in self.mailbox.queued() if r['id']==rid and r['session_id']==sid), None) if payload.get('_dispatch_queued') is True else None
+        if payload.get('attachments') and action != 'message':raise ActionError('Photos require a conversation message.',400)
+        try:
+            images = queued.get('attachments', []) if queued else decode_images(payload.get('attachments', []))
+        except ValueError as error:raise ActionError(str(error),400) from None
         if not self.lock.acquire(blocking=False):raise ActionError('이전 동작을 처리 중입니다. 잠시 후 다시 시도하세요.')
         try:
             content=title if action=='rename' else prompt
+            if images:content=json.dumps([content,public_images(images)],sort_keys=True,separators=(',',':'))
             request=(action,sid,key,hashlib.sha256(content.encode()).hexdigest() if content is not None else None)
             if rid in self.receipts:
                 previous,result=self.receipts[rid]
@@ -247,11 +256,16 @@ class Controller:
                 result={'message':f'터미널 제목을 {title}(으)로 변경했습니다.','title':title}
             elif action in ('prompt','message'):
                 current={**spec,'status':self.status(spec)}
+                if images:
+                    if current['kind'] not in ('Claude','GLM','Codex') or not accepts_message(current):
+                        raise ActionError('This session cannot receive photos right now.')
+                    try:images = self.images.restore(rid,sid,images) if queued else self.images.stage(rid,sid,images)
+                    except (ValueError,OSError) as error:raise ActionError(str(error) if isinstance(error,ValueError) else 'The attached photo could not be read. Nothing sent.') from None
                 with self.state_lock:mark=self.paused.get(sid)
                 if mark and mark['key']==key and mark['phase']=='resuming':
                     raise ActionError('이미 지시 전송을 요청했습니다. 세션에서 결과를 확인하세요.')
                 if action=='message' and current['kind']!='Aside' and current['status']=='working' and accepts_message(current):
-                    if not payload.get('_dispatch_queued'):self.mailbox.enqueue(spec,rid,prompt)
+                    if not payload.get('_dispatch_queued'):self.mailbox.enqueue(spec,rid,prompt,images)
                     result={'message':'작업을 중단하지 않고 세션이 대기 상태가 되면 메시지를 전달합니다.','queued':True}
                     self.receipts[rid]=(request,result)
                     return result
@@ -260,7 +274,7 @@ class Controller:
                 # Save an uncertain receipt before input, so transport errors never replay it.
                 self.receipts[rid]=(request,{'message':'이 지시의 전달 결과가 미확인입니다. 세션에서 확인한 뒤 새 요청을 보내세요.','started':False})
                 if action=='message':
-                    try:prompt=self.mailbox.begin(spec,rid,prompt)
+                    try:prompt=self.mailbox.begin(spec,rid,prompt,images)
                     except (OSError,ValueError):raise ActionError('이 세션의 답신 연결을 확인하지 못했습니다. 메시지를 전송하지 않았습니다.')
                 if spec['kind']=='Aside':
                     from .aside import cli_path

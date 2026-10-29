@@ -104,6 +104,7 @@ def export_snapshot(state):
         if identified and mailbox_readable(s):
             capabilities.append('mailbox')
             if accepts_message(s):capabilities.append('message')
+            if accepts_message(s) and s['kind'] in ('Claude','GLM','Codex'):capabilities.append('message_images')
         if s['kind']!='Aside' and identified and (not term or status in ('idle','interrupted') or can_pause and status in ('working','waiting')):capabilities.append('terminate')
         sessions.append({'id':s['id'],'control_key':s.get('control_key',''),'kind':s['kind'],
             'app':'Orca' if term else loc.get('app') or 'Unknown',
@@ -128,7 +129,7 @@ def export_snapshot(state):
     return {'version':__version__,'updated':state.get('updated',0),'recording_started':state.get('started',0),
         'flow':export_flow(state),
         'operations':operations,
-        'account_quotas':[{'id':q['id'],'kind':q['kind'],'account_label':q['kind']+' · '+q['id'][-6:],
+        'account_quotas':[{'id':q['id'],'kind':q['kind'],'account_label':q['kind']+' · '+q['id'][-6:], 'alias':q.get('alias',''),
             'plan':q.get('plan',''),'windows':[{k:w.get(k) for k in ('label','pct','reset')} for w in q.get('windows',[])[:8]],
             'updated':q.get('updated',0),'stale':q.get('stale',True),'note':q.get('note',''),'status':q.get('status',''),
             'weekly':{key:{k:value.get(k) for k in ('used_pp','observed_seconds','partial')}
@@ -197,7 +198,7 @@ class CloudLink:
             self.receipts[rid]={'type':'result','request_id':rid,'ok':False,'message':'Previous execution is unconfirmed. Check the session before requesting another action.'}
             save_private(self.receipt_file,self.receipts)
             if data.get('action') not in ('focus','pause','resume','terminate','prompt','message'):raise ValueError('Unsupported action')
-            result=self.controller.execute({k:data.get(k) for k in ('action','session_id','control_key','request_id','prompt')})
+            result=self.controller.execute({k:data.get(k) for k in ('action','session_id','control_key','request_id','prompt','attachments') if k in data})
             self.result(rid,True,result.get('message','Completed'))
         except Exception as e:
             if data.get('action')=='message':self.controller.mailbox.delivery(rid,'delivery_unconfirmed')

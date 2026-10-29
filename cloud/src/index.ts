@@ -11,7 +11,13 @@ const random=()=>[...crypto.getRandomValues(new Uint8Array(32))].map(b=>b.toStri
 export async function hash(value:string){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))].map(b=>b.toString(16).padStart(2,'0')).join('');}
 const json=(body:unknown,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const bearer=(req:Request)=>req.headers.get('Authorization')?.match(/^Bearer ([A-Za-z0-9._-]{20,8000})$/)?.[1];
-async function body(req:Request){const raw=await req.text();if(raw.length>8192)throw new Error('Body too large');return JSON.parse(raw);}
+async function body(req:Request,max=8192){
+ const reader=req.body?.getReader();if(!reader)throw Error('Missing body');
+ const parts:Uint8Array[]=[];let size=0;
+ while(true){const {value,done}=await reader.read();if(done)break;size+=value.byteLength;if(size>max){await reader.cancel();throw Error('Body too large');}parts.push(value);}
+ const all=new Uint8Array(size);let offset=0;for(const part of parts){all.set(part,offset);offset+=part.length;}
+ return JSON.parse(new TextDecoder().decode(all));
+}
 async function user(req:Request,env:Env,googleOnly=false):Promise<{id:string;expires:number;mobileHash?:string}>{
  const token=bearer(req);if(!token)throw new Error('Authentication required');
  if(MOBILE_TOKEN.test(token)){
@@ -55,7 +61,7 @@ async function handle(req:Request,env:Env):Promise<Response>{
    if(!await limit(env.DB,'billing:'+u.id,6,600))return json({error:'Too many billing requests. Try again later.'},429);
    return path.endsWith('/checkout')?hub(env,u.id).fetch(new Request('https://hub/billing/checkout',{method:'POST',body:JSON.stringify({uid:u.id})})):portal(env,u.id);
  }
- if(path==='/health')return json({ok:true,service:'1top relay',version:'1.8.0',access:'approved-accounts',billing_enabled:billingReady(env),mode:env.DEPLOYMENT_MODE==='self_hosted'?'self_hosted':'managed',pairing_enabled:env.PAIRING_ENABLED==='true'});
+ if(path==='/health')return json({ok:true,service:'1top relay',version:'1.10.0',access:'approved-accounts',billing_enabled:billingReady(env),mode:env.DEPLOYMENT_MODE==='self_hosted'?'self_hosted':'managed',pairing_enabled:env.PAIRING_ENABLED==='true'});
  if(path==='/api/mobile/authorize'&&req.method==='POST'){
    const u=await user(req,env,true),access=await requireHostedAccess(env.DB,u.id);
    if(!await limit(env.DB,'mobile:'+u.id,10,600))return json({error:'Too many mobile sign-ins. Try again later.'},429);
@@ -146,8 +152,9 @@ async function handle(req:Request,env:Env):Promise<Response>{
    return hub(env,u.id).fetch(new Request('https://hub/revoke',{method:'POST',body:JSON.stringify({id:data.device_id})}));
  }
  if(path==='/api/action'&&req.method==='POST'){
-   const u=await approvedUser(req,env),cmd=action(await body(req));
+   const u=await approvedUser(req,env);
    if(!await limit(env.DB,'action:'+u.id,30))return json({error:'Action limit reached. Check your devices before retrying.'},429);
+   const cmd=action(await body(req,2200000));
    const d=await env.DB.prepare('SELECT id FROM devices WHERE id=? AND user_id=? AND revoked_at IS NULL AND allow_control=1').bind(cmd.device_id,u.id).first();
    if(!d)return json({error:'Device not found or control is disabled'},404);
    return hub(env,u.id).fetch(new Request('https://hub/action',{method:'POST',body:JSON.stringify(cmd)}));

@@ -5,7 +5,7 @@ export interface Env { DB:D1Database; HUBS:DurableObjectNamespace<AccountHub>; F
 type Attachment = {role:'device'|'browser';id:string;expires:number;name?:string;platform?:string;allow_control?:boolean;
   mailbox_at?:number;mailbox?:{request_id:string;device_id:string;session_id:string;expires:number}};
 type StoredDevice = {id:string;name:string;platform:string;received:number;snapshot:DeviceSnapshot};
-type Receipt = {request:Omit<ReturnType<typeof action>,'prompt'>;fingerprint?:string;created:number;status:string;message?:string};
+type Receipt = {request:Omit<ReturnType<typeof action>,'prompt'|'attachments'>;fingerprint?:string;created:number;status:string;message?:string};
 const json=(value:unknown,status=200)=>Response.json(value,{status});
 export class AccountHub extends DurableObject<Env> {
   constructor(ctx:DurableObjectState,env:Env){super(ctx,env);ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping','pong'));}
@@ -74,8 +74,9 @@ export class AccountHub extends DurableObject<Env> {
       if(sockets.length!==1 || !device || Date.now()-device.received>20000)return json({error:'Device is offline or stale. Nothing sent.'},409);
       const attached=sockets[0].deserializeAttachment() as Attachment;
       if(!attached.allow_control || !s || s.control_key!==cmd.control_key || !s.capabilities.includes(cmd.action))return json({error:'Action is not available for this session.'},409);
+      if(cmd.attachments?.length&&!s.capabilities.includes('message_images'))return json({error:'Update this computer before sending photos.'},409);
       // Save first; an ambiguous delivery is never automatically replayed.
-      const {prompt:instruction,...metadata}=cmd;
+      const {prompt:instruction,attachments:photos,...metadata}=cmd;
       const record:Receipt={request:metadata,fingerprint,created:Date.now(),status:'sent'};
       await this.ctx.storage.put(key,record);
       try{sockets[0].send(JSON.stringify({type:'action',...cmd,expires_at:Date.now()+15000}));}
