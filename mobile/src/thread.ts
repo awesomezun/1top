@@ -7,8 +7,13 @@ export const EDGES=[1600,1280,1024,800,640],QUALITIES=[.82,.68,.55];
 
 type T=(en:string,ko:string)=>string;
 export type Attachment={mime:string;data:string};
-/** A timeline row: the mailbox's own fields, plus local previews of photos sent from this phone. */
-export type Mail={id:string;text:string;created:number;status:string;reply:string;reply_at?:number;truncated?:boolean;local?:boolean;attachments?:{id?:string;name?:string;mime?:string;bytes?:number}[];photos?:{uri:string}[];instruction?:boolean;activity?:Activity|null};
+/** A photo in a draft: its preview and the fitted JPEG that will be sent. */
+export type DraftPhoto={id:string;uri:string;name:string;mime:string;data:string;bytes:number};
+export type Draft={text:string;photos:DraftPhoto[]};
+export const EMPTY:Draft={text:'',photos:[]};
+/** A timeline row: the mailbox's own fields, plus what only this phone knows about a message it sent:
+ *  photo previews, the draft it came from (to bring back after a refusal) and why it was refused. */
+export type Mail={id:string;request_id?:string;text:string;created:number;status:string;reply:string;reply_at?:number;truncated?:boolean;local?:boolean;attachments?:{id?:string;name?:string;mime?:string;bytes?:number}[];photos?:{uri:string}[];instruction?:boolean;activity?:Activity|null;draft?:Draft;error?:string};
 export type Activity={phase:Phase;observed_at:number};
 export type Fitted={width:number;height:number;quality:number;bytes:number;data:string;uri:string};
 
@@ -55,11 +60,11 @@ export type Delivery='queued'|'sending'|'awaiting_reply'|'replied'|'delivery_unc
 export function deliveryLabel(status:string,t:T){
  return ({queued:t('Queued · enters when the current turn ends','대기 중 · 현재 작업이 끝나면 전달'),sending:t('Sending','전송 중'),awaiting_reply:t('Delivered · waiting for a reply','전달됨 · 답신 대기'),replied:t('Replied','답신 도착'),
   delivery_unconfirmed:t('Delivery unconfirmed · check the session before sending again','전달 미확인 · 다시 보내기 전에 세션 확인'),source_changed:t('Reply source changed · the session was replaced','답신 연결 변경됨 · 세션이 바뀌었습니다'),
-  not_delivered:t('Not delivered · the session changed or the wait expired','미전달 · 세션이 바뀌었거나 대기가 만료됨'),instruction_sent:t('Instruction delivered · this session cannot reply','지시 전달됨 · 이 세션은 답신할 수 없음')} as Record<string,string>)[status]||status;
+  not_delivered:t('Not delivered · the session changed or the wait expired','미전달 · 세션이 바뀌었거나 대기가 만료됨'),not_sent:t('Not sent · refused before delivery','보내지 못함 · 전달 전에 거절됨'),instruction_sent:t('Instruction delivered · this session cannot reply','지시 전달됨 · 이 세션은 답신할 수 없음')} as Record<string,string>)[status]||status;
 }
 /** A message this phone sent that no receipt or mailbox moved past "sending" for 30 s is unconfirmed. */
 export const effectiveStatus=(m:{status:string;local?:boolean;created:number},nowSeconds:number)=>m.local&&m.status==='sending'&&nowSeconds-m.created>30?'delivery_unconfirmed':m.status;
-export function deliveryTone(status:string):'progress'|'done'|'problem'{return status==='replied'||status==='instruction_sent'?'done':['delivery_unconfirmed','source_changed','not_delivered'].includes(status)?'problem':'progress';}
+export function deliveryTone(status:string):'progress'|'done'|'problem'{return status==='replied'||status==='instruction_sent'?'done':['delivery_unconfirmed','source_changed','not_delivered','not_sent'].includes(status)?'problem':'progress';}
 
 export type Work='working'|'waiting'|'idle'|'paused'|'offline'|'stale';
 /** The session's work from its live status and how fresh its computer's report is. No percentages. */
@@ -70,9 +75,9 @@ export function workState(row:{status:string;device:{online:boolean;received:num
 }
 export function workLabel(work:Work,t:T){return ({working:t('Working','작업 중'),waiting:t('Waiting for input','입력 대기'),idle:t('Idle','대기'),paused:t('Paused','일시정지'),offline:t('Computer offline','컴퓨터 오프라인'),stale:t('Report is old','오래된 보고')} as Record<Work,string>)[work];}
 
-/** A send refused on the phone or answered by the relay failed for sure; a timeout or a dropped connection may
- *  still have delivered it, so it stays unconfirmed and is never resent automatically. */
-export const sendOutcome=(error:{status?:unknown;local?:boolean}):'failed'|'unconfirmed'=>typeof error?.status==='number'||error?.local===true?'failed':'unconfirmed';
+/** Only a send refused on the phone or by the relay (4xx) failed for sure. A server error (5xx), a timeout
+ *  or a dropped connection may still have delivered it: unconfirmed, and never resent automatically. */
+export const sendOutcome=(error:{status?:unknown;local?:boolean}):'failed'|'unconfirmed'=>error?.local===true||(typeof error?.status==='number'&&error.status>=400&&error.status<500)?'failed':'unconfirmed';
 
 /** Photos stored with a mailbox row: a count, and names while they fit. */
 export function attachmentSummary(list:{name?:string;bytes?:number}[]|null|undefined,t:T){
@@ -97,3 +102,54 @@ export function responseActivity(messages:{status:string;activity?:Activity|null
  return latest;
 }
 export const activityLabel=(phase:Phase,t:T)=>({responding:t('Preparing a reply…','응답 준비 중…'),working:t('Working…','작업 중…'),writing:t('Writing a reply…','답변 작성 중…')})[phase];
+
+// Conversations are kept per session (device id : session id): each has its own draft and timeline,
+// so sends that finish late only touch the session they were sent to.
+export type Convo={draft:Draft;thread:Mail[]};
+export const emptyDraft=(d:Draft)=>!d.text.trim()&&!d.photos.length;
+const update=(c:Convo,id:string,change:(m:Mail)=>Mail|null):Convo=>({...c,thread:c.thread.flatMap(m=>m.id!==id?[m]:(x=>x?[x]:[])(change(m)))});
+
+/** Sending empties the composer at once so the next message can be written while this one travels. */
+export const startSend=(c:Convo,mail:Mail):Convo=>({draft:EMPTY,thread:[...c.thread,mail]});
+/** A refusal brings the draft back only into an empty composer. Otherwise the refused message stays
+ *  in the timeline, with its text and photos, until the reader brings it back. */
+export const sendFailed=(c:Convo,id:string,reason:string):Convo=>{
+ const row=c.thread.find(m=>m.id===id);if(!row)return c;
+ if(emptyDraft(c.draft)&&row.draft)return {draft:row.draft,thread:c.thread.filter(m=>m.id!==id)};
+ return update(c,id,m=>({...m,status:'not_sent',error:reason}));
+};
+export const sendUnconfirmed=(c:Convo,id:string):Convo=>update(c,id,m=>m.status==='sending'?{...m,status:'delivery_unconfirmed'}:m);
+/** Appends a refused message to the current draft: text after a blank line, photos up to the limit.
+ *  Photos that do not fit stay on the refused message. */
+export function bringBack(c:Convo,id:string,max=PHOTO_MAX):Convo{
+ const row=c.thread.find(m=>m.id===id);if(!row?.draft)return c;
+ const have=new Set(c.draft.photos.map(p=>p.id)),incoming=row.draft.photos.filter(p=>!have.has(p.id)),room=Math.max(0,max-c.draft.photos.length);
+ const text=[c.draft.text.trimEnd(),row.draft.text].filter(x=>x.trim()).join('\n\n'),moved=incoming.slice(0,room),left=incoming.slice(room);
+ const draft={text,photos:[...c.draft.photos,...moved]};
+ return left.length?{draft,thread:c.thread.map(m=>m.id===id?{...m,draft:{text:'',photos:left},photos:left.map(p=>({uri:p.uri}))}:m)}:{draft,thread:c.thread.filter(m=>m.id!==id)};
+}
+
+// Delivery only moves forward: a late or partial mailbox answer never takes a message back.
+const RANK:Record<string,number>={sending:0,delivery_unconfirmed:0,not_sent:0,queued:1,awaiting_reply:2,instruction_sent:2,source_changed:3,not_delivered:3,replied:4};
+export const forward=(old:string,next:string)=>(RANK[next]??2)>=(RANK[old]??2)?next:old;
+const key=(m:{id:string;request_id?:string})=>m.request_id||m.id;
+
+/** The mailbox returns only the latest changed open requests (up to 10), so it is merged by request,
+ *  never used to replace the timeline: rows it leaves out stay, replies already shown stay, and
+ *  activity is taken only from this answer. A message this phone sent matches its request id. */
+export function mergeMailbox(thread:Mail[],server:Mail[]):Mail[]{
+ const rows=thread.map(m=>m.activity?{...m,activity:null}:m),at=new Map(rows.map((m,i)=>[key(m),i]));
+ for(const s of server){const i=at.get(key(s));
+  if(i===undefined){at.set(key(s),rows.length);rows.push({...s,activity:s.activity??null});continue;}
+  const old=rows[i];
+  rows[i]={...old,...s,status:forward(old.status,s.status),reply:s.reply||old.reply,reply_at:s.reply_at??old.reply_at,photos:old.photos,draft:old.draft,local:false,activity:s.activity??null};}
+ return rows.map((m,i)=>[m,i] as const).sort((a,b)=>(a[0].created-b[0].created)||(a[1]-b[1])).map(([m])=>m);
+}
+
+/** Relay receipts for this phone's sends, applied by request id. Every receipt is kept, so two
+ *  results arriving together are both applied. */
+export function applyReceipts(thread:Mail[],receipts:{status:string;request:{request_id:string}}[]):Mail[]{
+ let changed=false;
+ const next=thread.map(m=>{if(m.status!=='sending')return m;const r=receipts.find(x=>x.request?.request_id===key(m));if(!r)return m;changed=true;return {...m,status:r.status==='failed'?'delivery_unconfirmed':m.instruction?'instruction_sent':'awaiting_reply'};});
+ return changed?next:thread;
+}

@@ -1,12 +1,11 @@
-import React,{createContext,useContext,useEffect,useState} from 'react';
+import React,{createContext,useContext,useEffect,useRef,useState} from 'react';
 import {Alert} from 'react-native';
 import * as Crypto from 'expo-crypto';
 import {API,selectRelay,api,loadToken,signIn,signOut,useConnection} from './connection';
 import {demoDevices} from './demo';
 import {fresh} from './metrics';
 import {sortSessions} from './session-order';
-import {checkAttachments,sendOutcome,TEXT_MAX,type Attachment} from './thread';
-import type {Photo} from './photos';
+import {applyReceipts,checkAttachments,EMPTY,sendOutcome,TEXT_MAX,type Attachment,type Convo,type Mail} from './thread';
 import type {Device,SessionRow,WindowKey} from './types';
 const Context=createContext<any>(null);
 export const useWorkspace=()=>useContext(Context);
@@ -14,17 +13,24 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
  const [token,setToken]=useState<string|null>(null),[loading,setLoading]=useState(true),[demo,setDemo]=useState(false),[ko,setKo]=useState(false),[selected,setSelected]=useState('all'),[period,setPeriod]=useState<WindowKey>('24h'),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[pending,setPending]=useState<Record<string,string>>({}),[clock,setClock]=useState(()=>Date.now());
  const [relay,setRelay]=useState(API);
  const [controlMessages,setControlMessages]=useState<Record<string,{id:string;message:string;final:boolean}>>({});
- // One composer draft follows the reader between sessions, so picked photos survive a switch to a session that cannot take them.
- const [draft,setDraft]=useState<{text:string;photos:Photo[]}>({text:'',photos:[]});
+ // Each session (device id : session id) keeps its own draft and timeline. A send that finishes late,
+ // or a receipt, only changes the session it belongs to, even after the reader moved on.
+ const [convos,setConvos]=useState<Record<string,Convo>>({});
+ const seen=useRef(new Set<string>());
+ function updateConvo(key:string,change:(c:Convo)=>Convo,seed?:Mail[]){setConvos(old=>({...old,[key]:change(old[key]??{draft:EMPTY,thread:seed??[]})}));}
  const connection=useConnection(token),t=(en:string,kr:string)=>ko?kr:en;
  useEffect(()=>{loadToken().then(value=>{setToken(value);setRelay(API);}).catch(()=>setMessage('Unable to read saved sign-in.')).finally(()=>setLoading(false));},[]);
  useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),2000);return()=>clearInterval(timer);},[]);
  // Reset view state at the authentication boundary to prevent cross-account carryover.
  // eslint-disable-next-line react-hooks/set-state-in-effect
- useEffect(()=>{setSelected('all');setPending({});setMessage('');setControlMessages({});setDraft({text:'',photos:[]});},[token,demo]);
- // The server receipt is an external event; reflect its completion in pending controls.
- // eslint-disable-next-line react-hooks/set-state-in-effect
- useEffect(()=>{const result=connection.receipt;if(!result)return;setPending(old=>Object.fromEntries(Object.entries(old).filter(([,id])=>id!==result.request.request_id)));const message=result.status+': '+(result.message||'');setMessage(message);const key=result.request.device_id+':'+result.request.session_id;setControlMessages(old=>({...old,[key]:{id:result.request.request_id,message,final:true}}));},[connection.receipt]);
+ useEffect(()=>{setSelected('all');setPending({});setMessage('');setControlMessages({});setConvos({});seen.current=new Set();},[token,demo]);
+ // Server receipts are external events. Each is applied once to pending controls, control messages and
+ // every conversation's sends; results that arrive together are all kept by the connection.
+ useEffect(()=>{const all:any[]=connection.receipts,next=all.filter(r=>r?.request?.request_id&&!seen.current.has(r.request.request_id));if(!next.length)return;
+  for(const r of next)seen.current.add(r.request.request_id);const ids=new Set(next.map(r=>r.request.request_id)),last=next[next.length-1];
+  setPending(old=>Object.fromEntries(Object.entries(old).filter(([,id])=>!ids.has(id))));setMessage(last.status+': '+(last.message||''));
+  setControlMessages(old=>{const out={...old};for(const r of next)out[r.request.device_id+':'+r.request.session_id]={id:r.request.request_id,message:r.status+': '+(r.message||''),final:true};return out;});
+  setConvos(old=>Object.fromEntries(Object.entries(old).map(([k,c])=>[k,{...c,thread:applyReceipts(c.thread,all)}])));},[connection.receipts]);
  const devices:Device[]=demo?demoDevices():connection.devices;
  const visible=devices.filter(d=>selected==='all'||d.id===selected);
  const rows:SessionRow[]=sortSessions(visible.flatMap(d=>d.snapshot.sessions.map(s=>({...s,device:d,key:d.id+':'+s.id}))),period);
@@ -55,5 +61,5 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
    setTimeout(()=>setPending(old=>{if(old[row.key]!==id)return old;const next={...old};delete next[row.key];report(t('Result unconfirmed. Check the computer before retrying.','결과 미확인. 다시 요청하기 전에 컴퓨터를 확인하세요.'),true);return next;}),25000);
   }}]);
  }
- return <Context.Provider value={{relay,changeRelay,token,loading,demo,setDemo,ko,setKo,t,selected,setSelected,period,setPeriod,busy,message,setMessage,pending,controlMessages,clock,devices,visible,rows,connection,login,logout,control,sendMessage,draft,setDraft}}>{children}</Context.Provider>;
+ return <Context.Provider value={{relay,changeRelay,token,loading,demo,setDemo,ko,setKo,t,selected,setSelected,period,setPeriod,busy,message,setMessage,pending,controlMessages,clock,devices,visible,rows,connection,login,logout,control,sendMessage,convos,updateConvo}}>{children}</Context.Provider>;
 }

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-const {base64Bytes,fitted,fitPlan,fitPhoto,checkAttachments,sendMode,defaultPrompt,deliveryLabel,deliveryTone,effectiveStatus,workState,workLabel,sendOutcome,attachmentSummary,responseActivity,activityLabel,PHOTO_LIMIT,EDGES,QUALITIES}=await import('../src/thread.ts');
+const {base64Bytes,fitted,fitPlan,fitPhoto,checkAttachments,sendMode,defaultPrompt,deliveryLabel,deliveryTone,effectiveStatus,workState,workLabel,sendOutcome,attachmentSummary,responseActivity,activityLabel,EMPTY,startSend,sendFailed,sendUnconfirmed,bringBack,mergeMailbox,applyReceipts,forward,PHOTO_LIMIT,EDGES,QUALITIES}=await import('../src/thread.ts');
 const en=(e)=>e,ko=(_,k)=>k,b64=n=>Buffer.alloc(n,7).toString('base64');
 
 test('decoded base64 size counts padding',()=>{
@@ -65,8 +65,76 @@ test('the typing indicator follows request-scoped activity only, the latest one,
  assert.deepEqual(['responding','working','writing'].map(p=>activityLabel(p,ko)),['응답 준비 중…','작업 중…','답변 작성 중…']);
  assert.deepEqual(['responding','working','writing'].map(p=>activityLabel(p,en)),['Preparing a reply…','Working…','Writing a reply…']);
 });
-test('a refused send keeps the draft; a timeout or dropped connection is only unconfirmed',()=>{
- assert.equal(sendOutcome({status:413}),'failed');assert.equal(sendOutcome({local:true}),'failed');assert.equal(sendOutcome({name:'AbortError'}),'unconfirmed');assert.equal(sendOutcome(new TypeError('Network request failed')),'unconfirmed');
+test('only a refusal (4xx) or a check on the phone is a definite failure; 5xx, timeouts and dropped connections are unconfirmed',()=>{
+ for(const status of [400,401,404,409,413,422,429,499])assert.equal(sendOutcome({status}),'failed',String(status));
+ for(const status of [500,502,503,504,520,399])assert.equal(sendOutcome({status}),'unconfirmed',String(status));
+ assert.equal(sendOutcome({local:true}),'failed');assert.equal(sendOutcome({name:'AbortError'}),'unconfirmed');assert.equal(sendOutcome(new TypeError('Network request failed')),'unconfirmed');assert.equal(sendOutcome({}),'unconfirmed');
+});
+// The workspace keeps one conversation per device:session and changes only the one named.
+const put=(all,key,fn)=>({...all,[key]:fn(all[key]??{draft:EMPTY,thread:[]})});
+const photo=id=>({id,uri:'file:'+id,name:id+'.jpg',mime:'image/jpeg',data:'AAAA',bytes:3});
+const mail=(id,extra={})=>({id,text:'m'+id,created:Number(String(id).replace(/\D/g,''))||1,status:'sending',reply:'',local:true,...extra});
+test('drafts belong to their session: A, then B, then A again keeps both texts and photos',()=>{
+ let all={};
+ all=put(all,'mac:A',c=>({...c,draft:{text:'for A',photos:[photo('a1'),photo('a2')]}}));
+ all=put(all,'mac:B',c=>({...c,draft:{...c.draft,text:'for B'}}));
+ assert.deepEqual(all['mac:B'].draft,{text:'for B',photos:[]});
+ assert.deepEqual(all['mac:A'].draft.text,'for A');assert.deepEqual(all['mac:A'].draft.photos.map(p=>p.id),['a1','a2']);
+ all=put(all,'mini:A',c=>c);assert.deepEqual(all['mini:A'].draft,EMPTY);
+});
+test('sending empties only its own composer, and a late result for A never touches B',()=>{
+ const sentA={text:'question A',photos:[photo('a1')]};
+ let all=put({},'mac:A',c=>({...c,draft:sentA}));
+ all=put(all,'mac:A',c=>startSend(c,mail('r1',{draft:sentA})));
+ assert.deepEqual(all['mac:A'].draft,EMPTY);assert.equal(all['mac:A'].thread.length,1);
+ all=put(all,'mac:B',c=>({...c,draft:{text:'writing B',photos:[photo('b1')]}}));
+ const before=all['mac:B'];
+ // A's late success changes no draft at all; its late refusal or timeout changes only A.
+ for(const late of [c=>sendFailed(c,'r1','413'),c=>sendUnconfirmed(c,'r1')]){const after=put(all,'mac:A',late);assert.equal(after['mac:B'],before);}
+ // Meanwhile the reader writes the next message in A; a late refusal must not overwrite it.
+ all=put(all,'mac:A',c=>({...c,draft:{text:'next in A',photos:[]}}));
+ const failed=put(all,'mac:A',c=>sendFailed(c,'r1','Too large'))['mac:A'];
+ assert.equal(failed.draft.text,'next in A');assert.equal(failed.thread[0].status,'not_sent');assert.equal(failed.thread[0].error,'Too large');assert.deepEqual(failed.thread[0].draft,sentA);
+});
+test('a refusal restores into an empty composer, otherwise it can be brought back after the current draft',()=>{
+ const sent={text:'retry me',photos:[photo('p1'),photo('p2')]};
+ const restored=sendFailed(startSend({draft:sent,thread:[]},mail('r1',{draft:sent})),'r1','400');
+ assert.deepEqual(restored.draft,sent);assert.equal(restored.thread.length,0);
+ const kept={draft:{text:'new text',photos:[photo('n1'),photo('n2')]},thread:[mail('r1',{status:'not_sent',draft:sent})]};
+ const back=bringBack(kept,'r1');
+ assert.equal(back.draft.text,'new text\n\nretry me');assert.deepEqual(back.draft.photos.map(p=>p.id),['n1','n2','p1']);
+ // The photo that did not fit the three-photo limit stays on the refused message.
+ assert.equal(back.thread.length,1);assert.deepEqual(back.thread[0].draft.photos.map(p=>p.id),['p2']);assert.equal(back.thread[0].draft.text,'');
+ const all=bringBack(back,'r1');assert.equal(all.draft.photos.length,3);assert.equal(all.thread.length,1);
+ const roomy=bringBack({draft:EMPTY,thread:[mail('r1',{status:'not_sent',draft:sent})]},'r1');assert.deepEqual(roomy.draft,sent);assert.equal(roomy.thread.length,0);
+});
+test('twelve quick messages stay twelve when the mailbox returns only the latest ten',()=>{
+ let thread=[];for(let i=1;i<=12;i++)thread=startSend({draft:EMPTY,thread},mail('r'+i)).thread;
+ const server=Array.from({length:10},(_,k)=>({id:'r'+(k+3),text:'m'+(k+3),created:k+3,status:'awaiting_reply',reply:''}));
+ const merged=mergeMailbox(thread,server);
+ assert.equal(merged.length,12);assert.deepEqual(merged.map(m=>m.id),thread.map(m=>m.id));
+ assert.deepEqual(merged.slice(0,2).map(m=>m.status),['sending','sending']);assert.ok(merged.slice(2).every(m=>m.status==='awaiting_reply'&&!m.local));
+});
+test('a late reply stays and a reply is never taken back to waiting',()=>{
+ const thread=[{id:'r1',text:'q',created:1,status:'replied',reply:'done',reply_at:5},{id:'r2',text:'q2',created:2,status:'awaiting_reply',reply:''}];
+ const missing=mergeMailbox(thread,[{id:'r2',text:'q2',created:2,status:'awaiting_reply',reply:''}]);
+ assert.equal(missing.length,2);assert.equal(missing[0].reply,'done');assert.equal(missing[0].status,'replied');
+ const stale=mergeMailbox(thread,[{id:'r1',text:'q',created:1,status:'awaiting_reply',reply:''}]);
+ assert.equal(stale[0].status,'replied');assert.equal(stale[0].reply,'done');
+ assert.equal(forward('replied','awaiting_reply'),'replied');assert.equal(forward('awaiting_reply','replied'),'replied');assert.equal(forward('delivery_unconfirmed','awaiting_reply'),'awaiting_reply');assert.equal(forward('queued','sending'),'queued');assert.equal(forward('awaiting_reply','not_delivered'),'not_delivered');
+});
+test('activity comes only from the latest answer, and a sent message is matched by its request id',()=>{
+ const thread=[{id:'r1',text:'a',created:1,status:'awaiting_reply',reply:'',activity:{phase:'writing',observed_at:9}},{id:'local-2',request_id:'req-2',text:'b',created:2,status:'sending',reply:'',local:true,photos:[{uri:'file:x'}]}];
+ const merged=mergeMailbox(thread,[{id:'srv-2',request_id:'req-2',text:'b',created:2,status:'awaiting_reply',reply:'',activity:{phase:'responding',observed_at:10}}]);
+ assert.equal(merged.length,2);assert.equal(merged[0].activity,null);assert.deepEqual(merged[1].activity,{phase:'responding',observed_at:10});
+ assert.deepEqual(merged[1].photos,[{uri:'file:x'}]);assert.equal(merged[1].status,'awaiting_reply');
+ const none=mergeMailbox(merged,[]);assert.ok(none.every(m=>m.activity==null));assert.equal(none.length,2);
+});
+test('every receipt that arrives together is applied once to the send it names',()=>{
+ const thread=[mail('r1'),mail('r2'),{...mail('r3'),status:'replied'},{...mail('r4'),instruction:true}];
+ const out=applyReceipts(thread,[{status:'completed',request:{request_id:'r1'}},{status:'failed',request:{request_id:'r2'}},{status:'completed',request:{request_id:'r3'}},{status:'completed',request:{request_id:'r4'}}]);
+ assert.deepEqual(out.map(m=>m.status),['awaiting_reply','delivery_unconfirmed','replied','instruction_sent']);
+ assert.equal(applyReceipts(out,[{status:'completed',request:{request_id:'zz'}}]),out);
 });
 test('stored photos show as a count and their names',()=>{
  assert.equal(attachmentSummary([],ko),'');assert.equal(attachmentSummary([{name:'a.jpg',bytes:1}],ko),'사진 1장 · a.jpg');assert.equal(attachmentSummary([{bytes:1},{bytes:2}],en),'2 photos');
