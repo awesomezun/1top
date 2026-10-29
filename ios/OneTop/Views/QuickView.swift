@@ -292,42 +292,67 @@ struct QuickView: View {
         return L.t("Last report ", "마지막 보고 ") + date.formatted(Date.FormatStyle(date: .omitted, time: .standard).locale(L.locale))
     }
 
+    /// Brand on the left; on the right three glass buttons: the computers in view (with the
+    /// connection state), display and language, and more.
     private var header: some View {
-        HStack(spacing: 8) {
+        @Bindable var model = model
+        return HStack(spacing: 8) {
             Image(systemName: "waveform.path").font(.system(size: 17, weight: .semibold)).foregroundStyle(theme.accent)
-            Text("1top").font(.system(size: 17, weight: .semibold))
-            Spacer()
-            HStack(spacing: 6) {
-                Circle().fill(fresh ? theme.accent : theme.amber).frame(width: 6, height: 6)
-                Text(connectionLabel).font(.system(size: 11.5)).foregroundStyle(theme.muted).lineLimit(1)
-            }.padding(.horizontal, 9).frame(height: 24).overlay(Capsule().stroke(theme.line))
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("connection")
-            .accessibilityValue(lastReport)
-            Menu {
-                if model.devices.count > 1 { ComputerPicker() }
-                Button(L.t("Reconnect now", "지금 다시 연결")) { model.connect() }.disabled(model.connection == .demo)
-                Button(tokensChosen ? L.t("Show sessions as weekly limit %", "세션을 주간 한도 %로 보기") : L.t("Show sessions as tokens", "세션을 토큰으로 보기")) { tokensChosen.toggle() }
-                if model.connection == .demo { Button(L.t("Leave demo", "데모 끝내기")) { model.leaveDemo() } }
-            } label: { Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).frame(width: 30, height: 30) }
-            .accessibilityLabel(L.t("More", "더 보기")).accessibilityIdentifier("more-menu")
+            Text("1top").font(.system(size: 17, weight: .semibold)).fixedSize()
+            Spacer(minLength: 4)
+            GlassEffectContainer(spacing: 6) {
+                HStack(spacing: 6) {
+                    Menu {
+                        ComputerPicker()
+                        if !lastReport.isEmpty { Text(lastReport) }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Circle().fill(fresh ? theme.accent : theme.amber).frame(width: 6, height: 6)
+                            Text(connectionLabel).font(.system(size: 11.5)).foregroundStyle(theme.muted).lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.glass).controlSize(.small)
+                    .accessibilityLabel(connectionLabel)
+                    .accessibilityIdentifier("connection")
+                    .accessibilityValue(lastReport)
+                    Menu {
+                        Section(L.t("Theme", "테마")) {
+                            Picker(L.t("Theme", "테마"), selection: $model.appearance) {
+                                ForEach(Appearance.allCases) { Text($0.label).tag($0) }
+                            }
+                            .pickerStyle(.inline)
+                        }
+                        Section(L.t("Language", "언어")) {
+                            Picker(L.t("Language", "언어"), selection: $model.language) {
+                                ForEach(Language.allCases) { Text($0.name).tag($0) }
+                            }
+                            .pickerStyle(.inline)
+                        }
+                    } label: {
+                        Image(systemName: "circle.lefthalf.filled").font(.system(size: 13, weight: .semibold))
+                    }
+                    .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.small)
+                    .accessibilityLabel(L.t("Theme and language", "테마와 언어"))
+                    .accessibilityIdentifier("display-menu")
+                    .accessibilityValue(model.appearance.rawValue + " " + model.language.rawValue)
+                    Menu {
+                        Button(L.t("Reconnect now", "지금 다시 연결")) { model.connect() }.disabled(model.connection == .demo)
+                        Button(tokensChosen ? L.t("Show sessions as weekly limit %", "세션을 주간 한도 %로 보기") : L.t("Show sessions as tokens", "세션을 토큰으로 보기")) { tokensChosen.toggle() }
+                        if model.connection == .demo { Button(L.t("Leave demo", "데모 끝내기")) { model.leaveDemo() } }
+                    } label: {
+                        Image(systemName: "ellipsis").font(.system(size: 13, weight: .semibold))
+                    }
+                    .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.small)
+                    .accessibilityLabel(L.t("More", "더 보기")).accessibilityIdentifier("more-menu")
+                }
+            }
         }
         .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 10)
     }
 
     private var periodPicker: some View {
-        HStack(spacing: 2) {
-            ForEach(Period.allCases) { period in
-                let selected = model.period == period
-                Button { model.period = period } label: {
-                    Text(period.label).font(.system(size: 12.5, weight: selected ? .semibold : .medium)).frame(maxWidth: .infinity).frame(height: 28)
-                        .foregroundStyle(selected ? theme.ink : theme.muted)
-                        .background(selected ? theme.raised : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-                        .contentShape(Rectangle())
-                }.buttonStyle(.plain).accessibilityLabel(L.t("Last \(period.label)", "최근 \(period.label)")).accessibilityAddTraits(selected ? .isSelected : [])
-            }
-        }
-        .padding(3).background(theme.card, in: RoundedRectangle(cornerRadius: 9)).overlay(RoundedRectangle(cornerRadius: 9).stroke(theme.line))
+        @Bindable var model = model
+        return GlassSegments.periods($model.period)
     }
 
     // MARK: Tokens · average speed on the radar, split by model

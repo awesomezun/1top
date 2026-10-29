@@ -20,7 +20,11 @@ final class AppModel {
     var account: RelayAccount?
     var relay: URL = Relay.current
     var language: Language = Language.saved {
-        didSet { language.save(); L.ko = language == .ko }
+        didSet { language.save(); L.language = language }
+    }
+    /// Light, dark or the iPhone's own setting, applied at the root.
+    var appearance: Appearance = Appearance.saved {
+        didSet { appearance.save() }
     }
     /// Request IDs in flight by session key; the relay allows one control at a time per session.
     var pending: [String: String] = [:]
@@ -35,7 +39,7 @@ final class AppModel {
     private var socket: URLSessionWebSocketTask?
 
     init() {
-        L.ko = language == .ko
+        L.language = language
         if ProcessInfo.processInfo.arguments.contains("--demo") { showDemo(); return }
         #if DEBUG
         TokenStore.importDevelopmentToken()
