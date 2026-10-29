@@ -22,6 +22,7 @@ enum Chinese {
         // Demo computers, sessions and conversation (shared with the Android demo).
         "5 hours": "5小时",
         "Switches to ": "切换到 ",
+        "Clear search": "清除搜索",
         "Account names are the ones given in the desktop app.": "账户名称沿用桌面应用中设置的名称。",
         "Also do the cleanup I asked for yesterday.": "把昨天让你做的整理也做了。",
         "Better docs search": "文档搜索改进",

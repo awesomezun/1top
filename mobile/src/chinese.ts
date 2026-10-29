@@ -3,6 +3,7 @@
 // test/chinese.test.mjs lists any text without a translation.
 export const exact:Record<string,string>={
  "Switches to ":"切换到 ",
+ "Clear search":"清除搜索",
  "5 hours":"5小时",
  "Account names are the ones given in the desktop app.":"账户名称沿用桌面应用中设置的名称。",
  "Also do the cleanup I asked for yesterday.":"把昨天让你做的整理也做了。",

@@ -20,6 +20,9 @@ import type {SessionRow} from './types';
 // The demo's two sent pictures, drawn like the iPhone demo's; the relay itself returns no image data.
 const DEMO_PHOTOS:Record<string,number>={'demo:1':require('../assets/demo/photo-1.png'),'demo:2':require('../assets/demo/photo-2.png')};
 const photoSource=(uri:string)=>DEMO_PHOTOS[uri]??{uri};
+// QA only (onetop://?qaDemoImages=N in the demo): the same pictures in the composer, as on the iPhone.
+const TINY_PNG='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+const QA_PHOTOS=[1,2,3].map(n=>({id:'qa-'+n,uri:'demo:'+Math.min(n,2),name:'IMG_04'+(13+n)+'.png',mime:'image/png',data:TINY_PNG,bytes:180_000}));
 const mark=(work:Work)=>work==='working'||work==='waiting'||work==='paused'?work:'idle';
 const motion=Platform.OS!=='web';
 
@@ -41,6 +44,10 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
  const draft=convo.draft,thread=convo.thread;
  const [picking,setPicking]=useState(false),[error,setError]=useState(''),[rejected,setRejected]=useState<string[]>([]);
  const scroll=useRef<React.ComponentRef<typeof ScrollView>>(null);
+ useEffect(()=>{if(w.demo&&w.qaPhotos>0&&photosOk&&!w.convos[key])change(c=>({...c,draft:{...c.draft,photos:QA_PHOTOS.slice(0,w.qaPhotos)}}));
+  // Once, when a demo conversation first opens.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[]);
  useEffect(()=>{
   if(w.demo||!replies||w.connection.state!=='live')return;
   const refresh=()=>w.connection.readMailbox(row);
@@ -107,12 +114,13 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
   {/* Android draws edge to edge, so the window no longer resizes for the keyboard: lift the composer here too. */}
   <KeyboardAvoidingView style={{flex:1}} behavior="padding">
    <View style={st.head}>
-    <View style={{flex:1,minWidth:0}}><Text numberOfLines={1} style={st.title}>{name}</Text>
-     <Text numberOfLines={1} style={st.sub}>{[row.device.name,row.app,row.terminal===name?'':row.terminal,row.kind==='Aside'?'':toolWithAccount(row,tags,w.period),shortModel(row.model)].filter(Boolean).join(' · ')}</Text></View>
+    {/* The title in the middle, as on the iPhone's sheet; where it runs goes on the first line below. */}
+    <View style={{width:34}}/><Text numberOfLines={1} style={[st.title,{flex:1,textAlign:'center'}]}>{name}</Text>
     <Pressable accessibilityRole="button" accessibilityLabel={t('Close','닫기')} onPress={close} style={st.close}><Icon name="close" size={18} color={c.ink}/></Pressable>
    </View>
    {/* The session's work stays in view while composing. */}
    <View testID="work-state" style={st.strip}>
+    <Text numberOfLines={1} style={st.sub}>{[row.device.name,row.app,row.terminal===name?'':row.terminal,row.kind==='Aside'?'':toolWithAccount(row,tags,w.period),shortModel(row.model)].filter(Boolean).join(' · ')}</Text>
     <View style={{flexDirection:'row',alignItems:'center',gap:8}}><StateMark status={mark(work)}/><Text style={{color:work==='offline'||work==='stale'?c.amber:c.ink,fontSize:13,fontWeight:'600'}}>{workLabel(work,t)}</Text>
      <Text numberOfLines={1} style={{color:c.dim,fontSize:11.5,flexShrink:1}}>{t('Last report ','마지막 보고 ')+reported}</Text></View>
     <Text numberOfLines={1} style={{color:c.muted,fontSize:12,fontVariant:['tabular-nums']}}>{[t('Total ','누적 ')+short(sum(row.tokens)),(()=>{const label=periodLabel(w.period,t);return t(`Last ${label}`,`최근 ${label}`)+' '+short(sum(row.windows?.[w.period as keyof typeof row.windows]));})(),row.rate===null?'—':short(row.rate*3600)+t(' tokens/h',' tokens/시간')].join(' · ')}</Text>
@@ -144,7 +152,7 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
     {rejected.map((r,i)=><Text key={i} style={[st.note,{color:c.amber}]}>{r}</Text>)}
     {!!error&&<Text style={[st.note,{color:c.soft}]}>{error}</Text>}
     {!!photos.length&&<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:8}}>{photos.map((p,i)=><View key={p.id} testID="photo-preview">
-     <Image source={{uri:p.uri}} style={st.thumb} accessibilityLabel={t(`Photo ${i+1}, ${kb(p.bytes)}`,`사진 ${i+1}, ${kb(p.bytes)}`)}/>
+     <Image source={photoSource(p.uri)} style={st.thumb} accessibilityLabel={t(`Photo ${i+1}, ${kb(p.bytes)}`,`사진 ${i+1}, ${kb(p.bytes)}`)}/>
      <Pressable accessibilityRole="button" accessibilityLabel={t(`Remove photo ${i+1}`,`사진 ${i+1} 빼기`)} onPress={()=>change(c=>({...c,draft:{...c.draft,photos:c.draft.photos.filter(x=>x.id!==p.id)}}))} style={st.remove}><Icon name="close" size={11} color={c.ink}/></Pressable>
      <Text style={{color:c.dim,fontSize:10.5,textAlign:'center',marginTop:3}}>{kb(p.bytes)}</Text></View>)}</ScrollView>}
     <View style={{flexDirection:'row',alignItems:'flex-end',gap:8}}>

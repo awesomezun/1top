@@ -19,6 +19,10 @@ struct SessionsView: View {
             List {
                 Section {
                     ConnectionNotice().listRowInsets(.init()).listRowBackground(Color.clear)
+                    // Always shown under the large title and above the periods, as on Android and above the
+                    // desktop dashboard's session table.
+                    SearchField(text: $query, prompt: L.t("Session, project, model, computer", "세션, 프로젝트, 모델, 컴퓨터"))
+                        .listRowBackground(Color.clear).listRowInsets(.init(top: 0, leading: 0, bottom: 6, trailing: 0))
                     GlassSegments.periods($model.period)
                         .listRowBackground(Color.clear).listRowInsets(.init())
                     HStack(spacing: 28) {
@@ -39,7 +43,6 @@ struct SessionsView: View {
                                            description: query.isEmpty ? Text(L.t("Connect a computer to your account. Its active sessions appear here.", "컴퓨터를 계정에 연결하면 활동 중인 세션이 표시됩니다.")) : nil)
                 }
             }
-            .searchable(text: $query, prompt: L.t("Session, project, model, computer", "세션, 프로젝트, 모델, 컴퓨터"))
             .navigationTitle(L.t("Sessions", "세션"))
             .toolbar {
                 if model.devices.count > 1 {
@@ -87,6 +90,25 @@ struct SessionsView: View {
                 }
             }
             .contextMenu { SessionActions(session: s, open: { detail = s }, request: $request) }
+    }
+}
+
+/// A search field that stays in the list, so the large title stays large.
+private struct SearchField: View {
+    @Binding var text: String
+    var prompt: String
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
+            TextField(prompt, text: $text).textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.search)
+            if !text.isEmpty {
+                Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
+                    .buttonStyle(.plain).accessibilityLabel(L.t("Clear search", "검색어 지우기"))
+            }
+        }
+        .padding(.horizontal, 12).frame(height: 40)
+        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityIdentifier("sessions-search")
     }
 }
 

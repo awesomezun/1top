@@ -2,6 +2,7 @@ import React,{createContext,useContext,useEffect,useRef,useState} from 'react';
 import {AccessibilityInfo,Alert,Animated,Dimensions,Easing,useColorScheme,View} from 'react-native';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
+import * as Linking from 'expo-linking';
 import {nextLang,translate,when as clockText,type Lang} from './i18n';
 import {applyTheme,quick,type ThemeName} from './theme';
 import {API,selectRelay,api,loadToken,signIn,signOut,useConnection} from './connection';
@@ -33,6 +34,11 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
   const prefs=Promise.all([SecureStore.getItemAsync(SAVED.lang),SecureStore.getItemAsync(SAVED.appearance),SecureStore.getItemAsync(SAVED.tokens)]).then(([l,a,k])=>{
    if(l==='ko'||l==='en'||l==='zh')setLangState(l);if(a==='system'||a==='light'||a==='dark')setAppearanceState(a);setTokensState(k==='1');}).catch(()=>{});
   Promise.all([prefs,loadToken().then(value=>{setToken(value);setRelay(API);}).catch(()=>setMessage('Unable to read saved sign-in.'))]).finally(()=>setLoading(false));},[]);
+ // QA only: onetop://?qaDemoImages=2 puts that many drawn pictures in a demo conversation's composer, as the
+ // iPhone's -qaDemoImages does. Only the demo reads it, and the demo never sends anything.
+ const [qaPhotos,setQaPhotos]=useState(0);
+ useEffect(()=>{const read=(url:string|null)=>{if(!url)return;const n=Number(Linking.parse(url).queryParams?.qaDemoImages);if(n>0)setQaPhotos(Math.min(3,Math.floor(n)));};
+  Linking.getInitialURL().then(read).catch(()=>{});const sub=Linking.addEventListener('url',e=>read(e.url));return()=>sub.remove();},[]);
  const setLang=(next:Lang)=>{setLangState(next);SecureStore.setItemAsync(SAVED.lang,next).catch(()=>{});};
  const setAppearance=(next:Appearance)=>{setAppearanceState(next);SecureStore.setItemAsync(SAVED.appearance,next).catch(()=>{});};
  const setTokensChosen=(next:boolean)=>{setTokensState(next);SecureStore.setItemAsync(SAVED.tokens,next?'1':'0').catch(()=>{});};
@@ -95,7 +101,7 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
    setTimeout(()=>setPending(old=>{if(old[row.key]!==id)return old;const next={...old};delete next[row.key];report(t('Result unconfirmed. Check the computer before retrying.','결과 미확인. 다시 요청하기 전에 컴퓨터를 확인하세요.'),true);return next;}),25000);
   }}]);
  }
- return <Context.Provider value={{relay,changeRelay,token,loading,demo,setDemo,lang,setLang,shownLang:shownLang??lang,ko:lang==='ko',appearance,setAppearance,theme,toggleTheme,cycleLang,tokensChosen,setTokensChosen,when,t,selected,setSelected,period,setPeriod,busy,message,setMessage,pending,controlMessages,clock,devices,visible,rows,connection,login,logout,control,sendMessage,convos,updateConvo}}><View style={{flex:1}}>{children}
+ return <Context.Provider value={{relay,changeRelay,token,loading,demo,setDemo,lang,setLang,shownLang:shownLang??lang,ko:lang==='ko',appearance,setAppearance,theme,toggleTheme,cycleLang,tokensChosen,setTokensChosen,qaPhotos,when,t,selected,setSelected,period,setPeriod,busy,message,setMessage,pending,controlMessages,clock,devices,visible,rows,connection,login,logout,control,sendMessage,convos,updateConvo}}><View style={{flex:1}}>{children}
   {cover&&<Animated.View pointerEvents="none" style={{position:'absolute',left:cover.x-cover.r,top:cover.y-cover.r,width:cover.r*2,height:cover.r*2,borderRadius:cover.r,backgroundColor:cover.color,opacity:fade,transform:[{scale:grow}]}}/>}
  </View></Context.Provider>;
 }
