@@ -1,6 +1,6 @@
 {
   "name": "onetop-mobile",
-  "version": "4.0.0",
+  "version": "4.2.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@react-native-community/netinfo": "12.0.1",
@@ -8,6 +8,8 @@
     "expo-constants": "~58.0.13",
     "expo-crypto": "~58.0.2",
     "expo-font": "~58.0.10",
+    "expo-image-manipulator": "~58.0.16",
+    "expo-image-picker": "~58.0.10",
     "expo-linking": "~58.0.4",
     "expo-router": "~58.0.26",
     "expo-secure-store": "~58.0.2",
