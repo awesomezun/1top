@@ -38,6 +38,7 @@ export async function signOut(token:string|null){
  if(token){try{await api('/api/mobile/logout',token,{});}catch(e:any){if(![400,401].includes(e.status))throw e;}}
  await SecureStore.deleteItemAsync(key);
 }
+const none:any[]=[];
 export function useConnection(token:string|null){
  const [owner,setOwner]=useState(token);
  const socket=useRef<WebSocket|null>(null);
@@ -47,10 +48,12 @@ export function useConnection(token:string|null){
  // Computers paired without remote control: their sessions offer no controls at all.
  const noControl=useRef<Set<string>>(new Set());
  const [devices,setDevices]=useState<Device[]>([]),[state,setState]=useState('offline'),[error,setError]=useState(''),[account,setAccount]=useState<any>(null),[retryKey,setRetryKey]=useState(0),[active,setActive]=useState(AppState.currentState==='active'),[network,setNetwork]=useState(true),[receipt,setReceipt]=useState<any>(null);
+ // Every result is kept (the last 100): results arriving together share one render, and none may be lost.
+ const [receipts,setReceipts]=useState<any[]>([]);
  useEffect(()=>{const sub=AppState.addEventListener('change',v=>setActive(v==='active'));const off=NetInfo.addEventListener(v=>setNetwork(v.isConnected!==false));return()=>{sub.remove();off();};},[]);
  // Clear account-scoped external connection state before a new subscription is created.
  // eslint-disable-next-line react-hooks/set-state-in-effect
- useEffect(()=>{setOwner(token);setDevices([]);setAccount(null);setError('');setReceipt(null);setMailbox(null);},[token]);
+ useEffect(()=>{setOwner(token);setDevices([]);setAccount(null);setError('');setReceipt(null);setReceipts([]);setMailbox(null);},[token]);
  useEffect(()=>{
   if(!token||!active||!network)return;
   let alive=true,ws:WebSocket|null=null,timer:ReturnType<typeof setTimeout>|undefined,attempt=0;
@@ -63,12 +66,12 @@ export function useConnection(token:string|null){
     ws=new (WebSocket as any)(ticket.socket_url,['1top','ticket.'+ticket.ticket],{headers:{Origin:'https://1top.si'}} as any);
     socket.current=ws;
     ws!.onopen=()=>{if(alive){attempt=0;setState('live');setError('');}};
-    ws!.onmessage=(e:MessageEvent)=>{if(!alive)return;try{const m=JSON.parse(e.data);const scope=(d:Device):Device=>noControl.current.has(d.id)?{...d,allow_control:false,snapshot:d.snapshot&&{...d.snapshot,sessions:(d.snapshot.sessions||[]).map(s=>({...s,capabilities:[]}))}}:d;if(m.type==='state')setDevices((m.devices||[]).map(scope));if(m.type==='snapshot')setDevices(old=>[...old.filter(d=>d.id!==m.device.id),scope(m.device)]);if(m.type==='offline')setDevices(old=>old.map(d=>d.id===m.device_id?{...d,online:false}:d));if(m.type==='removed')setDevices(old=>old.filter(d=>d.id!==m.device_id));if(m.type==='result')setReceipt(m);if(m.type==='mailbox'){const ask=mailboxAsk.current;if(ask&&m.request_id===ask.request_id&&m.device_id===ask.device_id&&m.session_id===ask.session_id)setMailbox(m);}}catch{setError('Invalid device report. Reconnect to try again.');}};
+    ws!.onmessage=(e:MessageEvent)=>{if(!alive)return;try{const m=JSON.parse(e.data);const scope=(d:Device):Device=>noControl.current.has(d.id)?{...d,allow_control:false,snapshot:d.snapshot&&{...d.snapshot,sessions:(d.snapshot.sessions||[]).map(s=>({...s,capabilities:[]}))}}:d;if(m.type==='state')setDevices((m.devices||[]).map(scope));if(m.type==='snapshot')setDevices(old=>[...old.filter(d=>d.id!==m.device.id),scope(m.device)]);if(m.type==='offline')setDevices(old=>old.map(d=>d.id===m.device_id?{...d,online:false}:d));if(m.type==='removed')setDevices(old=>old.filter(d=>d.id!==m.device_id));if(m.type==='result'){setReceipt(m);setReceipts(old=>[...old.slice(-99),m]);}if(m.type==='mailbox'){const ask=mailboxAsk.current;if(ask&&m.request_id===ask.request_id&&m.device_id===ask.device_id&&m.session_id===ask.session_id)setMailbox(m);}}catch{setError('Invalid device report. Reconnect to try again.');}};
     ws!.onerror=()=>{if(alive)setState('offline');};
     ws!.onclose=()=>{if(!alive)return;setState('offline');timer=setTimeout(connect,Math.min(30000,1000*2**attempt++));};
    }catch(e:any){if(!alive)return;setState(e.status===403?'restricted':'offline');setError(e.message);if(e.status!==400&&e.status!==401&&e.status!==403)timer=setTimeout(connect,Math.min(30000,1000*2**attempt++));}
   }
   connect();return()=>{alive=false;clearTimeout(timer);socket.current=null;if(ws){ws.onclose=null;ws.close();}};
  },[token,active,network,retryKey]);
- return {mailbox:owner===token?mailbox:null,readMailbox:(row:any)=>{if(!token||!active||!network||socket.current?.readyState!==1)return false;const ask={request_id:Crypto.randomUUID(),device_id:row.device.id,session_id:row.id};mailboxAsk.current=ask;socket.current.send(JSON.stringify({type:'mailbox_request',...ask,control_key:row.control_key}));return true;},devices:owner===token?devices:[],state:token&&active&&network?state:'offline',error,account:owner===token?account:null,receipt:owner===token?receipt:null,retry:()=>setRetryKey(v=>v+1)};
+ return {mailbox:owner===token?mailbox:null,readMailbox:(row:any)=>{if(!token||!active||!network||socket.current?.readyState!==1)return false;const ask={request_id:Crypto.randomUUID(),device_id:row.device.id,session_id:row.id};mailboxAsk.current=ask;socket.current.send(JSON.stringify({type:'mailbox_request',...ask,control_key:row.control_key}));return true;},devices:owner===token?devices:[],state:token&&active&&network?state:'offline',error,account:owner===token?account:null,receipt:owner===token?receipt:null,receipts:owner===token?receipts:none,retry:()=>setRetryKey(v=>v+1)};
 }
