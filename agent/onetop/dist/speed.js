@@ -22,6 +22,11 @@
    seconds,computers:rows.length,expected,partial:rows.length<expected||rows.some(r=>r.partial)};
  }
  function niceMax(value){if(!valid(value)||value===0)return 1;const power=10**Math.floor(Math.log10(value));return [1,2,5,10].map(n=>n*power).find(n=>n>=value)||10*power;}
+ // The dial's resting full scale by period: longer periods hold more idle time, so their hourly
+ // average runs lower. Up to an hour 200M, up to a week 100M, beyond that 50M tokens per hour.
+ function baseMax(seconds){return !valid(seconds)||seconds<=3600?2e8:seconds<=604800?1e8:5e7;}
+ // The full scale for a reading: the period's resting scale, raised to a 1-2-5 step when exceeded.
+ function scaleMax(rate,seconds){return Math.max(baseMax(seconds),valid(rate)?niceMax(rate):0);}
 
  /* Instrument face for the speed panel: a 252×196 SVG drawn from the same rate and
     scale as before. 'sweep' is the segment tachometer, 'scope' adds the selected
@@ -115,6 +120,6 @@
  // Bloom in each element's own colour, as in the cockpit candidates.
  const glowFilter='<filter id="fsGlow" filterUnits="userSpaceOnUse" x="-12" y="-12" width="276" height="220" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="2.3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
  function instrument(o){return (o.style==='scope'?'':face(o))+(o.rate>0?motion(o.style):'')+(o.style==='scope'?face(o):'');}
- const api={measure,niceMax,instrument,face,motion,glowFilter,digits};
+ const api={measure,niceMax,baseMax,scaleMax,instrument,face,motion,glowFilter,digits};
  if(typeof module!=='undefined')module.exports=api;else root.OneTopSpeed=api;
 })(typeof window==='undefined'?globalThis:window);
