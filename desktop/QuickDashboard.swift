@@ -832,10 +832,24 @@ struct QuickDashboard: View {
             if quota.stale, quota.status != nil {
                 Text(quota.note).font(m.font(.caption)).foregroundStyle(theme.amber).fixedSize(horizontal: false, vertical: true)
             }
+            if quota.needsReconnect { reconnectButton(quota) }
         }.padding(.horizontal, m(12)).padding(.vertical, m(10))
             .background(theme.card, in: RoundedRectangle(cornerRadius: m(8)))
             .overlay(RoundedRectangle(cornerRadius: m(8)).stroke(theme.line))
             .help(quota.note + (quota.updated > 0 ? " · " + Date(timeIntervalSince1970: quota.updated).formatted(date: .omitted, time: .shortened) : ""))
+    }
+    /// macOS asks once for the saved sign-in; the button stays off while that question is open.
+    private func reconnectButton(_ quota: AccountQuota) -> some View {
+        let waiting = model.authorizing == quota.id
+        return VStack(alignment: .leading, spacing: m(4)) {
+            Button { model.authorizeAccount(quota.id) } label: {
+                Text(waiting ? "macOS 승인 기다리는 중…" : "다시 연결").font(m.font(.label, .semibold))
+                    .padding(.horizontal, m(10)).frame(height: m(26))
+                    .background(theme.raised, in: RoundedRectangle(cornerRadius: m(6)))
+            }.buttonStyle(.plain).disabled(model.authorizing != nil || !model.fresh)
+            Text("macOS가 저장된 로그인 사용을 한 번 묻습니다. 다시 묻지 않습니다.").font(m.font(.caption)).foregroundStyle(theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }.padding(.top, m(2))
     }
     private func resetLabel(_ reset: Double) -> String {
         guard reset > 0 else { return "초기화 시각 미보고" }

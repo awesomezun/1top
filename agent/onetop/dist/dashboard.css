@@ -548,3 +548,8 @@ dialog h2{font-size:var(--type-heading);font-weight:650}
 .maps-layout>.history-grid{margin-top:0;grid-template-rows:repeat(2,minmax(0,auto))}
 .maps-layout .history-chart{height:176px}
 @media(max-width:1180px){.maps-layout{grid-template-columns:minmax(0,1fr)}.maps-layout .map-panel>.map-surface{flex:none;height:300px}.maps-layout .history-chart{height:200px}}
+
+/* One-time reconnect for an account whose saved sign-in cannot be read in the background. */
+.weekly-reconnect{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:10px}
+.weekly-reconnect button{height:28px;padding:0 12px;border:1px solid var(--line-strong);border-radius:7px;background:var(--raised);color:var(--ink);font-size:var(--type-label);font-weight:600}
+.weekly-reconnect small{color:var(--muted);font-size:var(--type-caption)}
