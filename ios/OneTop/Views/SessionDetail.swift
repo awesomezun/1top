@@ -82,6 +82,7 @@ struct SessionDetail: View {
     @State private var pane: Pane
     @State private var instruction = ""
     @State private var request: ControlRequest?
+    @FocusState private var typing: Bool
 
     init(session: Session, pane: Pane? = nil) {
         self.session = session
@@ -178,8 +179,12 @@ struct SessionDetail: View {
                         .onChange(of: instruction) { _, value in if value.utf16.count > 4000 { instruction = String(value.utf16.prefix(4000)) ?? value } }
                         .accessibilityLabel(L.t("AI instruction", "AI 지시 내용"))
                         .accessibilityIdentifier("instruction")
+                        .focused($typing)
                     Button {
-                        request = ControlRequest(session: s, action: "prompt", instruction: instruction)
+                        // Put the keyboard away first, or the confirmation opens behind it and cannot be tapped.
+                        typing = false
+                        let ask = ControlRequest(session: s, action: "prompt", instruction: instruction)
+                        Task { @MainActor in try? await Task.sleep(for: .milliseconds(350)); request = ask }
                     } label: {
                         Label(L.t("Send instruction", "지시 보내기"), systemImage: "paperplane")
                     }
