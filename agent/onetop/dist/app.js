@@ -20,6 +20,9 @@ const time=t=>new Date(t*1000).toLocaleTimeString(OneTopI18n.locale(),{hour12:fa
 const ago=t=>{if(!t)return '보고 없음';const n=Math.max(0,Date.now()/1000-t);return n<5?'방금':n<60?Math.floor(n)+'초 전':n<3600?Math.floor(n/60)+'분 전':n<86400?Math.floor(n/3600)+'시간 전':Math.floor(n/86400)+'일 전';};
 // How old a value that could not be refreshed is, so an old % never reads as current: "38분 전 보고".
 const reportAge=t=>t?ago(t)+' 보고':'마지막 보고';
+// A limit that cannot refresh until the account is connected again says so, not just how old it is.
+const RECONNECT=new Set(['login_required','login_expired','credential_store_unavailable','access_denied']);
+const staleLabel=q=>RECONNECT.has(q.status)?'재연결 필요':reportAge(q.updated);
 const model=m=>(m||'모델 미확인').replace(/\[1m\]/gi,'').replace(/^claude-/,'').replace(/^gpt-/,'GPT-');
 const reportedEffort=s=>typeof s.effort==='string'&&s.effort.trim()?s.effort:'';
 const effortBadge=s=>reportedEffort(s)?` <span class="count" title="보고된 추론 강도 (reasoning effort)">${esc(reportedEffort(s))}</span>`:'';
@@ -115,8 +118,8 @@ function renderSessionSummary(){
  $('sessionAccountStrip').innerHTML=(data.account_quotas||[]).map(q=>{
   const n=OneTopWeekly.weekly(q)?.pct,known=OneTopWeekly.valid(n),current=known&&!q.stale;
   const label=q.account_label||q.plan||'계정 확인 중',shortLabel=label.includes('@')?label.split('@')[0]:label;
-  const note=current?`${OneTopWeekly.percent(n)} 사용 · 주간 한도 100% 기준`:OneTopWeekly.valid(n)?`${reportAge(q.updated)} ${OneTopWeekly.percent(n)} · 최신 보고 대기`:'주간 사용량 보고 대기';
-  return `<button class="session-account ${known?(current?'':'is-last-report'):'is-pending'}" data-summary-view="accounts" style="--account-color:${colors[q.kind]||'#8d9ba8'}" title="${esc(kindName(q.kind)+' · '+label+'\n'+note)}"><i></i><span class="session-account-identity"><b>${esc(kindName(q.kind))}</b><small>${esc(shortLabel)}</small></span><strong>${known?OneTopWeekly.percent(n)+(current?'':`<small>${esc(reportAge(q.updated))}</small>`):'보고 대기'}</strong>${track(n)}</button>`;
+  const note=current?`${OneTopWeekly.percent(n)} 사용 · 주간 한도 100% 기준`:OneTopWeekly.valid(n)?`${reportAge(q.updated)} ${OneTopWeekly.percent(n)} · ${RECONNECT.has(q.status)?'재연결 필요':'최신 보고 대기'}`:'주간 사용량 보고 대기';
+  return `<button class="session-account ${known?(current?'':'is-last-report'):'is-pending'}" data-summary-view="accounts" style="--account-color:${colors[q.kind]||'#8d9ba8'}" title="${esc(kindName(q.kind)+' · '+label+'\n'+note)}"><i></i><span class="session-account-identity"><b>${esc(kindName(q.kind))}</b><small>${esc(shortLabel)}</small></span><strong>${known?OneTopWeekly.percent(n)+(current?'':`<small>${esc(staleLabel(q))}</small>`):'보고 대기'}</strong>${track(n)}</button>`;
  }).join('')||'<button class="session-accounts-empty" data-summary-view="accounts">계정 연결 · 사용량 보고 대기 ↗</button>';
 }
 let speedScale={key:null,max:1,lower:0,since:0};
@@ -646,7 +649,7 @@ function renderWeekly(){
  const periodLabel=periodMeta()?.label||selectedPeriod;
  $('weeklyOverview').innerHTML=rows.map(q=>{
   const w=OneTopWeekly.weekly(q),n=w?.pct,valid=OneTopWeekly.valid(n),a=data.weekly_usage?.accounts.find(a=>a.id===q.id),p=a?.periods[selectedPeriod];
-  const current=valid&&!q.stale,delta=OneTopWeekly.valid(p?.used_pp),status=current?'제공자 보고':q.updated?reportAge(q.updated):'확인 필요';
+  const current=valid&&!q.stale,delta=OneTopWeekly.valid(p?.used_pp),status=current?'제공자 보고':RECONNECT.has(q.status)?'재연결 필요':q.updated?reportAge(q.updated):'확인 필요';
   const rate=OneTopWeekly.accountBurn(p,q),rateKnown=OneTopWeekly.valid(rate);
   const rateNote=rateKnown?`최근 ${periodLabel}${p.partial?' 중 관측된 구간만 계산':''} · ${OneTopWeekly.duration(p.observed_seconds)} 관측에서 +${OneTopWeekly.number(p.used_pp)}%\n한도 증가량 ÷ 실제 관측 시간으로 계산한 평균입니다. 주간 한도 100%를 기준으로 한 시간당 소진 비율이며, 미래 소진량 예측이 아닙니다.`:'최소 2분의 유효한 한도 관측과 최신 계정 보고가 필요합니다.';
   return `<article class="weekly-card ${current?'':'is-stale'}" style="--quota-color:${colors[q.kind]||'#8d9ba8'}"><div class="weekly-card-heading"><b>${dot(q.kind)}${esc(kindName(q.kind))}</b><span>${esc(q.plan||'')} · ${status}</span></div><p class="weekly-account" title="${esc(q.account_label)}">${esc(q.account_label)}</p><div class="weekly-value"><strong>${valid?OneTopWeekly.percent(n):'—'}</strong><span>/ 100% 사용</span><b>${current?OneTopWeekly.percent(Math.max(0,100-n))+' 남음':''}</b></div><div class="track"><i style="width:${valid?Math.min(100,n):0}%;background:var(--quota-color)"></i></div><div class="weekly-period"><span>${periodCaption()}</span><strong>${delta?'+'+OneTopWeekly.number(p.used_pp)+'%':q.stale?'조회 필요':'다음 보고 대기'}</strong><span title="${esc(rateNote)}">${rateKnown?'평균 '+OneTopWeekly.burn(rate):delta?'소진 속도 확인 중':'한도 변화 기록 중'}</span></div><div class="weekly-chart" data-weekly-chart="${esc(q.id)}"></div><p class="weekly-note">${q.stale?esc(q.note):w?.reset?new Date(w.reset*1000).toLocaleString(OneTopI18n.locale(),{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화 · '+ago(q.updated)+' 확인':'주간 한도 확인 중'}</p></article>`;

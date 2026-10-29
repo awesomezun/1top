@@ -22,6 +22,8 @@ const SECONDS:Record<WindowKey,number>={'10m':600,'30m':1800,'1h':3600,'5h':1800
 const ORDER=['Claude','Codex','GLM','Antigravity','Aside'];
 
 export function pct(n:number|null|undefined){if(!valid(n))return '—';if(n===0)return '0%';if(n<.05)return '<0.1%';const t=Math.round(n*10)/10;return (Number.isInteger(t)?String(t):t.toFixed(1))+'%';}
+/** A limit that cannot refresh until the account is connected again says so, not just how old it is. */
+const RECONNECT=new Set(['login_required','login_expired','credential_store_unavailable','access_denied']);
 /** How old a value that could not be refreshed is: "38m ago", "38분 전 보고". */
 export function age(updated:number|null|undefined,now:number,t:(en:string,ko:string)=>string){const s=valid(updated)?Math.max(0,now-updated):null;if(s===null)return t('Last report','마지막 보고');
  const [n,en,ko]:[number,string,string]=s<60?[0,'Just now','방금']:s<3600?[Math.floor(s/60),'m','분 전']:s<86400?[Math.floor(s/3600),'h','시간 전']:[Math.floor(s/86400),'d','일 전'];return n?t(n+en+' ago',n+ko+' 보고'):t(en,ko+' 보고');}
@@ -182,7 +184,7 @@ export function Dashboard(){
       return <View key={q.id} style={[st.tile,{backgroundColor:color+'12'}]}><View style={{flexDirection:'row',alignItems:'center',gap:5}}><View style={[st.dot,{backgroundColor:color}]}/><Text style={{color:quick.ink,fontSize:12.5,fontWeight:'600'}}>{toolName(q.kind)}</Text><View style={{flex:1}}/><Text style={{color:q.stale?quick.muted:quick.ink,fontSize:17,fontWeight:'600'}}>{pct(wk?.pct)}</Text></View>
        <View style={{flexDirection:'row',alignItems:'center',gap:6}}><Text numberOfLines={1} style={{width:62,color:quick.muted,fontSize:10.5}}>{q.account_label.includes(' · ')?q.account_label.split(' · ').pop():q.account_label.split('@')[0]}</Text>
         <Spark points={q.usage_points||[]} start={start} end={end} color={color} faded={q.stale}/>
-        <Text numberOfLines={1} style={{width:q.stale?66:58,textAlign:'right',color:q.stale?quick.amber:color,fontSize:10.5,fontWeight:'500'}}>{q.stale?age(q.updated,now,t):(()=>{const p=q.weekly?.[period];return valid(p?.used_pp)&&valid(p?.observed_seconds)&&p.observed_seconds>=120?pct(p.used_pp/p.observed_seconds*3600)+t('/h','/시간'):mins>0?(mins>=1440?t(`in ${Math.floor(mins/1440)}d`,`${Math.floor(mins/1440)}일 후`):t(`in ${Math.floor(mins/60)}h`,`${Math.floor(mins/60)}시간 후`)):t('Collecting','수집 중');})()}</Text></View></View>;})}</View>
+        <Text numberOfLines={1} style={{width:q.stale?66:58,textAlign:'right',color:q.stale?quick.amber:color,fontSize:10.5,fontWeight:'500'}}>{q.stale?(RECONNECT.has(q.status||'')?t('Reconnect needed','재연결 필요'):age(q.updated,now,t)):(()=>{const p=q.weekly?.[period];return valid(p?.used_pp)&&valid(p?.observed_seconds)&&p.observed_seconds>=120?pct(p.used_pp/p.observed_seconds*3600)+t('/h','/시간'):mins>0?(mins>=1440?t(`in ${Math.floor(mins/1440)}d`,`${Math.floor(mins/1440)}일 후`):t(`in ${Math.floor(mins/60)}h`,`${Math.floor(mins/60)}시간 후`)):t('Collecting','수집 중');})()}</Text></View></View>;})}</View>
      :<Text style={{color:quick.muted,fontSize:11.5}}>{t('Connect subscription accounts in 1top on your computer.','컴퓨터의 1top에서 구독 계정을 연결하면 표시됩니다.')}</Text>}
    </View>
    <View style={{paddingHorizontal:16,paddingTop:12,paddingBottom:10,gap:8}}>

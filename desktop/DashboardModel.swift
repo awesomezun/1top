@@ -472,11 +472,9 @@ struct AccountQuota: Decodable, Identifiable {
         switch status {
         case "last_report": return Self.reportAge(updated)
         case "report_pending": return "보고 대기"
-        case "login_required", "login_expired": return "재로그인 필요"
+        case "login_required", "login_expired", "credential_store_unavailable", "access_denied": return "재연결 필요"
         case "refresh_pending": return "갱신 중"
         case "rate_limited": return "조회 제한"
-        case "access_denied": return "권한 확인"
-        case "credential_store_unavailable": return "저장소 확인"
         default: return updated > 0 ? Self.reportAge(updated) : "조회 지연"
         }
     }
