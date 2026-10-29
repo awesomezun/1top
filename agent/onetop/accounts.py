@@ -462,7 +462,10 @@ class AccountQuotaSampler:
                 config=Path.home()/'.claude.json' if root==Path.home()/'.claude' else root/'.claude.json'
                 account=read_json(config).get('oauthAccount') or {}
                 existing=rows.get(identity('Claude',account.get('accountUuid'),account.get('organizationUuid','')))
-                if existing and (not existing['stale'] or existing.get('status')=='refresh_pending'):
+                # A recent cached value can survive a failed credential lookup.
+                # Still try other profiles of the same account so an enrolled
+                # login can refresh it without another authorization prompt.
+                if existing and ((not existing['stale'] and not existing.get('status')) or existing.get('status')=='refresh_pending'):
                     bindings[root.resolve()]=(existing['id'],kind,now)
                     continue
             row=self.profile(kind,root,now)

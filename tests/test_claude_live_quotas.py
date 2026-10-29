@@ -77,3 +77,22 @@ class ClaudeLiveQuotaTests(unittest.TestCase):
         row=self.sampler.claude_live(self.root,1000)
         self.assertEqual(row['status'],'invalid_response');self.assertTrue(row['stale'])
         self.assertTrue(all(w['pct'] is None for w in row['windows']))
+
+    def test_failed_old_profile_does_not_skip_enrolled_profile_with_recent_cache(self):
+        other=self.root/'enrolled';other.mkdir()
+        (other/'.claude.json').write_text((self.root/'.claude.json').read_text())
+        self.sampler.cached[self.key]={'updated':850,'windows':[{'label':'주간','pct':22,'reset':9000}],
+                                      'source':'claude_oauth'}
+        def credentials(root):
+            if root==self.root:raise CredentialError('credential_store_unavailable')
+            return self.credentials
+        self.claude_credentials.side_effect=credentials
+        with patch('onetop.accounts.profile_roots',return_value=[('Claude',self.root),('Claude',other)]),patch('onetop.accounts.time.time',return_value=1000):
+            self.sampler.sample()
+        row=self.sampler.rows[0]
+        self.assertEqual(len(self.sampler.rows),1)
+        self.assertEqual(row['updated'],1000)
+        self.assertEqual([w['pct'] for w in row['windows']],[5,32])
+        self.assertNotIn('status',row)
+        self.assertEqual(self.claude_credentials.call_count,2)
+        self.assertEqual(self.sampler.roots()[other.resolve()][0],self.key)
