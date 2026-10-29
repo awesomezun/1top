@@ -30,7 +30,8 @@ body.quick-body{margin:0;background:var(--bg);color:var(--ink);font:var(--q-titl
 .q-lang{min-width:30px;padding:0 6px;border:1px solid var(--line);background:var(--panel);font-size:var(--q-label);font-weight:600}
 .q-lang:hover{border-color:var(--muted)}
 .q-more:hover,.q-icon-button:hover{background:var(--raised)}
-.q-periods{display:flex;gap:2px;margin:0 14px 10px;padding:3px;background:var(--panel);border:1px solid var(--line);border-radius:9px}
+/* The outline is drawn inside, like the panel's stroke, so it adds no height. */
+.q-periods{display:flex;gap:2px;margin:0 14px 10px;padding:3px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line);border-radius:9px}
 .q-periods button{flex:1;display:grid;place-items:center;height:24px;border-radius:6px;font-size:var(--q-body);font-weight:500;color:var(--muted)}
 .q-periods button[aria-pressed=true]{background:var(--raised);color:var(--ink);font-weight:600}
 
@@ -95,12 +96,14 @@ body.quick-body{margin:0;background:var(--bg);color:var(--ink);font:var(--q-titl
 .q-count{display:grid;place-items:center;height:18px;padding:0 6px;border-radius:5px;background:var(--raised);color:var(--muted);font-size:var(--q-label);font-weight:600;font-variant-numeric:tabular-nums}
 .q-working{display:flex;align-items:center;gap:5px;padding-left:4px;font-size:var(--q-label);font-weight:500}
 .q-working.stale{color:var(--amber)}
-.q-col-label{width:70px;flex:none;text-align:right;font-size:var(--q-caption);color:var(--muted);white-space:nowrap}
+/* A label longer than its column spills to the left, as the macOS panel lays it out. */
+.q-col-label{width:70px;flex:none;display:flex;justify-content:flex-end;font-size:var(--q-caption);color:var(--muted);white-space:nowrap}
 .q-col-gap{width:55px;flex:none}
 .q-sessions-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
-.q-row{display:flex;align-items:center;gap:9px;height:46px;padding:0 16px;position:relative}
+/* 46 points of row plus a 1-point divider below it, as in the macOS list. */
+.q-row{display:flex;align-items:center;gap:9px;height:47px;padding:0 16px;border-bottom:1px solid transparent;position:relative}
 .q-row:hover{background:color-mix(in srgb,var(--raised) 60%,transparent)}
-.q-row::after{content:"";position:absolute;left:79px;right:0;bottom:0;height:1px;background:var(--line);opacity:.7}
+.q-row::after{content:"";position:absolute;left:79px;right:0;bottom:-1px;height:1px;background:var(--line);opacity:.7}
 .q-pace{width:54px;flex:none;display:flex;flex-direction:column;align-items:center;gap:2px}
 .q-pace span{font-size:var(--q-tiny);font-variant-numeric:tabular-nums;white-space:nowrap;max-width:54px;overflow:hidden}
 .q-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}

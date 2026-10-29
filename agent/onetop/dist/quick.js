@@ -310,7 +310,13 @@
  }
  function quotaSheet(q){
   const tint=color(q.kind),busy=S.authorizing!=null;
-  return `<div class="q-quota" style="--tint:${tint}"><div class="q-quota-top"><i></i><b>${esc(toolName(q.kind))}</b>${chip(q.id)}<em>${esc(q.plan||'')}</em><i class="q-dot${q.stale?' warn':''}"></i><small class="${q.stale?'stale':''}">${esc(statusLabel(q))}</small></div><div class="q-quota-label" title="${esc(q.account_label+' · '+String(q.id).slice(-6))}">${esc(q.account_label)}</div><div class="q-quota-windows">${(q.windows||[]).map(w=>`<div class="q-quota-window"><div><span>${esc(T(w.label))}</span><span class="num">${w.pct==null?esc(T('미확인')):percent0(w.pct)}</span></div><div class="q-bar">${w.pct==null?'':`<i style="width:${Math.min(100,Math.max(0,w.pct))}%;${w.pct>=90?'background:var(--amber)':''}"></i>`}</div><small>${esc(resetLabel(w.reset))}</small></div>`).join('')}</div>${q.stale&&q.status?`<p class="q-quota-note">${esc(T(q.note||''))}</p>`:''}${q.stale&&RECONNECT.has(q.status)?`<div class="q-reconnect"><button type="button" data-act="authorize" data-account="${esc(q.id)}" ${busy||!fresh()?'disabled':''}>${esc(T(S.authorizing===q.id?'승인 기다리는 중…':'다시 연결'))}</button><small>${esc(T('저장된 로그인을 한 번 확인합니다. 자동으로 다시 묻지 않습니다.'))}</small></div>`:''}<form class="q-name" data-act="rename" data-account="${esc(q.id)}"><input name="alias" maxlength="24" value="${esc(S.layer.draft??q.alias??'')}" placeholder="${esc(T('계정 이름(24자, 비우면 번호)'))}" aria-label="${esc(T('계정 이름'))}"><button type="submit" ${S.busy||!fresh()?'disabled':''}>${esc(T('저장'))}</button></form></div>`;
+  return `<div class="q-quota" style="--tint:${tint}"><div class="q-quota-top"><i></i><b>${esc(toolName(q.kind))}</b>${chip(q.id)}<em>${esc(q.plan||'')}</em><i class="q-dot${q.stale?' warn':''}"></i><small class="${q.stale?'stale':''}">${esc(statusLabel(q))}</small></div><div class="q-quota-label" title="${esc(q.account_label+' · '+String(q.id).slice(-6))}">${esc(q.account_label)}</div><div class="q-quota-windows">${(q.windows||[]).map(w=>`<div class="q-quota-window"><div><span>${esc(T(w.label))}</span><span class="num">${w.pct==null?esc(T('미확인')):percent0(w.pct)}</span></div><div class="q-bar">${w.pct==null?'':`<i style="width:${Math.min(100,Math.max(0,w.pct))}%;${w.pct>=90?'background:var(--amber)':''}"></i>`}</div><small>${esc(resetLabel(w.reset))}</small></div>`).join('')}</div>${q.stale&&q.status?`<p class="q-quota-note">${esc(T(q.note||''))}</p>`:''}${q.stale&&RECONNECT.has(q.status)?reconnect(q,busy):''}<form class="q-name" data-act="rename" data-account="${esc(q.id)}"><input name="alias" maxlength="24" value="${esc(S.layer.draft??q.alias??'')}" placeholder="${esc(T('계정 이름(24자, 비우면 번호)'))}" aria-label="${esc(T('계정 이름'))}"><button type="submit" ${S.busy||!fresh()?'disabled':''}>${esc(T('저장'))}</button></form></div>`;
+ }
+ // On a Mac, reconnecting asks macOS once for the saved sign-in; elsewhere the account's official sign-in opens again.
+ const macHost=()=>(S.data?.system?.host?.os||'Darwin')==='Darwin';
+ function reconnect(q,busy){
+  const mac=macHost(),waiting=S.authorizing===q.id;
+  return `<div class="q-reconnect"><button type="button" data-act="${mac?'authorize':'relogin'}" data-account="${esc(q.id)}" data-kind="${esc(q.kind)}" ${busy||!fresh()?'disabled':''}>${esc(T(mac?(waiting?'macOS 승인 기다리는 중…':'다시 연결'):(waiting?'로그인 창을 여는 중…':'다시 로그인')))}</button><small>${esc(T(mac?'macOS가 저장된 로그인 사용을 한 번 묻습니다. 다시 묻지 않습니다.':'이 계정의 공식 로그인 창을 엽니다. 같은 계정으로 다시 로그인하세요.'))}</small></div>`;
  }
  const CONFIRM={pause:['작업을 일시정지할까요?','현재 작업에 Esc를 보냅니다. 세션은 유지되며, 실제 중단 여부는 수집 후 확인됩니다.','일시정지'],resume:['새 요청으로 작업을 재개할까요?','이전 작업을 이어서 진행하라는 새 요청을 보냅니다. 토큰을 다시 사용할 수 있습니다. 터미널에 작성 중인 입력이 없는지 확인하세요.','새 요청으로 재개'],terminate:['이 CLI를 종료할까요?','작업 중이면 먼저 중단을 요청하고, 멈춘 상태가 확인되면 해당 CLI만 종료합니다. 터미널 탭과 저장된 기록은 유지됩니다.','CLI 종료']};
  function renderLayer(){
@@ -384,6 +390,11 @@
   if(!fresh()||S.busy||S.authorizing||!S.data?.action_token)return;S.authorizing=id;renderLayer();
   const {status,value}=await post('/api/accounts/authorize',{account_id:id},125);
   S.authorizing=null;say(value?.message||'연결 결과를 확인하지 못했습니다. 계정 상태가 바뀌었는지 먼저 확인해 주세요.',status!==200);refresh();
+ }
+ async function relogin(id,kind){
+  if(!fresh()||S.busy||S.authorizing||!S.data?.action_token)return;S.authorizing=id;renderLayer();
+  const {status,value}=await post('/api/accounts/login',{kind},20);
+  S.authorizing=null;say(value?.message||(status===200?'로그인 창을 열었습니다.':'로그인 창을 열지 못했습니다.'),status!==200);
  }
  async function addAccount(kind){
   if(!fresh()||S.busy||!S.data?.action_token)return;S.busy=true;render();
@@ -495,6 +506,7 @@
   else if(act==='close'){S.layer=null;renderLayer();}
   else if(act==='account'){const rect=el.getBoundingClientRect(),panel=$('quick').getBoundingClientRect(),z=S.zoom||1;S.layer={type:'account',id:el.dataset.account,top:Math.max(8,Math.min(panel.height/z-260,(rect.bottom-panel.top)/z+6))};renderLayer();}
   else if(act==='authorize')authorize(el.dataset.account);
+  else if(act==='relogin')relogin(el.dataset.account,el.dataset.kind);
   else if(act==='control')control(el.dataset.action,el.dataset.session);
   else if(act==='confirm'){const L=S.layer;S.layer=null;renderLayer();const s=sessions().find(x=>x.id===L.id);if(s)perform(L.action,s);}
   else if(act==='dismiss'){S.message=null;render();}

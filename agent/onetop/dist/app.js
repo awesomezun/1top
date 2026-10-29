@@ -664,7 +664,12 @@ let authorizing=null;const authorizeNotes={};
 // Renaming an account: the draft survives the periodic redraw, and the server keeps the name (alias).
 let aliasEditing=null,aliasDraft='',aliasSaving=false,aliasNote='';
 function aliasMarkup(q){return `<form class="alias-form" data-alias-form="${esc(q.id)}"><label>계정 이름<input name="alias" maxlength="24" value="${esc(aliasDraft)}" placeholder="${esc(q.account_label||'')}" autocomplete="off"></label><button type="submit"${aliasSaving?' disabled':''}>저장</button><button type="button" data-alias-cancel>취소</button><small>${esc(aliasNote||'24자까지 쓸 수 있습니다. 비우고 저장하면 번호로 돌아갑니다.')}</small></form>`;}
-function reconnectMarkup(q){return `<div class="weekly-reconnect"><button type="button" data-account-authorize="${esc(q.id)}"${authorizing?' disabled':''}>${authorizing===q.id?'macOS 승인 기다리는 중…':'다시 연결'}</button><small>${esc(authorizeNotes[q.id]||'macOS가 저장된 로그인 사용을 한 번 묻습니다. 다시 묻지 않습니다.')}</small></div>`;}
+// On a Mac, reconnecting asks macOS once for the saved sign-in. Elsewhere there is no saved sign-in to approve,
+// so the same button opens the account's official sign-in again.
+const macHost=()=>(data?.system?.host?.os||'Darwin')==='Darwin';
+function reconnectMarkup(q){
+ if(!macHost())return `<div class="weekly-reconnect"><button type="button" data-account-relogin="${esc(q.kind)}" data-account-id="${esc(q.id)}"${authorizing?' disabled':''}>${authorizing===q.id?'로그인 창을 여는 중…':'다시 로그인'}</button><small>${esc(authorizeNotes[q.id]||'이 계정의 공식 로그인 창을 엽니다. 같은 계정으로 다시 로그인하세요.')}</small></div>`;
+ return `<div class="weekly-reconnect"><button type="button" data-account-authorize="${esc(q.id)}"${authorizing?' disabled':''}>${authorizing===q.id?'macOS 승인 기다리는 중…':'다시 연결'}</button><small>${esc(authorizeNotes[q.id]||'macOS가 저장된 로그인 사용을 한 번 묻습니다. 다시 묻지 않습니다.')}</small></div>`;}
 $('weeklyOverview').addEventListener('click',e=>{
  const edit=e.target.closest('[data-alias-edit]');
  if(edit){const q=data.account_quotas.find(q=>q.id===edit.dataset.aliasEdit);aliasEditing=q.id;aliasDraft=q.alias||'';aliasNote='';renderWeekly();document.querySelector('[data-alias-form] input')?.focus();return;}
@@ -683,6 +688,17 @@ $('weeklyOverview').addEventListener('submit',async e=>{
  finally{aliasSaving=false;render();}
 });
 $('weeklyOverview').addEventListener('click',async e=>{
+ const relogin=e.target.closest('[data-account-relogin]');
+ if(relogin&&!authorizing){
+  const id=relogin.dataset.accountId;authorizing=id;renderWeekly();
+  try{
+   if(!data?.action_token||!data.ready)throw Error('수집기 연결을 확인한 뒤 다시 시도해 주세요.');
+   const r=await fetch('/api/accounts/login',{method:'POST',headers:{'Content-Type':'application/json','X-Monitor-Token':data.action_token},body:JSON.stringify({kind:relogin.dataset.accountRelogin}),signal:AbortSignal.timeout(20000)});
+   const result=await r.json().catch(()=>({}));authorizeNotes[id]=result.message||(r.ok?'로그인 창을 열었습니다.':'로그인 창을 열지 못했습니다.');
+  }catch(error){authorizeNotes[id]=error.name==='TimeoutError'?'로그인 창 응답을 확인하지 못했습니다. 터미널을 먼저 확인해 주세요.':error.message;}
+  finally{authorizing=null;renderWeekly();}
+  return;
+ }
  const b=e.target.closest('[data-account-authorize]');if(!b||authorizing)return;
  const id=b.dataset.accountAuthorize;authorizing=id;renderWeekly();
  try{

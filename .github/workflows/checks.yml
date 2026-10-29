@@ -13,6 +13,7 @@ jobs:
       - run: pip install -e .
       - run: python -m unittest discover -s tests -q
       - run: xcrun swiftc desktop/DashboardModel.swift tests/desktop/ModelChecks.swift -o /tmp/onetop-model-checks && /tmp/onetop-model-checks
+      - run: xcrun swiftc desktop/QuickText.swift tests/desktop/QuickTextChecks.swift -o /tmp/onetop-text-checks && /tmp/onetop-text-checks
       - run: xcrun swiftc -framework AppKit -framework SwiftUI -framework WebKit desktop/*.swift -o /tmp/onetop-desktop-check
   cloud-and-web:
     runs-on: ubuntu-latest
