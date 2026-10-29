@@ -553,3 +553,16 @@ dialog h2{font-size:var(--type-heading);font-weight:650}
 .weekly-reconnect{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:10px}
 .weekly-reconnect button{height:28px;padding:0 12px;border:1px solid var(--line-strong);border-radius:7px;background:var(--raised);color:var(--ink);font-size:var(--type-label);font-weight:600}
 .weekly-reconnect small{color:var(--muted);font-size:var(--type-caption)}
+
+/* Account number when one tool has several accounts: Claude Code 1, Claude Code 2. */
+.account-no{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 4px;margin-left:5px;border-radius:5px;background:var(--raised);color:var(--ink);font-size:var(--type-caption);font-weight:650;line-height:1;font-variant-numeric:tabular-nums;vertical-align:1px}
+
+/* A name the user gave an account, in place of its number; renamed from the account limits card. */
+.account-no.is-alias{max-width:9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.alias-edit{margin-left:4px;padding:0 4px;height:18px;border:0;border-radius:5px;background:transparent;color:var(--dim);font-size:var(--type-caption);line-height:1;vertical-align:1px}
+.alias-edit:hover:not(:disabled){background:var(--hover);color:var(--ink)}
+.alias-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 8px;margin-top:10px}
+.alias-form label{display:flex;flex-direction:column;gap:4px;flex:1 1 160px;color:var(--muted);font-size:var(--type-caption)}
+.alias-form input{height:30px;padding:0 9px;border:1px solid var(--line-strong);border-radius:7px;background:var(--panel);color:var(--ink);font-size:var(--type-label)}
+.alias-form button{height:30px;padding:0 12px;border:1px solid var(--line-strong);border-radius:7px;background:var(--raised);color:var(--ink);font-size:var(--type-label);font-weight:600}
+.alias-form small{flex-basis:100%;color:var(--muted);font-size:var(--type-caption)}
