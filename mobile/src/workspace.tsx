@@ -23,7 +23,7 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
  useEffect(()=>{const result=connection.receipt;if(!result)return;setPending(old=>Object.fromEntries(Object.entries(old).filter(([,id])=>id!==result.request.request_id)));const message=result.status+': '+(result.message||'');setMessage(message);const key=result.request.device_id+':'+result.request.session_id;setControlMessages(old=>({...old,[key]:{id:result.request.request_id,message,final:true}}));},[connection.receipt]);
  const devices:Device[]=demo?demoDevices():connection.devices;
  const visible=devices.filter(d=>selected==='all'||d.id===selected);
- const rows:SessionRow[]=sortSessions(visible.flatMap(d=>d.snapshot.sessions.map(s=>({...s,device:d,key:d.id+':'+s.id}))),clock);
+ const rows:SessionRow[]=sortSessions(visible.flatMap(d=>d.snapshot.sessions.map(s=>({...s,device:d,key:d.id+':'+s.id}))),period);
  async function changeRelay(value:string){if(token)throw Error(t('Sign out before changing servers.','서버 변경 전에 로그아웃하세요.'));setRelay(await selectRelay(value));setMessage(t('Server saved. Sign in to connect.','서버를 저장했습니다. 로그인하여 연결하세요.'));}
  async function login(){setBusy(true);setMessage('');try{setToken(await signIn());setDemo(false);}catch(e:any){setMessage(e.message);}finally{setBusy(false);}}
  async function logout(){setBusy(true);try{if(!demo)await signOut(token);setToken(null);setDemo(false);}catch(e:any){setMessage(e.message);}finally{setBusy(false);}}

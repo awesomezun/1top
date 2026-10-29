@@ -1,1 +1,1 @@
-export {Sessions as default} from '../../ui';
+export {Dashboard as default} from '../../dashboard';
