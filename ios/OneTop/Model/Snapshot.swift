@@ -16,12 +16,12 @@ enum Period: String, CaseIterable, Identifiable, Sendable {
     }
     var label: String {
         switch self {
-        case .m10: "10분"
-        case .m30: "30분"
-        case .h1: "1시간"
-        case .h5: "5시간"
-        case .h12: "12시간"
-        case .h24: "24시간"
+        case .m10: L.t("10m", "10분")
+        case .m30: L.t("30m", "30분")
+        case .h1: L.t("1h", "1시간")
+        case .h5: L.t("5h", "5시간")
+        case .h12: L.t("12h", "12시간")
+        case .h24: L.t("24h", "24시간")
         }
     }
 }
@@ -48,6 +48,18 @@ struct Session: Codable, Identifiable, Hashable, Sendable {
     var weeklyEstimate: [String: WeeklyEstimate]?
     var rootSessionId: String?
     var parentSessionId: String?
+    /// The computer that reported this session; set by the app, not sent by the relay.
+    var deviceId: String?
+
+    /// Session IDs are unique per computer only.
+    var key: String { (deviceId ?? "") + ":" + id }
+    var total: Double? {
+        guard let tokens, tokens.count == 4, tokens.allSatisfy({ $0.isFinite && $0 >= 0 }) else { return nil }
+        return tokens.reduce(0, +)
+    }
+    func can(_ action: String) -> Bool { capabilities?.contains(action) == true }
+    /// A collector without estimates sends nothing or an empty map; only a number counts.
+    var hasEstimate: Bool { weeklyEstimate?.values.contains { $0.usedPp.map { $0.isFinite && $0 >= 0 } ?? false } ?? false }
 
     func tokens(in period: Period) -> Double? {
         guard let vector = windows?[period.rawValue] ?? nil, !vector.isEmpty,
@@ -64,7 +76,7 @@ struct Session: Codable, Identifiable, Hashable, Sendable {
     }
     var displayProject: String? {
         guard let project, !project.isEmpty else { return nil }
-        return project == "0" && kind == "Aside" ? "Aside 기본 작업공간" : project
+        return project == "0" && kind == "Aside" ? L.t("Aside default workspace", "Aside 기본 작업공간") : project
     }
 }
 
@@ -89,13 +101,14 @@ struct WeeklyPeriod: Codable, Hashable, Sendable {
     }
 }
 
-/// Token bins over a period, oldest first, by tool.
+/// Token bins over a period, oldest first, by tool. Bin i covers [start + i·step, start + (i+1)·step).
+/// A nil bin is unknown (a computer did not cover it), never zero.
 struct FlowSeries: Codable, Hashable, Sendable {
     var step: Double
     var start: Double?
     var end: Double?
     var reported: Bool?
-    var bins: [[String: Double]]
+    var bins: [[String: Double]?]
 }
 
 struct QuotaWindow: Codable, Hashable, Sendable {
@@ -113,10 +126,16 @@ struct Quota: Codable, Identifiable, Hashable, Sendable {
     var updated: Double?
     var stale: Bool
     var note: String?
+    /// Why a value could not be refreshed: login_required, login_expired, rate_limited, …
+    var status: String?
     var windows: [QuotaWindow]
     var weekly: [String: WeeklyPeriod]?
     /// [time, weekly %, reset] report points, newest last.
     var usagePoints: [[Double]]?
+    /// The account's sign-in on the computer has to be renewed before the limit can update.
+    var needsReconnect: Bool { ["login_required", "login_expired", "credential_store_unavailable", "access_denied"].contains(status ?? "") }
+    /// What a stale value says instead of a rate: reconnect needed, or how old it is.
+    var staleLabel: String { needsReconnect ? L.t("Reconnect needed", "재연결 필요") : Format.reportAge(updated) }
     var weeklyWindow: QuotaWindow? { windows.first { $0.label == "주간" || $0.key == "7d" || $0.key == "weekly" } }
     var fiveHour: QuotaWindow? { windows.first { $0.label == "5H" || $0.key == "5h" } }
     /// The relay masks accounts as "Claude · 4f21a8"; the tool is already the tile title, so keep the tag.
@@ -144,6 +163,22 @@ struct PeriodTotal: Codable, Hashable, Sendable {
     var partial: Bool?
 }
 
+/// Goals, loops and skills as the computer reports them. Loop activity is not verified yet.
+struct Operations: Codable, Hashable, Sendable {
+    struct Goal: Codable, Hashable, Sendable {
+        var runtime: String?
+        var status: String?
+        var tokensUsed: Double?
+        var timeUsedSeconds: Double?
+        var sessionConnected: Bool?
+    }
+    var updated: Double?
+    var installedSkills: Double?
+    var observedEvents: Double?
+    var loopState: String?
+    var goals: [Goal]?
+}
+
 struct DeviceSnapshot: Codable, Hashable, Sendable {
     var version: String?
     var updated: Double?
@@ -152,6 +187,8 @@ struct DeviceSnapshot: Codable, Hashable, Sendable {
     var accountQuotas: [Quota]?
     var periods: [PeriodTotal]?
     var flow: [String: FlowSeries]?
+    var operations: Operations?
+    var recordingStarted: Double?
 }
 
 struct Device: Codable, Identifiable, Hashable, Sendable {
@@ -159,8 +196,45 @@ struct Device: Codable, Identifiable, Hashable, Sendable {
     var name: String
     var platform: String?
     var online: Bool
+    /// When the relay last heard from this computer, in milliseconds.
     var received: Double
     var snapshot: DeviceSnapshot?
+    var receivedDate: Date { Date(timeIntervalSince1970: received / 1000) }
+}
+
+/// What a control request asked for, echoed back in its receipt.
+struct ActionRequest: Codable, Hashable, Sendable {
+    var action: String
+    var requestId: String
+    var deviceId: String
+    var sessionId: String
+    var controlKey: String?
+}
+
+/// The relay's answer to /api/action: sent, unconfirmed, or (for a repeated ID) the final state.
+struct ActionReceipt: Decodable, Sendable {
+    var request: ActionRequest?
+    var status: String
+    var message: String?
+}
+
+/// One message to a session and the session's reply. Bodies live on the computer; the relay only
+/// carries the latest ten on request.
+struct MailMessage: Codable, Identifiable, Hashable, Sendable {
+    var id: String
+    var text: String
+    var created: Double
+    var status: String
+    var reply: String?
+    var replyAt: Double?
+    var truncated: Bool?
+    /// Sent from this phone and not yet in the computer's list.
+    var local: Bool?
+}
+
+struct RelayAccount: Decodable, Hashable, Sendable {
+    var role: String?
+    var plan: String?
 }
 
 /// Messages on the relay's live socket that the app reads; others are ignored.
@@ -168,6 +242,14 @@ struct LiveMessage: Decodable, Sendable {
     var type: String
     var devices: [Device]?
     var device: Device?
+    var deviceId: String?
+    var sessionId: String?
+    var requestId: String?
+    var request: ActionRequest?
+    var status: String?
+    var message: String?
+    var messages: [MailMessage]?
+    var error: String?
 }
 
 extension JSONDecoder {

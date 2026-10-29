@@ -28,7 +28,7 @@ enum Tool {
 extension Color {
     /// The 1top mint: segment digits, the beam and the accent.
     static let mint1top = Color("AccentColor")
-    static let segmentOn = Color(red: 0.455, green: 0.831, blue: 0.694)
+    static let segmentOn = Color(red: 157 / 255, green: 1, blue: 60 / 255)
 }
 
 enum Format {
@@ -49,14 +49,32 @@ enum Format {
         let tenths = (value * 10).rounded() / 10
         return (tenths == tenths.rounded() ? String(Int(tenths)) : String(format: "%.1f", tenths)) + "%"
     }
+    /// A speed in tokens per hour from the collector's tokens per second.
+    static func perHour(_ perSecond: Double?) -> String {
+        guard let perSecond, perSecond.isFinite, perSecond >= 0 else { return "—" }
+        return tokens(perSecond * 3600) + L.t(" tokens/h", " tokens/시간")
+    }
+    /// How old a value that could not be refreshed is, so an old % never reads as current. Same
+    /// rule as the Mac's DashboardModel.reportAge.
+    static func reportAge(_ updated: Double?, now: Double = Date().timeIntervalSince1970) -> String {
+        guard let updated, updated > 0 else { return L.t("Last report", "마지막 보고") }
+        let s = max(0, now - updated)
+        if s < 60 { return L.t("Just now", "방금 보고") }
+        if s < 3600 { return L.t("\(Int(s / 60))m ago", "\(Int(s / 60))분 전 보고") }
+        if s < 86400 { return L.t("\(Int(s / 3600))h ago", "\(Int(s / 3600))시간 전 보고") }
+        return L.t("\(Int(s / 86400))d ago", "\(Int(s / 86400))일 전 보고")
+    }
     static func reset(_ at: Double?, now: Double = Date().timeIntervalSince1970) -> String {
-        guard let at, at > 0 else { return "초기화 시각 미보고" }
+        guard let at, at > 0 else { return L.t("Reset time not reported", "초기화 시각 미보고") }
         let minutes = Int(ceil((at - now) / 60))
-        if minutes <= 0 { return "초기화 보고 대기" }
-        if minutes >= 1440 { return "\(minutes / 1440)일 \((minutes % 1440) / 60)시간 후 초기화" }
-        return minutes >= 60 ? "\(minutes / 60)시간 \(minutes % 60)분 후 초기화" : "\(minutes)분 후 초기화"
+        if minutes <= 0 { return L.t("Waiting for the reset report", "초기화 보고 대기") }
+        if minutes >= 1440 { return L.t("Resets in \(minutes / 1440)d \((minutes % 1440) / 60)h", "\(minutes / 1440)일 \((minutes % 1440) / 60)시간 후 초기화") }
+        return minutes >= 60 ? L.t("Resets in \(minutes / 60)h \(minutes % 60)m", "\(minutes / 60)시간 \(minutes % 60)분 후 초기화")
+            : L.t("Resets in \(minutes)m", "\(minutes)분 후 초기화")
     }
     static func status(_ status: String) -> String {
-        ["working": "작업 중", "waiting": "확인 필요", "paused": "일시정지", "idle": "대기 중", "interrupted": "중단됨", "resuming": "재개 중"][status] ?? "상태 미확인"
+        let ko = ["working": "작업 중", "waiting": "확인 필요", "paused": "일시정지", "idle": "대기 중", "interrupted": "중단됨", "resuming": "재개 중"]
+        let en = ["working": "Working", "waiting": "Needs input", "paused": "Paused", "idle": "Idle", "interrupted": "Interrupted", "resuming": "Resuming"]
+        return L.t(en[status] ?? "Unknown state", ko[status] ?? "상태 미확인")
     }
 }

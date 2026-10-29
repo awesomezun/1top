@@ -9,7 +9,7 @@ settings:
   base:
     DEVELOPMENT_TEAM: 2DY8KQ6H5F
     MARKETING_VERSION: "4.0.0"
-    CURRENT_PROJECT_VERSION: "2"
+    CURRENT_PROJECT_VERSION: "3"
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
 targets:
@@ -32,3 +32,31 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
+  # Device QA: drives the app on a real iPhone. Controls go only to the session named by QA_SESSION.
+  OneTopUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: OneTopUITests
+    dependencies:
+      - target: OneTop
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: si.onetop.mobile.dev.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: OneTop
+        SWIFT_VERSION: "5.0"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+schemes:
+  OneTop:
+    build:
+      targets:
+        OneTop: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - OneTopUITests

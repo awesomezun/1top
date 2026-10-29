@@ -16,8 +16,10 @@ struct QuickTheme {
     var muted: Color { pick((154, 165, 174), (91, 102, 112)) }
     var dim: Color { pick((108, 120, 130), (135, 146, 155)) }
     var accent: Color { pick((108, 207, 169), (19, 128, 95)) }
-    var segmentOn: Color { pick((116, 212, 177), (31, 138, 105)) }
-    var segmentLead: Color { pick((196, 245, 226), (15, 90, 68)) }
+    /// LCD green for the digits, the beam, the newest bin and the resource bars, kept clear of the
+    /// Codex teal so a tool colour never reads as an instrument light.
+    var segmentOn: Color { pick((157, 255, 60), (106, 168, 0)) }
+    var segmentLead: Color { pick((226, 255, 196), (61, 99, 0)) }
     var segmentOff: Color { pick((29, 35, 39), (238, 241, 243)) }
     var grid: Color { pick((43, 50, 56), (211, 218, 222)) }
     var amber: Color { pick((233, 178, 92), (154, 100, 16)) }
@@ -40,7 +42,9 @@ struct SpeedReading {
         // Fine bins from the collector when the relay carries them: oldest first, tokens per bin.
         if let flow, !flow.bins.isEmpty, flow.step > 0 {
             let count = flow.bins.count
-            bins = flow.bins.enumerated().reversed().map { index, values in
+            bins = flow.bins.enumerated().reversed().map { index, bin in
+                // An unknown bin draws nothing; it is not a zero.
+                let values = bin ?? [:]
                 let parts = values.sorted { Self.order($0.key) < Self.order($1.key) }.map { ($0.key, max(0, $0.value) / flow.step * 3600) }
                 let ago = Double(count - 1 - index) * flow.step
                 return Bin(start: ago, end: min(seconds, ago + flow.step), byKind: parts, total: parts.reduce(0) { $0 + $1.1 })
@@ -81,7 +85,8 @@ struct ScopeDial: View {
             .onAppear { opened = Date() }
             .onChange(of: period) { opened = Date() }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("최근 \(period.label) 평균 토큰 사용 속도 시간당 \(Format.tokens(reading.average)) tokens")
+            .accessibilityLabel(L.t("Average token speed over the last \(period.label): \(Format.tokens(reading.average)) tokens per hour",
+                                     "최근 \(period.label) 평균 토큰 사용 속도 시간당 \(Format.tokens(reading.average)) tokens"))
     }
 
     private func dial(at date: Date) -> some View {
@@ -155,9 +160,9 @@ struct ScopeDial: View {
                 ctx.fill(now, with: .color(theme.red.opacity(sweeping ? 0.65 + 0.35 * sin(date.timeIntervalSinceReferenceDate * 3.2) : 1)))
             }
             VStack(spacing: 1) {
-                Text("평균").font(.system(size: 10.5)).foregroundStyle(theme.dim)
+                Text(L.t("Average", "평균")).font(.system(size: 10.5)).foregroundStyle(theme.dim)
                 SegmentDigits(value: reading.average, height: 29)
-                Text(reading.average == nil ? "확인 중" : "tokens/시간").font(.system(size: 10.5)).foregroundStyle(theme.muted)
+                Text(reading.average == nil ? L.t("Checking", "확인 중") : L.t("tokens/h", "tokens/시간")).font(.system(size: 10.5)).foregroundStyle(theme.muted)
             }
         }
     }
@@ -237,14 +242,16 @@ struct QuickView: View {
     @Environment(\.colorScheme) private var scheme
     @AppStorage("weeklyTokensMode") private var tokensChosen = false
     /// Weekly % needs the collector's estimates; a collector that does not send them shows tokens.
-    private var tokensMode: Bool { tokensChosen || !model.sessions.contains { $0.weeklyEstimate != nil } }
+    private var tokensMode: Bool { tokensChosen || !model.sessions.contains(where: \.hasEstimate) }
+    @State private var detail: Session?
+    @State private var request: ControlRequest?
     private static let paceColumn: CGFloat = 54, valueColumn: CGFloat = 70
     private var theme: QuickTheme { QuickTheme(light: scheme == .light) }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                header
+                ConnectionNotice().padding(.horizontal, 14).padding(.bottom, 10)
                 periodPicker.padding(.horizontal, 14).padding(.bottom, 10)
                 tokenSection.padding(.horizontal, 16)
                 weeklyCard.padding(.horizontal, 14).padding(.top, 14)
@@ -254,24 +261,36 @@ struct QuickView: View {
             .padding(.bottom, 24)
         }
         .scrollIndicators(.hidden)
+        // The header stays at the top like a navigation bar; content scrolling under it and the
+        // status bar fades behind the system scroll edge effect instead of showing through.
+        .safeAreaBar(edge: .top) { header.background(theme.background.opacity(0.01)) }
+        .scrollEdgeEffectStyle(.hard, for: .top)
         .background(theme.background.ignoresSafeArea())
         .foregroundStyle(theme.ink)
         .refreshable { if model.connection != .demo { model.connect() } }
+        .sheet(item: $detail) { SessionDetail(session: $0) }
+        .controlConfirmation($request)
     }
 
     // MARK: Header and period
     private var connectionLabel: String {
-        let name = model.device?.name ?? "컴퓨터 없음"
+        let name = model.devices.isEmpty ? L.t("No computer", "컴퓨터 없음") : model.scopeName
         return switch model.connection {
-        case .live: "실시간 · " + name
-        case .demo: "데모 · " + name
-        case .connecting: "연결 중"
-        case .offline: "오프라인 · 마지막 기록"
-        case .restricted: "권한 필요"
-        case .signedOut: "로그인 필요"
+        case .live: L.t("Live · ", "실시간 · ") + name
+        case .demo: L.t("Demo · ", "데모 · ") + name
+        case .connecting: L.t("Connecting", "연결 중")
+        case .offline: L.t("Offline · last record", "오프라인 · 마지막 기록")
+        case .restricted: L.t("Access required", "권한 필요")
+        case .signedOut: L.t("Sign-in required", "로그인 필요")
         }
     }
     private var fresh: Bool { model.connection == .live || model.connection == .demo }
+    /// The newest report time, read out with the connection state.
+    private var lastReport: String {
+        guard let last = model.devices.map(\.received).max(), last > 0 else { return "" }
+        let date = Date(timeIntervalSince1970: last / 1000)
+        return L.t("Last report ", "마지막 보고 ") + date.formatted(Date.FormatStyle(date: .omitted, time: .standard).locale(L.locale))
+    }
 
     private var header: some View {
         HStack(spacing: 8) {
@@ -282,16 +301,16 @@ struct QuickView: View {
                 Circle().fill(fresh ? theme.accent : theme.amber).frame(width: 6, height: 6)
                 Text(connectionLabel).font(.system(size: 11.5)).foregroundStyle(theme.muted).lineLimit(1)
             }.padding(.horizontal, 9).frame(height: 24).overlay(Capsule().stroke(theme.line))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("connection")
+            .accessibilityValue(lastReport)
             Menu {
-                if model.devices.count > 1 {
-                    Picker("컴퓨터", selection: Binding(get: { model.device?.id ?? "" }, set: { model.selectedDeviceID = $0 })) {
-                        ForEach(model.devices) { Text($0.name + ($0.online ? "" : " · 오프라인")).tag($0.id) }
-                    }
-                }
-                Button("지금 새로고침") { model.connect() }.disabled(model.connection == .demo)
-                Button(tokensChosen ? "세션을 주간 한도 %로 보기" : "세션을 토큰으로 보기") { tokensChosen.toggle() }
-                if model.connection == .demo { Button("데모 끝내기") { model.leaveDemo() } }
+                if model.devices.count > 1 { ComputerPicker() }
+                Button(L.t("Reconnect now", "지금 다시 연결")) { model.connect() }.disabled(model.connection == .demo)
+                Button(tokensChosen ? L.t("Show sessions as weekly limit %", "세션을 주간 한도 %로 보기") : L.t("Show sessions as tokens", "세션을 토큰으로 보기")) { tokensChosen.toggle() }
+                if model.connection == .demo { Button(L.t("Leave demo", "데모 끝내기")) { model.leaveDemo() } }
             } label: { Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).frame(width: 30, height: 30) }
+            .accessibilityLabel(L.t("More", "더 보기")).accessibilityIdentifier("more-menu")
         }
         .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 10)
     }
@@ -305,31 +324,29 @@ struct QuickView: View {
                         .foregroundStyle(selected ? theme.ink : theme.muted)
                         .background(selected ? theme.raised : Color.clear, in: RoundedRectangle(cornerRadius: 6))
                         .contentShape(Rectangle())
-                }.buttonStyle(.plain).accessibilityLabel("최근 \(period.label)").accessibilityAddTraits(selected ? .isSelected : [])
+                }.buttonStyle(.plain).accessibilityLabel(L.t("Last \(period.label)", "최근 \(period.label)")).accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
         .padding(3).background(theme.card, in: RoundedRectangle(cornerRadius: 9)).overlay(RoundedRectangle(cornerRadius: 9).stroke(theme.line))
     }
 
     // MARK: Tokens · average speed on the radar, split by model
-    private var periodTotal: Double? {
-        model.device?.snapshot?.periods?.first { $0.key == model.period.rawValue }?.tokens.map { $0.reduce(0, +) }
-    }
+    /// Every reporting computer's own period total, so sessions that ended still count.
+    private var periodTotal: Double? { model.periodTokens }
 
     private var tokenSection: some View {
-        let reading = SpeedReading(sessions: model.sessions, period: model.period, periodTotal: periodTotal,
-                                   flow: model.device?.snapshot?.flow?[model.period.rawValue]), usage = modelSlices()
+        let reading = SpeedReading(sessions: model.sessions, period: model.period, periodTotal: periodTotal, flow: model.flow), usage = modelSlices()
         return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("토큰 사용").font(.system(size: 12.5, weight: .semibold))
-                Text("최근 \(model.period.label)").font(.system(size: 11.5)).foregroundStyle(theme.muted)
+                Text(L.t("Token usage", "토큰 사용")).font(.system(size: 12.5, weight: .semibold))
+                Text(L.t("Last \(model.period.label)", "최근 \(model.period.label)")).font(.system(size: 11.5)).foregroundStyle(theme.muted)
                 Spacer()
             }
             HStack(alignment: .center, spacing: 16) {
                 ScopeDial(reading: reading, period: model.period, theme: theme).frame(width: 182, height: 182)
                 Group {
                     if usage.slices.isEmpty {
-                        Text(reading.average == nil ? "사용량을 확인하고 있습니다" : "이 기간에 보고된 사용이 없습니다")
+                        Text(reading.average == nil ? L.t("Checking usage", "사용량을 확인하고 있습니다") : L.t("No usage reported in this period", "이 기간에 보고된 사용이 없습니다"))
                             .font(.system(size: 11.5)).foregroundStyle(theme.muted)
                     } else {
                         modelLegend(usage.slices, total: usage.total)
@@ -359,8 +376,8 @@ struct QuickView: View {
         }
         let rest = total - shown.reduce(0) { $0 + $1.tokens }, others = rows.count - shown.count
         if total > 0, rest > total * 0.005 {
-            slices.append(UsageSlice(id: "__rest__", name: others > 0 ? "기타 모델" : "종료된 세션",
-                                     detail: others > 0 ? "\(others)개" : "목록에 없는 세션", kind: nil, value: rest, shade: 1))
+            slices.append(UsageSlice(id: "__rest__", name: others > 0 ? L.t("Other models", "기타 모델") : L.t("Ended sessions", "종료된 세션"),
+                                     detail: others > 0 ? L.t("\(others) more", "\(others)개") : L.t("Not in the list", "목록에 없는 세션"), kind: nil, value: rest, shade: 1))
         }
         return (slices, total)
     }
@@ -373,7 +390,7 @@ struct QuickView: View {
 
     private func modelLegend(_ slices: [UsageSlice], total: Double) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("모델별").font(.system(size: 10.5)).foregroundStyle(theme.muted)
+            Text(L.t("By model", "모델별")).font(.system(size: 10.5)).foregroundStyle(theme.muted)
             GeometryReader { geo in
                 HStack(spacing: 2) {
                     ForEach(slices) { slice in
@@ -402,12 +419,12 @@ struct QuickView: View {
         let rows = model.quotas
         return VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("주간 한도").font(.system(size: 12.5, weight: .semibold))
-                Text("계정별 100%").font(.system(size: 11.5)).foregroundStyle(theme.muted)
+                Text(L.t("Weekly limits", "주간 한도")).font(.system(size: 12.5, weight: .semibold))
+                Text(L.t("100% per account", "계정별 100%")).font(.system(size: 11.5)).foregroundStyle(theme.muted)
                 Spacer()
             }.padding(.horizontal, 2)
             if rows.isEmpty {
-                Text("컴퓨터의 1top에서 구독 계정을 연결하면 표시됩니다.").font(.system(size: 11.5)).foregroundStyle(theme.muted)
+                Text(L.t("Connect subscription accounts in 1top on your computer.", "컴퓨터의 1top에서 구독 계정을 연결하면 표시됩니다.")).font(.system(size: 11.5)).foregroundStyle(theme.muted)
             } else {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                     ForEach(rows.prefix(4)) { weeklyTile($0) }
@@ -418,7 +435,7 @@ struct QuickView: View {
 
     private func weeklyTile(_ q: Quota) -> some View {
         let w = q.weeklyWindow, color = Tool.color(q.kind), rate = fresh && !q.stale ? q.weekly?[model.period.rawValue]?.burnPerHour : nil
-        let end = model.device?.snapshot?.updated ?? Date().timeIntervalSince1970, start = end - model.period.seconds
+        let end = model.reportEnd, start = end - model.period.seconds
         let points = sparkPoints(q.usagePoints, start: start, end: end)
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
@@ -433,9 +450,9 @@ struct QuickView: View {
                 Text(q.handle).font(.system(size: 10.5)).foregroundStyle(theme.muted).lineLimit(1).truncationMode(.middle)
                     .frame(width: 78, alignment: .leading)
                 WeeklySpark(points: points, start: start, end: end, color: color, faded: q.stale).frame(maxWidth: .infinity).frame(height: 14)
-                Text(q.stale ? "마지막 보고" : rate.map { Format.percent($0) + "/시간" } ?? "수집 중")
-                    .font(.system(size: 10.5, weight: .medium)).foregroundStyle(q.stale ? theme.amber : color).lineLimit(1)
-                    .frame(width: 54, alignment: .trailing)
+                Text(q.stale ? q.staleLabel : rate.map { Format.percent($0) + L.t("/h", "/시간") } ?? L.t("Collecting", "수집 중"))
+                    .font(.system(size: 10.5, weight: .medium)).foregroundStyle(q.stale ? theme.amber : color).lineLimit(1).minimumScaleFactor(0.8)
+                    .frame(width: 62, alignment: .trailing)
             }
         }
         .padding(.horizontal, 10).padding(.vertical, 8).frame(maxWidth: .infinity)
@@ -443,10 +460,27 @@ struct QuickView: View {
     }
 
     // MARK: Resources
+    /// CPU and memory per computer; one computer needs no name.
     private var resources: some View {
-        HStack(spacing: 18) {
-            resource("CPU", value: model.device?.snapshot?.host?.cpu)
-            resource("메모리", value: model.device?.snapshot?.host?.memoryPercent)
+        let list = model.reportingDevices
+        return VStack(alignment: .leading, spacing: 6) {
+            ForEach(list) { device in
+                VStack(alignment: .leading, spacing: 3) {
+                    if list.count > 1 {
+                        HStack(spacing: 5) {
+                            Circle().fill(model.isFresh(device) ? theme.accent : theme.amber).frame(width: 5, height: 5)
+                            Text(device.name).font(.system(size: 11.5, weight: .semibold)).lineLimit(1)
+                            if !model.isFresh(device) {
+                                Text(L.t("Last report ", "마지막 보고 ") + L.time(device.receivedDate)).font(.system(size: 10.5)).foregroundStyle(theme.amber)
+                            }
+                        }
+                    }
+                    HStack(spacing: 18) {
+                        resource("CPU", value: device.snapshot?.host?.cpu)
+                        resource(L.t("Memory", "메모리"), value: device.snapshot?.host?.memoryPercent)
+                    }
+                }
+            }
         }
     }
     private func resource(_ label: String, value: Double?) -> some View {
@@ -454,7 +488,7 @@ struct QuickView: View {
             Text(label).foregroundStyle(theme.muted)
             GeometryReader { geo in
                 Capsule().fill(theme.line).overlay(alignment: .leading) {
-                    Capsule().fill((value ?? 0) > 90 ? theme.amber : theme.accent).frame(width: geo.size.width * min(100, max(0, value ?? 0)) / 100)
+                    Capsule().fill((value ?? 0) > 90 ? theme.amber : theme.segmentOn).frame(width: geo.size.width * min(100, max(0, value ?? 0)) / 100)
                 }
             }.frame(height: 3)
             Text(Format.percent(value)).monospacedDigit().frame(width: 40, alignment: .trailing)
@@ -472,15 +506,15 @@ struct QuickView: View {
         let paceScale = niceMaximum(max(1, rows.compactMap(pace).max() ?? 0))
         return VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Text("세션").font(.system(size: 12.5, weight: .semibold))
+                Text(L.t("Sessions", "세션")).font(.system(size: 12.5, weight: .semibold))
                 Text("\(rows.count)").font(.system(size: 11.5, weight: .semibold)).monospacedDigit().foregroundStyle(theme.muted)
                     .padding(.horizontal, 6).frame(height: 18).background(theme.raised, in: RoundedRectangle(cornerRadius: 5))
                 HStack(spacing: 5) {
-                    Circle().fill(fresh ? theme.accent : theme.amber).frame(width: 6, height: 6)
-                    Text(fresh ? "작업 중 \(rows.filter(\.isWorking).count)" : "마지막 기록")
-                }.font(.system(size: 11.5, weight: .medium)).foregroundStyle(fresh ? theme.accent : theme.amber).padding(.leading, 4)
+                    if fresh { StatusGlyph(status: "working") } else { Circle().fill(theme.amber).frame(width: 6, height: 6) }
+                    Text(fresh ? L.t("Working \(rows.filter(\.isWorking).count)", "작업 중 \(rows.filter(\.isWorking).count)") : L.t("Last record", "마지막 기록"))
+                }.font(.system(size: 11.5, weight: .medium)).foregroundStyle(fresh ? theme.ink : theme.amber).padding(.leading, 4)
                 Spacer(minLength: 4)
-                Text(tokensMode ? "토큰" : "주간 한도 사용량").font(.system(size: 10.5)).foregroundStyle(theme.muted)
+                Text(tokensMode ? L.t("Tokens", "토큰") : L.t("Weekly limit used", "주간 한도 사용량")).font(.system(size: 10.5)).foregroundStyle(theme.muted)
                     .fixedSize().frame(width: Self.valueColumn, alignment: .trailing)
             }
             .padding(.horizontal, 16).padding(.vertical, 8)
@@ -488,12 +522,15 @@ struct QuickView: View {
             if rows.isEmpty {
                 VStack(spacing: 6) {
                     Image(systemName: "terminal").font(.system(size: 22)).foregroundStyle(theme.muted)
-                    Text("감지된 AI 세션이 없습니다").font(.system(size: 13))
+                    Text(L.t("No AI sessions detected", "감지된 AI 세션이 없습니다")).font(.system(size: 13))
                 }.frame(maxWidth: .infinity).padding(.vertical, 32)
             } else {
                 LazyVStack(spacing: 0) {
                     ForEach(rows) { group in
-                        sessionRow(group, paceScale: paceScale)
+                        Button { detail = group.root } label: { sessionRow(group, paceScale: paceScale).contentShape(Rectangle()) }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("session-" + group.root.id)
+                            .contextMenu { SessionActions(session: group.root, open: { detail = group.root }, request: $request) }
                         Rectangle().fill(theme.line.opacity(0.7)).frame(height: 1).padding(.leading, 16 + Self.paceColumn + 9)
                     }
                 }
@@ -503,28 +540,30 @@ struct QuickView: View {
 
     private func sessionRow(_ g: SessionGroup, paceScale: Double) -> some View {
         let s = g.root, burn = pace(g)
-        let hub = g.isWorking ? theme.accent : s.status == "waiting" ? theme.amber : theme.dim
+        let hub = g.isWorking ? theme.ink : s.status == "waiting" ? theme.amber : theme.dim
         let tokens = g.tokens(in: model.period)
         let value = tokensMode ? Format.tokens(tokens) : g.estimate(in: model.period).map { "≈" + Format.percent($0) } ?? (tokens == 0 ? "0%" : "—")
         return HStack(alignment: .center, spacing: 9) {
             VStack(spacing: 2) {
                 MiniGauge(value: burn, scale: paceScale, color: Tool.color(s.kind), hub: hub, theme: theme)
-                Text(burn.map { tokensMode ? Format.tokens($0) + "/시간" : Format.percent($0) + "/시간" } ?? "—")
+                Text(burn.map { (tokensMode ? Format.tokens($0) : Format.percent($0)) + L.t("/h", "/시간") } ?? "—")
                     .font(.system(size: 9.5)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.85)
                     .foregroundStyle(burn == nil ? theme.dim : burn == 0 ? theme.muted : theme.ink)
             }
             .frame(width: Self.paceColumn)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
+                    StatusGlyph(status: g.isWorking ? "working" : s.status)
                     Text(s.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                     if g.childCount > 0 {
-                        Text("하위 \(g.childCount)").font(.system(size: 10.5)).foregroundStyle(theme.muted).padding(.horizontal, 5).frame(height: 16)
+                        Text(L.t("+\(g.childCount) sub", "하위 \(g.childCount)")).font(.system(size: 10.5)).foregroundStyle(theme.muted).padding(.horizontal, 5).frame(height: 16)
                             .overlay(Capsule().stroke(theme.line)).fixedSize()
                     }
                 }
                 HStack(spacing: 4) {
                     Text(Tool.name(s.kind)).foregroundStyle(Tool.color(s.kind))
                     if let project = s.displayProject { Text("· " + project).foregroundStyle(theme.muted) }
+                    if model.reportingDevices.count > 1, let device = model.device(for: s) { Text("· " + device.name).foregroundStyle(theme.dim) }
                 }.font(.system(size: 11.5)).lineLimit(1)
             }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             Text(value).font(.system(size: 13, weight: .semibold)).monospacedDigit().lineLimit(1)
