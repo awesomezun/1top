@@ -47,7 +47,7 @@ struct SessionsView: View {
                 }
             }
             .refreshable { if model.connection != .demo { model.connect() } }
-            .sheet(item: $detail) { SessionDetail(session: $0) }
+            .sheet(item: $detail) { SessionDetail(session: $0).detailSource("sessions", $0.id) }
             .controlConfirmation($request)
         }
     }

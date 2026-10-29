@@ -271,7 +271,7 @@ struct QuickView: View {
         .background(theme.background.ignoresSafeArea())
         .foregroundStyle(theme.ink)
         .refreshable { if model.connection != .demo { model.connect() } }
-        .sheet(item: $detail) { SessionDetail(session: $0) }
+        .sheet(item: $detail) { SessionDetail(session: $0).detailSource("row", $0.id) }
         .controlConfirmation($request)
     }
 

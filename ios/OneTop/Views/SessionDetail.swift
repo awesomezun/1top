@@ -366,6 +366,18 @@ struct MailboxView: View {
 }
 
 /// Every computer together, or one of them.
+extension View {
+    /// Debug builds name each detail sheet by the path that opened it (row, sessions, launch) and its
+    /// session, so a UI test's accessibility record shows why a sheet is on screen.
+    @ViewBuilder func detailSource(_ source: String, _ id: String) -> some View {
+        #if DEBUG
+        self.accessibilityElement(children: .contain).accessibilityIdentifier("detail-\(source)-\(id)")
+        #else
+        self
+        #endif
+    }
+}
+
 struct ComputerPicker: View {
     @Environment(AppModel.self) private var model
     // Buttons rather than a Picker, so each choice carries its own identifier (scope-all, scope-<id>).
