@@ -17,8 +17,9 @@ export async function loadToken(){
  if(raw.startsWith('1tm_'))return API===MANAGED_RELAY?raw:null;
  try{const saved=JSON.parse(raw);return saved.relay===API&&/^1tm_[a-f0-9]{64}$/.test(saved.token)?saved.token:null;}catch{return null;}
 }
-export async function api(path:string,token:string,body?:unknown,origin=API){
- const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);
+// A message with photos carries up to about 2 MB of JSON, so it may wait longer than the default.
+export async function api(path:string,token:string,body?:unknown,origin=API,wait=15000){
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),wait);
  try{const response=await fetch(origin+path,{method:body===undefined?'GET':'POST',redirect:'error',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal});const result=await response.json();if(!response.ok)throw Object.assign(new Error(result.error||'Connection failed'),{status:response.status,code:result.code});return result;}finally{clearTimeout(timeout);}
 }
 const random=async(n:number)=>Array.from(await Crypto.getRandomBytesAsync(n)).map(v=>v.toString(16).padStart(2,'0')).join('');

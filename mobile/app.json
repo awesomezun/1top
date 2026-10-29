@@ -2,7 +2,7 @@
   "expo": {
     "name": "1top",
     "slug": "onetop",
-    "version": "1.5.0",
+    "version": "4.2.0",
     "scheme": "onetop",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "si.onetop.mobile",
-      "versionCode": 8,
+      "versionCode": 10,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0d1218"
@@ -30,7 +30,10 @@
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.SYSTEM_ALERT_WINDOW"
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
       ]
     },
     "plugins": [
@@ -46,6 +49,14 @@
             "./assets/fonts/IBMPlexSansKR-SemiBold.ttf",
             "./assets/fonts/IBMPlexSansKR-Bold.ttf"
           ]
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "1top uses the photos you choose to send them to your own AI session.",
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ]
     ],
