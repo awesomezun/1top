@@ -1,0 +1,61 @@
+{
+  "release": "4.2.2",
+  "date": "2026-10-29",
+  "source_commit": "15a3267ac5b252fd0501725d24d64e3489324908",
+  "python_tests": {
+    "passed": 386
+  },
+  "macos": {
+    "installed_version": "4.2.2",
+    "local_api_version_verified": true,
+    "notarized": false
+  },
+  "relay": {
+    "version": "1.10.0",
+    "deployment_id": "69dca8f9-d427-46bf-b9a3-7802d865011a",
+    "tests_passed": 65,
+    "optional_load_test_skipped": 1,
+    "typecheck_passed": true
+  },
+  "windows": {
+    "workflow_run": 40913278664,
+    "exe_scenarios": 4,
+    "msix_scenarios": 7,
+    "all_passed": true,
+    "store_certified": false
+  },
+  "burst": {
+    "path": "installed Mac local action API -> durable mailbox -> real Claude -> background reply collection",
+    "accepted_count": 3,
+    "acceptance_latency_ms": [
+      50,
+      57,
+      56
+    ],
+    "replies": [
+      "SEQ-1",
+      "SEQ-2",
+      "SEQ-3"
+    ],
+    "all_replied_in_order": true,
+    "phone_disconnected_during_reply_collection": true,
+    "scope_limit": "This run is not an iPhone UI or a live remote relay test."
+  },
+  "photo": {
+    "path": "installed Mac local action API -> real Claude image read -> correlated reply",
+    "synthetic_code": "1TOP PHOTO TEST: Q7",
+    "synthetic_shape": "teal square",
+    "reply_identified_both": true,
+    "scope_limit": "Response phases were verified by transcript replay; the phone animation was not captured in this run."
+  },
+  "message_invariants": {
+    "deduplicate_same_request_id": true,
+    "persistent_queue_after_restart": true,
+    "ambiguous_delivery_auto_retry": false,
+    "unresolved_capacity": 100,
+    "undelivered_expiry_minutes": 15,
+    "expiry_or_source_change_is_visible": true,
+    "mailbox_updates_merge_by_request_id": true
+  },
+  "mobile_validation": "Recorded separately; no physical mobile pass is claimed by this report."
+}
