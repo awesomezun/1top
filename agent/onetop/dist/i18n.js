@@ -2,6 +2,7 @@
 window.OneTopI18n=(()=>{
  'use strict';let language='ko',scheduled=false;const texts=new WeakMap(),attributes=new WeakMap();
  const entries=[
+ ['요일·시간대와 날짜별 토큰 사용','Token use by weekday, hour and date','按星期、时段和日期的 token 用量'],['시간대별','By hour','按时段'],['날짜별','By date','按日期'],['최근 30일 하루 평균','Daily average · last 30 days','最近 30 天日均'],['최근 1년 날짜별 합계','Daily totals · last year','最近一年每日合计'],['부터 기록','onward','起有记录'],['사용한 날','Days used','使用天数'],
  ['작업 중 아님','Not working','未在工作'],
  ['사용량 살펴보기','Usage overview','用量概览'],['선택 기간의 사용 비중과 모델·프로젝트별 추이, 요일·시간대별 사용 패턴을 확인합니다.','Usage share for the selected period, trends by model and project, and patterns by weekday and hour.','查看所选时段的用量占比、按模型和项目的趋势，以及按星期和时段的使用规律。'],
  ['모델별 사용량 추이','Usage by model','按模型的用量趋势'],['프로젝트별 사용량 추이','Usage by project','按项目的用量趋势'],['토큰 기준 상위 5개 모델','Top 5 models by tokens','按 token 排名前 5 的模型'],['토큰 기준 상위 5개 프로젝트','Top 5 projects by tokens','按 token 排名前 5 的项目'],

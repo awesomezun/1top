@@ -32,12 +32,17 @@
   for(const [date,hour,value] of hours){if(value==null||!(hour>=0&&hour<24))continue;const c=cells[weekday(date)][hour];c.sum+=value;c.days++;if(value>0)c.used++;}
   return cells.map(row=>row.map(c=>c.days?{value:c.sum/c.days,days:c.days,used:c.used}:null));
  }
- // A Monday-first month calendar: rows of seven cells, null outside the month.
- function month(days,year,index){
-  const values=new Map(days.map(([d,v])=>[d,v])),lead=(new Date(year,index,1).getDay()+6)%7,count=new Date(year,index+1,0).getDate(),cells=Array(lead).fill(null);
-  for(let d=1;d<=count;d++){const date=`${year}-${String(index+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;cells.push({date,day:d,value:values.has(date)?values.get(date):undefined});}
-  while(cells.length%7)cells.push(null);
-  return Array.from({length:cells.length/7},(_,i)=>cells.slice(i*7,i*7+7));
+ // The last 53 Monday-first weeks ending this week, as columns of seven days, with each month's
+ // first column. Days before the record are null (no record); days after today are future.
+ function year(days,todayKey){
+  const values=new Map(days.map(([d,v])=>[d,v])),first=days.length?days[0][0]:todayKey,[y,m,d]=todayKey.split('-').map(Number);
+  const today=new Date(y,m-1,d),start=new Date(y,m-1,d-((today.getDay()+6)%7)-52*7),key=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+  const weeks=[],months=[];
+  for(let w=0;w<53;w++){const col=[];for(let i=0;i<7;i++){const day=new Date(start.getFullYear(),start.getMonth(),start.getDate()+w*7+i),k=key(day);
+    col.push({date:k,day:day.getDate(),future:k>todayKey,value:k>todayKey?undefined:k<first?null:values.has(k)?values.get(k):null});
+    if(day.getDate()===1)months.push({week:w,month:day.getMonth()+1});}
+   weeks.push(col);}
+  return {weeks,months};
  }
  // Five equal classes of the largest value, so a busy hour stands out. Measured zero is its own class.
  const level=(value,max)=>value==null?null:!(value>0)||!(max>0)?0:Math.max(1,Math.min(5,Math.ceil(5*value/max)));
@@ -60,6 +65,6 @@
  // Display names: model IDs keep their version, without the vendor prefix the tool colour already shows.
  const modelName=key=>key==='unknown'?'모델 미확인':String(key).replace(/\[1m\]/gi,'').replace(/^claude-/i,'').replace(/^gpt-/i,'GPT-');
  const projectName=row=>row.key==='unknown'?'프로젝트 미확인':/\/\.aside\/u\/[^/]+$/.test(row.key)||row.label==='0'?'Aside 기본 작업공간':row.label||row.key;
- const api={step,stepLabel,fold,slots,weekday,weekHours,month,level,axisMax,smooth,runs,modelName,projectName};
+ const api={step,stepLabel,fold,slots,weekday,weekHours,year,level,axisMax,smooth,runs,modelName,projectName};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.OneTopHistory=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

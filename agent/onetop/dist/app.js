@@ -459,7 +459,7 @@ window.addEventListener('resize',renderMaps);
 // ---------- Usage history: trends by model and project, and the usage heatmap ----------
 // Loaded from /api/history while the usage map is open: on opening, when the period or AI filter
 // changes, and every minute. A collector without the endpoint (404) only changes these panels.
-const historyView={key:'',at:0,data:null,error:'',loading:false,mode:'hours',month:null,slots:{model:{},project:{}},geometry:{},hover:{}};
+const historyView={key:'',at:0,data:null,error:'',loading:false,slots:{model:{},project:{}},geometry:{},hover:{}};
 // Monday-first weekday labels, per language here: a bare '일' would collide with the day unit in i18n.js.
 const weekdays=()=>({en:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],zh:['一','二','三','四','五','六','日']})[OneTopI18n.language]||['월','화','수','목','금','토','일'];
 // One tooltip for every history chart, created on first use. Names inside are data, set as text.
@@ -576,60 +576,52 @@ for(const id of ['modelTrend','projectTrend']){
   const now=historyView.hover[id]??g.n-1,i=e.key==='Home'?0:e.key==='End'?g.n-1:Math.max(0,Math.min(g.n-1,now+(e.key==='ArrowLeft'?-1:1)));historyView.hover[id]=i;drawTrend(id,id==='modelTrend'?'model':'project');
   const r=canvas.getBoundingClientRect();trendTip(id,i,r.left+g.l+(i+.5)*g.pw/g.n,r.top+16);});
 }
-// Heatmap: weekday × hour over the last 30 days (a daily average), or one month of daily totals.
+// Heatmaps side by side: weekday × hour over the last 30 days (a daily average) and the last
+// 53 weeks of daily totals, GitHub-style, with month names above.
 function drawHeatmap(){
- const grid=$('heatmapGrid'),empty=document.querySelector('.heatmap-empty'),d=historyView.data,mode=historyView.mode;
- document.querySelectorAll('[data-heatmap]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.heatmap===mode)));
- $('heatmapMonthNav').hidden=mode!=='month'||!d;
- const message=historyMessage('히트맵');
- empty.hidden=!message;grid.hidden=!!message;document.querySelector('.heatmap-foot').hidden=!!message;$('historyCoverage').hidden=!!message;
- if(message){empty.innerHTML=esc(message[0])+(message[1]?`<small>${esc(message[1])}</small>`:'');$('heatmapCaption').innerHTML='';$('heatmapSummary').innerHTML='';$('historyCoverage').innerHTML='';return;}
- if(mode==='month')drawMonth(grid,d);else drawHours(grid,d);
+ const d=historyView.data,empty=document.querySelector('.heatmap-empty'),pair=document.querySelector('.heatmap-pair'),message=historyMessage('히트맵');
+ empty.hidden=!message;pair.hidden=!!message;document.querySelector('.heatmap-foot').hidden=!!message;$('historyCoverage').hidden=!!message;
+ if(message){empty.innerHTML=esc(message[0])+(message[1]?`<small>${esc(message[1])}</small>`:'');return;}
+ drawHours($('heatmapHours'),d);drawYear($('heatmapYear'),d);
  const since=Math.min(...(d.coverage||[]).map(c=>c.from).filter(Number.isFinite)),names={collector:'1top 수집 기록',claude_transcripts:'Claude Code 대화 기록',codex_sessions:'Codex 대화 기록'};
  $('historyCoverage').innerHTML=Number.isFinite(since)?`<span>기록 시작</span> <b data-user-content>${esc(new Date(since*1000).toLocaleDateString(OneTopI18n.locale(),{year:'numeric',month:'short',day:'numeric'}))}</b> · <span>출처</span> ${[...new Set((d.coverage||[]).map(c=>names[c.source]).filter(Boolean))].map(x=>`<span>${esc(x)}</span>`).join(', ')}`:'';
 }
 function drawHours(grid,d){
  const cells=OneTopHistory.weekHours(d.heatmap?.hours||[]),max=Math.max(0,...cells.flat().filter(Boolean).map(c=>c.value)),dates=(d.heatmap?.hours||[]).map(h=>h[0]).sort();
- grid.className='heatmap is-hours';
- grid.innerHTML='<span></span>'+Array.from({length:24},(_,h)=>`<span class="heat-label is-hour">${h}</span>`).join('')+cells.map((row,w)=>`<span class="heat-label is-row" data-user-content>${weekdays()[w]}</span>`+row.map((c,h)=>`<i class="heat-cell${c?'':' is-null'}"${c?` data-level="${OneTopHistory.level(c.value,max)}"`:''} data-w="${w}" data-h="${h}"></i>`).join('')).join('');
+ grid.innerHTML='<span></span>'+Array.from({length:24},(_,h)=>`<span class="heat-label is-hour">${h%3?'':h}</span>`).join('')+cells.map((row,w)=>`<span class="heat-label is-row" data-user-content>${weekdays()[w]}</span>`+row.map((c,h)=>`<i class="heat-cell${c?'':' is-null'}"${c?` data-level="${OneTopHistory.level(c.value,max)}"`:''} data-w="${w}" data-h="${h}"></i>`).join('')).join('');
  grid.cells=cells;
  const range=dates.length?[dates[0],dates.at(-1)].map(x=>new Date(x+'T00:00:00').toLocaleDateString(OneTopI18n.locale(),{month:'short',day:'numeric'})).join(' – '):'';
- $('heatmapCaption').innerHTML=spans(['요일·시간대별 하루 평균','최근 30일'])+(range?`<span data-user-content>${esc(range)}</span>`:'');
+ $('hoursCaption').innerHTML=spans(['최근 30일 하루 평균'])+(range?`<span data-user-content>${esc(range)}</span>`:'');
  let peak=null;cells.forEach((row,w)=>row.forEach((c,h)=>{if(c&&c.value>0&&(!peak||c.value>peak.value))peak={...c,w,h};}));
- $('heatmapSummary').innerHTML=peak?`<span>가장 많이 쓰는 시간</span> <b data-user-content>${esc(weekdays()[peak.w])} ${peak.h}:00</b> · <b>${fmt(peak.value)}</b> tokens`:'';
+ $('hoursSummary').innerHTML=peak?`<span>가장 많이 쓰는 시간</span> <b data-user-content>${esc(weekdays()[peak.w])} ${peak.h}:00</b> · <b>${fmt(peak.value)}</b> tokens`:'';
 }
-function drawMonth(grid,d){
- const days=d.heatmap?.days||[],today=new Date(),first=days[0]?.[0],start=first?new Date(first+'T00:00:00'):today;
- const bound=(y,m)=>{const v=y*12+m,lo=start.getFullYear()*12+start.getMonth(),hi=today.getFullYear()*12+today.getMonth();return Math.max(lo,Math.min(hi,v));};
- const at=bound(historyView.month?.y??today.getFullYear(),historyView.month?.m??today.getMonth()),year=Math.floor(at/12),index=at%12;historyView.month={y:year,m:index};
- const max=Math.max(0,...days.map(x=>x[1]||0)),todayKey=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`,weeks=OneTopHistory.month(days,year,index);
- grid.className='heatmap is-month';
- grid.innerHTML=weekdays().map(w=>`<span class="heat-label" data-user-content>${w}</span>`).join('')+weeks.flat().map((c,i)=>{
-  if(!c)return '<i class="heat-cell is-outside"></i>';
-  const future=c.date>todayKey,known=c.value!=null&&c.value!==undefined;
-  return `<i class="heat-cell${future?' is-future':known?'':' is-null'}${c.date===todayKey?' is-today':''}"${!future&&known?` data-level="${OneTopHistory.level(c.value,max)}"`:''} data-i="${i}"><b>${c.day}</b></i>`;}).join('');
+function drawYear(grid,d){
+ const today=new Date(),todayKey=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+ const {weeks,months}=OneTopHistory.year(d.heatmap?.days||[],todayKey),values=weeks.flat().filter(c=>typeof c.value==='number'),max=Math.max(0,...values.map(c=>c.value));
+ const monthName=m=>new Date(2026,m-1,1).toLocaleDateString(OneTopI18n.locale(),{month:'short'});
+ grid.innerHTML=`<div class="year-months">${months.map(m=>`<span style="grid-column:${m.week+1}" data-user-content>${esc(monthName(m.month))}</span>`).join('')}</div>`+
+  `<div class="year-body"><div class="year-days">${weekdays().map((w,i)=>`<span data-user-content>${i%2?'':esc(w)}</span>`).join('')}</div><div class="year-grid">${weeks.map((col,w)=>col.map((c,i)=>`<i class="heat-cell${c.future?' is-future':c.value===null?' is-null':''}${c.date===todayKey?' is-today':''}"${typeof c.value==='number'?` data-level="${OneTopHistory.level(c.value,max)}"`:''} data-i="${w*7+i}"></i>`).join('')).join('')}</div></div>`;
  grid.cells=weeks.flat();
- $('heatmapMonth').textContent=new Date(year,index,1).toLocaleDateString(OneTopI18n.locale(),{year:'numeric',month:'long'});
- const [prev,next]=document.querySelectorAll('[data-month-step]'),here=year*12+index;prev.disabled=here<=bound(-1,0);next.disabled=here>=bound(9999,0);
- $('heatmapCaption').innerHTML=spans(['날짜별 사용량 합계']);
- const inMonth=weeks.flat().filter(c=>c&&typeof c.value==='number'),sum=inMonth.reduce((n,c)=>n+c.value,0),top=inMonth.reduce((p,c)=>!p||c.value>p.value?c:p,null);
- $('heatmapSummary').innerHTML=inMonth.length?`<span>월 합계</span> <b>${fmt(sum)}</b> · <span>가장 많이 쓴 날</span> <b data-user-content>${esc(new Date(top.date+'T00:00:00').toLocaleDateString(OneTopI18n.locale(),{month:'short',day:'numeric'}))}</b> ${fmt(top.value)}`:'';
+ const first=(d.heatmap?.days||[])[0]?.[0];
+ $('yearCaption').innerHTML=spans(['최근 1년 날짜별 합계'])+(first?`<span><b data-user-content>${esc(new Date(first+'T00:00:00').toLocaleDateString(OneTopI18n.locale(),{year:'numeric',month:'short',day:'numeric'}))}</b> <span>부터 기록</span></span>`:'');
+ const sum=values.reduce((n,c)=>n+c.value,0),top=values.reduce((p,c)=>!p||c.value>p.value?c:p,null),used=values.filter(c=>c.value>0).length;
+ $('yearSummary').innerHTML=values.length?`<span>합계</span> <b>${fmt(sum)}</b> · <span>사용한 날</span> <b>${used}</b> · <span>가장 많이 쓴 날</span> <b data-user-content>${esc(new Date(top.date+'T00:00:00').toLocaleDateString(OneTopI18n.locale(),{month:'short',day:'numeric'}))}</b> ${fmt(top.value)}`:'';
 }
-$('heatmapGrid').addEventListener('pointerover',e=>{
- const cell=e.target.closest('.heat-cell'),grid=$('heatmapGrid');if(!cell||cell.classList.contains('is-outside')||cell.classList.contains('is-future'))return hideTip();
- const r=cell.getBoundingClientRect(),t=OneTopI18n.t;
- if(historyView.mode==='hours'){const w=Number(cell.dataset.w),h=Number(cell.dataset.h),c=grid.cells?.[w]?.[h];
-  showTip(tip=>{const title=document.createElement('strong');title.textContent=`${weekdays()[w]} ${h}:00–${h+1}:00`;tip.append(title);
-   if(!c){const p=document.createElement('p');p.textContent=t('기록 없음');tip.append(p);return;}
-   tipRow(tip,'',fmt(c.value),t('하루 평균')+' · tokens');const p=document.createElement('p');p.textContent=`${t('최근 30일')} · ${c.days}${t('일 기록')} · ${c.used}${t('일 사용')}`;tip.append(p);},r.right,r.top);}
- else{const c=grid.cells?.[Number(cell.dataset.i)];if(!c)return hideTip();
-  showTip(tip=>{const title=document.createElement('strong');title.textContent=new Date(c.date+'T00:00:00').toLocaleDateString(OneTopI18n.locale(),{year:'numeric',month:'short',day:'numeric',weekday:'short'});tip.append(title);
-   if(c.value==null){const p=document.createElement('p');p.textContent=t('기록 없음');tip.append(p);return;}
-   tipRow(tip,'',fmt(c.value),'tokens');},r.right,r.top);}
-});
-$('heatmapGrid').addEventListener('pointerleave',hideTip);
-$('heatmapModes').onclick=e=>{const b=e.target.closest('[data-heatmap]');if(!b)return;historyView.mode=b.dataset.heatmap;hideTip();drawHeatmap();};
-$('heatmapMonthNav').onclick=e=>{const b=e.target.closest('[data-month-step]');if(!b||b.disabled||!historyView.month)return;const v=historyView.month.y*12+historyView.month.m+Number(b.dataset.monthStep);historyView.month={y:Math.floor(v/12),m:v%12};hideTip();drawHeatmap();};
+for(const id of ['heatmapHours','heatmapYear']){
+ $(id).addEventListener('pointerover',e=>{
+  const cell=e.target.closest('.heat-cell'),grid=$(id);if(!cell||cell.classList.contains('is-future'))return hideTip();
+  const r=cell.getBoundingClientRect(),t=OneTopI18n.t;
+  if(id==='heatmapHours'){const w=Number(cell.dataset.w),h=Number(cell.dataset.h),c=grid.cells?.[w]?.[h];
+   showTip(tip=>{const title=document.createElement('strong');title.textContent=`${weekdays()[w]} ${h}:00–${h+1}:00`;tip.append(title);
+    if(!c){const p=document.createElement('p');p.textContent=t('기록 없음');tip.append(p);return;}
+    tipRow(tip,'',fmt(c.value),t('하루 평균')+' · tokens');const p=document.createElement('p');p.textContent=`${t('최근 30일')} · ${c.days}${t('일 기록')} · ${c.used}${t('일 사용')}`;tip.append(p);},r.right,r.top);}
+  else{const c=grid.cells?.[Number(cell.dataset.i)];if(!c)return hideTip();
+   showTip(tip=>{const title=document.createElement('strong');title.textContent=new Date(c.date+'T00:00:00').toLocaleDateString(OneTopI18n.locale(),{year:'numeric',month:'short',day:'numeric',weekday:'short'});tip.append(title);
+    if(c.value===null){const p=document.createElement('p');p.textContent=t('기록 없음');tip.append(p);return;}
+    tipRow(tip,'',fmt(c.value),'tokens');},r.right,r.top);}
+ });
+ $(id).addEventListener('pointerleave',hideTip);
+}
 window.addEventListener('resize',drawHistory);
 
 function checkUpdates(){fetch('/api/updates').then(r=>r.json()).then(u=>{let b=$('updateNotice');if(!b){b=document.createElement('a');b.id='updateNotice';b.className='update-notice';b.target='_blank';b.rel='noopener';document.querySelector('.rail-bottom')?.append(b);}if(b){b.hidden=!u.available;b.textContent='새 버전 '+u.version+' · '+(u.status==='preview'?'미리보기 다운로드':'업데이트');b.href=u.release_url||'https://github.com/awesomezun/1top/releases';}}).catch(()=>{});}
