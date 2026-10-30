@@ -1,6 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { AccountHub, type Env } from './hub';
-import { action, text } from './protocol';
+import { accountAlias, action, text } from './protocol';
 import { AccessDenied, accessDeadline, requireHostedAccess } from './access';
 import {billingReady,billingStatus,portal,webhook} from './billing';
 import { MOBILE_TOKEN, mobileIdentity, authorizeMobile } from './mobile';
@@ -61,7 +61,7 @@ async function handle(req:Request,env:Env):Promise<Response>{
    if(!await limit(env.DB,'billing:'+u.id,6,600))return json({error:'Too many billing requests. Try again later.'},429);
    return path.endsWith('/checkout')?hub(env,u.id).fetch(new Request('https://hub/billing/checkout',{method:'POST',body:JSON.stringify({uid:u.id})})):portal(env,u.id);
  }
- if(path==='/health')return json({ok:true,service:'1top relay',version:'1.10.0',access:'approved-accounts',billing_enabled:billingReady(env),mode:env.DEPLOYMENT_MODE==='self_hosted'?'self_hosted':'managed',pairing_enabled:env.PAIRING_ENABLED==='true'});
+ if(path==='/health')return json({ok:true,service:'1top relay',version:'1.11.0',access:'approved-accounts',billing_enabled:billingReady(env),mode:env.DEPLOYMENT_MODE==='self_hosted'?'self_hosted':'managed',pairing_enabled:env.PAIRING_ENABLED==='true'});
  if(path==='/api/mobile/authorize'&&req.method==='POST'){
    const u=await user(req,env,true),access=await requireHostedAccess(env.DB,u.id);
    if(!await limit(env.DB,'mobile:'+u.id,10,600))return json({error:'Too many mobile sign-ins. Try again later.'},429);
@@ -151,13 +151,13 @@ async function handle(req:Request,env:Env):Promise<Response>{
    if(!d)return json({error:'Device not found'},404);
    return hub(env,u.id).fetch(new Request('https://hub/revoke',{method:'POST',body:JSON.stringify({id:data.device_id})}));
  }
- if(path==='/api/action'&&req.method==='POST'){
+ if(['/api/action','/api/accounts/alias'].includes(path)&&req.method==='POST'){
    const u=await approvedUser(req,env);
    if(!await limit(env.DB,'action:'+u.id,30))return json({error:'Action limit reached. Check your devices before retrying.'},429);
-   const cmd=action(await body(req,2200000));
+   const cmd=path==='/api/accounts/alias'?accountAlias(await body(req,4096)):action(await body(req,2200000));
    const d=await env.DB.prepare('SELECT id FROM devices WHERE id=? AND user_id=? AND revoked_at IS NULL AND allow_control=1').bind(cmd.device_id,u.id).first();
    if(!d)return json({error:'Device not found or control is disabled'},404);
-   return hub(env,u.id).fetch(new Request('https://hub/action',{method:'POST',body:JSON.stringify(cmd)}));
+   return hub(env,u.id).fetch(new Request(path==='/api/accounts/alias'?'https://hub/accounts/alias':'https://hub/action',{method:'POST',body:JSON.stringify(cmd)}));
  }
  return json({error:'Not found'},404);
 }

@@ -7,6 +7,7 @@ import websocket
 from . import __version__
 from .controls import accepts_instruction, accepts_message
 from .mailbox import readable as mailbox_readable
+from .relay_data import CALIBRATION, select, host_metrics, system_metrics, public_history
 
 RELAY='https://onetop-relay.gitreels.workers.dev'
 SSL=ssl.create_default_context(cafile=certifi.where())
@@ -84,7 +85,7 @@ def export_weekly(usage):
         calibration = value.get('calibration')
         if isinstance(calibration, dict):
             estimate['calibration'] = {k:calibration.get(k) for k in
-                ('pp_per_token','confidence','from','to','valid_until','source')}
+                CALIBRATION}
         result[key] = estimate
     return result
 
@@ -97,6 +98,7 @@ def export_snapshot(state):
         identified=bool(s.get('control_key'))
         status=s.get('status','unknown')
         if identified and (term or loc.get('app_path')):capabilities.append('focus')
+        if identified and term:capabilities.append('rename')
         can_pause=identified and term and s.get('input_verified') is not False and s['kind'] in ('Claude','GLM','Codex')
         if (can_pause or identified and s['kind']=='Aside') and status in ('working','waiting'):capabilities.append('pause')
         if can_pause and s.get('display_status')=='paused' and status in ('idle','interrupted'):capabilities.append('resume')
@@ -109,11 +111,13 @@ def export_snapshot(state):
         sessions.append({'id':s['id'],'control_key':s.get('control_key',''),'kind':s['kind'],
             'app':'Orca' if term else loc.get('app') or 'Unknown',
             'terminal':term.get('title') or loc.get('terminal',''),
-            'project':s.get('project',''),'title':s.get('project','')+' · '+s['kind'],
+            'project':s.get('project',''),'title':'',
             'model':s.get('model',''),'effort':s.get('effort'),
             'effort_source':s.get('effort_source'),'effort_updated':s.get('effort_updated'),
             'status':s.get('display_status') or status,'tokens':s.get('tokens'),
             'context_usage':{k:s['context_usage'].get(k) for k in ('basis','input_tokens','capacity','parts','observed_at','model')} if isinstance(s.get('context_usage'),dict) else None,
+            **select(s, ('last_usage','request_input','context_size','terminal_note','pids')),
+            'usage':select(u, ('last_minute','last_five_minutes','output_rate','history')),
             'rate':u.get('rate'),'windows':u.get('windows',{}),'cpu':r.get('cpu'),'rss':r.get('rss'),
             'weekly_estimate':export_weekly(u),'weekly_account':u.get('weekly_account'),
             'root_session_id':s.get('root_session_id',s['id']),
@@ -127,18 +131,25 @@ def export_snapshot(state):
                  for g in ops.get('goals',[])], 'loop_state':'not_verified','skill_runtime':'partial'}
     weekly = {a['id']:a for a in state.get('weekly_usage',{}).get('accounts',[])}
     return {'version':__version__,'updated':state.get('updated',0),'recording_started':state.get('started',0),
-        'flow':export_flow(state),
+        'features':['history','account_alias'],
+        'flow':{**export_flow(state), **state.get('remote_flows', {})},
+        'system':system_metrics(state.get('system', {})),
+        'collection_ms':state.get('collection_ms'), 'resume_prompt':state.get('resume_prompt',''),
+        'actions':[select(a, ('t','action','sid','terminal','project','message')) for a in state.get('actions', [])[-20:]],
+        'orca_terminals':state.get('orca_terminals'), 'process_counts':state.get('process_counts',{}),
+        'quotas':[select(q, ('kind','plan','updated','stale','note','windows')) for q in state.get('quotas', [])[:24]],
         'operations':operations,
         'account_quotas':[{'id':q['id'],'kind':q['kind'],'account_label':q['kind']+' · '+q['id'][-6:], 'alias':q.get('alias',''),
             'plan':q.get('plan',''),'windows':[{k:w.get(k) for k in ('label','pct','reset')} for w in q.get('windows',[])[:8]],
             'updated':q.get('updated',0),'stale':q.get('stale',True),'note':q.get('note',''),'status':q.get('status',''),
+            'calibration':select(weekly.get(q['id'],{}).get('calibration'), CALIBRATION),
             'weekly':{key:{k:value.get(k) for k in ('used_pp','observed_seconds','partial')}
                       for key,value in weekly.get(q['id'],{}).get('periods',{}).items()},
             'usage_points':weekly.get(q['id'],{}).get('usage_points',[])[-60:]}
             for q in state.get('account_quotas',[])[:24]],
         'sessions':sessions,'applications':[{'name':a['name'],'evidence':a['evidence']} for a in state.get('applications',[])],'host':{'cpu':host.get('cpu'),'used_memory':memory.get('used',0),
-        'total_memory':memory.get('total',0),'cores':host.get('cores',0)},
-        'periods':[{k:w[k] for k in ('key','label','tokens','partial','observed_seconds')} for w in state.get('period_usage',{}).get('windows',[])]}
+        'total_memory':memory.get('total',0),'cores':host.get('cores',0),**host_metrics(host)},
+        'periods':[{k:w.get(k) for k in ('key','label','tokens','partial','observed_seconds','seconds')} for w in state.get('period_usage',{}).get('windows',[])]}
 
 
 class CloudLink:
@@ -146,7 +157,7 @@ class CloudLink:
         self.collector=collector;self.controller=controller;self.data_dir=data_dir
         self.config_file=data_dir/'device.json';self.receipt_file=data_dir/'remote-receipts.json'
         self.stop=threading.Event();self.action_lock=threading.Lock();self.ws=None
-        self.message_lock=threading.Lock();self.receipt_lock=threading.RLock()
+        self.history_lock=threading.Lock();self.message_lock=threading.Lock();self.receipt_lock=threading.RLock()
         self.status='Not connected'
         self.workspace_usage={'devices':[], 'updated':0}
         try:self.config=json.loads(self.config_file.read_text())
@@ -208,8 +219,16 @@ class CloudLink:
             with self.receipt_lock:
                 self.receipts[rid]={'type':'result','request_id':rid,'ok':False,'message':'Previous execution is unconfirmed. Check the session before requesting another action.'}
                 save_private(self.receipt_file,self.receipts)
-            if data.get('action') not in ('focus','pause','resume','terminate','prompt','message'):raise ValueError('Unsupported action')
-            result=self.controller.execute({k:data.get(k) for k in ('action','session_id','control_key','request_id','prompt','attachments') if k in data})
+            if data.get('action') not in ('focus','pause','resume','terminate','prompt','message','rename','account_alias'):raise ValueError('Unsupported action')
+            if data.get('action')=='account_alias':
+                from . import account_aliases
+                with self.collector.lock:
+                    rows=self.collector.snapshot.get('account_quotas', [])
+                    account_aliases.set_alias(self.data_dir,data.get('account_id'),data.get('alias'),{q['id'] for q in rows})
+                    account_aliases.apply(rows,self.data_dir)
+                result={'message':'Account name updated.'}
+            else:
+                result=self.controller.execute({k:data.get(k) for k in ('action','session_id','control_key','request_id','prompt','attachments','title') if k in data})
             self.result(rid,True,result.get('message','Completed'))
         except Exception as e:
             if data.get('action')=='message':self.controller.mailbox.delivery(rid,'delivery_unconfirmed')
@@ -229,6 +248,26 @@ class CloudLink:
         try:self.ws.send(json.dumps(reply,ensure_ascii=False))
         except Exception:pass
 
+    def read_history(self,data):
+        rid=data.get('request_id','')
+        if not isinstance(rid,str) or len(rid)!=36 or data.get('device_id')!=self.config['device_id']:return
+        if data.get('expires_at',0)<time.time()*1000:return
+        # One history aggregation at a time; abusive requests cannot fan out disk scans.
+        lock=getattr(self,'history_lock',None)
+        if lock is None:self.history_lock=lock=threading.Lock()
+        reply={'type':'history','request_id':rid}
+        if not lock.acquire(blocking=False):
+            reply['error']='History is busy. Try again shortly.'
+        else:
+            try:
+                with self.collector.lock:state=self.collector.snapshot
+                result=self.collector.history.response(data.get('period','1h'),str(data.get('step','60')),data.get('kind'),state)
+                reply['data']=public_history(result)
+            except Exception:reply['error']='History is unavailable for this period or step.'
+            finally:lock.release()
+        try:self.ws.send(json.dumps(reply,ensure_ascii=False))
+        except Exception:pass
+
     def flush_mailbox(self):
         if not self.action_lock.acquire(blocking=False):return
         try:self.controller.flush_mailbox()
@@ -244,7 +283,7 @@ class CloudLink:
                 self.status='Connected';delay=1;last=0;interval=60
                 while not self.stop.is_set():
                     if time.monotonic()-last>=interval:
-                        with self.collector.lock:state=self.collector.snapshot
+                        state=self.collector.state_for_cloud()
                         if state.get('ready'):
                             payload=export_snapshot(self.controller.decorate(state))
                             payload['speed_periods']=self.collector.speed_for_cloud(state)
@@ -259,6 +298,7 @@ class CloudLink:
                         if message.get('type')=='report_policy':
                             interval=3 if message.get('interval')==3 else 60
                             if interval==3:last=0
+                        if message.get('type')=='history_request':threading.Thread(target=self.read_history,args=(message,),daemon=True).start()
                         if message.get('type')=='mailbox_request':threading.Thread(target=self.read_mailbox,args=(message,),daemon=True).start()
                         if message.get('type')=='action':
                             # Message admission only persists to the local queue;

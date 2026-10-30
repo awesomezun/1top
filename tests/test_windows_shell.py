@@ -123,7 +123,7 @@ class FakeRuntime:
     def monitor_areas(self, point):
         return (0, 0, 1920, 1040), (0, 0, 1920, 1080)
 
-    def scale_factor(self):
+    def scale_factor(self, point=None):
         return 1.0
 
     def window_handle(self, window):

@@ -238,7 +238,7 @@ class Shell:
         point = point or runtime.cursor_position()
         self.quick_point = point
         work, screen = runtime.monitor_areas(point)
-        frame = runtime.quick_frame(point, work, screen, runtime.scale_factor(), self.zoom)
+        frame = runtime.quick_frame(point, work, screen, runtime.scale_factor(point), self.zoom)
         self.quick.show()
         hwnd = runtime.window_handle(self.quick)
         if hwnd:
@@ -335,7 +335,12 @@ class Shell:
         # Opened at login: the quick view, like the macOS login item's --quick-view.
         self.quick.events.loaded += self.opened_at_login
         if smoke:
-            self.window.events.loaded += lambda: threading.Thread(target=smoke, daemon=True).start()
+            smoke_started = threading.Event()
+            def run_smoke_once():
+                if not smoke_started.is_set():
+                    smoke_started.set()
+                    threading.Thread(target=smoke, daemon=True).start()
+            self.window.events.loaded += run_smoke_once
         try:
             self.webview.start(gui='edgechromium', private_mode=False, storage_path=str(self.runtime.webview_storage()))
         finally:
@@ -349,6 +354,66 @@ def desktop(launcher, quick_first=False):
     from onetop import windows_runtime
     shell = Shell(webview, pystray, Image, launcher, windows_runtime, quick_first)
     shell.run(smoke=lambda: smoke(shell))
+
+
+def quick_native_checks(shell):
+    """CI fixture only: actual Win32 panel style, focus dismissal, and preference clicks."""
+    import ctypes
+    from ctypes import wintypes
+    runtime, quick, window = shell.runtime, shell.quick, shell.window
+    def wait_for(check):
+        for _ in range(80):
+            if check():return True
+            time.sleep(.1)
+        return False
+    shell.show_quick(shell.tray_point())
+    hwnd = runtime.window_handle(quick)
+    user32 = ctypes.windll.user32
+    user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+    style = user32.GetWindowLongPtrW(ctypes.c_void_p(hwnd), -20)
+    rect = wintypes.RECT()
+    user32.GetWindowRect(ctypes.c_void_p(hwnd), ctypes.byref(rect))
+    work, _ = runtime.monitor_areas(shell.quick_point)
+    result = {'tool_window': bool(style & 0x80), 'not_app_window': not bool(style & 0x40000),
+              'within_work_area': rect.left >= work[0] and rect.top >= work[1] and rect.right <= work[2] and rect.bottom <= work[3],
+              'monitor_scale': runtime.scale_factor(shell.quick_point)}
+    quick.evaluate_js("window.__qaCircles=0;window.__qaAnimate=Element.prototype.animate;Element.prototype.animate=function(f,o){if(o?.pseudoElement==='::view-transition-new(root)')window.__qaCircles++;return window.__qaAnimate.call(this,f,o)}")
+    def prefs(view):
+        return view.evaluate_js('({lang:document.documentElement.lang,theme:document.documentElement.dataset.theme})') or {}
+    initial = prefs(quick)
+    languages = []
+    for lang in ('en', 'zh', 'ko'):
+        quick.evaluate_js('document.querySelector("[data-act=language]").click()')
+        ok = wait_for(lambda: prefs(quick).get('lang') == ('zh-CN' if lang == 'zh' else lang) and prefs(window).get('lang') == ('zh-CN' if lang == 'zh' else lang))
+        wait_for(lambda: not quick.evaluate_js('OneTopEffects.running'))
+        languages.append({'lang':lang,'synced':ok})
+    result['languages'] = languages
+    themes = []
+    for theme in ('light', 'dark'):
+        quick.evaluate_js('document.querySelector("[data-act=theme]").click()')
+        ok = wait_for(lambda: prefs(quick).get('theme') == theme and prefs(window).get('theme') == theme)
+        wait_for(lambda: not quick.evaluate_js('OneTopEffects.running'))
+        themes.append({'theme':theme,'synced':ok})
+    result['themes'] = themes
+    result['circle_animations'] = quick.evaluate_js('window.__qaCircles')
+    result['preferences_restored'] = prefs(quick) == initial
+    window.show()
+    runtime.bring_forward(runtime.window_handle(window))
+    result['blur_dismissed'] = wait_for(lambda: not shell.quick_visible)
+    if not runtime.package_identity():
+        was_enabled = runtime.opens_at_login()
+        try:
+            runtime.set_open_at_login(True)
+            result['login_enabled'] = runtime.opens_at_login()
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,runtime.RUN_KEY) as key:
+                command = winreg.QueryValueEx(key,runtime.RUN_VALUE)[0]
+            result['login_quick_view'] = command == runtime.login_command() and '--quick-view' in command
+            runtime.set_open_at_login(False)
+            result['login_disabled'] = not runtime.opens_at_login()
+        finally:
+            runtime.set_open_at_login(was_enabled)
+    return result
 
 
 def smoke(shell):
@@ -397,6 +462,7 @@ def smoke(shell):
                               persisted_storage=previous, storage_expectation_met=expected is None or previous == expected,
                               existing_data_preserved=migration_ok,
                               update_channel=(local_json(port, '/api/updates') or {}).get('channel'))
+                result['quick_native'] = quick_native_checks(shell)
                 if package_identity():
                     from PIL import ImageGrab
                     ImageGrab.grab(all_screens=True).save(Path(report).with_suffix('.png'))

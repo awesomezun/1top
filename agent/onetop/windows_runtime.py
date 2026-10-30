@@ -86,7 +86,10 @@ def monitor_areas(point):
         _fields_ = [('cbSize', wintypes.DWORD), ('rcMonitor', wintypes.RECT),
                     ('rcWork', wintypes.RECT), ('dwFlags', wintypes.DWORD)]
     user32 = ctypes.windll.user32
+    user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
     user32.MonitorFromPoint.restype = wintypes.HMONITOR
+    user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MonitorInfo)]
+    user32.GetMonitorInfoW.restype = wintypes.BOOL
     monitor = user32.MonitorFromPoint(wintypes.POINT(*point), 2)  # MONITOR_DEFAULTTONEAREST
     info = MonitorInfo()
     info.cbSize = ctypes.sizeof(MonitorInfo)
@@ -97,8 +100,22 @@ def monitor_areas(point):
     return rect(info.rcWork), rect(info.rcMonitor)
 
 
-def scale_factor():
-    # The same factor pywebview's Edge backend applies to window positions.
+def scale_factor(point=None):
+    # Resolve the clicked monitor, rather than always using the primary monitor.
+    try:
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
+        user32.MonitorFromPoint.restype = wintypes.HMONITOR
+        monitor = user32.MonitorFromPoint(wintypes.POINT(*(point or cursor_position())), 2)
+        get_dpi = ctypes.windll.shcore.GetDpiForMonitor
+        get_dpi.argtypes = [wintypes.HMONITOR, ctypes.c_int, ctypes.POINTER(wintypes.UINT), ctypes.POINTER(wintypes.UINT)]
+        get_dpi.restype = ctypes.c_long
+        x, y = wintypes.UINT(), wintypes.UINT()
+        if get_dpi(monitor, 0, ctypes.byref(x), ctypes.byref(y)) == 0 and x.value:
+            return x.value / 96
+    except (AttributeError, OSError):
+        pass
     try:
         return ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100
     except (AttributeError, OSError):

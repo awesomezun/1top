@@ -326,6 +326,19 @@ class Collector:
             self.range_cache[key] = result
             return result
 
+    def state_for_cloud(self):
+        from .relay_data import all_periods
+        with self.lock:snapshot=self.snapshot
+        if not snapshot.get('ready'):return snapshot
+        with self.range_lock:
+            cached=getattr(self,'cloud_cache',None)
+            if cached and snapshot['updated']==cached['updated']:return cached
+            with closing(sqlite3.connect((DATA/'monitor.sqlite').as_uri()+'?mode=ro',uri=True,timeout=5)) as db:
+                db.execute('BEGIN')
+                result=all_periods(db,snapshot)
+            self.cloud_cache=result
+            return result
+
     def speed_for_cloud(self, snapshot):
         from .fleet_usage import speed_windows
         with self.range_lock:
