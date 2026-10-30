@@ -59,9 +59,22 @@ test('the demo is the one demo world: the same computers, sessions, accounts and
  // Accounts are numbered the way the desktop numbers them, and the alias replaces a number.
  assert.deepEqual(accountTags(phone),{'demo-claude-4f1c2a':'1','demo-claude-9b07e3':'Studio','demo-codex-61d8f0':'1','demo-codex-c2a957':'2'});
  // An English screen shows no Korean, and the conversation follows the language too.
- const english=JSON.stringify([demoDevices((en)=>en),demoThread('s1',(en)=>en)]);
+ const english=JSON.stringify([demoDevices((en)=>en),demoThread('s1','en')]);
  assert.equal(/[가-힣]/.test(english.replace(/"label":"주간"/g,'')),false);
- assert.equal(demoThread('s1',(en)=>en).length,8);
+ // The conversation demo opens as on the web and the desktop: the same messages in each language, a
+ // photo listed by name, and nothing being answered.
+ const {earlierMessages}=await import('../../site/src/demo-model.js'),{demoMailbox}=await import('../../scripts/demo-state.mjs');
+ for(const lang of ['ko','en','zh']){
+  const web=earlierMessages('s1',at,lang).map(({changed,reply_at,...m})=>({...m,...(reply_at===null?{}:{reply_at})}));
+  assert.deepEqual(demoThread('s1',lang),web,lang);
+  assert.deepEqual(demoMailbox('s1',at,lang),earlierMessages('s1',at,lang),lang);
+ }
+ // The web relay lists them in the page's language (Korean without a page).
+ assert.deepEqual(await demoRelay({demoNow:at}).mailbox({session_id:'s1'}),earlierMessages('s1',at,'ko').map(({changed,...m})=>m));
+ assert.deepEqual(demoThread('s1','ko').map(m=>m.status),['replied','replied','delivery_unconfirmed']);
+ assert.ok(demoThread('s1','ko').every(m=>!m.activity));
+ assert.deepEqual(demoThread('s1','ko').flatMap(m=>(m.attachments||[]).map(a=>a.name)),['receipt.png']);
+ assert.deepEqual(demoThread('s3','ko'),[]);
  setDemoNow(null);
 });
 

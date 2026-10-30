@@ -69,6 +69,34 @@ export const WORLD={
  ],
  // A session whose CLI build sends no replies: instructions only.
  noReplies:['s6'],
+ // The conversation demo on Checkout UI, alike on the web, the desktop dashboard and both phones.
+ // earlier: what it opens with, oldest first. Nothing is being answered, so no reply is being written;
+ // ago is seconds before now and replied seconds after sending; photos are listed by name, since the
+ // relay carries no picture. script: what a sent message goes through, also filmed for the landing page.
+ // Its text and photo (under site/public; the phones carry the same picture) are the example to send;
+ // each step comes at seconds after sending. A message of the person's own keeps its text and photos,
+ // and the steps and the reply follow the script.
+ conversation:{
+  session:'s1',
+  earlier:[
+   {ago:1500,status:'replied',replied:60,
+    text:{ko:'지금 어디까지 진행됐나요?',en:'How far along are you?',zh:'现在进展到哪里了？'},
+    reply:{ko:'결제 화면의 카드 입력 단계를 새 컴포넌트로 옮겼습니다. 남은 작업은 영수증 화면과 테스트 두 개입니다.',en:'I moved the card entry step of checkout to the new component. The receipt screen and two tests are left.',zh:'已将结账页面的银行卡输入步骤移到新组件，剩下收据页面和两个测试。'}},
+   {ago:1080,status:'replied',replied:120,photos:['receipt.png'],
+    text:{ko:'영수증 화면도 이 사진처럼 맞춰 주세요.',en:'Make the receipt screen match this photo too.',zh:'收据页面也请按这张照片调整。'},
+    reply:{ko:'사진대로 영수증 화면의 여백과 글자 크기를 맞췄습니다.',en:'I matched the receipt screen\'s spacing and text sizes to the photo.',zh:'已按照片调整了收据页面的间距和字号。'}},
+   {ago:420,status:'delivery_unconfirmed',
+    text:{ko:'테스트가 끝나면 알려 주세요.',en:'Let me know when the tests finish.',zh:'测试完成后告诉我。'}},
+  ],
+  script:{
+   text:{ko:'결제 화면 테스트는 어디까지 진행됐나요? 할인 코드 입력란도 확인해 주세요.',en:'How far along are the checkout tests? Please check the discount-code field too.',zh:'结账页面测试进行到哪里了？也请检查一下优惠码输入框。'},
+   photo:'demo/checkout.png',
+   // Taken in (queued), delivered and awaiting the reply, the session's three phases, then the reply.
+   steps:[{at:0,status:'queued'},{at:2.2,status:'awaiting_reply'},{at:4.4,status:'awaiting_reply',activity:'responding'},
+    {at:6.6,status:'awaiting_reply',activity:'working'},{at:8.8,status:'awaiting_reply',activity:'writing'},{at:11,status:'replied'}],
+   reply:{ko:'결제 화면 테스트 42개 중 40개가 통과했습니다. 남은 2개는 보내 주신 화면의 할인 코드 입력란 문제라서 지금 고치고 있습니다.',en:'40 of the 42 checkout tests pass. The other 2 are the discount-code field in the screenshot you sent, and I am fixing it now.',zh:'42 个结账测试中有 40 个已通过。剩下 2 个是你发来的截图里的优惠码输入框问题，我正在修复。'},
+  },
+ },
  // Goals, loops and skills each computer reports, by computer.
  operations:[
   {installed_skills:14,observed_events:9,goals:[{thread_id:'demo-goal-1',runtime:'Codex',status:'active',tokens_used:18400000,time_used_seconds:6300,session_connected:true,evidence:'reported'}]},
@@ -76,3 +104,5 @@ export const WORLD={
   {installed_skills:11,observed_events:5,goals:[{thread_id:'demo-goal-3',runtime:'Codex',status:'paused',tokens_used:9100000,time_used_seconds:4100,session_connected:true,evidence:'reported'}]},
  ],
 };
+// The conversation demo by itself, for the landing page's recordings: its earlier messages and the script.
+export const CONVERSATION=WORLD.conversation;

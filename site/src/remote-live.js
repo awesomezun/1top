@@ -6,7 +6,8 @@ import config from '../firebase-config.json';
 import {selectedRelay,socketForRelay} from './relay-settings.js';
 
 export function liveRelay({onStatus}){
- const auth=getAuth(initializeApp(config)),API=selectedRelay(),results=new Set(),mailboxes=new Map();
+ const auth=getAuth(initializeApp(config)),API=selectedRelay(),results=new Set(),mailboxes=new Map(),histories=new Map();
+ let historyTurn=Promise.resolve(),historySent=0;
  let user=null,devices=new Map(),deviceList=[],ws=null,retry=null,attempt=0,generation=0;
  async function api(path,data){
   const token=user?await user.getIdToken():null;
@@ -31,6 +32,7 @@ export function liveRelay({onStatus}){
     if(m.type==='removed')devices.delete(m.device_id);
     if(m.type==='result')for(const listener of results)listener(m);
     if(m.type==='mailbox'){const done=mailboxes.get(m.request_id);if(done){mailboxes.delete(m.request_id);done(m);}}
+    if(m.type==='history'){const done=histories.get(m.request_id);if(done){histories.delete(m.request_id);done(m);}}
    };
    ws.onclose=()=>{if(current!==generation||!user)return;onStatus({state:'reconnecting',user});retry=setTimeout(connect,Math.min(30000,1000*2**attempt++));};
   }catch(error){
@@ -56,6 +58,23 @@ export function liveRelay({onStatus}){
     ws.send(JSON.stringify({type:'mailbox_request',request_id,...request}));
    });
   },
+  // A computer's usage history (usage-history-contract_v1.0.0), asked on the socket. The relay keeps one
+  // request per viewer at a time, two seconds apart, so requests wait their turn.
+  history(request){
+   const turn=historyTurn.then(async()=>{
+    await new Promise(done=>setTimeout(done,Math.max(0,historySent+2000-Date.now())));
+    if(ws?.readyState!==1)throw Object.assign(Error('Disconnected'),{status:503});
+    const request_id=crypto.randomUUID();historySent=Date.now();
+    return new Promise((resolve,reject)=>{
+     const timer=setTimeout(()=>{histories.delete(request_id);reject(Object.assign(Error('History was not answered.'),{status:504}));},15000);
+     histories.set(request_id,m=>{clearTimeout(timer);m.error?reject(Object.assign(Error(m.error),{status:409})):resolve(m.data);});
+     ws.send(JSON.stringify({type:'history_request',request_id,...request}));
+    });
+   });
+   historyTurn=turn.catch(()=>{});return turn;
+  },
+  // An account's display name; its result arrives like a control's.
+  alias:command=>api('/api/accounts/alias',command),
   signOut:()=>{generation++;clearTimeout(retry);ws?.close();return signOut(auth);},
  };
 }

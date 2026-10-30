@@ -2,7 +2,7 @@
 // module runs first and answers its /api/* requests from relay snapshots, so the dashboard's own code
 // draws the same screen and behaves the same way. The demo (/app?demo) is a relay too (remote-demo.js)
 // and goes through the same adapter and the same control path as the signed-in one (remote-live.js).
-import {remoteState,findSession,isFresh} from './remote-adapter.js';
+import {remoteState,findSession,isFresh,mergeHistory} from './remote-adapter.js';
 import './remote-app.css';
 
 const demo=new URLSearchParams(location.search).has('demo');
@@ -46,6 +46,8 @@ function state(period){
  queueMicrotask(renderChrome);
  return result;
 }
+// The computer's own answer to a request, or null when none comes within 25 seconds.
+const resultOf=id=>new Promise(done=>{waiting.set(id,done);setTimeout(()=>{if(waiting.delete(id))done(null);},RESULT_WAIT);});
 // A control goes to the computer as a relay action; the dashboard hears the computer's own answer,
 // or after 25 seconds that the answer is not confirmed.
 async function action(request){
@@ -53,8 +55,9 @@ async function action(request){
  if(request.action==='message')return message(relay,found,request);
  if(!found)return json({ok:false,message:'세션 연결이 종료되었습니다.'},404);
  if(!found.session.capabilities?.includes(request.action))return json({ok:false,message:'원격 워크스페이스에서는 아직 지원하지 않습니다'},409);
- const command={action:request.action,request_id:request.request_id,device_id:found.device.id,session_id:found.session.id,control_key:found.session.control_key};
- const answer=new Promise(done=>{waiting.set(command.request_id,done);setTimeout(()=>{if(waiting.delete(command.request_id))done(null);},RESULT_WAIT);});
+ const command={action:request.action,request_id:request.request_id,device_id:found.device.id,session_id:found.session.id,control_key:found.session.control_key,
+  ...(request.action==='rename'?{title:request.title}:{})};
+ const answer=resultOf(command.request_id);
  try{const receipt=await relay.send(command);if(receipt.status==='completed'){waiting.delete(command.request_id);return json({ok:true,message:receipt.message||'완료'});}}
  catch(error){waiting.delete(command.request_id);return json({ok:false,message:error.message},error.status||502);}
  const m=await answer;
@@ -85,6 +88,30 @@ async function mailbox(request){
  catch(error){return json({ok:false,message:error.message},error.status||502);}
 }
 
+// Usage history from each computer in the scope that offers it (snapshot feature 'history'), asked through
+// the relay; several are added up by their bins. Without it the dashboard says remote has none yet.
+async function history(params){
+ const relay=await ready,list=relay.devices().filter(d=>(scope==='all'||d.id===scope)&&isFresh(d)&&(d.snapshot.features||[]).includes('history'));
+ if(!list.length||!relay.history)return json({error:'remote'},501);
+ const request={period:params.get('period'),step:params.get('step'),...(params.get('kind')?{kind:params.get('kind')}:{})},parts=[];
+ for(const device of list){
+  try{parts.push({device,data:await relay.history({device_id:device.id,...request})});}
+  catch(error){if(/400|bins/i.test(error.message))return json({error:error.message},400);}
+ }
+ return parts.length?json(mergeHistory(parts)):json({error:'failed'},502);
+}
+// An account's display name, saved by a computer that has the account and offers 'account_alias'.
+async function alias(request){
+ const relay=await ready,device=relay.devices().find(d=>isFresh(d)&&(d.snapshot.features||[]).includes('account_alias')&&(d.snapshot.account_quotas||[]).some(q=>q.id===request.account_id));
+ if(!device||!relay.alias)return json({ok:false,message:'원격 워크스페이스에서는 아직 지원하지 않습니다'},501);
+ const command={request_id:crypto.randomUUID(),device_id:device.id,account_id:request.account_id,alias:String(request.alias||'').trim().slice(0,24)},answer=resultOf(command.request_id);
+ try{const receipt=await relay.alias(command);if(receipt.status==='completed'){waiting.delete(command.request_id);return json({ok:true,alias:command.alias||null});}}
+ catch(error){waiting.delete(command.request_id);return json({ok:false,message:error.message},error.status||502);}
+ const m=await answer;
+ if(!m)return json({ok:false,message:'저장 응답을 확인하지 못했습니다. 잠시 뒤 다시 확인해 주세요.'},504);
+ return m.status==='completed'?json({ok:true,alias:command.alias||null}):json({ok:false,message:m.message||'이름을 저장하지 못했습니다.'},409);
+}
+
 // Same-origin /api/* requests from the dashboard; everything else goes to the network as usual.
 const network=window.fetch.bind(window);
 window.fetch=async(input,init={})=>{
@@ -97,8 +124,9 @@ window.fetch=async(input,init={})=>{
   case '/api/updates':return json({available:false});
   case '/api/action':return action(JSON.parse(init.body||'{}'));
   case '/api/mailbox':return mailbox(JSON.parse(init.body||'{}'));
-  // Not in a relay snapshot yet: usage history, terminal renaming, account sign-in and names.
-  case '/api/history':return json({error:'remote'},501);
+  case '/api/history':return history(url.searchParams);
+  case '/api/accounts/alias':return alias(JSON.parse(init.body||'{}'));
+  // Provider sign-in and macOS reconnecting stay on each computer.
   default:return json({ok:false,message:'원격 워크스페이스에서는 아직 지원하지 않습니다'},501);
  }
 };

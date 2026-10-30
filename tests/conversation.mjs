@@ -49,13 +49,24 @@ assert.equal(c.MAX_PHOTOS,3);assert.equal(c.MAX_BYTES,524288);
 for(const status of ['queued','sending','awaiting_reply','replied','delivery_unconfirmed','source_changed','not_delivered','send_failed'])assert.ok(c.DELIVERY[status],status);
 for(const phase of ['responding','working','writing'])assert.ok(c.TYPING[phase],phase);
 
-// The demo relay keeps a mailbox like a computer: a working session's message waits for its turn.
-const {demoRelay}=await import('../site/src/remote-demo.js');
-const relay=demoRelay(),device=relay.devices()[0],session=device.snapshot.sessions.find(s=>s.capabilities.includes('message')&&s.status==='working');
-assert.ok(session.capabilities.includes('mailbox')&&session.capabilities.includes('message_images'));
-const command={action:'message',request_id:'11111111-1111-1111-1111-111111111111',device_id:device.id,session_id:session.id,control_key:session.control_key,prompt:'How far along are you?',attachments:[{mime:'image/jpeg',data:'AAAA'}]};
+// The demo relay keeps a mailbox like a computer: the conversation demo's earlier messages (demo-world.js)
+// come first, and a sent message follows the script, each step at its time, to the scripted reply.
+const {demoRelay}=await import('../site/src/remote-demo.js'),{WORLD}=await import('../site/src/demo-world.js');
+const relay=demoRelay(),device=relay.devices()[0],session=device.snapshot.sessions.find(s=>s.id===WORLD.conversation.session);
+assert.ok(session.capabilities.includes('mailbox')&&session.capabilities.includes('message_images')&&session.status==='working');
+const ask={device_id:device.id,session_id:session.id,control_key:session.control_key};
+assert.deepEqual((await relay.mailbox(ask)).map(r=>[r.status,r.activity]),[['replied',null],['replied',null],['delivery_unconfirmed',null]]);
+const command={action:'message',request_id:'11111111-1111-1111-1111-111111111111',...ask,prompt:'How far along are you?',attachments:[{mime:'image/jpeg',data:'AAAA'}]};
+const later=[],timeout=globalThis.setTimeout;
+globalThis.setTimeout=(fn,ms)=>ms>=1000?later.push([ms,fn]):timeout(fn,ms);
 assert.equal((await relay.send(command)).status,'sent');assert.equal((await relay.send(command)).status,'sent');
-const rows=await relay.mailbox({device_id:device.id,session_id:session.id,control_key:session.control_key});
-assert.equal(rows.length,1);assert.equal(rows[0].status,'queued');assert.equal(rows[0].attachments[0].bytes,3);
-console.log('Conversation: forward-only delivery, ID merge, capabilities, work state, send blocks and the demo mailbox passed.');
+globalThis.setTimeout=timeout;
+let rows=await relay.mailbox(ask);
+assert.equal(rows.length,4);assert.equal(rows[3].status,'queued');assert.equal(rows[3].attachments[0].bytes,3);
+const seen=[];
+for(const [ms,step] of later.sort((a,b)=>a[0]-b[0])){step();const row=(await relay.mailbox(ask))[3];seen.push([ms/1000,row.status,row.activity?.phase??null]);}
+assert.deepEqual(seen,WORLD.conversation.script.steps.filter(s=>s.at>0).map(s=>[s.at,s.status,s.activity??null]));
+rows=await relay.mailbox(ask);
+assert.equal(rows[3].text,'How far along are you?');assert.equal(rows[3].reply,WORLD.conversation.script.reply.ko);
+console.log('Conversation: forward-only delivery, ID merge, capabilities, work state, send blocks and the demo mailbox and script passed.');
 process.exit(0);

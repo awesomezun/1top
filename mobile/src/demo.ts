@@ -2,7 +2,8 @@ import type {Device,Flow,Quota,Session,Vector,WindowKey} from './types';
 import type {Mail} from './thread';
 import {bins} from './demo-usage';
 import {WORLD} from './demo-world';
-import {machines,accounts,sessionNumbers,host,type Machine} from './demo-model';
+import {machines,accounts,sessionNumbers,host,earlierMessages,type Machine} from './demo-model';
+import type {Lang} from './i18n';
 import {holdDemo,heldDemo} from './clock';
 type T=(en:string,ko:string)=>string;
 
@@ -10,8 +11,6 @@ type T=(en:string,ko:string)=>string;
 // desktop demo collector and the iPhone show these computers, sessions and accounts with the same numbers.
 // Names are the world's own and read the same in every language.
 const PERIODS:[WindowKey,number][]=[['10m',600],['30m',1800],['1h',3600],['5h',18000],['12h',43200],['24h',86400]];
-/** The message of the first conversation that carries two photos, shown as sent pictures. */
-export const PHOTO_MESSAGE='00000000-0000-4000-8000-000000000002';
 /** When this demo began: the hours around it never rest, and sessions stopped before it stay stopped. */
 let anchor=Date.now()/1000;
 /** QA and filming (onetop://?qaDemoNow=<unix seconds>): hold the demo at one moment, the same moment the
@@ -52,26 +51,8 @@ export function demoDevices(_t:T=(en)=>en,now=demoClock(),start=anchor):Device[]
  });
 }
 
-/** The first conversation shows every delivery state once, a reply, photos and a reply being written;
- *  three more sessions show the other response phases. Nothing here is sent anywhere. */
-export function demoThread(sessionId:string,t:T):Mail[]{
- const now=demoClock(),id=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
- const message=(n:number,text:string,status:string,ago:number,extra:Partial<Mail>={}):Mail=>({id:id(n),text,created:now-ago,status,reply:'',...extra});
- const activity=(phase:'responding'|'working'|'writing')=>({phase,observed_at:now-3});
- if(sessionId==='s1')return [
-  message(1,t('How far along are you?','지금 어디까지 진행됐어?'),'replied',1500,{reply:t('I moved the card entry step of checkout to the new component. The receipt screen and two tests are left.','결제 화면의 카드 입력 단계를 새 컴포넌트로 옮겼고, 남은 작업은 영수증 화면과 테스트 두 개입니다.'),reply_at:now-1440}),
-  message(2,t('The buttons look misaligned on these two screens. Please check.','이 두 화면에서 버튼 정렬이 어긋나 보여. 확인해 줘.'),'replied',1200,{reply:t('I checked both photos. The pay button\'s bottom margin was 8 pt off, so I matched it.','두 사진 모두 확인했습니다. 결제 버튼의 아래 여백이 8pt 달라서 맞췄습니다.'),reply_at:now-1140,
-   attachments:[{id:'IMG_0412.jpg',name:'IMG_0412.jpg',mime:'image/jpeg',bytes:180_000},{id:'IMG_0413.jpg',name:'IMG_0413.jpg',mime:'image/jpeg',bytes:180_000}],photos:[{uri:'demo:1'},{uri:'demo:2'}]}),
-  message(3,t('Match the receipt screen to the same rules.','영수증 화면도 같은 기준으로 맞춰 줘.'),'awaiting_reply',900,{activity:activity('writing')}),
-  message(4,t('Let me know when the tests finish.','테스트가 끝나면 알려 줘.'),'queued',600),
-  message(5,t('Where is the log file?','로그 파일 경로를 알려 줘.'),'delivery_unconfirmed',420),
-  message(6,t('Compare it with the previous branch too.','이전 브랜치 결과도 비교해 줘.'),'source_changed',300),
-  message(7,t('Also do the cleanup I asked for yesterday.','어제 요청한 정리도 해 줘.'),'not_delivered',200),
-  message(8,t('Sum up the current screen in one line.','지금 화면을 한 줄로 요약해 줘.'),'sending',5),
- ];
- if(sessionId==='s3')return [message(10,t('Change how search results are sorted.','검색 결과 정렬 기준을 바꿔 줘.'),'awaiting_reply',120,{activity:activity('working')})];
- if(sessionId==='s5')return [message(11,t('Polish the notification copy.','알림 문구를 다듬어 줘.'),'awaiting_reply',20,{activity:activity('responding')})];
- // Awaiting a reply with no reported activity: nothing claims the request is being answered.
- if(sessionId==='s4')return [message(9,t('What rules do you use to clean the data?','데이터 정리 기준을 알려 줘.'),'awaiting_reply',240)];
- return [];
+/** The conversation demo's earlier messages, as on the web and the desktop (demo-world.js): replies, a
+ *  photo listed by name, one delivery not confirmed, and nothing being answered. Nothing here is sent. */
+export function demoThread(sessionId:string,lang:Lang):Mail[]{
+ return earlierMessages(WORLD,sessionId,demoClock(),lang).map(({changed,reply_at,...m})=>({...m,...(reply_at===null?{}:{reply_at})}));
 }

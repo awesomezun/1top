@@ -72,6 +72,22 @@ export function host(m,now){
   rx:Math.round(rx[0]+rx[1]*busy),tx:Math.round(tx[0]+tx[1]*busy)};
 }
 
+/** The conversation's earlier messages at now, in a language, as a computer's mailbox lists them
+ *  (POST /api/mailbox): oldest first, none being answered. Other sessions have none. */
+export function earlierMessages(sessionId,now,lang='ko'){
+ const c=WORLD.conversation;if(sessionId!==c.session)return [];
+ return c.earlier.map((m,i)=>{const created=now-m.ago,reply_at=m.replied?created+m.replied:null;
+  return {id:'00000000-0000-4000-8000-'+String(i+1).padStart(12,'0'),text:m.text[lang]??m.text.en,created,changed:reply_at??created,status:m.status,
+   reply:m.reply?m.reply[lang]??m.reply.en:'',reply_at,truncated:false,attachments:(m.photos||[]).map(name=>({id:name,name,mime:'image/png',bytes:184320})),activity:null};});
+}
+
+/** What a sent message shows once the script reaches a step, at time at: its delivery, the phase the
+ *  session reports and, at the end, the reply. Its own text and photos stay. */
+export function scriptStep(step,lang='ko',at){
+ const {reply}=WORLD.conversation.script;
+ return {status:step.status,activity:step.activity?{phase:step.activity,observed_at:at}:null,...(step.status==='replied'?{reply:reply[lang]??reply.en,reply_at:at}:{})};
+}
+
 /** The controls a computer offers for a session (agent/onetop/bridge.py export_snapshot). A paused
  *  session is idle underneath; a session whose CLI sends no replies takes instructions only. */
 export function capabilities(s){
@@ -84,5 +100,7 @@ export function capabilities(s){
  if(instruction)caps.push('prompt');
  if(replies&&s.tokens&&(tool||s.kind==='Aside')){caps.push('mailbox');if(instruction||orca&&tool&&['working','idle','interrupted'].includes(state)){caps.push('message');if(tool)caps.push('message_images');}}
  if(s.kind!=='Aside'&&(!orca||['idle','paused'].includes(s.status)||canPause&&active))caps.push('terminate');
+ // A root session found in an Orca terminal can have that terminal renamed, as bridge.py offers.
+ if(orca&&!s.parent_session_id&&s.tokens)caps.push('rename');
  return caps;
 }

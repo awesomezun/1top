@@ -7,8 +7,6 @@ import Foundation
 enum DemoData {
     /// The Mac mini is paired without remote control, so its sessions show usage only.
     static let controlOff = Set(DemoWorld.computers.filter { !$0.control }.map(\.id))
-    /// Message 2 of the first conversation carries two photos; the demo shows them as sent pictures.
-    static let photoMessage = "00000000-0000-4000-8000-000000000002"
     /// QA and filming (-qaDemoNow <unix seconds>): hold the demo at one moment, the same moment the web page
     /// (/app?demo&demoNow=…), the desktop demo collector and Android (onetop://?qaDemoNow=…) take.
     static let held: Double? = { let at = UserDefaults.standard.double(forKey: "qaDemoNow"); return at > 0 ? at : nil }()
@@ -174,33 +172,31 @@ enum DemoData {
         }
     }
 
-    /// A conversation that shows every delivery state once, a reply, and photos the computer
-    /// listed by name (the relay returns no image data); three more sessions show the other response phases.
+    /// The conversation demo's earlier messages, as on the web and the desktop (demo-world.js): replies, a
+    /// photo listed by name (the relay returns no image data), one delivery not confirmed, and nothing being
+    /// answered. Messages read in the chosen language.
     static func mailboxes(now: Double = DemoData.now()) -> [String: AppModel.Mailbox] {
-        func message(_ n: Int, _ text: String, _ status: String, ago: Double, reply: String? = nil, photos: [String] = [], activity: String? = nil) -> MailMessage {
-            MailMessage(id: String(format: "00000000-0000-4000-8000-%012d", n), text: text, created: now - ago, status: status, reply: reply,
-                        replyAt: reply == nil ? nil : now - ago + 60, truncated: false,
-                        attachments: photos.isEmpty ? nil : photos.map { MailAttachment(id: $0, name: $0, mime: "image/jpeg", bytes: 180_000) },
-                        activity: activity.map { MailActivity(phase: $0, observedAt: now - 3) })
+        let lang = L.language.rawValue
+        let messages = DemoWorld.earlierMessages.enumerated().map { i, m -> MailMessage in
+            let created = now - m.ago
+            return MailMessage(id: String(format: "00000000-0000-4000-8000-%012d", i + 1), text: m.text[lang], created: created, status: m.status,
+                               reply: m.reply.map { $0[lang] }, replyAt: m.replied.map { created + $0 }, truncated: false,
+                               attachments: m.photos.isEmpty ? nil : m.photos.map { MailAttachment(id: $0, name: $0, mime: "image/png", bytes: 184_320) })
         }
-        return ["demo-0:s1": .init(messages: [
-            message(1, L.t("How far along are you?", "지금 어디까지 진행됐어?"), "replied", ago: 1500,
-                    reply: L.t("I moved the card entry step of checkout to the new component. The receipt screen and two tests are left.",
-                               "결제 화면의 카드 입력 단계를 새 컴포넌트로 옮겼고, 남은 작업은 영수증 화면과 테스트 두 개입니다.")),
-            message(2, L.t("The buttons look misaligned on these two screens. Please check.", "이 두 화면에서 버튼 정렬이 어긋나 보여. 확인해 줘."), "replied", ago: 1200,
-                    reply: L.t("I checked both photos. The pay button's bottom margin was 8 pt off, so I matched it.",
-                               "두 사진 모두 확인했습니다. 결제 버튼의 아래 여백이 8pt 달라서 맞췄습니다."), photos: ["IMG_0412.jpg", "IMG_0413.jpg"]),
-            message(3, L.t("Match the receipt screen to the same rules.", "영수증 화면도 같은 기준으로 맞춰 줘."), "awaiting_reply", ago: 900, activity: "writing"),
-            message(4, L.t("Let me know when the tests finish.", "테스트가 끝나면 알려 줘."), "queued", ago: 600),
-            message(5, L.t("Where is the log file?", "로그 파일 경로를 알려 줘."), "delivery_unconfirmed", ago: 420),
-            message(6, L.t("Compare it with the previous branch too.", "이전 브랜치 결과도 비교해 줘."), "source_changed", ago: 300),
-            message(7, L.t("Also do the cleanup I asked for yesterday.", "어제 요청한 정리도 해 줘."), "not_delivered", ago: 200),
-            message(8, L.t("Sum up the current screen in one line.", "지금 화면을 한 줄로 요약해 줘."), "sending", ago: 5),
-        ]),
-        // The other two response phases, one session each.
-        "demo-0:s3": .init(messages: [message(10, L.t("Change how search results are sorted.", "검색 결과 정렬 기준을 바꿔 줘."), "awaiting_reply", ago: 120, activity: "working")]),
-        "demo-0:s5": .init(messages: [message(11, L.t("Polish the notification copy.", "알림 문구를 다듬어 줘."), "awaiting_reply", ago: 20, activity: "responding")]),
-        // Awaiting a reply with no reported activity: nothing claims the request is being answered.
-        "demo-0:s4": .init(messages: [message(9, L.t("What rules do you use to clean the data?", "데이터 정리 기준을 알려 줘."), "awaiting_reply", ago: 240)])]
+        let session = DemoWorld.computers[DemoWorld.sessions.first { $0.id == DemoWorld.conversationSession }!.computer].id
+        return [session + ":" + DemoWorld.conversationSession: .init(messages: messages)]
     }
+
+    /// What a sent message shows once the conversation script reaches a step, at time at: its delivery, which
+    /// only moves forward as with a computer's answers (its queue is the truth over sending, as on the web),
+    /// the phase the session reports and, at the end, the reply.
+    static func scriptStep(_ step: DemoWorld.Step, _ message: MailMessage, at: Double) -> MailMessage {
+        let rank = ["queued": 0, "sending": 1, "awaiting_reply": 2, "replied": 3]
+        var next = message
+        if (rank[step.status] ?? 2) >= (rank[message.status] ?? 2) || (step.status == "queued" && message.status == "sending") { next.status = step.status }
+        next.activity = step.activity.map { MailActivity(phase: $0, observedAt: at) }
+        if step.status == "replied" { next.reply = DemoWorld.script.reply[L.language.rawValue]; next.replyAt = at }
+        return next
+    }
+
 }
