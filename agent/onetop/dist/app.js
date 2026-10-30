@@ -266,11 +266,12 @@ function renderTable(){
  const active=document.activeElement?.closest('[data-action],[data-group-toggle]'),focus=active?{a:active.dataset.action,id:active.dataset.target,group:active.dataset.groupToggle}:null;
  // A search or a filter opens both bands.
  const filtered=!!query||state!=='all'||modelFilter!=='all',collapsed=OneTopDashboard.state.collapsed||{};
- const cell=s=>{const r=s.resources,u=s.usage||{},pv=u.windows?.[selectedPeriod],period=periodMeta(),task=cleanTitle(s.title)||s.project;
+ const cell=s=>{const r=s.resources,u=s.usage||{},pv=u.windows?.[selectedPeriod],period=periodMeta(),title=cleanTitle(s.title),task=title||s.project;
   // The first line is whatever tells sessions apart: the terminal tab, else the conversation title.
   const term=s.is_subagent?(s.agent_path?.split('/').filter(Boolean).at(-1)||'하위 에이전트'):(s.orca_terminal?.title||(s.kind!=='Aside'&&s.location?.terminal)||''),primary=term||task;
   const place=s.kind==='Aside'?'Aside 앱 안에서 실행 · 별도 프로세스 없음':s.is_subagent?'하위 에이전트':s.pids.length===1?'PID '+s.pids[0]:'PID 연결 미확인';
-  const second=[term?task:'',s.project].filter(Boolean);
+  // A session without a conversation title (a relay sends none taken from prompts) shows its project once.
+  const second=[...new Set([term?title:'',s.project].filter(Boolean))];
   return `<tr class="${s.is_subagent?'subagent-row':''}" tabindex="0" data-session="${esc(s.id)}" data-group-of="${bandOf(s)}" aria-label="${esc(primary)} ${esc(s.project)} ${s.kind} ${labels[display(s)]}, 상세 보기"><td><div class="cell-line"><span class="cell-primary" title="${esc(s.terminal_note||primary)}" data-user-content>${s.is_subagent?'↳ ':''}${s.orca_terminal&&s.control_key&&!s.is_subagent?`<button type="button" class="terminal-rename" data-rename="${esc(s.id)}" title="터미널 제목 변경">${esc(term)}<span class="rename-pencil" aria-hidden="true">✎</span></button>`:esc(primary)}</span>${s.children_count?`<button class="children-toggle" data-children="${esc(s.id)}" aria-expanded="${expandedSessions.has(s.id)}" title="하위 사용량을 포함한 합계입니다"><span aria-hidden="true">${expandedSessions.has(s.id)?'▾':'▸'}</span> 하위 ${s.children_count}</button>`:''}</div><span class="cell-task" title="${esc(second.join(' · ')+'\n'+(s.cwd||'')+'\n'+place)}" data-user-content>${second.map((v,i)=>i===second.length-1&&second.length>1?`<span class="cell-project">${esc(v)}</span>`:esc(v)).join(' · ')}</span></td><td><span class="provider-cell">${s.kind==='Aside'?esc(model(s.model))+effortBadge(s):dot(s.kind)+esc(runtimeLabel(s))+accountChip(sessionAccount(s),data.account_quotas?.find(q=>q.id===sessionAccount(s))?.account_label)}</span><span class="cell-sub">${s.kind==='Aside'?'Aside 앱':esc(model(s.model))+effortBadge(s)}</span></td><td>${status(s)}</td><td class="num period-value" title="${pv?exact(total(pv))+' tokens':'사용량 미확인'}">${sessionWeeklyCell(s,pv,period)}</td><td class="num ${s.tokens?'':'unknown-value'}" title="${s.tokens?exact(total(s.tokens))+' tokens · 출력 '+fmt(s.tokens[3]):'유효한 사용량 보고 없음'}">${fmt(total(s.tokens))}</td><td class="num">${sessionBurnCell(s)}</td><td class="num" title="${r?r.count+'개 프로세스':s.kind==='Aside'?'Aside 앱 안에서 실행':'미귀속'}">${pct(r?.cpu)}</td><td class="num" title="${bytes(r?.rss)} / ${bytes(data.system?.host?.memory?.total)}">${memoryPercent(r?.rss)}</td><td>${actions(s)}</td></tr>`;};
  const html=TABLE_BANDS.map(([key,label])=>{
   const members=rows.filter(s=>bandOf(s)===key);if(!members.length)return '';
@@ -327,10 +328,11 @@ function tokenFlowData(events,minutes,updated,range){
  return {start,end,step,series,bins,peak,max};
 }
 // Token flow: stacked bars with rounded tops and a soft vertical fade, the current bin lit,
-// and a dashed line at the period's average bin.
-function tokenChart(id,events,minutes){
+// and a dashed line at the period's average bin. A longer period's bins (chart_range) belong to the
+// period charts; the session detail passes none and keeps its last hour.
+function tokenChart(id,events,minutes,range=data.chart_range){
  const c=canvasBase(id);if(!c)return;
- const {start,end,series,bins,max}=tokenFlowData(events,minutes,data.updated,data.chart_range);axes(c,max,'',3);
+ const {start,end,series,bins,max}=tokenFlowData(events,minutes,data.updated,range);axes(c,max,'',3);
  const {ctx,w,h,l,t,b,r,style}=c,pw=w-l-r,ph=h-t-b,base=h-b,step=pw/Math.max(1,bins.length),gap=Math.min(2,step*.28),bw=Math.max(1,step-gap);
  bins.forEach((v,i)=>{
   const total=series.reduce((n,k)=>n+(v[k]||0),0);if(!total)return;
@@ -362,13 +364,15 @@ function drawCharts(){
    const last=segments.at(-1)?.at(-1);if(last)endDot(ctx,x(last),y(last[key]),color);
   }
   timeLabels(c,start,end,2);}
- if(selectedId&&$('detailDialog').open){const s=visibleSessions().find(s=>s.id===selectedId)||data.sessions.find(s=>s.id===selectedId);if(s)tokenChart('detailChart',(s.usage?.history||[]).map(([t,n])=>({t,n,kind:s.kind})),60);}
+ if(selectedId&&$('detailDialog').open){const s=visibleSessions().find(s=>s.id===selectedId)||data.sessions.find(s=>s.id===selectedId);if(s)tokenChart('detailChart',(s.usage?.history||[]).map(([t,n])=>({t,n,kind:s.kind})),60,null);}
 }
 function detailPeriods(s){const p=data.period_usage;if(!p)return '';return `<section class="detail-periods"><h3>기간별 누적 사용량</h3><p>이 세션의 기록된 보고량 · 입력·캐시·출력 합계</p><div class="period-cards">${p.windows.map(w=>{const v=s.usage?.windows?.[w.key];return `<div class="period-card ${w.key===selectedPeriod?'selected':''}"><span class="period-label">최근 ${w.label}</span><b title="${exact(total(v))}">${fmt(total(v))}</b><span class="period-output">${v?'출력 '+fmt(v[3]):'사용량 미확인'}</span><span class="period-recording ${w.partial?'partial':''}">${w.partial?'일부 기록 · '+recordedDuration(w.observed_seconds):'기록된 보고량'}</span></div>`;}).join('')}</div></section>`;}
 function renderDetail(id){
  const s=visibleSessions().find(s=>s.id===id)||data.sessions.find(s=>s.id===id);if(!s){$('detailContent').innerHTML='<h2>세션 연결이 종료되었습니다.</h2>';$('detailMore').innerHTML='';window.OneTopConversation?.hide();return;}const t=s.tokens,r=s.resources,u=s.usage||{};
  const entry=(a,b)=>`<div><dt>${a}</dt><dd>${esc(b??'확인 불가')}</dd></div>`;
- $('detailContent').innerHTML=`${status(s)}<h2 id="detailTitle">${esc(s.orca_terminal?.title||s.location?.app||'실행 위치 미확인')}</h2><p class="detail-project"><span class="detail-name">${esc(s.title)}</span>${s.children_count?` · <span>하위 ${s.children_count}개 포함</span>`:''}<br><span class="detail-path">${esc(s.cwd)}</span></p><div class="detail-actions">${actions(s)}</div>`;
+ // The conversation title and the subagent count, whichever there are (a relay may send no title).
+ const heading=[s.title?`<span class="detail-name">${esc(s.title)}</span>`:'',s.children_count?`<span>하위 ${s.children_count}개 포함</span>`:''].filter(Boolean).join(' · ');
+ $('detailContent').innerHTML=`${status(s)}<h2 id="detailTitle">${esc(s.orca_terminal?.title||s.location?.app||'실행 위치 미확인')}</h2><p class="detail-project">${heading?heading+'<br>':''}<span class="detail-path">${esc(s.cwd)}</span></p><div class="detail-actions">${actions(s)}</div>`;
  // The conversation sits between the controls and the figures and keeps its draft across redraws.
  window.OneTopConversation?.show(s,{fresh:!!data.updated&&Date.now()/1000-data.updated<20,token:data.action_token,reported:s.reported||data.updated,name:s.orca_terminal?.title||s.location?.app||s.project});
  $('detailMore').innerHTML=`${detailPeriods(s)}<div class="detail-metrics">${['새 입력','캐시 읽기','캐시 쓰기','출력'].map((label,i)=>`<div class="detail-metric"><span>${label} tokens</span><b title="${exact(t?.[i])}">${fmt(t?.[i])}</b></div>`).join('')}</div><h3 class="detail-chart-title">최근 1시간 토큰 흐름</h3><div class="chart-wrap"><canvas id="detailChart" role="img" aria-label="이 세션의 최근 1시간 토큰 보고량"></canvas></div><dl class="detail-list">${entry('세션 누적',t?exact(total(t))+' tokens':null)}${entry('최근 60초',u.last_minute?exact(total(u.last_minute))+' tokens · '+fmt(u.rate)+' tokens/s':null)}${entry('최근 5분',u.last_five_minutes?exact(total(u.last_five_minutes))+' tokens':null)}${entry('최근 출력 속도',u.output_rate!=null?fmt(u.output_rate)+' output tokens/s · 60초 평균':null)}${entry('CLI 자원',r?pct(r.cpu)+' CPU · '+bytes(r.rss)+' RSS · '+r.count+'개 프로세스':null)}${entry('모델',s.model||null)}${reportedEffort(s)?entry('추론 강도 (effort)',reportedEffort(s)):''}${entry('터미널 연결',s.terminal_note)}${entry('세션 ID',s.id)}${entry('CLI PID',s.pids.length===1?s.pids[0]:'개별 프로세스 미확인')}${entry('최근 사용량 보고',s.last_usage?new Date(s.last_usage*1000).toLocaleString(OneTopI18n.locale()):null)}${entry('최근 요청 입력',s.request_input!=null?exact(s.request_input)+' tokens':null)}${s.context_size?entry('컨텍스트 크기',exact(s.context_size)+' tokens'):''}${entry('사용량 출처',s.path||'해당 세션 기록 미확인')}</dl>${s.note?`<p class="detail-note">${esc(s.note)}</p>`:''}<p class="detail-note">누적값과 최근 소비 속도에는 반복 입력과 캐시가 포함됩니다. 실제 청구액이나 모델의 순간 생성 속도를 뜻하지 않습니다.</p>`;
