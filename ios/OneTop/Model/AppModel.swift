@@ -12,7 +12,8 @@ final class AppModel {
     /// One session's messages and the last mailbox error.
     struct Mailbox: Equatable { var messages: [MailMessage] = []; var error: String? }
 
-    var connection: Connection = .signedOut
+    /// A demo held for filming shows its moment on the screens only while the demo is on screen.
+    var connection: Connection = .signedOut { didSet { DemoData.onScreen = connection == .demo } }
     var devices: [Device] = []
     /// One computer, or nil for every computer together.
     var selectedDeviceID: String?
@@ -76,7 +77,7 @@ final class AppModel {
     func isFresh(_ device: Device?, within milliseconds: Double = 30_000) -> Bool {
         guard let device else { return false }
         #if DEBUG
-        // UI tests can make one demo computer's report stale: -qaStaleDevice demo-mac.
+        // UI tests can make one demo computer's report stale: -qaStaleDevice demo-0.
         if connection == .demo, UserDefaults.standard.string(forKey: "qaStaleDevice") == device.id { return false }
         #endif
         if connection == .demo { return true }
@@ -140,7 +141,7 @@ final class AppModel {
         return order.compactMap { seen[$0] }
     }
     /// The newest report time among the reporting computers, in seconds.
-    var reportEnd: Double { reportingDevices.compactMap { $0.snapshot?.updated }.max() ?? Date().timeIntervalSince1970 }
+    var reportEnd: Double { reportingDevices.compactMap { $0.snapshot?.updated }.max() ?? DemoData.shownNow() }
 
     /// Root sessions with their subagents folded in, in the shared order.
     var groups: [SessionGroup] {
@@ -560,8 +561,8 @@ final class AppModel {
     func showDemo() {
         liveTask?.cancel(); liveTask = nil; socket = nil
         resetAccountState()
-        devices = DemoData.devices(now: Date().timeIntervalSince1970)
-        mailboxes = DemoData.mailboxes(now: Date().timeIntervalSince1970)
+        devices = DemoData.devices()
+        mailboxes = DemoData.mailboxes()
         sentPhotos[DemoData.photoMessage] = PhotoPrep.demo(2).map(\.preview)
         controlOff = DemoData.controlOff
         connection = .demo
@@ -569,7 +570,7 @@ final class AppModel {
 
     /// Re-reads the demo in the current language; messages written here stay.
     private func refreshDemoText() {
-        let now = Date().timeIntervalSince1970, seeded = DemoData.mailboxes(now: now)
+        let now = DemoData.now(), seeded = DemoData.mailboxes(now: now)
         devices = DemoData.devices(now: now)
         for (key, box) in seeded {
             let ids = Set(box.messages.map(\.id))

@@ -87,7 +87,7 @@ enum L {
     }
 
     /// Clock time for today's reports, date and time for older ones.
-    static func time(_ date: Date, now: Date = Date()) -> String {
+    static func time(_ date: Date, now: Date = Date(timeIntervalSince1970: DemoData.shownNow())) -> String {
         let style = Date.FormatStyle(date: Calendar.current.isDate(date, inSameDayAs: now) ? .omitted : .abbreviated, time: .shortened).locale(locale)
         return date.formatted(style)
     }

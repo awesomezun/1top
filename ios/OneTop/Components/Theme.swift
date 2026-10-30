@@ -56,7 +56,7 @@ enum Format {
     }
     /// How old a value that could not be refreshed is, so an old % never reads as current. Same
     /// rule as the Mac's DashboardModel.reportAge.
-    static func reportAge(_ updated: Double?, now: Double = Date().timeIntervalSince1970) -> String {
+    static func reportAge(_ updated: Double?, now: Double = DemoData.shownNow()) -> String {
         guard let updated, updated > 0 else { return L.t("Last report", "마지막 보고") }
         let s = max(0, now - updated)
         if s < 60 { return L.t("Just now", "방금 보고") }
@@ -64,7 +64,7 @@ enum Format {
         if s < 86400 { return L.t("\(Int(s / 3600))h ago", "\(Int(s / 3600))시간 전 보고") }
         return L.t("\(Int(s / 86400))d ago", "\(Int(s / 86400))일 전 보고")
     }
-    static func reset(_ at: Double?, now: Double = Date().timeIntervalSince1970) -> String {
+    static func reset(_ at: Double?, now: Double = DemoData.shownNow()) -> String {
         guard let at, at > 0 else { return L.t("Reset time not reported", "초기화 시각 미보고") }
         let minutes = Int(ceil((at - now) / 60))
         if minutes <= 0 { return L.t("Waiting for the reset report", "초기화 보고 대기") }

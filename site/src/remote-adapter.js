@@ -21,6 +21,10 @@ function estimate(e){
   ...(full?{calibration:{seconds:c.seconds,used_pp:c.used_pp,tokens:c.tokens,confidence:c.confidence||'',source:c.source||'',from:c.from??null,to:c.to??null}}:{})};
 }
 
+// Aside's default workspace is project 0; the relay carries no paths, so the name comes from that, as the
+// phones name it (the desktop dashboard names it from the session's folder).
+const asideHome=s=>s.kind==='Aside'&&s.project==='0';
+
 function session(device,s,online){
  const caps=new Set(s.capabilities||[]),orca=s.app==='Orca',status=online?s.status||'unknown':'unknown';
  // The relay folds a paused or resuming session into status; the dashboard keeps both, as the collector does.
@@ -28,7 +32,7 @@ function session(device,s,online){
  const estimates=Object.fromEntries(Object.entries(s.weekly_estimate||{}).map(([key,e])=>[key,estimate(e)]));
  return {
   id:remoteId(device,s.id),device_id:device.id,device_name:device.name,source_id:s.id,
-  kind:s.kind||'unknown',model:s.model||'',project:s.project||'',title:device.name||'',cwd:'',
+  kind:s.kind||'unknown',model:s.model||'',project:asideHome(s)?'Aside 기본 작업공간':s.project||'',title:device.name||'',cwd:'',
   status:base,display_status:status,effort:s.effort??null,context_usage:s.context_usage||null,
   tokens:vector(s.tokens),
   usage:{rate:valid(s.rate)?s.rate:null,windows:s.windows||{},weekly_account:s.weekly_account||null,weekly_estimate:estimates},

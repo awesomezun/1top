@@ -5,7 +5,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import {useWorkspace} from './workspace';
 import {SessionDetails} from './conversation';
-import {fresh,layout,usage} from './metrics';
+import {fresh,layout,projectName,usage} from './metrics';
 import {accountTags,sessionAccount,short} from './fleet';
 import {StateMark} from './state-mark';
 import {Icon} from './icons';
@@ -70,19 +70,19 @@ function Labeled({label,children}:{label:string;children:React.ReactNode}){retur
 
 export {SessionDetails};
 /** A session in the list: what it is, where it runs, the period's tokens and its pace per hour. */
-function SessionItem({row,tags,onPress}:{row:SessionRow;tags:Record<string,string>;onPress:()=>void}){const w=useWorkspace(),ok=fresh(row.device),name=row.terminal||row.project||row.kind;
+function SessionItem({row,tags,onPress}:{row:SessionRow;tags:Record<string,string>;onPress:()=>void}){const w=useWorkspace(),ok=fresh(row.device),name=row.terminal||projectName(row,w.t)||row.kind;
  const tokens=(()=>{const v=row.windows?.[w.period as WindowKey];return Array.isArray(v)?v.reduce((a,b)=>a+b,0):null;})();
  return <Pressable accessibilityRole="button" onPress={onPress} style={({pressed})=>[s.session,pressed&&{backgroundColor:quick.raised}]}>
   <View style={{width:4,height:46,borderRadius:2,backgroundColor:toolColor(row.kind)}}/>
   <View style={{flex:1,minWidth:0,gap:2}}><Text numberOfLines={1} style={{fontSize:15,fontWeight:'600',color:quick.ink}}>{name}</Text>
-   <Text numberOfLines={1} style={s.small}>{[toolWithAccount(row,tags,w.period),shortModel(row.model),row.project].filter(Boolean).join(' · ')}</Text>
+   <Text numberOfLines={1} style={s.small}>{[toolWithAccount(row,tags,w.period),shortModel(row.model),projectName(row,w.t)].filter(Boolean).join(' · ')}</Text>
    <Text numberOfLines={1} style={[s.small,{color:quick.dim}]}>{[row.device.name,row.app,row.terminal===name?'':row.terminal].filter(Boolean).join(' · ')}</Text></View>
   <View style={{alignItems:'flex-end',gap:3}}><Text style={{fontSize:15,fontWeight:'600',color:quick.ink,fontVariant:['tabular-nums']}}>{short(tokens)}</Text>
    <Text style={[s.small,{fontSize:11}]}>{ok&&row.rate!==null?short((row.rate||0)*3600)+w.t(' tokens/h',' tokens/시간'):'—'}</Text>
    <View style={{flexDirection:'row',alignItems:'center',gap:4}}><StateMark status={ok?row.status:'stale'} size={9}/><Text style={[s.small,{fontSize:11,color:ok&&row.status==='working'?quick.ink:quick.muted}]}>{ok?statusName(row.status,w.t):w.t('Last report ','마지막 보고 ')+w.when(row.device.received)}</Text></View></View>
  </Pressable>;}
 export function Sessions(){const w=useWorkspace(),[detail,setDetail]=useState<SessionRow|null>(null),[query,setQuery]=useState('');const tags=accountTags(w.devices||[]);
- const rows:SessionRow[]=w.rows.filter((r:SessionRow)=>!query.trim()||[r.terminal,r.project,r.model,toolName(r.kind),r.app,r.device.name].join(' ').toLowerCase().includes(query.trim().toLowerCase()));
+ const rows:SessionRow[]=w.rows.filter((r:SessionRow)=>!query.trim()||[r.terminal,r.project,projectName(r,w.t),r.model,toolName(r.kind),r.app,r.device.name].join(' ').toLowerCase().includes(query.trim().toLowerCase()));
  const working=rows.filter(r=>fresh(r.device)&&r.status==='working'),rest=rows.filter(r=>!working.includes(r));
  const section=(title:string,list:SessionRow[])=>!!list.length&&<Group header={title}>{list.map((r,i)=><View key={r.key}>{i>0&&<Hair/>}<SessionItem row={r} tags={tags} onPress={()=>setDetail(r)}/></View>)}</Group>;
  return <Screen title={w.t('Sessions','세션')}>
@@ -95,7 +95,7 @@ export function Sessions(){const w=useWorkspace(),[detail,setDetail]=useState<Se
   <SessionDetails key={detail?.key||'none'} row={detail} close={()=>setDetail(null)}/></Screen>;}
 
 export function Map({items}:{items:Tile[]}){const [width,setWidth]=useState(0),[picked,setPicked]=useState<Tile|null>(null);const w=useWorkspace();return <><View onLayout={e=>setWidth(e.nativeEvent.layout.width)} style={{height:260}}>{layout(items,width,260).map(tile=>{const show=(tile.w||0)>110&&(tile.h||0)>82;return <Pressable key={tile.id} accessibilityRole="button" accessibilityLabel={tile.label+', '+tile.value.toLocaleString()+' tokens'} onPress={()=>setPicked(tile)} style={[s.tile,{left:tile.x,top:tile.y,width:Math.max(0,(tile.w||0)-3),height:Math.max(0,(tile.h||0)-3),borderColor:tile.color,backgroundColor:tile.free?quick.raised:tile.color+'30'}]}>{show&&<><Text style={s.tileLabel} numberOfLines={2}>{tile.label}</Text><Text style={[s.number,{color:tile.color}]}>{short(tile.value)}</Text></>}</Pressable>;})}</View><Caption>{w.t('Tap any area for the full label and exact token count.','영역을 누르면 전체 이름과 정확한 토큰 수가 표시됩니다.')}</Caption><Sheet visible={!!picked} close={()=>setPicked(null)} title={picked?.label||''}><Text style={s.metric}>{picked?.value.toLocaleString()}</Text><Caption>tokens · {picked?.share?.toFixed(2)}%</Caption><Text style={s.body}>{picked?.detail}</Text></Sheet></>;}
-export function Usage(){const w=useWorkspace(),[group,setGroup]=useState('session');const data=usage(w.rows,w.period,group),label=periodLabel(w.period,w.t);
+export function Usage(){const w=useWorkspace(),[group,setGroup]=useState('session');const data=usage(w.rows,w.period,group,w.t),label=periodLabel(w.period,w.t);
  return <Screen title={w.t('Usage share','사용량 비율')}><PeriodPicker/>
   <View style={{gap:4,paddingHorizontal:4}}><Caption>{w.t(`Last ${label} · reported tokens, including cache`,`최근 ${label} · 보고된 토큰 · 캐시 포함`)}</Caption><Text style={[s.metric,{fontSize:34,lineHeight:41}]}>{short(data.sum)}</Text></View>
   <Segments items={[['session',w.t('Sessions','세션')],['app',w.t('Apps','실행 앱')],['tool',w.t('Tools','실행 도구')],['model',w.t('Models','모델')]]} value={group} onChange={setGroup}/>

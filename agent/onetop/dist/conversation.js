@@ -214,7 +214,8 @@
   const active=work==='offline'||work==='stale'?null:box.messages.filter(m=>m.activity).sort((a,b)=>b.created-a.created)[0];
   const html=`<p class="conversation-intro">이 세션에게 보낸 메시지와 답신입니다. 전체 작업 대화는 컴퓨터에 남습니다.</p>${notes.map(([tone,text])=>`<p class="conversation-note ${tone}">${text}</p>`).join('')}`+
    (box.messages.length?box.messages.map(bubble).join(''):`<div class="conversation-empty"><b>${replies?'이 세션에 물어보세요':'이 AI에게 지시하기'}</b><span>${replies?'“지금 어디까지 진행됐어?”':'이어서 테스트하고 오류 고쳐줘'}</span></div>`)+
-   (active?`<div class="typing" role="status" data-phase="${esc(active.activity.phase)}"><span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>${TYPING[active.activity.phase]||TYPING.writing}</span></div>`:'')+
+   // Three moving dots only; the phase is read out to screen readers, not written under the work state.
+   (active?`<div class="typing" role="status" data-phase="${esc(active.activity.phase)}"><span class="typing-dots" role="img" aria-label="${TYPING[active.activity.phase]||TYPING.writing}"><i></i><i></i><i></i></span></div>`:'')+
    (box.note?`<p class="conversation-note">${esc(box.note)}</p>`:'')+(box.error?`<p class="conversation-note error">${esc(box.error)}</p>`:'');
   if(html===shownTimeline)return;
   const nearEnd=log.scrollHeight-log.scrollTop-log.clientHeight<80;shownTimeline=html;log.innerHTML=html;if(nearEnd)log.scrollTop=log.scrollHeight;

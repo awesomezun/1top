@@ -219,7 +219,7 @@ final class DeviceQATests: XCTestCase {
         // Choose a computer and a period, and scroll a little; the changes below must keep them.
         tapWhenReady(element(app, "period-5h"), "5h")
         tapWhenReady(connection, "Computer menu")
-        tapWhenReady(app.buttons["scope-demo-mini"], "Mac mini")
+        tapWhenReady(app.buttons["scope-demo-1"], "Mac mini")
         app.swipeUp(velocity: .slow)
         sleep(1)
         let row = app.buttons["session-m1"]
@@ -264,7 +264,7 @@ final class DeviceQATests: XCTestCase {
             if key == "10m" { shot(app, "09b-after-morph-10m") }
         }
         element(app, "period-1h").tap()
-        let row = element(app, "session-d2")
+        let row = element(app, "session-s2")
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()
         XCTAssertTrue(element(app, "mail-draft").waitForExistence(timeout: 5), "Conversation did not open")
@@ -303,7 +303,7 @@ final class DeviceQATests: XCTestCase {
                     shot(app, "20-\(look)-\(language)-\(name)")
                 }
                 app.terminate()
-                app.launchArguments += ["-screenDetail", "d1", "-qaDemoImages", "2"]
+                app.launchArguments += ["-screenDetail", "s1", "-qaDemoImages", "2"]
                 app.launch()
                 XCTAssertTrue(element(app, "control-pause").waitForExistence(timeout: 15))
                 sleep(1)
@@ -316,7 +316,7 @@ final class DeviceQATests: XCTestCase {
     /// the new words: nothing of the sent message comes back (Android's keyboard can restore a word it
     /// was composing; the iPhone must not).
     func test25_TypingRightAfterSending() {
-        let app = launch(["--demo", "-screenDetail", "d1"])
+        let app = launch(["--demo", "-screenDetail", "s1"])
         let draft = element(app, "mail-draft")
         XCTAssertTrue(draft.waitForExistence(timeout: 15), "Conversation did not open")
         for (sent, next) in [("hello", "next"), ("안녕", "다음")] {
@@ -336,11 +336,49 @@ final class DeviceQATests: XCTestCase {
         shot(app, "25-typing-after-sending")
     }
 
+    /// Demo, held at one moment: send, then three moving dots with no words while the session answers
+    /// (the phase is only read out), then the reply. Korean, English and Chinese.
+    func test26_SendShowsDotsThenReply() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Filmed in the simulator.")
+        #endif
+        let words: [String: [String: String]] = ["ko": ["responding": "응답 준비 중…", "working": "작업 중…", "writing": "답변 작성 중…"],
+                                                 "en": ["responding": "Preparing a reply…", "working": "Working…", "writing": "Writing a reply…"],
+                                                 "zh": ["responding": "正在准备回复…", "working": "工作中…", "writing": "正在撰写回复…"]]
+        for (lang, text) in [("ko", "지금 어디까지 했어?"), ("en", "How far along are you?"), ("zh", "现在进展到哪里了？")] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--demo", "-qaGuard", "YES", "-appearance", "dark", "-language", lang, "-qaDemoNow", "1800000000", "-screenDetail", "s1"]
+            app.launch()
+            let draft = element(app, "mail-draft")
+            XCTAssertTrue(draft.waitForExistence(timeout: 15), "Conversation did not open")
+            let replies = app.staticTexts.matching(identifier: "mail-reply").count
+            tapWhenReady(draft, "Composer")
+            draft.typeText(text)
+            tapWhenReady(element(app, "mail-send"), "Send")
+            let confirm = element(app, "confirm-action")
+            XCTAssertTrue(confirm.waitForExistence(timeout: 5), "No send confirmation")
+            confirm.tap()
+            shot(app, "26-\(lang)-1-sent")
+            let dots = element(app, "typing-indicator")
+            XCTAssertTrue(dots.waitForExistence(timeout: 10), "No dots while the session answers")
+            sleep(3)
+            let phase = dots.value as? String ?? ""
+            XCTAssertEqual(dots.label, words[lang]?[phase], "The phase is not read out")
+            XCTAssertFalse(app.staticTexts[dots.label].exists, "The phase is written beside the dots")
+            shot(app, "26-\(lang)-2-dots")
+            let reply = app.staticTexts.matching(identifier: "mail-reply")
+            XCTAssertTrue(wait(reply.element(boundBy: replies), "exists == true", timeout: 20), "No reply")
+            sleep(1)
+            shot(app, "26-\(lang)-3-reply")
+            app.terminate()
+        }
+    }
+
     /// Demo: the one conversation screen. Two sample photos in the composer (debug -qaDemoImages),
     /// one removed; the send confirmation opened and closed with the draft kept; every delivery state
     /// and a session reply in the timeline; work state and controls reachable; a prompt-only session's notice.
     func test24_ConversationAndPhotos() {
-        let app = launch(["--demo", "-screenDetail", "d1", "-qaDemoImages", "2"])
+        let app = launch(["--demo", "-screenDetail", "s1", "-qaDemoImages", "2"])
         let state = element(app, "work-status")
         XCTAssertTrue(state.waitForExistence(timeout: 15), "Conversation did not open")
         XCTAssertEqual(state.value as? String, "working")
@@ -387,7 +425,7 @@ final class DeviceQATests: XCTestCase {
         shot(app, "24d-replies")
         // The other two phases, each from its own demo session.
         app.terminate()
-        for (id, phase, words) in [("d3", "working", "작업 중…"), ("d6", "responding", "응답 준비 중…")] {
+        for (id, phase, words) in [("s3", "working", "작업 중…"), ("s5", "responding", "응답 준비 중…")] {
             let other = launch(["--demo", "-screenDetail", id])
             let indicator = element(other, "typing-indicator")
             XCTAssertTrue(indicator.waitForExistence(timeout: 15), "No typing indicator in \(id)")
@@ -397,21 +435,21 @@ final class DeviceQATests: XCTestCase {
             other.terminate()
         }
         // Awaiting a reply without reported activity: no indicator, whatever the session is doing.
-        let quiet = launch(["--demo", "-screenDetail", "d4"])
+        let quiet = launch(["--demo", "-screenDetail", "s4"])
         XCTAssertTrue(element(quiet, "work-status").waitForExistence(timeout: 15))
         XCTAssertTrue(quiet.descendants(matching: .any).matching(identifier: "mail-status").matching(NSPredicate(format: "value == 'awaiting_reply'")).count > 0)
         XCTAssertFalse(element(quiet, "typing-indicator").waitForExistence(timeout: 2), "Typing without request activity")
         shot(quiet, "24f-awaiting-without-activity")
         quiet.terminate()
         // A stale report hides the indicator even though the row still has activity.
-        let stale = launch(["--demo", "-screenDetail", "d1", "-qaStaleDevice", "demo-mac"])
+        let stale = launch(["--demo", "-screenDetail", "s1", "-qaStaleDevice", "demo-0"])
         XCTAssertTrue(element(stale, "work-status").waitForExistence(timeout: 15))
         XCTAssertEqual(element(stale, "work-status").value as? String, "stale")
         XCTAssertFalse(element(stale, "typing-indicator").waitForExistence(timeout: 2), "Typing shown on a stale report")
         shot(stale, "24g-stale")
         stale.terminate()
         // A send to a working session: the phases come and go, and the indicator ends with the reply.
-        let fresh = launch(["--demo", "-screenDetail", "d2"])
+        let fresh = launch(["--demo", "-screenDetail", "s2"])
         XCTAssertTrue(element(fresh, "work-status").waitForExistence(timeout: 15))
         XCTAssertFalse(element(fresh, "typing-indicator").exists, "Typing before anything was sent")
         let box = element(fresh, "mail-draft")
@@ -429,7 +467,7 @@ final class DeviceQATests: XCTestCase {
         shot(fresh, "24i-replied")
         // An older computer's session takes instructions only, with no reply reader.
         fresh.terminate()
-        let old = launch(["--demo", "-screenDetail", "d5"])
+        let old = launch(["--demo", "-screenDetail", "s6"])
         XCTAssertTrue(element(old, "prompt-only").waitForExistence(timeout: 15), "No prompt-only notice")
         XCTAssertFalse(element(old, "photo-pick").exists, "Photo button for a session without photos")
         shot(old, "24j-prompt-only")

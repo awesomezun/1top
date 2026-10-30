@@ -1,4 +1,5 @@
 import {chinese} from './chinese';
+import {now as shownNow} from './clock';
 // Korean, English or Simplified Chinese, as on the iPhone: every label is t(english, korean), and
 // Chinese is looked up by the English text, so call sites stay two-language.
 export type Lang='ko'|'en'|'zh';
@@ -8,12 +9,12 @@ export const nextLang=(lang:Lang):Lang=>LANGS[(LANGS.findIndex(l=>l[0]===lang)+1
 export const translate=(lang:Lang,en:string,ko:string)=>lang==='ko'?ko:lang==='zh'?chinese(en):en;
 export const locale=(lang:Lang)=>lang==='ko'?'ko-KR':lang==='zh'?'zh-CN':'en-US';
 /** Clock time for today's reports ("오후 4:21", "4:21 PM", "下午4:21"); date and time for older ones. */
-export function when(ms:number,lang:Lang,now=Date.now()){
+export function when(ms:number,lang:Lang,now=shownNow()){
  const d=new Date(ms),today=new Date(now).toDateString()===d.toDateString();
  return d.toLocaleString(locale(lang),today?{hour:'numeric',minute:'2-digit'}:{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
 }
 /** How long until a limit resets, as the iPhone says it. */
-export function resetIn(at:number|null|undefined,t:(en:string,ko:string)=>string,now=Date.now()/1000){
+export function resetIn(at:number|null|undefined,t:(en:string,ko:string)=>string,now=shownNow()/1000){
  if(!at||!(at>0))return t('Reset time not reported','초기화 시각 미보고');
  const minutes=Math.ceil((at-now)/60);if(minutes<=0)return t('Waiting for the reset report','초기화 보고 대기');
  if(minutes>=1440){const d=Math.floor(minutes/1440),h=Math.floor(minutes%1440/60);return t(`Resets in ${d}d ${h}h`,`${d}일 ${h}시간 후 초기화`);}
@@ -29,7 +30,7 @@ export function windowName(w:{key?:string;label:string},t:(en:string,ko:string)=
 export const statusName=(status:string,t:(en:string,ko:string)=>string)=>({working:t('Working','작업 중'),waiting:t('Needs input','확인 필요'),paused:t('Paused','일시정지'),
  idle:t('Idle','대기 중'),interrupted:t('Interrupted','중단됨'),resuming:t('Resuming','재개 중')} as Record<string,string>)[status]||t('Unknown state','상태 미확인');
 /** How old a value that could not be refreshed is, so an old % never reads as current. */
-export function reportAge(updated:number|null|undefined,t:(en:string,ko:string)=>string,now=Date.now()/1000){
+export function reportAge(updated:number|null|undefined,t:(en:string,ko:string)=>string,now=shownNow()/1000){
  if(!updated||!(updated>0))return t('Last report','마지막 보고');const s=Math.max(0,now-updated);
  if(s<60)return t('Just now','방금 보고');if(s<3600)return t(`${Math.floor(s/60)}m ago`,`${Math.floor(s/60)}분 전 보고`);
  if(s<86400)return t(`${Math.floor(s/3600)}h ago`,`${Math.floor(s/3600)}시간 전 보고`);return t(`${Math.floor(s/86400)}d ago`,`${Math.floor(s/86400)}일 전 보고`);
