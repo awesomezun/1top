@@ -1,189 +1,189 @@
 import Foundation
 
-/// Two made-up computers for trying the app without an account. No real projects or accounts.
-/// The Android app's demo (mobile/src/demo.ts) carries the same computers, sessions, accounts and
-/// conversation, so both phones show the same thing. Names follow the chosen language.
+/// The demo for trying the app without an account: the one demo world (DemoWorld.swift, written from
+/// site/src/demo-world.js) as the web demo (site/src/remote-demo.js) and Android (mobile/src/demo.ts) show
+/// it, with the same computers, sessions, accounts and numbers. The steps are site/src/demo-model.js's in
+/// the same order; DemoWorldTests checks the numbers against the web model's. Nothing here is real.
 enum DemoData {
-    static let controls = ["focus", "pause", "resume", "terminate", "prompt", "message", "mailbox", "message_images"]
-    /// The demo Mac mini is paired without remote control, so its sessions show usage only.
-    static let controlOff: Set<String> = ["demo-mini"]
+    /// The Mac mini is paired without remote control, so its sessions show usage only.
+    static let controlOff = Set(DemoWorld.computers.filter { !$0.control }.map(\.id))
     /// Message 2 of the first conversation carries two photos; the demo shows them as sent pictures.
     static let photoMessage = "00000000-0000-4000-8000-000000000002"
+    /// QA and filming (-qaDemoNow <unix seconds>): hold the demo at one moment, the same moment the web page
+    /// (/app?demo&demoNow=…), the desktop demo collector and Android (onetop://?qaDemoNow=…) take.
+    static let held: Double? = { let at = UserDefaults.standard.double(forKey: "qaDemoNow"); return at > 0 ? at : nil }()
     /// When this demo began: the hours around it never rest, and sessions stopped before it stay stopped.
-    static let anchor = Date().timeIntervalSince1970
+    static let anchor = held ?? Date().timeIntervalSince1970
+    static func now() -> Double { held ?? Date().timeIntervalSince1970 }
+    /// Whether the demo is on screen; only then does a hold change what the screens show.
+    nonisolated(unsafe) static var onScreen = false
+    /// What the screens take as now ("updated … ago", resets, today's times): the phone's clock, or the held
+    /// moment while the demo is on screen. A signed-in connection never holds.
+    static func shownNow() -> Double { onScreen ? now() : Date().timeIntervalSince1970 }
 
-    /// Two accounts per tool, as on Android (mobile/src/demo.ts) and the web demo. per: weekly percent per
-    /// token, set once from a typical week of this demo, so a limit is the tokens of its weekly window times
-    /// per and moves with the work. reset: seconds after the demo began (the window began 7 days before).
-    /// five: the 5-hour window's reset and its percent per weekly percent. ago: how old the report is;
-    /// stale: the computer could not refresh it.
-    struct Account {
-        let id: String, kind: String, label: String, plan: String, per: Double, reset: Double, five: (reset: Double, factor: Double)?, ago: Double
-        var stale = false, alias: String? = nil
+    static let day = 86_400.0, week = 7 * 86_400.0, historyDays = 90.0
+    /// The shown sessions began this long before the demo; earlier sessions closed then.
+    static let started = 30 * 3600.0
+    /// Enough minutes for any weekly window (a window begins at most 7 days before its reset).
+    static let weekSpan = 8 * 1440 + 15
+
+    /// One stream of a computer's work: a shown session, a subagent under one, or an earlier session.
+    struct Part {
+        var id: String, kind: String, project: String, model: String?, account: String?, weight: Double, status: String?
+        var start: Double, stop: Double, row: Int?
+        var child: (lead: String, name: String, status: String)?
+        var earlier = false
     }
-    static let accounts: [Account] = [
-        Account(id: "demo:claude-a", kind: "Claude", label: "Claude · 4f21a8", plan: "max", per: 9.4e-9, reset: 276_000, five: (9_400, 6), ago: 40),
-        Account(id: "demo:claude-b", kind: "Claude", label: "Claude · b7e3c1", plan: "pro", per: 5.4e-8, reset: 290_000, five: (14_200, 6), ago: 70, alias: "Team"),
-        Account(id: "demo:codex-a", kind: "Codex", label: "Codex · 9c03e2", plan: "pro", per: 2.4e-8, reset: 250_000, five: nil, ago: 55),
-        // A limit the computer could not refresh: it shows how old it is instead of a rate.
-        Account(id: "demo:codex-b", kind: "Codex", label: "Codex · 2d5f90", plan: "plus", per: 2e-7, reset: 337_000, five: nil, ago: 38 * 60, stale: true),
-    ]
-    static func account(_ id: String?) -> Account? { accounts.first { $0.id == id } }
 
-    /// One demo session. weight is its usual share of its computer; mobile/src/demo.ts lists the same rows.
-    struct Row {
-        let id: String, kind: String, model: String, project: String, en: String, ko: String, status: String, weight: Double, account: String?
-        var capabilities: [String]
-        init(_ id: String, _ kind: String, _ model: String, _ project: String, _ en: String, _ ko: String, _ status: String, _ weight: Double, _ account: String?,
-             capabilities: [String] = DemoData.controls) {
-            self.id = id; self.kind = kind; self.model = model; self.project = project; self.en = en; self.ko = ko
-            self.status = status; self.weight = weight; self.account = account; self.capabilities = capabilities
+    /// A computer's streams: its shown sessions in world order, their subagents, then its earlier sessions.
+    static func streams(_ c: Int, anchor: Double) -> [Part] {
+        var out: [Part] = []
+        for (i, s) in DemoWorld.sessions.enumerated() where s.computer == c {
+            let stop = s.status == "waiting" ? anchor - Double(3 + i) * 60 : s.status == "paused" ? anchor - 12 * 60
+                : s.status == "idle" ? anchor - Double(40 + i * 31) * 60 : Double.infinity
+            out.append(Part(id: s.id, kind: s.kind, project: s.project, model: s.model, account: s.account, weight: s.weight, status: s.status,
+                            start: anchor - started, stop: stop, row: i))
+        }
+        for child in DemoWorld.children {
+            guard var part = out.first(where: { $0.id == child.lead }) else { continue }
+            let stop = child.status == "working" ? part.stop : min(part.stop, anchor - 25 * 60)
+            part.id = child.lead + "-" + child.name; part.weight *= child.share; part.status = child.status; part.stop = stop
+            part.child = (child.lead, child.name, child.status)
+            out.append(part)
+        }
+        for (i, e) in DemoWorld.earlier.enumerated() where e.computer == c {
+            out.append(Part(id: "earlier-\(i)", kind: e.kind, project: e.project, model: e.model, account: e.account, weight: e.weight, status: nil,
+                            start: anchor - historyDays * day, stop: anchor - started, row: nil, earlier: true))
+        }
+        return out
+    }
+
+    /// A computer's minutes from span minutes before now, with sums over any stretch: sum(j, from, to).
+    struct Machine {
+        let c: Int, list: [Part], u: DemoUsage.Usage, n: Int
+        /// Each stream's tokens from the first minute up to each minute, as the web model adds them up.
+        let cum: [[Double]]
+        func at(_ t: Double) -> Int { min(n, max(0, Int(ceil(t / 60)) - u.first)) }
+        func sum(_ j: Int, _ from: Double, _ to: Double = .infinity) -> Double {
+            let a = at(from), b = to == .infinity ? n : at(to)
+            return b > a ? cum[j][b] - cum[j][a] : 0
         }
     }
-    // Two accounts per tool, numbered 1 and 2 the way the desktop dashboard numbers them; one has a
-    // name given in the desktop app.
-    static let rows: [Row] = [
-        Row("d1", "Claude", "claude-opus-5-5", "storefront", "Checkout redesign", "결제 화면 개편", "working", 52, "demo:claude-a"),
-        Row("d2", "Codex", "gpt-6-astra", "api-gateway", "Rate limit tests", "요청 제한 테스트", "working", 12, "demo:codex-a"),
-        Row("d3", "Claude", "claude-opus-5-5", "docs-site", "Better docs search", "문서 검색 개선", "working", 13, "demo:claude-b"),
-        Row("d4", "Codex", "gpt-6.1-sol", "ml-pipeline", "Training data cleanup", "학습 데이터 정리", "waiting", 4, "demo:codex-b"),
-        // An older computer's session: instructions only, no reply reader.
-        Row("d5", "GLM", "glm-5.3[1m]", "storefront", "Translation review", "번역 검수", "idle", 3, nil, capabilities: ["focus", "prompt"]),
-        // Working, since a request is only answered by a working session (contract v1.1.0).
-        Row("d6", "Claude", "claude-sonnet-5-5", "mobile-app", "Notification settings", "알림 설정 화면", "working", 6, "demo:claude-a"),
-        Row("d7", "Codex", "gpt-6-astra", "infra", "Deploy script", "배포 스크립트", "paused", 2, "demo:codex-a"),
-        Row("d8", "Claude", "claude-opus-5-5", "design-system", "Design token cleanup", "토큰 정리", "idle", 0, "demo:claude-b"),
-        Row("m1", "Codex", "gpt-6.1-sol", "data-sync", "Nightly sync", "야간 동기화", "working", 8, "demo:codex-b"),
-        Row("m2", "Claude", "claude-sonnet-5-5", "billing", "Invoice template", "청구서 템플릿", "idle", 3, "demo:claude-a"),
-    ]
-    /// The demo computers: id, rows by id prefix, hash seed, the median tokens of an active minute and how
-    /// often the computer works next to the main one.
-    struct Computer { let id: String, prefix: String, seed: UInt32, scale: Double, duty: Double }
-    static let computers = [Computer(id: "demo-mac", prefix: "d", seed: 23, scale: 1.2e6, duty: 1), Computer(id: "demo-mini", prefix: "m", seed: 61, scale: 0.25e6, duty: 0.3)]
-    /// One person's computers rest together.
-    static let restSeed: UInt32 = 7
 
-    /// When a session takes part in its computer's work: working ones all along, the others until a
-    /// while before the demo began (DemoUsage shapes the minutes).
-    static func stream(_ status: String, _ weight: Double, _ index: Int, anchor: Double) -> DemoUsage.Stream {
-        let start = index % 4 == 3 ? anchor - Double(5 + index % 7) * 3600 : anchor - 30 * 3600
-        let stop = status == "waiting" ? anchor - Double(2 + index % 4) * 60 : status == "paused" ? anchor - 12 * 60
-            : status == "idle" ? anchor - Double(40 + index * 37 % 180) * 60 : Double.infinity
-        return .init(weight: weight, start: start, stop: stop)
+    static func machine(_ c: Int, now: Double, anchor: Double, span: Int = weekSpan) -> Machine {
+        let computer = DemoWorld.computers[c], list = streams(c, anchor: anchor)
+        let u = DemoUsage.usage(computer.seed, computer.scale, list.map { .init(weight: $0.weight, start: $0.start, stop: $0.stop) },
+                                now: now, anchor: anchor, rest: DemoWorld.rest, duty: computer.duty, awake: true, span: span)
+        let n = u.minutes[0].count
+        let cum = u.minutes.map { row -> [Double] in
+            var s = [Double](repeating: 0, count: n + 1)
+            for i in 0..<n { s[i + 1] = s[i] + row[i] }
+            return s
+        }
+        return Machine(c: c, list: list, u: u, n: n, cum: cum)
     }
 
-    /// One computer's minutes. owners: the account of each stream (the shown sessions, then the earlier
-    /// ones); week: each stream's tokens from its account's weekly window start until the demo began.
-    struct Machine { let computer: Computer; let rows: [(row: Row, index: Int)]; let now: DemoUsage.Usage; let before: DemoUsage.Usage; let owners: [String?]; let week: [Double] }
-    /// What stays fixed while one demo runs: the day before it began and each weekly window then.
-    nonisolated(unsafe) private static var fixed: [String: (before: DemoUsage.Usage, week: [Double])] = [:]
+    static func machines(now: Double, anchor: Double) -> [Machine] {
+        DemoWorld.computers.indices.map { machine($0, now: now, anchor: anchor) }
+    }
 
-    static func devices(now: Double, anchor: Double = DemoData.anchor) -> [Device] {
-        let machines = computers.map { c -> Machine in
-            let mine = rows.enumerated().filter { $0.element.id.hasPrefix(c.prefix) }.map { (row: $0.element, index: $0.offset) }
-            // Earlier sessions of each account on this computer, closed before the shown ones began: they
-            // fill the weekly window and never show in the last day.
-            var ids: [String] = []
-            for pair in mine { if let a = pair.row.account, !ids.contains(a) { ids.append(a) } }
-            let earlier = ids.map { id in (id: id, weight: mine.reduce(0) { $0 + ($1.row.account == id ? $1.row.weight : 0) }) }
-            let streams = mine.map { stream($0.row.status, $0.row.weight, $0.index, anchor: anchor) }
-                + earlier.map { DemoUsage.Stream(weight: $0.weight, start: anchor - 8 * 86400, stop: anchor - 30 * 3600) }
-            let owners = mine.map(\.row.account) + earlier.map { Optional($0.id) }
-            let key = c.id + ":" + String(anchor)
-            if fixed[key] == nil {
-                // Tokens from a day before the demo began until it began, so totals only grow; and each
-                // stream's tokens from its account's weekly window start until the demo began.
-                let long = DemoUsage.usage(c.seed, c.scale, streams, now: anchor, anchor: anchor, rest: restSeed, duty: c.duty, span: 8 * 1440 + 15)
-                fixed[key] = (DemoUsage.usage(c.seed, c.scale, streams, now: anchor, anchor: anchor, rest: restSeed, duty: c.duty),
-                              owners.enumerated().map { j, id in account(id).map { DemoUsage.since(long, j, anchor + $0.reset - 604_800) } ?? 0 })
-            }
-            return Machine(computer: c, rows: mine, now: DemoUsage.usage(c.seed, c.scale, streams, now: now, anchor: anchor, rest: restSeed, duty: c.duty),
-                           before: fixed[key]!.before, owners: owners, week: fixed[key]!.week)
+    /// A session's numbers: tokens over each period, its recent rate and its total since a day before the demo.
+    /// A subagent's total starts where its lead's does, as the desktop demo collector counts it.
+    static func sessionNumbers(_ m: Machine, _ j: Int, now: Double, anchor: Double) -> (windows: [String: [Double]?], rate: Double, tokens: [Double]) {
+        var windows: [String: [Double]?] = [:]
+        for p in Period.allCases { windows[p.rawValue] = DemoUsage.vector(m.sum(j, now - p.seconds)) }
+        let s = m.list[j], base = s.child.flatMap { child in m.list.first { $0.id == child.lead }?.weight } ?? s.weight
+        return (windows, (m.sum(j, now - 600) / 600).rounded(), DemoUsage.vector(base * 5e7 + m.sum(j, anchor - day)))
+    }
+
+    /// Each account's limits over every computer it works on. Providers report limits in whole percent.
+    struct Limits {
+        let account: DemoWorld.Account, resetAt: Double, start: Double, reportAt: Double, weekly: Double, five: Double?, fiveReset: Double?
+        let used: (Double, Double) -> Double
+    }
+    static func accounts(_ all: [Machine], now: Double, anchor: Double) -> [Limits] {
+        func used(_ key: String, _ from: Double, _ to: Double) -> Double {
+            all.reduce(0) { n, m in n + m.list.indices.reduce(0) { k, j in k + (m.list[j].account == key ? m.sum(j, from, to) : 0) } }
         }
-        let sessions = machines.map { m in
-            m.rows.enumerated().map { j, pair -> Session in
-                let row = pair.row, u = m.now
-                var windows: [String: [Double]?] = [:]
-                for p in Period.allCases { windows[p.rawValue] = DemoUsage.vector(DemoUsage.since(u, j, now - p.seconds)) }
-                let per = account(row.account)?.per ?? 0, lastMinute = u.minutes[j][u.minutes[j].count - 2]
-                let estimates = row.account.map { account in
+        return DemoWorld.accounts.map { a in
+            let reset = anchor + a.reset, start = reset - week, reportAt = a.stale.map { now - $0 } ?? now
+            return Limits(account: a, resetAt: reset, start: start, reportAt: reportAt, weekly: (used(a.key, start, reportAt) * a.per).rounded(),
+                          five: a.five.map { min(100, (used(a.key, anchor + $0.reset - 5 * 3600, reportAt) * a.per * $0.factor).rounded()) },
+                          fiveReset: a.five.map { anchor + $0.reset }, used: { used(a.key, $0, $1) })
+        }
+    }
+
+    static func devices(now: Double = DemoData.now(), anchor: Double = DemoData.anchor) -> [Device] {
+        let all = machines(now: now, anchor: anchor), limits = accounts(all, now: now, anchor: anchor)
+        func limit(_ key: String?) -> Limits? { limits.first { $0.account.key == key } }
+        func round4(_ n: Double) -> Double { (n * 1e4).rounded() / 1e4 }
+        return all.map { m in
+            let computer = DemoWorld.computers[m.c], rows = DemoWorld.sessions.filter { $0.computer == m.c }
+            let sessions = m.list.indices.compactMap { j -> Session? in
+                let s = m.list[j]
+                if s.earlier { return nil }
+                let row = rows.first { $0.id == (s.child?.lead ?? s.id) }!, i = DemoWorld.sessions.firstIndex { $0.id == row.id }!
+                let status = s.child?.status ?? row.status, numbers = row.weight > 0 ? sessionNumbers(m, j, now: now, anchor: anchor) : nil
+                let a = limit(s.account), minutes = m.u.minutes[j]
+                let cpu = status == "working" ? ((1.5 + min(30, minutes[minutes.count - 2] / 4e4) + Double(i % 5) * 0.7) * 10).rounded() / 10
+                    : status == "unknown" ? 0.6 : 0.3
+                let estimates = a.flatMap { a in numbers.map { n in
                     Dictionary(uniqueKeysWithValues: Period.allCases.map { p in
-                        (p.rawValue, WeeklyEstimate(usedPp: (windows[p.rawValue] ?? nil).map { $0.reduce(0, +) * per }, partial: false, accountId: account,
-                                                    calibration: .init(ppPerToken: per, confidence: "stable")))
+                        (p.rawValue, WeeklyEstimate(usedPp: round4(((n.windows[p.rawValue] ?? nil) ?? []).reduce(0, +) * a.account.per), partial: false,
+                                                    accountId: a.account.id, calibration: .init(ppPerToken: a.account.per, confidence: "limited")))
                     })
-                }
-                return Session(id: row.id, controlKey: "demo", kind: row.kind, app: row.kind == "Codex" ? "Orca" : "Terminal", terminal: L.t(row.en, row.ko),
-                               project: row.project, title: nil, model: row.model, status: row.status,
-                               tokens: DemoUsage.vector(row.weight * 4e7 + DemoUsage.since(m.before, j, anchor - 86400) + DemoUsage.since(u, j, anchor)),
-                               rate: row.status == "working" ? DemoUsage.since(u, j, now - 600) / 600 : 0, windows: windows,
-                               cpu: row.status == "working" ? ((1.5 + min(30, lastMinute / 4e4)) * 10).rounded() / 10 : 0.3, rss: 410,
-                               capabilities: row.capabilities, weeklyAccount: row.account, weeklyEstimate: estimates)
+                } }
+                return Session(id: s.id, controlKey: s.child == nil ? "demo-\(i)" : "", kind: row.kind, app: row.app, terminal: s.child == nil ? row.title : "",
+                               project: row.project, title: row.project + " · " + row.kind, model: row.model ?? "", status: status,
+                               tokens: numbers?.tokens, rate: numbers.map { status == "working" ? $0.rate : 0 }, windows: numbers?.windows ?? [:],
+                               cpu: s.child == nil ? cpu : nil, rss: s.child == nil ? Double(160 + i * 24) * 1_048_576 : nil,
+                               capabilities: s.child == nil ? row.caps : [], weeklyAccount: estimates == nil ? nil : a?.account.id, weeklyEstimate: estimates,
+                               rootSessionId: s.child?.lead ?? s.id, parentSessionId: s.child?.lead)
             }
-        }
-        // An account's tokens since a moment over both computers, and its weekly percent: the tokens of its
-        // weekly window (before the demo began, then since) times its per-token percent.
-        func used(_ id: String, _ from: Double) -> Double {
-            machines.reduce(0) { n, m in n + m.owners.enumerated().reduce(0) { k, e in k + (e.element == id ? DemoUsage.since(m.now, e.offset, from) : 0) } }
-        }
-        func weekly(_ a: Account) -> Double {
-            (machines.reduce(0) { n, m in n + m.owners.enumerated().reduce(0) { k, e in k + (e.element == a.id ? m.week[e.offset] : 0) } } + used(a.id, anchor)) * a.per
-        }
-        func round(_ n: Double) -> Double { (n * 10).rounded() / 10 }
-        func quota(_ a: Account) -> Quota {
-            let exact = weekly(a), reset = anchor + a.reset
-            var windows: [QuotaWindow] = []
-            // Providers report limits in whole percent, as the collector shows them; use and points keep decimals.
-            if let five = a.five {
-                windows.append(QuotaWindow(key: "5h", label: "5H", pct: min(100, (used(a.id, anchor + five.reset - 18_000) * a.per * five.factor).rounded()), reset: anchor + five.reset))
+            let used = Set(rows.compactMap(\.account))
+            // The relay names an account by its tool and the end of its id; providers report limits in whole percent.
+            let quotas = limits.filter { used.contains($0.account.key) }.map { l -> Quota in
+                let a = l.account
+                var windows: [QuotaWindow] = []
+                if let five = l.five { windows.append(QuotaWindow(key: "5h", label: "5H", pct: five, reset: l.fiveReset)) }
+                windows.append(QuotaWindow(key: "7d", label: "주간", pct: l.weekly, reset: l.resetAt))
+                let periods = Dictionary(uniqueKeysWithValues: Period.allCases.map { p in
+                    (p.rawValue, WeeklyPeriod(usedPp: round4(l.used(now - p.seconds, .infinity) * a.per), observedSeconds: p.seconds, partial: false))
+                })
+                let points = stride(from: l.start, through: l.reportAt, by: 600).map { t in [t, (l.used(l.start, t) * a.per).rounded(), l.resetAt] }
+                return Quota(id: a.id, kind: a.kind, accountLabel: a.kind + " · " + String(a.id.suffix(6)), plan: a.plan, updated: l.reportAt, stale: a.stale != nil,
+                             note: nil, status: a.status, windows: windows, weekly: periods, usagePoints: points, alias: a.alias)
             }
-            windows.append(QuotaWindow(key: "7d", label: "주간", pct: exact.rounded(), reset: reset))
-            let periods = Dictionary(uniqueKeysWithValues: Period.allCases.map { p in
-                (p.rawValue, WeeklyPeriod(usedPp: used(a.id, now - p.seconds) * a.per, observedSeconds: p.seconds, partial: false))
-            })
-            let points = (0..<145).map { i -> [Double] in
-                let at = now - 86400 + Double(i) * 600
-                return [at, max(0, round(exact - used(a.id, at) * a.per)), reset]
-            }
-            return Quota(id: a.id, kind: a.kind, accountLabel: a.label, plan: a.plan, updated: now - a.ago, stale: a.stale, note: nil, status: nil,
-                         windows: windows, weekly: periods, usagePoints: points, alias: a.alias)
-        }
-        let quotas = accounts.map(quota)
-        let (claudeA, claudeB, codexA, codexB) = (quotas[0], quotas[1], quotas[2], quotas[3])
-        func flow(_ m: Machine) -> [String: FlowSeries] {
+            let kinds = m.list.map { $0.weight > 0 ? $0.kind : nil }
             var flow: [String: FlowSeries] = [:]
             for p in Period.allCases {
                 let step: Double = p.seconds <= 3600 ? 60 : p.seconds <= 18000 ? 300 : 900
-                let b = DemoUsage.bins(m.now, m.rows.map { $0.row.kind }, now: now, seconds: p.seconds, step: step)
+                let b = DemoUsage.bins(m.u, kinds, now: now, seconds: p.seconds, step: step)
                 flow[p.rawValue] = FlowSeries(step: step, start: b.start, end: b.end, reported: true, bins: b.bins.map { $0 })
             }
-            return flow
+            // The host is as busy as its last whole minute of tokens (the current one is partial).
+            let busy = min(1, m.u.minutes.reduce(0) { $0 + $1[$1.count - 2] } / (computer.scale * 3)), ops = DemoWorld.operations[m.c]
+            let host = Host(cpu: ((computer.cpu.idle + computer.cpu.busy * busy) * 10).rounded() / 10, usedMemory: (computer.used * 1_073_741_824).rounded(),
+                            totalMemory: computer.memory * 1_073_741_824, cores: computer.cores)
+            let operations = Operations(installedSkills: Double(ops.installedSkills), observedEvents: Double(ops.observedEvents),
+                                        goals: ops.goals.map { .init(runtime: $0.runtime, status: $0.status, tokensUsed: $0.tokensUsed,
+                                                                     timeUsedSeconds: $0.timeUsedSeconds, sessionConnected: $0.sessionConnected) })
+            return Device(id: computer.id, name: computer.name, platform: computer.platform, online: true, received: now * 1000,
+                          snapshot: DeviceSnapshot(version: "4.0.0", updated: now, sessions: sessions, host: host, accountQuotas: quotas, periods: nil,
+                                                   flow: flow, operations: operations))
         }
-        // The host is as busy as its last minute of tokens.
-        func busy(_ m: Machine) -> Double { min(1, m.now.minutes.reduce(0) { $0 + $1[$1.count - 2] } / (m.computer.scale * 3)) }
-        let operations = Operations(updated: now - 30, installedSkills: 18, observedEvents: 7, loopState: "not_verified",
-                                    goals: [.init(runtime: "Codex", status: "active", tokensUsed: 1_240_000, timeUsedSeconds: 5_400, sessionConnected: true)])
-        let studioSnapshot = DeviceSnapshot(version: "4.0.0", updated: now, sessions: sessions[0],
-                                            host: Host(cpu: ((8 + 48 * busy(machines[0])) * 10).rounded() / 10, usedMemory: 61.4e9, totalMemory: 128e9, cores: 16),
-                                            accountQuotas: [claudeA, claudeB, codexA], periods: nil, flow: flow(machines[0]), operations: operations)
-        let miniSnapshot = DeviceSnapshot(version: "4.0.0", updated: now - 3, sessions: sessions[1],
-                                          host: Host(cpu: ((4 + 48 * busy(machines[1])) * 10).rounded() / 10, usedMemory: 9.8e9, totalMemory: 24e9, cores: 10),
-                                          accountQuotas: [codexB, claudeA], periods: nil, flow: flow(machines[1]),
-                                          operations: Operations(installedSkills: 6, observedEvents: 2, goals: []))
-        let received = now * 1000
-        return [Device(id: "demo-mac", name: L.t("Demo Mac Studio", "데모 Mac Studio"), platform: "macOS", online: true, received: received - 2_000, snapshot: studioSnapshot),
-                Device(id: "demo-mini", name: L.t("Demo Mac mini", "데모 Mac mini"), platform: "macOS", online: true, received: received - 4_000, snapshot: miniSnapshot)]
     }
 
     /// A conversation that shows every delivery state once, a reply, and photos the computer
-    /// listed by name (the relay returns no image data).
-    static func mailboxes(now: Double) -> [String: AppModel.Mailbox] {
+    /// listed by name (the relay returns no image data); three more sessions show the other response phases.
+    static func mailboxes(now: Double = DemoData.now()) -> [String: AppModel.Mailbox] {
         func message(_ n: Int, _ text: String, _ status: String, ago: Double, reply: String? = nil, photos: [String] = [], activity: String? = nil) -> MailMessage {
             MailMessage(id: String(format: "00000000-0000-4000-8000-%012d", n), text: text, created: now - ago, status: status, reply: reply,
                         replyAt: reply == nil ? nil : now - ago + 60, truncated: false,
                         attachments: photos.isEmpty ? nil : photos.map { MailAttachment(id: $0, name: $0, mime: "image/jpeg", bytes: 180_000) },
                         activity: activity.map { MailActivity(phase: $0, observedAt: now - 3) })
         }
-        return ["demo-mac:d1": .init(messages: [
+        return ["demo-0:s1": .init(messages: [
             message(1, L.t("How far along are you?", "지금 어디까지 진행됐어?"), "replied", ago: 1500,
                     reply: L.t("I moved the card entry step of checkout to the new component. The receipt screen and two tests are left.",
                                "결제 화면의 카드 입력 단계를 새 컴포넌트로 옮겼고, 남은 작업은 영수증 화면과 테스트 두 개입니다.")),
@@ -198,9 +198,9 @@ enum DemoData {
             message(8, L.t("Sum up the current screen in one line.", "지금 화면을 한 줄로 요약해 줘."), "sending", ago: 5),
         ]),
         // The other two response phases, one session each.
-        "demo-mac:d3": .init(messages: [message(10, L.t("Change how search results are sorted.", "검색 결과 정렬 기준을 바꿔 줘."), "awaiting_reply", ago: 120, activity: "working")]),
-        "demo-mac:d6": .init(messages: [message(11, L.t("Polish the notification copy.", "알림 문구를 다듬어 줘."), "awaiting_reply", ago: 20, activity: "responding")]),
+        "demo-0:s3": .init(messages: [message(10, L.t("Change how search results are sorted.", "검색 결과 정렬 기준을 바꿔 줘."), "awaiting_reply", ago: 120, activity: "working")]),
+        "demo-0:s5": .init(messages: [message(11, L.t("Polish the notification copy.", "알림 문구를 다듬어 줘."), "awaiting_reply", ago: 20, activity: "responding")]),
         // Awaiting a reply with no reported activity: nothing claims the request is being answered.
-        "demo-mac:d4": .init(messages: [message(9, L.t("What rules do you use to clean the data?", "데이터 정리 기준을 알려 줘."), "awaiting_reply", ago: 240)])]
+        "demo-0:s4": .init(messages: [message(9, L.t("What rules do you use to clean the data?", "데이터 정리 기준을 알려 줘."), "awaiting_reply", ago: 240)])]
     }
 }

@@ -4,7 +4,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import Svg,{Circle,G,Line,Path,Polygon} from 'react-native-svg';
 import {Text} from './typography';
 import {useWorkspace} from './workspace';
-import {fresh,total,valid} from './metrics';
+import {fresh,projectName,total,valid} from './metrics';
 import {accountTags,fleetFlow,fleetQuotas,hasEstimate,periodTokens,reporting,sessionAccount,short} from './fleet';
 import {AccountChip,Button,ComputerList,LanguageButton,PeriodPicker,SessionDetails,Sheet,periodLabel} from './ui';
 import {Icon} from './icons';
@@ -24,8 +24,9 @@ const ORDER=['Claude','Codex','GLM','Antigravity','Aside'];
 
 export function pct(n:number|null|undefined){if(!valid(n))return '—';if(n===0)return '0%';if(n<.05)return '<0.1%';const t=Math.round(n*10)/10;return (Number.isInteger(t)?String(t):t.toFixed(1))+'%';}
 export const shortModel=(s:SessionRow)=>{let m=(s.model||'').trim();if(!m)return toolName(s.kind);m=m.replace(/\[1m\]/ig,'');if(/^claude-/i.test(m))m=m.slice(7);if(/^gpt-/i.test(m))m='GPT-'+m.slice(4);return m;};
-const display=(s:SessionRow)=>s.project==='0'&&s.kind==='Aside'?'Aside workspace':s.project;
-const nameOf=(s:SessionRow)=>(s.terminal||'').trim()||display(s)||s.kind;
+type T=(en:string,ko:string)=>string;
+const display=(s:SessionRow,t:T)=>projectName(s,t);
+const nameOf=(s:SessionRow,t:T)=>(s.terminal||'').trim()||display(s,t)||s.kind;
 
 /** Bins from the nested period totals: for the last hour, the last 10 minutes, 10–30 and 30–60 minutes ago.
  *  Each bin is a speed in tokens per hour by tool, so bins of different lengths compare fairly. */
@@ -195,7 +196,7 @@ export function Dashboard(){
    {ordered.map((g,i)=>{const s=g.root,pace=live?paces[i]:null,hub=valid(pace)&&pace>0?quick.ink:quick.dim,state=gWorking(g)?'working':s.status,tokens=gTokens(g,period),est=gEstimate(g,period);
     const value=tokensMode?short(tokens):est!==null?'≈'+pct(est):tokens===0?'0%':'—',children=g.members.length-1;
     return <Pressable key={s.key} accessibilityRole="button" accessibilityHint={t('Opens messages and controls','메시지와 작업 제어를 엽니다')} onPress={()=>setDetail(s)} style={({pressed})=>[st.row,pressed&&{backgroundColor:quick.raised},!fresh(s.device)&&{opacity:.55}]}><View style={{width:54,alignItems:'center',gap:2}}><MiniGauge value={pace} scale={scale} color={toolColor(s.kind)} hub={hub}/><Text numberOfLines={1} style={{fontSize:9.5,color:pace===null?quick.dim:pace===0?quick.muted:quick.ink}}>{pace===null?'—':(tokensMode?short(pace):pct(pace))+t('/h','/시간')}</Text></View>
-     <View style={{flex:1,minWidth:0}}><View style={{flexDirection:'row',alignItems:'center',gap:6}}><StateMark status={state}/><Text numberOfLines={1} style={{flexShrink:1,color:quick.ink,fontSize:13,fontWeight:'600'}}>{nameOf(s)}</Text>{children>0&&<Text style={st.badge}>{t(`+${children}`,`하위 ${children}`)}</Text>}</View><View style={{flexDirection:'row',alignItems:'center',gap:4}}><Text style={{fontSize:11.5,color:toolColor(s.kind)}}>{toolName(s.kind)}</Text><AccountChip text={tags[sessionAccount(s,period)||'']}/><Text numberOfLines={1} style={{fontSize:11.5,color:quick.muted,flexShrink:1}}>{display(s)?'· '+display(s):''}{basis.length>1?' · '+s.device.name:''}</Text></View></View>
+     <View style={{flex:1,minWidth:0}}><View style={{flexDirection:'row',alignItems:'center',gap:6}}><StateMark status={state}/><Text numberOfLines={1} style={{flexShrink:1,color:quick.ink,fontSize:13,fontWeight:'600'}}>{nameOf(s,t)}</Text>{children>0&&<Text style={st.badge}>{t(`+${children}`,`하위 ${children}`)}</Text>}</View><View style={{flexDirection:'row',alignItems:'center',gap:4}}><Text style={{fontSize:11.5,color:toolColor(s.kind)}}>{toolName(s.kind)}</Text><AccountChip text={tags[sessionAccount(s,period)||'']}/><Text numberOfLines={1} style={{fontSize:11.5,color:quick.muted,flexShrink:1}}>{display(s,t)?'· '+display(s,t):''}{basis.length>1?' · '+s.device.name:''}</Text></View></View>
      <Text style={{width:70,textAlign:'right',color:value==='—'?quick.dim:quick.ink,fontSize:13,fontWeight:'600'}}>{value}</Text><Text style={{color:quick.dim,fontSize:13}}>›</Text></Pressable>;})}
    {!ordered.length&&<Text style={{color:quick.muted,fontSize:11.5,paddingHorizontal:16,paddingVertical:14}}>{t('Connect a computer to your account. Its sessions appear here.','컴퓨터를 계정에 연결하면 세션이 표시됩니다.')}</Text>}
   </ScrollView>

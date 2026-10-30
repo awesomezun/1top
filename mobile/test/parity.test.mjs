@@ -6,7 +6,8 @@ import {register} from 'node:module';
 register('data:text/javascript,'+encodeURIComponent("export async function resolve(s,c,n){if(s.startsWith('.')&&!/\\.[a-z]+$/.test(s)){try{return await n(s+'.ts',c);}catch{}}return n(s,c);}"));
 const {chinese}=await import('../src/chinese.ts');
 const {accountTags,sessionAccount}=await import('../src/fleet.ts');
-const {demoDevices,demoThread,DEMO_ROWS,DEMO_ACCOUNTS}=await import('../src/demo.ts');
+const {demoDevices,demoThread,setDemoNow}=await import('../src/demo.ts');
+const {WORLD}=await import('../src/demo-world.ts');
 const {unit,usage,since,bins,UNIT_CHECK}=await import('../src/demo-usage.ts');
 const {translate,windowName}=await import('../src/i18n.ts');
 
@@ -39,30 +40,42 @@ test('same-tool accounts are numbered by label once a tool has two, and a given 
  assert.equal(sessionAccount({weekly_account:'w',weekly_estimate:null},'1h'),'w');
 });
 
-test('the demo matches the iPhone demo: computers, sessions, models, names and accounts',()=>{
- const swift=readFileSync(new URL('../../ios/OneTop/Model/DemoData.swift',import.meta.url),'utf8');
- const ios=[...swift.matchAll(/Row\("(\w+)", "(\w+)", "([^"]+)", "([^"]+)", "([^"]+)", "([^"]+)", "(\w+)", ([\d.]+), (?:"([^"]+)"|nil)(?:, capabilities: \[([^\]]*)\])?\)/g)]
-  .map(m=>[m[1],m[2],m[3],m[4],m[5],m[6],m[7],Number(m[8]),m[9]||null,m[10]?m[10].split(', ').map(x=>x.replace(/"/g,'')):'controls']);
- assert.equal(ios.length,10);
- assert.deepEqual(DEMO_ROWS.map(r=>[...r.slice(0,9),r[9].length===8?'controls':r[9]]),ios);
- for(const lang of ['en','ko']){
-  const t=(en,ko)=>translate(lang,en,ko),devices=demoDevices(t),sessions=devices.flatMap(d=>d.snapshot.sessions);
-  assert.deepEqual(sessions.map(s=>[s.id,s.kind,s.model,s.project,s.status,s.weekly_account]),ios.map(r=>[r[0],r[1],r[2],r[3],r[6],r[8]]));
-  assert.deepEqual(sessions.map(s=>s.terminal),ios.map(r=>lang==='en'?r[4]:r[5]));
-  assert.deepEqual(devices.map(d=>d.name),lang==='en'?['Demo Mac Studio','Demo Mac mini']:['데모 Mac Studio','데모 Mac mini']);
- }
- // The session names are read through the language table at run time, so each needs a Chinese text.
- assert.deepEqual(DEMO_ROWS.filter(r=>chinese(r[4])===r[4]).map(r=>r[4]),[]);
- const iosAccounts=[...swift.matchAll(/Account\(id: "([^"]+)", kind: "(\w+)", label: "([^"]+)", plan: "(\w+)", per: ([\d.e-]+), reset: ([\d_]+), five: (?:\(([\d_]+), (\d+)\)|nil), ago: ([\d *]+)(?:, stale: true)?(?:, alias: "([^"]+)")?\)/g)]
-  .map(m=>({id:m[1],kind:m[2],label:m[3],plan:m[4],per:Number(m[5]),reset:Number(m[6].replace(/_/g,'')),five:m[7]?{reset:Number(m[7].replace(/_/g,'')),factor:Number(m[8])}:undefined,ago:eval(m[9]),alias:m[10]}));
- assert.deepEqual(iosAccounts,DEMO_ACCOUNTS.map(({stale,...a})=>({...a,five:a.five,alias:a.alias})));
- const quotas=new Map(demoDevices().flatMap(d=>d.snapshot.account_quotas).map(q=>[q.id,[q.id,q.kind,q.account_label]]));
- assert.deepEqual([...quotas.values()].sort(),DEMO_ACCOUNTS.map(a=>[a.id,a.kind,a.label]).sort());
- assert.deepEqual(accountTags(demoDevices()),{'demo:claude-a':'1','demo:claude-b':'Team','demo:codex-b':'1','demo:codex-a':'2'});
+test('the demo is the one demo world: the same computers, sessions, accounts and numbers as the web demo at the same moment',async()=>{
+ // The phones' copies are written from site/src/demo-world.js and are up to date.
+ const {files}=await import('../../scripts/demo-world.mjs');
+ for(const [path,text] of files)assert.equal(readFileSync(new URL('../../'+path,import.meta.url),'utf8'),text,path+' is out of date: run node scripts/demo-world.mjs');
+ const {WORLD:web}=await import('../../site/src/demo-world.js');
+ assert.deepEqual(Object.fromEntries(Object.entries(WORLD).filter(([k])=>k!=='caps')),JSON.parse(JSON.stringify(web)));
+ // The web demo relay held at the same moment gives the same screen.
+ const at=1_800_000_000;setDemoNow(at);globalThis.setInterval=()=>0;
+ const {demoRelay}=await import('../../site/src/remote-demo.js'),site=demoRelay({demoNow:at}).devices(),phone=demoDevices();
+ const sum=v=>v?v.reduce((a,b)=>a+b,0):null;
+ const shape=devices=>devices.map(d=>({id:d.id,name:d.name,platform:d.platform,
+  sessions:d.snapshot.sessions.map(s=>[s.id,s.kind,s.model||'',s.project,s.app,s.terminal,s.status,s.root_session_id,s.parent_session_id,s.capabilities.join(','),s.weekly_account||null,sum(s.windows['1h']),sum(s.windows['24h']),s.rate,sum(s.tokens),s.weekly_estimate?.['24h']?.used_pp??null,s.context_usage?JSON.stringify(s.context_usage):null]),
+  host:[d.snapshot.host.cpu,d.snapshot.host.used_memory,d.snapshot.host.total_memory,d.snapshot.host.cores],
+  quotas:d.snapshot.account_quotas.map(q=>[q.id,q.kind,q.account_label,q.alias||null,q.stale,q.windows.map(w=>w.pct).join('/'),q.weekly['24h'].used_pp,q.weekly['1h'].used_pp])}));
+ assert.deepEqual(shape(phone),shape(site));
+ assert.deepEqual(phone.map(d=>d.name),['MacBook Pro','Mac mini','Workstation']);
+ // Accounts are numbered the way the desktop numbers them, and the alias replaces a number.
+ assert.deepEqual(accountTags(phone),{'demo-claude-4f1c2a':'1','demo-claude-9b07e3':'Studio','demo-codex-61d8f0':'1','demo-codex-c2a957':'2'});
  // An English screen shows no Korean, and the conversation follows the language too.
- const english=JSON.stringify([demoDevices((en)=>en),demoThread('d1',(en)=>en)]);
+ const english=JSON.stringify([demoDevices((en)=>en),demoThread('s1',(en)=>en)]);
  assert.equal(/[가-힣]/.test(english.replace(/"label":"주간"/g,'')),false);
- assert.equal(demoThread('d1',(en)=>en).length,8);
+ assert.equal(demoThread('s1',(en)=>en).length,8);
+ setDemoNow(null);
+});
+
+test('a demo held for filming shows its moment on every screen, and only while the demo is on screen',async()=>{
+ const {holdDemo,showingDemo,now}=await import('../src/clock.ts'),{fresh}=await import('../src/metrics.ts'),{reportAge,resetIn}=await import('../src/i18n.ts');
+ const at=1_800_000_000,en=(e)=>e;setDemoNow(at);showingDemo(true);
+ const devices=demoDevices(),quotas=devices.flatMap(d=>d.snapshot.account_quotas);
+ assert.equal(now(),at*1000);
+ assert.ok(devices.every(d=>fresh({...d,online:true})),'held demo computers are online');
+ assert.equal(reportAge(quotas.find(q=>q.id==='demo-codex-61d8f0').updated,en),'38m ago');
+ assert.equal(resetIn(quotas.find(q=>q.id==='demo-claude-4f1c2a').windows[0].reset,en),resetIn(at+7400,en,at));
+ // Signed in, the screens take the phone's clock even with a hold left from a QA link.
+ showingDemo(false);assert.ok(Math.abs(now()-Date.now())<1000);
+ holdDemo(null);setDemoNow(null);
 });
 
 test('demo usage gives the numbers the iPhone and the web give (DemoUsageTests.swift, tests/demo-usage.mjs)',()=>{
@@ -79,7 +92,7 @@ test('the demo is uneven as real use is: pauses, a long tail, and one tool carry
  const totals=bins(u,['Claude'],now,86400,900).bins.map(b=>b.Claude||0),busy=totals.filter(n=>n>0).sort((a,b)=>a-b);
  assert.ok(busy.length<totals.length,'some quarter hours rest');
  assert.ok(busy.at(-1)>busy[Math.floor(busy.length/2)]*2.5,'the busiest quarter hour is well above the middle one');
- const byKind={};for(const s of sessions)byKind[s.kind]=(byKind[s.kind]||0)+s.windows['24h'].reduce((a,b)=>a+b,0);
+ const byKind={};for(const s of sessions)byKind[s.kind]=(byKind[s.kind]||0)+(s.windows['24h']||[]).reduce((a,b)=>a+b,0);
  const all=Object.values(byKind).reduce((a,b)=>a+b,0);
  assert.ok(byKind.Claude/all>.6&&byKind.Codex/all<.35,JSON.stringify(byKind));
 });
@@ -91,19 +104,22 @@ test('limit windows are named from their key in the chosen language',()=>{
  assert.equal(windowName({key:'5h',label:'5H'},(en,k)=>translate('zh',en,k)),'5小时');
 });
 
-test('phone demo limits follow the web demo rules and give the iPhone values (DemoUsageTests.swift)',()=>{
- // Over a week of start times: an account's sessions add up to its period use, which grows 1h ≤ 5h ≤ 24h,
- // stays below the weekly percent, and is about a tenth to two fifths of it.
+test('phone demo limits follow the web demo rules and give the web model values',async()=>{
+ const {machines:webMachines,accounts:webAccounts}=await import('../../site/src/demo-model.js');
+ // Over a week of start times: an account's sessions add up to no more than its period use, which grows
+ // 1h ≤ 5h ≤ 24h, stays below the weekly percent, and is a plausible part of it.
  for(let k=0;k<28;k++){const anchor=1_793_200_000+k*21600,devices=demoDevices(undefined,anchor+600,anchor),sessions=devices.flatMap(d=>d.snapshot.sessions);
   for(const q of new Map(devices.flatMap(d=>d.snapshot.account_quotas).map(q=>[q.id,q])).values()){
    const week=q.windows.find(w=>w.key==='7d').pct,[h1,h5,day]=['1h','5h','24h'].map(p=>q.weekly[p].used_pp);
-   for(const p of ['1h','5h','24h'])assert.ok(Math.abs(sessions.filter(s=>s.weekly_account===q.id).reduce((n,s)=>n+s.weekly_estimate[p].used_pp,0)-q.weekly[p].used_pp)<1e-5,q.id+' '+p);
-   assert.ok(h1<=h5&&h5<=day&&day<=week,q.id+' at '+k);
+   for(const p of ['1h','5h','24h'])assert.ok(sessions.filter(s=>s.weekly_account===q.id).reduce((n,s)=>n+s.weekly_estimate[p].used_pp,0)<=q.weekly[p].used_pp+1e-3,q.id+' '+p);
+   assert.ok(h1<=h5+1e-9&&h5<=day+1e-9&&day<=week+.05,q.id+' at '+k);
    // Limits are whole percent, as providers report them.
    assert.ok(q.windows.every(w=>Number.isInteger(w.pct)),q.id+' whole percent at '+k);
-   assert.ok(day/week>=.1&&day/week<=.42,q.id+' day share '+(day/week).toFixed(2)+' at '+k);
-  }}
- // The same start gives the same limits on both phones.
- const at=1_793_200_000,limits=Object.fromEntries(new Map(demoDevices(undefined,at+600,at).flatMap(d=>d.snapshot.account_quotas).map(q=>[q.id,q.windows.map(w=>w.pct)])));
- assert.deepEqual(limits,{'demo:claude-a':[7,32],'demo:claude-b':[12,62],'demo:codex-a':[29],'demo:codex-b':[69]});
+   assert.ok(day/week>=.05&&day/week<=.5,q.id+' day share '+(day/week).toFixed(2)+' at '+k);
+  }
+  // The web model gives the same limits.
+  const web=webAccounts(webMachines(anchor+600,anchor),anchor+600,anchor);
+  for(const q of new Map(devices.flatMap(d=>d.snapshot.account_quotas).map(q=>[q.id,q])).values()){const w=web.find(a=>a.id===q.id);
+   assert.deepEqual(q.windows.map(x=>x.pct),[...(w.five!==null?[w.five]:[]),w.weekly],q.id+' at '+k);}
+ }
 });

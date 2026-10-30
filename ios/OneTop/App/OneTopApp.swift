@@ -35,7 +35,7 @@ struct RootView: View {
         }
         .preferredColorScheme(model.appearance.scheme)
         #if DEBUG
-        // Screenshot runs open a screen directly: -screenTab usage, -screenDetail d1.
+        // Screenshot runs open a screen directly: -screenTab usage, -screenDetail s1.
         .task {
             let defaults = UserDefaults.standard
             if let tab = defaults.string(forKey: "screenTab").flatMap(Screen.init) { screen = tab }

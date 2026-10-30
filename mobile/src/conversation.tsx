@@ -6,7 +6,7 @@ import {Text} from './typography';
 import {useWorkspace} from './workspace';
 import {StateMark} from './state-mark';
 import {demoThread} from './demo';
-import {fresh} from './metrics';
+import {fresh,projectName} from './metrics';
 import {accountTags,short} from './fleet';
 import {toolWithAccount,shortModel,periodLabel} from './ui';
 import {Icon,type IconName} from './icons';
@@ -114,7 +114,7 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
  }
 
  const controls=Object.entries({focus:t('Open','열기'),pause:t('Pause','일시정지'),resume:t('Resume','재개'),terminate:t('Quit CLI','CLI 종료')}).filter(([a])=>caps.includes(a));
- const reported=w.when(row.device.received),tags=accountTags(w.devices||[]),name=row.terminal||row.project||row.title||t('Session','세션');
+ const reported=w.when(row.device.received),tags=accountTags(w.devices||[]),name=row.terminal||projectName(row,t)||row.title||t('Session','세션');
  const sum=(v:unknown)=>Array.isArray(v)?v.reduce((a:number,b:number)=>a+b,0):null;
  return <SafeAreaView style={st.fill}>
   {/* Android draws edge to edge, so the window no longer resizes for the keyboard: lift the composer here too. */}

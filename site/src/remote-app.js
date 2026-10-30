@@ -6,6 +6,11 @@ import {remoteState,findSession,isFresh} from './remote-adapter.js';
 import './remote-app.css';
 
 const demo=new URLSearchParams(location.search).has('demo');
+// QA and filming: /app?demo&demoNow=<unix seconds> holds the demo at that moment, the same moment the
+// desktop demo collector and the phones' QA options take, so every surface shows the same numbers. The
+// page's clock holds there too, so resets, report ages and the header clock read alike. Only the demo holds.
+const demoNow=demo&&Number(new URLSearchParams(location.search).get('demoNow'))||null;
+if(demoNow){const Real=Date,at=demoNow*1000;globalThis.Date=class extends Real{constructor(...a){super(...(a.length?a:[at]));}static now(){return at;}};}
 const PREFS='onetop.dashboard.v1',SCOPE='1top-remote-scope',RESULT_WAIT=25000;
 const read=key=>{try{return localStorage.getItem(key);}catch{return null;}};
 const write=(key,value)=>{try{localStorage.setItem(key,value);}catch{}};
@@ -27,7 +32,7 @@ document.documentElement.classList.add('remote');
 
 let scope=read(SCOPE)||'all',status={state:demo?'live':'connecting'},source=null;
 const waiting=new Map();
-const ready=(demo?import('./remote-demo.js').then(m=>m.demoRelay()):import('./remote-live.js').then(m=>m.liveRelay({onStatus:next=>{status=next;
+const ready=(demo?import('./remote-demo.js').then(m=>m.demoRelay({demoNow})):import('./remote-live.js').then(m=>m.liveRelay({onStatus:next=>{status=next;
  if(next.state==='signed-out'){location.replace('/sign-in');return;}renderChrome();if(next.state==='live')window.refresh?.();}}))).then(relay=>{
  source=relay;relay.onResult(m=>{const done=waiting.get(m.request?.request_id);if(done){waiting.delete(m.request.request_id);done(m);}});return relay;});
 const devices=()=>source?.devices()||[];

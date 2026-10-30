@@ -11,8 +11,6 @@ export const exact:Record<string,string>={
  "Change how search results are sorted.":"修改搜索结果的排序方式。",
  "Checkout redesign":"结账页面改版",
  "Compare it with the previous branch too.":"也和之前分支的结果比较一下。",
- "Demo Mac Studio":"演示 Mac Studio",
- "Demo Mac mini":"演示 Mac mini",
  "Deploy script":"部署脚本",
  "Design token cleanup":"设计令牌整理",
  "How far along are you?":"现在进展到哪里了？",

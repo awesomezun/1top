@@ -6,7 +6,8 @@ import * as Linking from 'expo-linking';
 import {nextLang,translate,when as clockText,type Lang} from './i18n';
 import {applyTheme,quick,type ThemeName} from './theme';
 import {API,selectRelay,api,loadToken,signIn,signOut,useConnection} from './connection';
-import {demoDevices} from './demo';
+import {demoDevices,setDemoNow} from './demo';
+import {now as shownNow,showingDemo} from './clock';
 import {fresh} from './metrics';
 import {sortSessions} from './session-order';
 import {applyReceipts,checkAttachments,EMPTY,inTurn,sendOutcome,TEXT_MAX,type Attachment,type Convo,type Mail} from './thread';
@@ -17,7 +18,9 @@ export type Appearance='system'|'light'|'dark';
 // Language, theme and the session value (weekly % or tokens) are remembered on this phone, as on the iPhone.
 const SAVED={lang:'onetop.language',appearance:'onetop.appearance',tokens:'onetop.sessionTokens'};
 export function WorkspaceProvider({children}:{children:React.ReactNode}){
- const [token,setToken]=useState<string|null>(null),[loading,setLoading]=useState(true),[demo,setDemo]=useState(false),[lang,setLangState]=useState<Lang>('ko'),[selected,setSelected]=useState('all'),[period,setPeriod]=useState<WindowKey>('1h'),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[pending,setPending]=useState<Record<string,string>>({}),[clock,setClock]=useState(()=>Date.now());
+ const [token,setToken]=useState<string|null>(null),[loading,setLoading]=useState(true),[demo,setDemoState]=useState(false),[lang,setLangState]=useState<Lang>('ko'),[selected,setSelected]=useState('all'),[period,setPeriod]=useState<WindowKey>('1h'),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[pending,setPending]=useState<Record<string,string>>({}),[clock,setClock]=useState(()=>shownNow());
+ // The screens' clock holds with the demo only while the demo is on screen (clock.ts).
+ const setDemo=(on:boolean)=>{showingDemo(on);setDemoState(on);setClock(shownNow());};
  const [relay,setRelay]=useState(API);
  const [controlMessages,setControlMessages]=useState<Record<string,{id:string;message:string;final:boolean}>>({});
  // Each session (device id : session id) keeps its own draft and timeline. A send that finishes late,
@@ -37,9 +40,11 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
    if(l==='ko'||l==='en'||l==='zh')setLangState(l);if(a==='system'||a==='light'||a==='dark')setAppearanceState(a);setTokensState(k==='1');}).catch(()=>{});
   Promise.all([prefs,loadToken().then(value=>{setToken(value);setRelay(API);}).catch(()=>setMessage('Unable to read saved sign-in.'))]).finally(()=>setLoading(false));},[]);
  // QA only: onetop://?qaDemoImages=2 puts that many drawn pictures in a demo conversation's composer, as the
- // iPhone's -qaDemoImages does. Only the demo reads it, and the demo never sends anything.
+ // iPhone's -qaDemoImages does; onetop://?qaDemoNow=<unix seconds> holds the demo at that moment, as the web
+ // page and the iPhone's -qaDemoNow do, for screenshots alike on every surface. Only the demo reads them,
+ // and the demo never sends anything.
  const [qaPhotos,setQaPhotos]=useState(0);
- useEffect(()=>{const read=(url:string|null)=>{if(!url)return;const n=Number(Linking.parse(url).queryParams?.qaDemoImages);if(n>0)setQaPhotos(Math.min(3,Math.floor(n)));};
+ useEffect(()=>{const read=(url:string|null)=>{if(!url)return;const q=Linking.parse(url).queryParams,n=Number(q?.qaDemoImages),at=Number(q?.qaDemoNow);if(n>0)setQaPhotos(Math.min(3,Math.floor(n)));if(at>0){setDemoNow(at);setClock(shownNow());}};
   Linking.getInitialURL().then(read).catch(()=>{});const sub=Linking.addEventListener('url',e=>read(e.url));return()=>sub.remove();},[]);
  const setLang=(next:Lang)=>{setLangState(next);SecureStore.setItemAsync(SAVED.lang,next).catch(()=>{});};
  const setAppearance=(next:Appearance)=>{setAppearanceState(next);SecureStore.setItemAsync(SAVED.appearance,next).catch(()=>{});};
@@ -61,7 +66,7 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
  const headed=useRef<Lang|null>(null),[shownLang,setShownLang]=useState<Lang|null>(null);
  const cycleLang=(x:number,y:number)=>{const first=headed.current===null,next=nextLang(headed.current??lang);headed.current=next;setShownLang(next);
   if(first)reveal(x,y,quick.background,()=>{if(headed.current)setLang(headed.current);headed.current=null;setShownLang(null);});};
- useEffect(()=>{const timer=setInterval(()=>setClock(Date.now()),2000);return()=>clearInterval(timer);},[]);
+ useEffect(()=>{const timer=setInterval(()=>setClock(shownNow()),2000);return()=>clearInterval(timer);},[]);
  // Reset view state at the authentication boundary to prevent cross-account carryover.
  // eslint-disable-next-line react-hooks/set-state-in-effect
  useEffect(()=>{setSelected('all');setPending({});setMessage('');setControlMessages({});setConvos({});seen.current=new Set();},[token,demo]);
