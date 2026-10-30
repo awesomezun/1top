@@ -29,10 +29,10 @@ export class AccountHub extends DurableObject<Env> {
     return this.ctx.storage.transaction(async storage=>{
       const raw=JSON.stringify(device.snapshot),key='snapshot:'+device.id;
       const old=await storage.get<{parts?:number}>(key);
-      const count=raw.length>24000?Math.ceil(raw.length/24000):0;
+      const count=raw.length>35000?Math.ceil(raw.length/35000):0;
       if(count){
         const values:Record<string,unknown>={[key]:{...device,snapshot:undefined,parts:count}};
-        for(let i=0;i<count;i++)values['snapshot-part:'+device.id+':'+i]=raw.slice(i*24000,(i+1)*24000);
+        for(let i=0;i<count;i++)values['snapshot-part:'+device.id+':'+i]=raw.slice(i*35000,(i+1)*35000);
         await storage.put(values);
       }else await storage.put(key,device);
       for(let i=count;i<(old?.parts||0);i++)await storage.delete('snapshot-part:'+device.id+':'+i);
@@ -92,7 +92,13 @@ export class AccountHub extends DurableObject<Env> {
       server.serializeAttachment({role,id,expires:Number(u.searchParams.get('expires')),name:u.searchParams.get('name')||'',platform:u.searchParams.get('platform')||'',allow_control:u.searchParams.get('control')==='1'} satisfies Attachment);
       if(role==='browser') {
         const records=await this.devices();
-        server.send(JSON.stringify({type:'state',devices:records.filter(v=>Date.now()-v.received<86400000).map(v=>({...v,online:this.isOnline(v.id)&&Date.now()-v.received<30000}))}));
+        const devices=records.filter(v=>Date.now()-v.received<86400000).map(v=>({...v,online:this.isOnline(v.id)&&Date.now()-v.received<30000}));
+        // A workspace can contain 25 large devices. Avoid one oversized initial frame.
+        const first:typeof devices=[],rest:typeof devices=[];let bytes=100;
+        for(const device of devices){const size=new TextEncoder().encode(JSON.stringify(device)).byteLength;
+          if(bytes+size<4194304){first.push(device);bytes+=size+1;}else rest.push(device);}
+        server.send(JSON.stringify({type:'state',devices:first}));
+        for(const device of rest)server.send(JSON.stringify({type:'snapshot',device}));
       }
       this.reportPolicy();
       await this.ctx.storage.setAlarm(Date.now()+60000);
@@ -140,7 +146,7 @@ export class AccountHub extends DurableObject<Env> {
     const a=ws.deserializeAttachment() as Attachment;
     if(ws.readyState!==1)return;
     if(a.expires<Date.now()){ws.close(4003,'Session expired');return;}
-    if(typeof message!=='string'||new TextEncoder().encode(message).byteLength>2097152){ws.close(1009,'Message too large');return;}
+    if(typeof message!=='string'||new TextEncoder().encode(message).byteLength>4194304){ws.close(1009,'Message too large');return;}
     if(message==='ping'){ws.send('pong');return;}
     try {
       const value=JSON.parse(message);

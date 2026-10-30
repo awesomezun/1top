@@ -9,7 +9,7 @@ MODE="${1:---notarized}"
 PYTHON="${ONETOP_PYTHON:-python3}"
 VERSION="$(PYTHONPATH=agent "$PYTHON" -c 'from onetop import __version__; print(__version__)')"
 APP="${2:-build/1top_v${VERSION}/1top.app}"
-OUT="release/v${VERSION}/1top-${VERSION}-macos-arm64.dmg"
+OUT="${ONETOP_RELEASE_ROOT:-release/v${VERSION}}/1top-${VERSION}-macos-arm64.dmg"
 [[ -d "$APP/Contents" ]] || { echo "Build the macOS app first: $APP" >&2; exit 1; }
 APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 [[ "$APP_VERSION" == "$VERSION" ]] || { echo 'App and source versions do not match.' >&2; exit 1; }
@@ -23,7 +23,7 @@ if [[ "$MODE" == --notarized ]]; then
   xcrun stapler validate "$APP"
   spctl --assess --type execute --verbose=2 "$APP"
 fi
-mkdir -p "release/v${VERSION}" build
+mkdir -p "$(dirname "$OUT")" build
 STAGE="$(mktemp -d "$PWD/build/dmg-${VERSION}.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 ditto "$APP" "$STAGE/1top.app"

@@ -58,7 +58,12 @@ it('rejects stale rename and unknown aliases; deduplicates accepted account edit
 });
 it('round-trips large snapshots across Durable Object storage value limits and removes chunks',async()=>{
  const hub=env.HUBS.get(env.HUBS.idFromName('chunks-'+crypto.randomUUID()));
- const snap=snapshot({sessions:Array.from({length:250},(_,i)=>({id:'s'+i,terminal:'가'.repeat(100),usage:{history:Array.from({length:60},(_,j)=>[j,1e10])},windows:Object.fromEntries([...Object.keys(SPEED_SECONDS),'all'].map(k=>[k,[1e10,2e10,3e10,4e10]]))}))});
+ const keys=[...Object.keys(SPEED_SECONDS),'all'];
+ const snap=snapshot({sessions:Array.from({length:250},(_,i)=>({id:'s'+i,terminal:'가'.repeat(100),weekly_account:'a'.repeat(64),
+ weekly_estimate:Object.fromEntries(keys.map(k=>[k,{account_id:'a'.repeat(64),used_pp:2.123456789,period_seconds:31536000,tokens:17280000,calibration:{pp_per_token:.000000123,confidence:'limited',from:1793320000,to:1793320600,valid_until:1793321200,source:'historical_provider_calibration',seconds:600,used_pp:2.123456789,tokens:17280000}}])),
+ usage:{history:Array.from({length:60},(_,j)=>[j,1e10])},windows:Object.fromEntries(keys.map(k=>[k,[1e10,2e10,3e10,4e10]]))}))});
+ expect(new TextEncoder().encode(JSON.stringify(snap)).length).toBeGreaterThan(2*1024*1024);
+ expect(new TextEncoder().encode(JSON.stringify(snap)).length).toBeLessThan(4*1024*1024);
  const device={id:crypto.randomUUID(),name:'test',platform:'test',received:Date.now(),snapshot:snap};
  await runInDurableObject(hub,async(i:any,state:any)=>{
    await i.storeDevice(device);expect(await i.readDevice(device.id)).toEqual(device);

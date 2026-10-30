@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 PYTHON="${ONETOP_PYTHON:-.venv/bin/python}"
 VERSION="$("$PYTHON" -c 'from onetop import __version__; print(__version__)')"
-APP="build/1top_v${VERSION}/1top.app"
+APP="${ONETOP_BUILD_ROOT:-build/1top_v${VERSION}}/1top.app"
 if [[ -e "$APP" ]]; then echo "Versioned build already exists: $APP" >&2; exit 1; fi
 "$PYTHON" -m PyInstaller --noconfirm --clean --name onetop-agent --onedir --collect-data onetop --collect-data certifi --copy-metadata opentelemetry-proto --copy-metadata protobuf --distpath build/agent-dist --workpath build/pyinstaller --specpath build scripts/agent_entry.py
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/agent"
