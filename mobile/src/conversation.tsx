@@ -10,6 +10,7 @@ import {fresh} from './metrics';
 import {accountTags,short} from './fleet';
 import {toolWithAccount,shortModel,periodLabel} from './ui';
 import {Icon,type IconName} from './icons';
+import {resetComposer} from '../modules/composer-reset';
 import {onTheme,quick as c} from './theme';
 import {pickPhotos,rejectionText} from './photos';
 import {activityLabel,attachmentSummary,bringBack,defaultPrompt,deliveryIcon,deliveryLabel,deliveryTone,effectiveStatus,EMPTY,kb,mergeMailbox,PHOTO_MAX,responseActivity,sendFailed,sendMode,sendOutcome,sendUnconfirmed,startSend,TEXT_MAX,workLabel,workState,type Convo,type Mail,type Phase,type Work} from './thread';
@@ -44,6 +45,9 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
  const draft=convo.draft,thread=convo.thread;
  const [picking,setPicking]=useState(false),[error,setError]=useState(''),[rejected,setRejected]=useState<string[]>([]);
  const scroll=useRef<React.ComponentRef<typeof ScrollView>>(null);
+ // A send hands the composer back to Android's keyboard afresh (modules/composer-reset); otherwise the
+ // keyboard types the word it was composing back in front of the next key.
+ const field=useRef<React.ComponentRef<typeof TextInput>>(null);
  useEffect(()=>{if(w.demo&&w.qaPhotos>0&&photosOk&&!w.convos[key])change(c=>({...c,draft:{...c.draft,photos:QA_PHOTOS.slice(0,w.qaPhotos)}}));
   // Once, when a demo conversation first opens.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -83,11 +87,13 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
   if(mode==='prompt'){
    // Older computers take a text instruction only; it is confirmed first and cannot be answered here.
    w.control(live,'prompt',body,(id:string,outcome:string)=>{if(outcome==='failed')return;
+    if(draft.text===sent.text)resetComposer(field.current,sent.text);
     w.updateConvo(key,(c:Convo)=>({draft:c.draft.text===sent.text?{...c.draft,text:''}:c.draft,thread:[...c.thread,{id,text:body,created:Date.now()/1000,status:outcome==='sent'?(w.demo?'instruction_sent':'sending'):'delivery_unconfirmed',reply:'',local:true,instruction:true}]}));});
    return;
   }
   const id=Crypto.randomUUID();
   // The composer empties now, so the next message can be written while this one travels.
+  resetComposer(field.current,sent.text);
   change(c=>startSend(c,{id,text:body,created:Date.now()/1000,status:'sending',reply:'',local:true,draft:sent,photos:sent.photos.map(p=>({uri:p.uri})),attachments:sent.photos.map(p=>({name:p.name,mime:p.mime,bytes:p.bytes}))}));
   try{
    await w.sendMessage(live,body,id,sent.photos.map(p=>({mime:p.mime,data:p.data})));
@@ -157,7 +163,7 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
      <Text style={{color:c.dim,fontSize:10.5,textAlign:'center',marginTop:3}}>{kb(p.bytes)}</Text></View>)}</ScrollView>}
     <View style={{flexDirection:'row',alignItems:'flex-end',gap:8}}>
      {mode==='message'&&photosOk&&<Pressable accessibilityRole="button" accessibilityLabel={t('Add photos','사진 추가')} disabled={photos.length>=PHOTO_MAX||picking} onPress={addPhotos} style={[st.icon,(photos.length>=PHOTO_MAX||picking)&&{opacity:.4}]}><Icon name="photo" size={20} color={c.ink}/></Pressable>}
-     <TextInput accessibilityLabel={mode==='prompt'?t('Instruction','지시 내용'):t('Message to this session','이 세션에 보낼 메시지')} multiline maxLength={TEXT_MAX} editable={mode!=='none'} value={draft.text} onChangeText={(text:string)=>change(c=>({...c,draft:{...c.draft,text}}))} placeholder={mode==='prompt'?t('Write an instruction…','지시를 입력하세요…'):t('Write a message…','메시지를 입력하세요…')} placeholderTextColor={c.dim} style={st.input}/>
+     <TextInput ref={field} accessibilityLabel={mode==='prompt'?t('Instruction','지시 내용'):t('Message to this session','이 세션에 보낼 메시지')} multiline maxLength={TEXT_MAX} editable={mode!=='none'} value={draft.text} onChangeText={(text:string)=>change(c=>({...c,draft:{...c.draft,text}}))} placeholder={mode==='prompt'?t('Write an instruction…','지시를 입력하세요…'):t('Write a message…','메시지를 입력하세요…')} placeholderTextColor={c.dim} style={st.input}/>
      <Pressable accessibilityRole="button" accessibilityLabel={mode==='prompt'?t('Instruct','지시'):t('Send','보내기')} disabled={!canSend} onPress={send} style={[st.send,!canSend&&{opacity:.35}]}><Icon name="send" size={20} color={c.onAccent}/></Pressable>
     </View>
     <Text style={{color:c.dim,fontSize:11}}>{photos.length?t(`${photos.length}/3 photos`,`사진 ${photos.length}/3`)+' · ':''}{t('A busy session may reply later. Sending can use AI tokens.','작업 중인 세션은 답신이 늦을 수 있습니다. 메시지 전송은 AI 토큰을 사용할 수 있습니다.')}</Text>
