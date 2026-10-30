@@ -382,6 +382,11 @@ def quick_native_checks(shell):
         return view.evaluate_js('({lang:document.documentElement.lang,theme:document.documentElement.dataset.theme})') or {}
     initial = prefs(quick)
     result['motion_environment'] = quick.evaluate_js('({supported:!!document.startViewTransition,reduced:matchMedia("(prefers-reduced-motion: reduce)").matches,visible:!document.hidden})')
+    # Hosted runners request reduced motion. Exercise the normal WebView2 path
+    # via a page-local media fixture, without changing the Windows user's setting.
+    if result['motion_environment']['reduced']:
+        quick.evaluate_js('window.__qaMedia=window.matchMedia;window.matchMedia=q=>{const m=window.__qaMedia(q);return q==="(prefers-reduced-motion: reduce)"?new Proxy(m,{get:(t,k)=>k==="matches"?false:typeof t[k]==="function"?t[k].bind(t):t[k]}):m}')
+        result['motion_emulated'] = True
     languages = []
     for lang in ('en', 'zh', 'ko'):
         shell.show_quick(shell.quick_point)
@@ -401,6 +406,7 @@ def quick_native_checks(shell):
         themes.append({'theme':theme,'synced':ok})
     result['themes'] = themes
     result['circle_animations'] = quick.evaluate_js('window.__qaCircles')
+    quick.evaluate_js('if(window.__qaMedia)window.matchMedia=window.__qaMedia;Element.prototype.animate=window.__qaAnimate')
     result['preferences_restored'] = prefs(quick) == initial
     window.show()
     runtime.bring_forward(runtime.window_handle(window))
@@ -438,10 +444,9 @@ def smoke(shell):
             match = next((s for s in state.get('sessions', []) if s['id'] == sid), {})
             fixture_ready = not sid or (match.get('tokens') == [100, 200, 10, 20]
                 and match.get('usage', {}).get('windows', {}).get('1h') == [100, 200, 10, 20])
-            quick_view = quick.evaluate_js('({ready:!!(window.OneTopQuick&&OneTopQuick.ready),rows:document.querySelectorAll("[data-session-row]").length,connection:document.querySelector("#quickConnection")?.textContent||null,lang:document.documentElement.lang})') or {}
-            if result and result.get('maps') and result.get('dataReady') and state.get('ready') and fixture_ready and quick_view.get('ready'):
+            quick_view = quick.evaluate_js('({ready:!!(window.OneTopQuick&&OneTopQuick.ready),rows:document.querySelectorAll("[data-session-row]").length,connection:document.querySelector("#quickConnection")?.textContent||null,lang:document.documentElement.lang,dataReady:window.OneTopQuick?.state?.data?.ready===true,render_error:window.OneTopQuick?.error||null})') or {}
+            if result and result.get('maps') and result.get('dataReady') and state.get('ready') and fixture_ready and quick_view.get('ready') and quick_view.get('dataReady') and quick_view.get('rows') == len(state.get('root_sessions') or state.get('sessions', [])):
                 result.update(window.evaluate_js('({connection:document.querySelector("#connectionText").textContent,rendered_sessions:document.querySelectorAll("#sessionsBody tr[data-session]").length,render_error:(()=>{try{render();return null}catch(e){return String(e.stack)}})()})'))
-                quick_view = quick.evaluate_js('(OneTopQuick.refresh().then(()=>({ready:OneTopQuick.ready,rows:document.querySelectorAll("[data-session-row]").length,connection:document.querySelector("#quickConnection").textContent,render_error:OneTopQuick.error})))') or quick_view
                 result.update(quick_ready=quick_view.get('ready'), quick_rows=quick_view.get('rows'),
                               quick_connection=quick_view.get('connection'), quick_render_error=quick_view.get('render_error'),
                               window_title=shell.t('window_title'))

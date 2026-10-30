@@ -84,11 +84,28 @@ class LocalConversationTests(unittest.TestCase):
              patch('onetop.server.time.sleep', side_effect=StopLoop):
             with self.assertRaises(StopLoop):
                 self.collector.loop()
+            self.collector.mailbox_worker.join(5)
         self.assertEqual(send.call_count, 1)
         self.assertIn(request_id, send.call_args.args[4])
         status, result = self.post('/api/mailbox', {'session_id': 'fixture', 'control_key': 'key'})
         self.assertEqual(status, 200)
         self.assertEqual([(m['id'], m['status']) for m in result['messages']], [(request_id, 'awaiting_reply')])
+
+    def test_slow_terminal_dispatch_neither_blocks_ticks_nor_spawns_duplicates(self):
+        entered=threading.Event();release=threading.Event()
+        def slow():entered.set();release.wait(5)
+        with patch.object(self.controller,'flush_mailbox',side_effect=slow) as flush:
+            try:
+                self.collector.tick_mailbox()
+                self.assertTrue(entered.wait(1))
+                worker=self.collector.mailbox_worker
+                before=time.monotonic()
+                for _ in range(20):self.collector.tick_mailbox()
+                self.assertLess(time.monotonic()-before,.2)
+                self.assertIs(self.collector.mailbox_worker,worker)
+                self.assertEqual(flush.call_count,1)
+            finally:
+                release.set();self.collector.mailbox_worker.join(5)
 
     def test_all_shared_dashboard_assets_are_served(self):
         for path, mime in [('conversation.js', 'application/javascript'), ('quick.html', 'text/html'),

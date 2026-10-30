@@ -93,7 +93,7 @@ with tempfile.TemporaryDirectory() as tmp:
             native=result['quick_native']
             assert all(native[k] for k in ('tool_window','not_app_window','within_work_area','blur_dismissed','preferences_restored','login_enabled','login_disabled','login_quick_view')), native
             assert all(r['synced'] for r in native['languages']+native['themes']), native
-            if native['motion_environment']['supported'] and not native['motion_environment']['reduced']:
+            if native['motion_environment']['supported'] and (not native['motion_environment']['reduced'] or native.get('motion_emulated')):
                 assert native['circle_animations'] >= 5, native
             else:
                 assert native['circle_animations'] == 0, native

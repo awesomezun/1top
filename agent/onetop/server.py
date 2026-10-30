@@ -814,6 +814,17 @@ class Collector:
                 'collection_ms':round((time.monotonic()-collect_started)*1000,1)}
         with self.lock:self.snapshot=result
 
+    def tick_mailbox(self):
+        # Terminal admission can take seconds. Keep collection fresh while a
+        # single dispatcher drains the durable queue; never spawn overlapping sends.
+        worker=getattr(self,'mailbox_worker',None)
+        if self.controller is None or worker and worker.is_alive():return
+        def dispatch():
+            try:self.controller.flush_mailbox()
+            except Exception as e:print('mailbox:',type(e).__name__,flush=True)
+        self.mailbox_worker=threading.Thread(target=dispatch,daemon=True,name='1top-mailbox')
+        self.mailbox_worker.start()
+
     def loop(self):
         self.accounts.start()
         self.initialize()
@@ -828,9 +839,7 @@ class Collector:
                 print('collector:',type(e).__name__,command,flush=True)
             # Local conversations must work without pairing or a relay socket.
             # One collector tick owns dispatch; the relay only admits requests.
-            if self.controller is not None:
-                try:self.controller.flush_mailbox()
-                except Exception as e:print('mailbox:',type(e).__name__,flush=True)
+            self.tick_mailbox()
             time.sleep(max(.2,3-(time.monotonic()-before)))
 
     def agy_loop(self):
