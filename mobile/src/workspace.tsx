@@ -100,17 +100,20 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
  function control(row:SessionRow,action:string,instruction?:string,after?:(id:string,outcome:'sent'|'failed'|'unconfirmed')=>void){
   if(!row||!fresh(row.device,20000)||!row.capabilities.includes(action)||pending[row.key])return;
   if(action==='prompt'&&(!instruction?.trim()||instruction.length>4000)){setMessage(t('Enter an instruction up to 4,000 characters.','4,000자 이내의 지시를 입력하세요.'));return;}
-  const labels:Record<string,string>={prompt:t('Send AI instruction','AI에게 지시 보내기'),focus:t('Open on computer','컴퓨터에서 열기'),pause:t('Pause work','작업 일시정지'),resume:t('Resume work','작업 재개'),terminate:t('Quit CLI','CLI 종료')};
-  Alert.alert(labels[action],row.device.name+' · '+row.app+' · '+row.terminal+'\n'+row.project+(action==='prompt'?'\n\n'+instruction!.slice(0,300)+(instruction!.length>300?'…':'')+'\n\n'+t('Sends a new instruction to this AI session. It may use tokens.','이 AI 세션에 새 지시를 보내며 토큰을 사용할 수 있습니다.'):action==='terminate'?'\n'+t('This ends the CLI process. Unsaved work may be lost.','CLI 프로세스를 종료합니다. 저장하지 않은 작업은 유실될 수 있습니다.'):'\n'+t('Runs on the selected computer.','선택한 컴퓨터에서 실행됩니다.')),[{text:t('Cancel','취소'),style:'cancel'},{text:labels[action],style:action==='terminate'?'destructive':'default',onPress:async()=>{
-   if(demo){const message=t('Demo only. No command was sent.','체험 화면입니다. 명령을 전송하지 않았습니다.');setMessage(message);setControlMessages(old=>({...old,[row.key]:{id:'demo',message,final:true}}));after?.('demo-'+Date.now(),'sent');return;}
-   if(!fresh(row.device,20000)||connection.state!=='live'){const message=t('Computer report is stale. Reconnect first.','컴퓨터 정보가 오래됐습니다. 먼저 재연결하세요.');setMessage(message);setControlMessages(old=>({...old,[row.key]:{id:'stale',message,final:true}}));return;}
-   const id=Crypto.randomUUID();setPending(old=>({...old,[row.key]:id}));
-   const report=(message:string,final=false)=>{setMessage(message);setControlMessages(old=>old[row.key]?.id===id&&old[row.key]?.final?old:({...old,[row.key]:{id,message,final}}));};
-   report(t('Sending…','전송 중…'));
-   try{const result=await api('/api/action',token!,{action,request_id:id,device_id:row.device.id,session_id:row.id,control_key:row.control_key,...(action==='prompt'?{prompt:instruction}:{})});after?.(id,'sent');report(result.status==='completed'?t('Completed','완료'):t('Sent. Waiting for the computer.','전송했습니다. 컴퓨터 응답을 기다립니다.'),result.status==='completed');}
-   catch(e:any){setPending(old=>{const next={...old};delete next[row.key];return next;});after?.(id,sendOutcome(e));report(e.message,true);return;}
-   setTimeout(()=>setPending(old=>{if(old[row.key]!==id)return old;const next={...old};delete next[row.key];report(t('Result unconfirmed. Check the computer before retrying.','결과 미확인. 다시 요청하기 전에 컴퓨터를 확인하세요.'),true);return next;}),25000);
-  }}]);
+  // An instruction from the conversation goes at once, as a message does; the session's own controls are confirmed first.
+  if(action==='prompt'){void run(row,action,instruction,after);return;}
+  const labels:Record<string,string>={focus:t('Open on computer','컴퓨터에서 열기'),pause:t('Pause work','작업 일시정지'),resume:t('Resume work','작업 재개'),terminate:t('Quit CLI','CLI 종료')};
+  Alert.alert(labels[action],row.device.name+' · '+row.app+' · '+row.terminal+'\n'+row.project+(action==='terminate'?'\n'+t('This ends the CLI process. Unsaved work may be lost.','CLI 프로세스를 종료합니다. 저장하지 않은 작업은 유실될 수 있습니다.'):'\n'+t('Runs on the selected computer.','선택한 컴퓨터에서 실행됩니다.')),[{text:t('Cancel','취소'),style:'cancel'},{text:labels[action],style:action==='terminate'?'destructive':'default',onPress:()=>run(row,action,instruction,after)}]);
+ }
+ async function run(row:SessionRow,action:string,instruction?:string,after?:(id:string,outcome:'sent'|'failed'|'unconfirmed')=>void){
+  if(demo){const message=t('Demo only. No command was sent.','체험 화면입니다. 명령을 전송하지 않았습니다.');setMessage(message);setControlMessages(old=>({...old,[row.key]:{id:'demo',message,final:true}}));after?.('demo-'+Date.now(),'sent');return;}
+  if(!fresh(row.device,20000)||connection.state!=='live'){const message=t('Computer report is stale. Reconnect first.','컴퓨터 정보가 오래됐습니다. 먼저 재연결하세요.');setMessage(message);setControlMessages(old=>({...old,[row.key]:{id:'stale',message,final:true}}));return;}
+  const id=Crypto.randomUUID();setPending(old=>({...old,[row.key]:id}));
+  const report=(message:string,final=false)=>{setMessage(message);setControlMessages(old=>old[row.key]?.id===id&&old[row.key]?.final?old:({...old,[row.key]:{id,message,final}}));};
+  report(t('Sending…','전송 중…'));
+  try{const result=await api('/api/action',token!,{action,request_id:id,device_id:row.device.id,session_id:row.id,control_key:row.control_key,...(action==='prompt'?{prompt:instruction}:{})});after?.(id,'sent');report(result.status==='completed'?t('Completed','완료'):t('Sent. Waiting for the computer.','전송했습니다. 컴퓨터 응답을 기다립니다.'),result.status==='completed');}
+  catch(e:any){setPending(old=>{const next={...old};delete next[row.key];return next;});after?.(id,sendOutcome(e));report(e.message,true);return;}
+  setTimeout(()=>setPending(old=>{if(old[row.key]!==id)return old;const next={...old};delete next[row.key];report(t('Result unconfirmed. Check the computer before retrying.','결과 미확인. 다시 요청하기 전에 컴퓨터를 확인하세요.'),true);return next;}),25000);
  }
  return <Context.Provider value={{relay,changeRelay,token,loading,demo,setDemo,lang,setLang,shownLang:shownLang??lang,ko:lang==='ko',appearance,setAppearance,theme,toggleTheme,cycleLang,tokensChosen,setTokensChosen,qaPhotos,qaScript,when,t,selected,setSelected,period,setPeriod,busy,message,setMessage,pending,controlMessages,clock,devices,visible,rows,connection,login,logout,control,sendMessage,convos,updateConvo}}><View style={{flex:1}}>{children}
   {cover&&<Animated.View pointerEvents="none" style={{position:'absolute',left:cover.x-cover.r,top:cover.y-cover.r,width:cover.r*2,height:cover.r*2,borderRadius:cover.r,backgroundColor:cover.color,opacity:fade,transform:[{scale:grow}]}}/>}

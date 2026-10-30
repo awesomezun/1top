@@ -79,6 +79,9 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
  const shown=thread.map(m=>({...m,status:effectiveStatus(m,now/1000)}));
  const activity=responseActivity(shown,work);
  const photos=draft.photos,blocked=photos.length>0&&!photosOk;
+ // Sending goes at once, with no confirmation: what this session does with a message is said where it is written.
+ const placeholder=mode==='prompt'?t('Instructions only. Write an instruction…','지시만 받는 세션입니다. 지시를 입력하세요…')
+  :mode==='message'&&work==='working'?t('Sends after the current work…','지금 작업이 끝나면 차례로 보냅니다…'):t('Write a message…','메시지를 입력하세요…');
  // Messages can follow one another without waiting; a prompt-only computer takes one instruction at a time.
  const canSend=available&&!noControl&&mode!=='none'&&!(mode==='prompt'&&w.pending[key])&&!blocked&&draft.text.length<=TEXT_MAX&&(draft.text.trim().length>0||photos.length>0);
 
@@ -92,7 +95,7 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
   if(!live||!canSend)return;
   const sent=draft,body=sent.text.trim()?sent.text:defaultPrompt(t);setError('');
   if(mode==='prompt'){
-   // Older computers take a text instruction only; it is confirmed first and cannot be answered here.
+   // Older computers take a text instruction only; it goes at once, as a message does, and cannot be answered here.
    w.control(live,'prompt',body,(id:string,outcome:string)=>{if(outcome==='failed')return;
     if(draft.text===sent.text)resetComposer(field.current,sent.text);
     w.updateConvo(key,(c:Convo)=>({draft:c.draft.text===sent.text?{...c.draft,text:''}:c.draft,thread:[...c.thread,{id,text:body,created:shownNow()/1000,status:outcome==='sent'?(w.demo?'instruction_sent':'sending'):'delivery_unconfirmed',reply:'',local:true,instruction:true}]}));});
@@ -176,7 +179,7 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
      <Text style={{color:c.dim,fontSize:10.5,textAlign:'center',marginTop:3}}>{kb(p.bytes)}</Text></View>)}</ScrollView>}
     <View style={{flexDirection:'row',alignItems:'flex-end',gap:8}}>
      {mode==='message'&&photosOk&&<Pressable accessibilityRole="button" accessibilityLabel={t('Add photos','사진 추가')} disabled={photos.length>=PHOTO_MAX||picking} onPress={addPhotos} style={[st.icon,(photos.length>=PHOTO_MAX||picking)&&{opacity:.4}]}><Icon name="photo" size={20} color={c.ink}/></Pressable>}
-     <TextInput ref={field} accessibilityLabel={mode==='prompt'?t('Instruction','지시 내용'):t('Message to this session','이 세션에 보낼 메시지')} multiline maxLength={TEXT_MAX} editable={mode!=='none'} value={draft.text} onChangeText={(text:string)=>change(c=>({...c,draft:{...c.draft,text}}))} placeholder={mode==='prompt'?t('Write an instruction…','지시를 입력하세요…'):t('Write a message…','메시지를 입력하세요…')} placeholderTextColor={c.dim} style={st.input}/>
+     <TextInput ref={field} accessibilityLabel={mode==='prompt'?t('Instruction','지시 내용'):t('Message to this session','이 세션에 보낼 메시지')} multiline maxLength={TEXT_MAX} editable={mode!=='none'} value={draft.text} onChangeText={(text:string)=>change(c=>({...c,draft:{...c.draft,text}}))} placeholder={placeholder} placeholderTextColor={c.dim} style={st.input}/>
      <Pressable accessibilityRole="button" accessibilityLabel={mode==='prompt'?t('Instruct','지시'):t('Send','보내기')} disabled={!canSend} onPress={send} style={[st.send,!canSend&&{opacity:.35}]}><Icon name="send" size={20} color={c.onAccent}/></Pressable>
     </View>
     <Text style={{color:c.dim,fontSize:11}}>{photos.length?t(`${photos.length}/3 photos`,`사진 ${photos.length}/3`)+' · ':''}{t('Messages can use AI tokens.','메시지를 보내면 AI 토큰이 쓰일 수 있습니다.')}</Text>

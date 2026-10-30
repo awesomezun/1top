@@ -220,12 +220,10 @@ final class AppModel {
 
     static func actionLabel(_ action: String) -> String {
         switch action {
-        case "prompt": L.t("Send AI instruction", "AI에게 지시 보내기")
         case "focus": L.t("Open on computer", "컴퓨터에서 열기")
         case "pause": L.t("Pause work", "작업 일시정지")
         case "resume": L.t("Resume work", "작업 재개")
         case "terminate": L.t("Quit CLI", "CLI 종료")
-        case "message": L.t("Send message", "메시지 보내기")
         default: action
         }
     }

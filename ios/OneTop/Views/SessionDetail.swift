@@ -1,15 +1,12 @@
 import PhotosUI
 import SwiftUI
 
-/// A control the person picked; it runs only after the confirmation below. `composer` marks the
-/// conversation's own send, which takes the session's draft (text and photos) as it is.
+/// A control the person picked; it runs only after the confirmation below. The conversation's own send
+/// goes at once, as in a chat app.
 struct ControlRequest: Identifiable {
     let id = UUID()
     var session: Session
     var action: String
-    var instruction: String?
-    var photos = 0
-    var composer = false
 }
 
 extension View {
@@ -26,8 +23,7 @@ private struct ControlConfirmation: ViewModifier {
                                    isPresented: Binding(get: { request != nil }, set: { if !$0 { request = nil } }),
                                    titleVisibility: .visible, presenting: request) { r in
             Button(AppModel.actionLabel(r.action), role: r.action == "terminate" ? .destructive : nil) {
-                if r.composer { Task { await model.sendConversation(r.session) } }
-                else { Task { await model.control(r.session, action: r.action, instruction: r.instruction) } }
+                Task { await model.control(r.session, action: r.action) }
             }
             .accessibilityIdentifier("confirm-action")
             Button(L.t("Cancel", "취소"), role: .cancel) {}
@@ -42,15 +38,6 @@ private struct ControlConfirmation: ViewModifier {
         let place = [model.device(for: s)?.name, s.app, s.terminal].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         let head = place + "\n" + (s.displayProject ?? s.name)
         switch r.action {
-        case "prompt", "message":
-            let text = r.instruction ?? "", preview = text.count > 300 ? String(text.prefix(300)) + "…" : text
-            var lines = [head, "", preview]
-            if r.photos > 0 { lines.append(L.t("Photos: \(r.photos)", "사진 \(r.photos)장")) }
-            lines.append("")
-            lines.append(r.action == "message"
-                ? L.t("Sends a message to this AI session; its answer shows up here. It may use tokens.", "이 AI 세션에 메시지를 보냅니다. AI의 답은 이 화면에 나오며, 토큰을 사용할 수 있습니다.")
-                : L.t("Sends a new instruction to this AI session. It may use tokens.", "이 AI 세션에 새 지시를 보내며 토큰을 사용할 수 있습니다."))
-            return lines.joined(separator: "\n")
         case "terminate":
             return head + "\n" + L.t("This ends the CLI process. Unsaved work may be lost.", "CLI 프로세스를 종료합니다. 저장하지 않은 작업은 유실될 수 있습니다.")
         default:
@@ -109,7 +96,7 @@ struct SessionDetail: View {
                     Spacer()
                 } else {
                     ConversationTimeline(session: s)
-                        .safeAreaInset(edge: .bottom) { Composer(session: s, request: $request) }
+                        .safeAreaInset(edge: .bottom) { Composer(session: s) }
                 }
             }
             .navigationTitle(s.name)
@@ -121,8 +108,8 @@ struct SessionDetail: View {
         #if DEBUG
         .onAppear {
             let defaults = UserDefaults.standard
-            if let action = defaults.string(forKey: "screenConfirm"), current.can(action) {
-                request = ControlRequest(session: current, action: action, instruction: action == "prompt" ? "이어서 테스트하고 오류 고쳐줘" : nil)
+            if let action = defaults.string(forKey: "screenConfirm"), Self.controls.contains(action), current.can(action) {
+                request = ControlRequest(session: current, action: action)
             }
             // -qaDemoScript YES: the conversation script's message (demo-world.js), its text in the chosen
             // language and its photo, ready to send for filming, as Android's onetop://?qaDemoScript=1.
@@ -424,11 +411,10 @@ struct TypingIndicator: View {
 }
 
 /// One composer for questions and instructions: text, up to three photos when the session takes
-/// them, and one send button. Sending asks for confirmation first.
+/// them, and one send button that sends at once, as in a chat app.
 struct Composer: View {
     @Environment(AppModel.self) private var model
     var session: Session
-    @Binding var request: ControlRequest?
     @State private var picked: [PhotosPickerItem] = []
     @FocusState private var typing: Bool
 
@@ -438,6 +424,10 @@ struct Composer: View {
 
     var body: some View {
         let d = draft.wrappedValue, block = model.sendBlock(session), photosOK = session.can("message_images")
+        // Sending goes at once, with no confirmation: what this session does with a message is said where it is written.
+        let placeholder = session.can("message")
+            ? (model.workState(session) == "working" ? L.t("Sends after the current work…", "지금 작업이 끝나면 차례로 보냅니다…") : L.t("Write a message…", "메시지를 입력하세요…"))
+            : session.can("prompt") ? L.t("Instructions only. Write an instruction…", "지시만 받는 세션입니다. 지시를 입력하세요…") : L.t("Write a message…", "메시지를 입력하세요…")
         // Messages can follow one another while earlier ones are still on their way; an instruction-only
         // session takes one control at a time.
         let busy = (model.sending[session.key] ?? 0) > 0 || model.pending[session.key] != nil
@@ -481,8 +471,7 @@ struct Composer: View {
                     .accessibilityLabel(L.t("Add photos", "사진 추가"))
                     .accessibilityIdentifier("photo-pick")
                 }
-                TextField(session.can("message") ? L.t("Write a message…", "메시지를 입력하세요…") : L.t("Write an instruction…", "지시를 입력하세요…"),
-                          text: draft.text, axis: .vertical)
+                TextField(placeholder, text: draft.text, axis: .vertical)
                     .lineLimit(1...6)
                     .focused($typing)
                     .padding(.horizontal, 14).padding(.vertical, 10)
@@ -493,7 +482,7 @@ struct Composer: View {
                     }
                     .accessibilityLabel(L.t("Message to session", "세션에 보낼 메시지"))
                     .accessibilityIdentifier("mail-draft")
-                Button { confirm() } label: {
+                Button { Task { await model.sendConversation(session) } } label: {
                     Image(systemName: "arrow.up").font(.body.weight(.semibold)).frame(width: 30, height: 30)
                         .overlay(alignment: .topTrailing) { if busy { Circle().fill(.white.opacity(0.9)).frame(width: 7, height: 7).offset(x: 3, y: -3) } }
                 }
@@ -527,16 +516,6 @@ struct Composer: View {
             }
             model.drafts[key, default: Draft()].error = reasons.isEmpty ? nil : reasons.joined(separator: "\n")
         }
-    }
-
-    private func confirm() {
-        let d = draft.wrappedValue
-        let text = d.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? AppModel.photoPrompt : d.text
-        // Put the keyboard away first, or the confirmation opens behind it and cannot be tapped.
-        typing = false
-        let ask = ControlRequest(session: session, action: session.can("message") ? "message" : "prompt", instruction: text,
-                                 photos: d.photos.count, composer: true)
-        Task { @MainActor in try? await Task.sleep(for: .milliseconds(350)); request = ask }
     }
 }
 

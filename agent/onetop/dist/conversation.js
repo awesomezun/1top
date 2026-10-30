@@ -1,5 +1,5 @@
 /* Session conversation in the session detail: a chat with the session, up to three photos a message. Same contract as the phone (mobile-conversation-contract_v1.2.0) and the same composition as
-   its conversation screen: work state, timeline, typing indicator, composer, confirmation.
+   its conversation screen: work state, timeline, typing indicator, composer. A message goes at once.
    One `message` action carries questions and instructions; delivery states only move forward and rows
    are merged by ID. The collector answers POST /api/action and POST /api/mailbox; on 1top.si the
    remote workspace answers the same requests through the relay. */
@@ -92,7 +92,7 @@
  // ---------- Browser view ----------
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const drafts=new Map(),boxes=new Map(),failed=new Map(),sentPhotos=new Map(),sending=new Map();
- let root$=null,dialog$=null,current=null,context={},timer=0,reading=false,pending=null;
+ let root$=null,current=null,context={},timer=0,reading=false;
  const draftOf=key=>{if(!drafts.has(key))drafts.set(key,{text:'',photos:[],error:''});return drafts.get(key);};
  const boxOf=key=>{if(!boxes.has(key))boxes.set(key,{messages:[],error:'',missing:false});return boxes.get(key);};
  const language=()=>root.OneTopI18n?.language||'ko';
@@ -103,13 +103,13 @@
   const result=await response.json().catch(()=>({}));return {status:response.status,result};
  }
 
- function mount(element,confirmDialog){
-  root$=element;dialog$=confirmDialog;
+ function mount(element){
+  root$=element;
   root$.innerHTML=`<div class="conversation-log" role="log" aria-live="polite"></div><form class="composer"><div class="composer-state"></div><div class="composer-photos"></div><p class="composer-note" role="alert"></p><div class="composer-row"><label class="composer-photo" title="사진 추가"><input type="file" accept="image/jpeg,image/png" multiple hidden><span aria-hidden="true">＋</span><span class="visually-hidden">사진 추가</span></label><textarea rows="1" aria-label="세션에 보낼 메시지"></textarea><button type="submit" class="composer-send" aria-label="메시지 보내기">↑</button></div><small class="composer-foot">메시지를 보내면 AI 토큰이 쓰일 수 있습니다.</small></form>`;
   const form=root$.querySelector('form'),input=root$.querySelector('textarea'),file=root$.querySelector('input[type=file]');
   input.addEventListener('input',()=>{if(!current)return;const d=draftOf(current.id);d.text=input.value.slice(0,MAX_TEXT);if(input.value!==d.text)input.value=d.text;d.error='';fit(input);renderComposer();});
   input.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();form.requestSubmit();}});
-  form.addEventListener('submit',e=>{e.preventDefault();confirm();});
+  form.addEventListener('submit',e=>{e.preventDefault();submit();});
   file.addEventListener('change',async()=>{
    if(!current)return;const key=current.id,files=[...file.files];file.value='';const reasons=[];
    for(const f of files){
@@ -124,9 +124,6 @@
    const back=e.target.closest('[data-bring-back]');
    if(back&&current)bringBack(back.dataset.bringBack,current.id);
   });
-  dialog$.querySelector('[data-message-cancel]').onclick=()=>{pending=null;dialog$.close();};
-  dialog$.querySelector('[data-message-confirm]').onclick=()=>{const ask=pending;pending=null;dialog$.close();if(ask)send(ask);};
-  dialog$.addEventListener('cancel',()=>{pending=null;});
  }
  const fit=input=>{input.style.height='auto';input.style.height=Math.min(input.scrollHeight,140)+'px';};
 
@@ -156,16 +153,12 @@
   finally{reading=false;if(current?.id===s.id)renderTimeline();}
  }
 
- function confirm(){
+ // Sends at once, as a chat app does; what the session does with a message is said in the composer.
+ function submit(){
   const s=current;if(!s)return;const d=draftOf(s.id),block=sendBlock(s,d,context.fresh);
   if(!d.text.trim()&&!d.photos.length)return;
   if(block){d.error=block;renderComposer();return;}
-  const caps=capabilities(s),message=caps.has('message'),text=d.text.trim()?d.text:PHOTO_PROMPT[language()]||PHOTO_PROMPT.en;
-  pending={session:s,action:message?'message':'prompt',text,photos:d.photos.length};
-  dialog$.querySelector('[data-message-title]').textContent=message?'이 세션에 메시지를 보낼까요?':'이 AI에게 지시를 보낼까요?';
-  dialog$.querySelector('[data-message-target]').textContent=`${context.name||s.project||''}\n${text}${d.photos.length?`\n📷 × ${d.photos.length}`:''}`;
-  dialog$.querySelector('[data-message-explanation]').textContent=message?'작업 중인 세션에는 현재 작업이 끝난 뒤 접수 순서대로 전달됩니다. 메시지 전송은 AI 토큰을 사용할 수 있습니다.':'이 세션은 지시만 받아 새 요청으로 전달합니다. 결과는 컴퓨터에서 확인하세요. AI 토큰을 사용할 수 있습니다.';
-  dialog$.showModal();dialog$.querySelector('[data-message-confirm]').focus();
+  send({session:s,action:capabilities(s).has('message')?'message':'prompt',text:d.text.trim()?d.text:PHOTO_PROMPT[language()]||PHOTO_PROMPT.en});
  }
 
  // A definite refusal (4xx) keeps the draft; an unknown fate (5xx, time-out, lost connection) is
@@ -235,8 +228,10 @@
   root$.querySelector('.composer-photos').innerHTML=d.photos.map((p,i)=>`<span class="composer-preview"><img src="${p.preview}" alt=""><button type="button" data-photo-remove="${p.id}" aria-label="사진 지우기">×</button></span>`).join('');
   const note=root$.querySelector('.composer-note'),text=d.error||(block&&(d.text||d.photos.length)?block:'');note.textContent=text;note.className='composer-note'+(d.error?' error':' warn');note.hidden=!text;
   const photo=root$.querySelector('.composer-photo');photo.hidden=!caps.has('message_images');photo.classList.toggle('disabled',d.photos.length>=MAX_PHOTOS);photo.querySelector('input').disabled=d.photos.length>=MAX_PHOTOS;
-  // i18n.js leaves text fields alone, so the hint is translated here.
-  root$.querySelector('textarea').placeholder=(root.OneTopI18n?.t||(x=>x))(caps.has('message')?'메시지를 입력하세요…':'지시를 입력하세요…');
+  // With no confirmation before sending, the hint says what this session does with a message. i18n.js
+  // leaves text fields alone, so it is translated here.
+  const hint=caps.has('message')?(work==='working'?'지금 작업이 끝나면 차례로 보냅니다…':'메시지를 입력하세요…'):caps.has('prompt')?'지시만 받는 세션입니다. 지시를 입력하세요…':'메시지를 입력하세요…';
+  root$.querySelector('textarea').placeholder=(root.OneTopI18n?.t||(x=>x))(hint);
   const sendButton=root$.querySelector('.composer-send');sendButton.disabled=!!block||!(d.text.trim()||d.photos.length);sendButton.classList.toggle('busy',busy);
  }
 
