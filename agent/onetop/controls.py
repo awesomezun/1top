@@ -309,7 +309,7 @@ class Controller:
                 self.receipts[rid]=(request,{'message':'이 지시의 전달 결과가 미확인입니다. 세션에서 확인한 뒤 새 요청을 보내세요.','started':False})
                 if action=='message':
                     try:prompt=self.mailbox.begin(spec,rid,prompt,images)
-                    except (OSError,ValueError):raise ActionError('이 세션의 답신 연결을 확인하지 못했습니다. 메시지를 전송하지 않았습니다.')
+                    except (OSError,ValueError):raise ActionError('이 세션과의 대화 연결을 확인하지 못했습니다. 메시지를 보내지 않았습니다.')
                 if spec['kind']=='Aside':
                     from .aside import cli_path
                     mode='queue' if current['status']=='working' else 'resume'
