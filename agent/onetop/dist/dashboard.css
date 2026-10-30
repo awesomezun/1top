@@ -590,15 +590,16 @@ dialog h2{font-size:var(--type-heading);font-weight:650}
 .mail-out,.mail-in{display:grid;gap:6px;max-width:86%;padding:10px 12px;border-radius:14px;font-size:var(--type-body)}
 .mail-out{justify-self:end;background:var(--accent-soft);border:1px solid var(--accent-line,transparent)}
 .mail-in{justify-self:start;background:var(--panel-2);border:1px solid var(--line)}
-.mail-in>b{font-size:var(--type-caption);color:var(--accent-ink,var(--accent));font-weight:600}
+.mail-from{display:flex;align-items:center;gap:6px;justify-self:start;margin:4px 0 -4px 2px;color:var(--muted);font-size:var(--type-caption);font-weight:600}
+.mail-from svg{width:14px;height:14px;fill:var(--ai,var(--accent))}
 .mail-in>small{color:var(--dim);font-size:var(--type-caption)}
 .mail-text{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
 .mail-photos{display:flex;gap:6px}.mail-photos img{width:72px;height:72px;object-fit:cover;border-radius:10px}
 .mail-files{margin:0;color:var(--muted);font-size:var(--type-caption)}
-.mail-status{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:var(--type-caption)}
+.mail-status{display:flex;align-items:center;gap:4px;justify-self:end;margin:-4px 4px 0 0;color:var(--dim);font-size:var(--type-caption)}
 .mail-status i{font-style:normal;width:12px;text-align:center}
 .mail-status.warn{color:var(--amber)}.mail-status.error{color:var(--red)}
-.mail-back{justify-self:start;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--ink);font-size:var(--type-caption)}
+.mail-back{justify-self:end;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--ink);font-size:var(--type-caption)}
 /* Under the latest message the session is answering: three small dots that rise and fade in turn. */
 .typing{display:flex;align-items:center;gap:8px;padding:2px 6px;color:var(--muted);font-size:var(--type-caption)}
 .typing-dots{display:inline-flex;gap:4px;height:12px;align-items:center}

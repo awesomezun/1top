@@ -14,13 +14,13 @@ import {accountTags,short} from './fleet';
 import {toolWithAccount,shortModel,periodLabel} from './ui';
 import {Icon,type IconName} from './icons';
 import {resetComposer} from '../modules/composer-reset';
-import {onTheme,quick as c} from './theme';
+import {onTheme,quick as c,toolColor,toolName} from './theme';
 import {pickPhotos,rejectionText} from './photos';
-import {activityLabel,attachmentSummary,bringBack,defaultPrompt,deliveryIcon,deliveryLabel,deliveryTone,effectiveStatus,EMPTY,forward,kb,mergeMailbox,PHOTO_MAX,responseActivity,sendFailed,sendMode,sendOutcome,sendUnconfirmed,startSend,TEXT_MAX,workLabel,workState,type Convo,type Mail,type Work} from './thread';
+import {activityLabel,attachmentSummary,bringBack,defaultPrompt,deliveryIcon,deliveryLabel,deliveryMeaning,deliveryTone,effectiveStatus,EMPTY,forward,kb,mergeMailbox,PHOTO_MAX,responseActivity,sendFailed,sendMode,sendOutcome,sendUnconfirmed,startSend,TEXT_MAX,workLabel,workState,type Convo,type Mail,type Work} from './thread';
 import type {SessionRow} from './types';
 
-// One conversation per session: its live work at the top, then messages and replies, then one composer.
-// Delivery of each message is shown on the message; the session's work is shown apart from it.
+// One conversation per session, as in a chat app: its live work at the top, then the messages with the AI's
+// under them, then one composer. A small state sits under each sent message, apart from the session's work.
 // The demo's pictures: the conversation script's checkout screen (demo-world.js) and a plain one, as on
 // the iPhone; the relay itself returns no image data.
 const DEMO_PHOTOS:Record<string,number>={'demo:checkout':require('../assets/demo/checkout.png'),'demo:2':require('../assets/demo/photo-2.png')};
@@ -49,6 +49,9 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
  const draft=convo.draft,thread=convo.thread;
  const [picking,setPicking]=useState(false),[error,setError]=useState(''),[rejected,setRejected]=useState<string[]>([]);
  const scroll=useRef<React.ComponentRef<typeof ScrollView>>(null);
+ // The newest message stays in view. The AI's message comes as the dots and the sent message's state go, and
+ // the first scroll can land before that layout is on screen, so it scrolls once more just after.
+ const toEnd=()=>{scroll.current?.scrollToEnd({animated:false});setTimeout(()=>scroll.current?.scrollToEnd({animated:false}),150);};
  // A send hands the composer back to Android's keyboard afresh (modules/composer-reset); otherwise the
  // keyboard types the word it was composing back in front of the next key.
  const field=useRef<React.ComponentRef<typeof TextInput>>(null);
@@ -113,7 +116,7 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
    // A refusal (4xx) brings the text and photos back only into an empty composer; otherwise they stay on
    // the refused message. No answer, a timeout or a server error may still have delivered it: never resend.
    if(sendOutcome(e)==='failed'){w.updateConvo(key,(c:Convo)=>sendFailed(c,id,e.message));setError(e.message);}
-   else{w.updateConvo(key,(c:Convo)=>sendUnconfirmed(c,id));setError(t('No answer from the relay. The message may still arrive; check the session before sending again.','릴레이 응답이 없습니다. 전달됐을 수 있으니 다시 보내기 전에 세션을 확인하세요.'));}
+   else{w.updateConvo(key,(c:Convo)=>sendUnconfirmed(c,id));setError(deliveryMeaning('delivery_unconfirmed',t));}
   }
  }
 
@@ -139,7 +142,8 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
     {!noControl&&!available&&<Text style={st.note}>{t('Sending and controls need a fresh report from this computer.','보내기와 제어는 이 컴퓨터의 최신 보고가 있어야 합니다.')}</Text>}
     {!!w.controlMessages[row.key]&&<Text style={st.note}>{w.controlMessages[row.key].message}</Text>}
    </View>
-   <ScrollView ref={scroll} style={{flex:1}} contentContainerStyle={{padding:16,gap:14}} onContentSizeChange={()=>scroll.current?.scrollToEnd({animated:false})} onLayout={()=>scroll.current?.scrollToEnd({animated:false})} keyboardShouldPersistTaps="handled">
+   <ScrollView ref={scroll} style={{flex:1}} contentContainerStyle={{padding:16,gap:14}} onContentSizeChange={toEnd} onLayout={toEnd} keyboardShouldPersistTaps="handled">
+    <Text style={st.note}>{t('Only chats from 1top show here.','1top에서 나눈 대화만 표시됩니다.')}</Text>
     {!shown.length&&<View style={{paddingVertical:20,gap:8}}><Text style={{color:c.ink,fontSize:18,fontWeight:'600'}}>{noControl?t('No conversation','대화가 없습니다'):t('Ask or tell this session','이 세션에 묻거나 맡기세요')}</Text>
      {!noControl&&<Text style={{color:c.muted,fontSize:14,lineHeight:21}}>{t('“How far along are you?” · “Fix the failing test next.”','“지금 어디까지 진행됐어?” · “이어서 실패한 테스트 고쳐 줘.”')}</Text>}</View>}
     {shown.map(m=><View key={m.id} style={{gap:8}}>
@@ -147,16 +151,21 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
       {!!m.photos?.length&&<View style={{flexDirection:'row',gap:6,marginBottom:8}}>{m.photos.map((p,i)=><Image key={i} source={photoSource(p.uri)} style={st.sent} accessibilityLabel={t(`Photo ${i+1}`,`사진 ${i+1}`)}/>)}</View>}
       {!m.photos?.length&&!!m.attachments?.length&&<View style={{flexDirection:'row',alignItems:'center',gap:6,marginBottom:6}}><Icon name="photo" size={15} color={c.muted}/><Text style={{color:c.muted,fontSize:12,flexShrink:1}}>{attachmentSummary(m.attachments,t)}</Text></View>}
       <Text selectable style={{color:c.ink,fontSize:15.5,lineHeight:22}}>{m.text}</Text>
-      {(()=>{const tone=m.status==='not_delivered'||m.status==='not_sent'?c.soft:deliveryTone(m.status)==='problem'?c.amber:c.muted;return <View style={{flexDirection:'row',alignItems:'center',gap:6,marginTop:6}}><Icon name={deliveryIcon(m.status)} size={14} color={tone}/><Text style={{fontSize:11.5,color:tone,flexShrink:1}}>{deliveryLabel(m.status,t)}</Text></View>;})()}
-      {m.status==='not_sent'&&<>{!!m.error&&<Text style={{marginTop:3,fontSize:11.5,color:c.muted}}>{m.error}</Text>}
-       {!!m.draft&&<Pressable testID="bring-back" accessibilityRole="button" onPress={()=>change(cv=>bringBack(cv,m.id))} style={st.bring}><Text style={{color:c.ink,fontSize:12,fontWeight:'600'}}>{t('Bring back to the composer','입력창으로 다시 가져오기')}</Text></Pressable>}</>}
      </View>
-     {!!m.reply&&<View style={st.reply}><Text style={{color:c.muted,fontSize:11.5,marginBottom:6}}>{t('Reply from the session','세션의 답신')}</Text><Text selectable style={{color:c.ink,fontSize:15.5,lineHeight:23}}>{m.reply}</Text>{m.truncated&&<Text style={{color:c.muted,fontSize:12,marginTop:6}}>{t('Long reply shortened.','긴 답신의 일부를 표시합니다.')}</Text>}</View>}
+     {(()=>{const label=deliveryLabel(m.status,t),meaning=deliveryMeaning(m.status,t);if(!label)return null;
+      const tone=m.status==='not_delivered'||m.status==='not_sent'?c.soft:deliveryTone(m.status)==='problem'?c.amber:c.dim;
+      return <View testID="mail-status" accessible accessibilityLabel={meaning?label+(w.lang==='zh'?'，':'. ')+meaning:label} style={st.state}><Icon name={deliveryIcon(m.status)} size={12} color={tone}/><Text style={{fontSize:11.5,color:tone}}>{label}</Text></View>;})()}
+     {m.status==='not_sent'&&<>{!!m.error&&<Text style={{alignSelf:'flex-end',marginTop:-4,fontSize:11.5,color:c.muted}}>{m.error}</Text>}
+      {!!m.draft&&<Pressable testID="bring-back" accessibilityRole="button" onPress={()=>change(cv=>bringBack(cv,m.id))} style={st.bring}><Text style={{color:c.ink,fontSize:12,fontWeight:'600'}}>{t('Try again','다시 시도')}</Text></Pressable>}</>}
+     {!!m.reply&&<View style={{gap:6}}>
+      <View testID="mail-from" style={st.from}><Icon name="sparkle" size={14} color={toolColor(row.kind)}/><Text style={{color:c.muted,fontSize:12,fontWeight:'600'}}>{toolName(row.kind)}</Text></View>
+      <View style={st.reply}><Text selectable style={{color:c.ink,fontSize:15.5,lineHeight:23}}>{m.reply}</Text>{m.truncated&&<Text style={{color:c.muted,fontSize:12,marginTop:6}}>{t('Long message shortened.','길어서 앞부분만 표시합니다.')}</Text>}</View>
+     </View>}
     </View>)}
    </ScrollView>
    {activity&&<Typing label={activityLabel(activity.phase,t)}/>}
    {noControl?null:<View style={st.composer}>
-    {mode==='prompt'&&<Text style={[st.note,{color:c.amber}]}>{t('This computer’s 1top cannot send replies. Your text goes as an instruction only; check the answer on the computer.','이 컴퓨터의 1top은 답신을 보낼 수 없습니다. 입력한 내용은 지시로만 전달되며, 답은 컴퓨터에서 확인해야 합니다.')}</Text>}
+    {mode==='prompt'&&<Text style={[st.note,{color:c.amber}]}>{t('This session takes instructions only. See the result on the computer.','이 세션은 지시만 받습니다. 결과는 컴퓨터에서 확인하세요.')}</Text>}
     {mode==='none'&&<Text style={st.note}>{t('This session cannot take input right now. For a running terminal, pause the work first.','이 세션은 지금 입력을 받을 수 없습니다. 실행 중인 터미널은 먼저 작업을 멈춘 뒤 확인하세요.')}</Text>}
     {blocked&&<Text style={[st.note,{color:c.amber}]}>{t('This session cannot take photos. Your photos are kept but will not be sent; remove them to send text, or open a session that takes photos.','이 세션은 사진을 받을 수 없습니다. 고른 사진은 남겨 두었고 보내지 않습니다. 글만 보내려면 사진을 빼거나, 사진을 받는 세션을 여세요.')}</Text>}
     {rejected.map((r,i)=><Text key={i} style={[st.note,{color:c.amber}]}>{r}</Text>)}
@@ -170,7 +179,7 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
      <TextInput ref={field} accessibilityLabel={mode==='prompt'?t('Instruction','지시 내용'):t('Message to this session','이 세션에 보낼 메시지')} multiline maxLength={TEXT_MAX} editable={mode!=='none'} value={draft.text} onChangeText={(text:string)=>change(c=>({...c,draft:{...c.draft,text}}))} placeholder={mode==='prompt'?t('Write an instruction…','지시를 입력하세요…'):t('Write a message…','메시지를 입력하세요…')} placeholderTextColor={c.dim} style={st.input}/>
      <Pressable accessibilityRole="button" accessibilityLabel={mode==='prompt'?t('Instruct','지시'):t('Send','보내기')} disabled={!canSend} onPress={send} style={[st.send,!canSend&&{opacity:.35}]}><Icon name="send" size={20} color={c.onAccent}/></Pressable>
     </View>
-    <Text style={{color:c.dim,fontSize:11}}>{photos.length?t(`${photos.length}/3 photos`,`사진 ${photos.length}/3`)+' · ':''}{t('A busy session may reply later. Sending can use AI tokens.','작업 중인 세션은 답신이 늦을 수 있습니다. 메시지 전송은 AI 토큰을 사용할 수 있습니다.')}</Text>
+    <Text style={{color:c.dim,fontSize:11}}>{photos.length?t(`${photos.length}/3 photos`,`사진 ${photos.length}/3`)+' · ':''}{t('Messages can use AI tokens.','메시지를 보내면 AI 토큰이 쓰일 수 있습니다.')}</Text>
    </View>}
   </KeyboardAvoidingView>
  </SafeAreaView>;
@@ -207,7 +216,10 @@ const make=()=>StyleSheet.create({
  sent:{width:72,height:72,borderRadius:8,backgroundColor:c.raised},
  typing:{flexDirection:'row',alignItems:'center',gap:8,paddingHorizontal:18,paddingVertical:6},
  composer:{gap:8,paddingHorizontal:12,paddingTop:10,paddingBottom:12,borderTopWidth:1,borderTopColor:c.line,backgroundColor:c.background},
- bring:{alignSelf:'flex-start',marginTop:8,paddingHorizontal:10,paddingVertical:6,borderRadius:8,borderWidth:1,borderColor:c.line},
+ // A sent message's state sits just under it, at its edge; the AI's name just over its message.
+ state:{alignSelf:'flex-end',flexDirection:'row',alignItems:'center',gap:4,marginTop:-4,marginRight:4},
+ from:{flexDirection:'row',alignItems:'center',gap:6,marginLeft:2},
+ bring:{alignSelf:'flex-end',marginTop:-2,paddingHorizontal:10,paddingVertical:6,borderRadius:8,borderWidth:1,borderColor:c.line},
  thumb:{width:64,height:64,borderRadius:8,backgroundColor:c.raised},
  remove:{position:'absolute',top:-6,right:-6,width:20,height:20,borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:c.raised,borderWidth:1,borderColor:c.background},
  icon:{width:44,height:44,borderRadius:22,alignItems:'center',justifyContent:'center',backgroundColor:c.raised},

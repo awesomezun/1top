@@ -342,9 +342,9 @@ final class DeviceQATests: XCTestCase {
         #if !targetEnvironment(simulator)
         throw XCTSkip("Filmed in the simulator.")
         #endif
-        let words: [String: [String: String]] = ["ko": ["responding": "응답 준비 중…", "working": "작업 중…", "writing": "답변 작성 중…"],
-                                                 "en": ["responding": "Preparing a reply…", "working": "Working…", "writing": "Writing a reply…"],
-                                                 "zh": ["responding": "正在准备回复…", "working": "工作中…", "writing": "正在撰写回复…"]]
+        let words: [String: [String: String]] = ["ko": ["responding": "생각하는 중…", "working": "작업 중…", "writing": "작성 중…"],
+                                                 "en": ["responding": "Thinking…", "working": "Working…", "writing": "Writing…"],
+                                                 "zh": ["responding": "正在思考…", "working": "工作中…", "writing": "正在撰写…"]]
         for (lang, text) in [("ko", "지금 어디까지 했어?"), ("en", "How far along are you?"), ("zh", "现在进展到哪里了？")] {
             let app = XCUIApplication()
             app.launchArguments = ["--demo", "-qaGuard", "YES", "-appearance", "dark", "-language", lang, "-qaDemoNow", "1800000000", "-screenDetail", "s1"]
@@ -407,6 +407,12 @@ final class DeviceQATests: XCTestCase {
             shot(app, "27-\(lang)-2-dots")
             XCTAssertTrue(wait(app.staticTexts.matching(identifier: "mail-reply").element(boundBy: replies), "exists == true", timeout: 15), "No reply")
             sleep(1)
+            // As in a chat app: the AI's message under its name, no state under an answered message, and no
+            // "reply" anywhere on the screen but in the name of the demo project support-replies, behind the sheet.
+            XCTAssertEqual(element(app, "mail-from").label, "Claude Code")
+            XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier == 'mail-status' AND value == 'replied'")).count, 0)
+            let old = NSPredicate(format: "(label CONTAINS[c] 'repl' OR label CONTAINS '답신' OR label CONTAINS '回复') AND NOT label CONTAINS 'support-replies'")
+            XCTAssertEqual(app.descendants(matching: .any).matching(old).count, 0, "A \"reply\" word is on the screen")
             shot(app, "27-\(lang)-3-reply")
             app.terminate()
         }
@@ -441,11 +447,11 @@ final class DeviceQATests: XCTestCase {
         XCTAssertFalse(confirm.waitForExistence(timeout: 2), "Confirmation still open")
         XCTAssertTrue((draft.value as? String ?? "").contains("QA demo question"), "Draft lost after closing the confirmation")
         XCTAssertTrue(element(app, "photo-preview-0").exists, "Photo lost after closing the confirmation")
-        // The earlier messages: two replies and one unconfirmed delivery, each delivery on its own line.
+        // The earlier messages: two answered, with nothing under them, and one not confirmed, with its state.
         let states = app.descendants(matching: .any).matching(identifier: "mail-status")
-        XCTAssertEqual(states.count, 3, "Earlier messages missing")
-        XCTAssertEqual(states.matching(NSPredicate(format: "value == 'replied'")).count, 2)
+        XCTAssertEqual(states.count, 1, "Earlier messages missing")
         XCTAssertEqual(states.matching(NSPredicate(format: "value == 'delivery_unconfirmed'")).count, 1)
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "mail-from").count, 2, "The AI's messages carry no name")
         // Controls stay reachable while composing.
         XCTAssertTrue(element(app, "control-pause").isHittable && element(app, "control-terminate").isHittable, "Controls not reachable")
         tapWhenReady(element(app, "control-terminate"), "Quit CLI")

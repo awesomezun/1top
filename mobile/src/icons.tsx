@@ -3,7 +3,7 @@ import Svg,{Circle,Defs,G,Line,Mask,Path,Polygon,Polyline,Rect} from 'react-nati
 
 // Vector icons in the shapes of the iPhone's SF Symbols, so both phones point at the same things:
 // gauge.with.needle, terminal, square.grid.2x2, chart.bar.xaxis, gearshape and the controls.
-export type IconName='dashboard'|'sessions'|'usage'|'limits'|'workspace'|'computer'|'moon'|'sun'|'more'|'focus'|'pause'|'resume'|'terminate'|'send'|'photo'|'close'|'check'|'clock'|'sending'|'waiting'|'replied'|'warning'|'branch'|'failed';
+export type IconName='dashboard'|'sessions'|'usage'|'limits'|'workspace'|'computer'|'moon'|'sun'|'more'|'focus'|'pause'|'resume'|'terminate'|'send'|'photo'|'close'|'check'|'clock'|'sending'|'warning'|'branch'|'failed'|'sparkle';
 
 const gear=(()=>{const teeth=8,out=10.2,inn=7.8,pts:string[]=[];for(let i=0;i<teeth*4;i++){const a=(i/(teeth*4))*Math.PI*2-Math.PI/2,r=i%4<2?out:inn;pts.push(`${12+r*Math.cos(a)},${12+r*Math.sin(a)}`);}return pts.join(' ');})();
 
@@ -28,10 +28,11 @@ export function Icon({name,size=24,color,cut='#000'}:{name:IconName;size?:number
   case 'close':return <G><Line x1={6} y1={6} x2={18} y2={18} stroke={color} strokeWidth={2.2} strokeLinecap="round"/><Line x1={18} y1={6} x2={6} y2={18} stroke={color} strokeWidth={2.2} strokeLinecap="round"/></G>;
   case 'clock':return <G><Circle cx={12} cy={12} r={9.5} fill="none" stroke={color} strokeWidth={1.8}/><Polyline points="12,7 12,12 15.5,14" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"/></G>;
   case 'sending':return <G><Circle cx={12} cy={12} r={9.5} fill="none" stroke={color} strokeWidth={1.8}/><Line x1={12} y1={16.5} x2={12} y2={8} stroke={color} strokeWidth={1.8} strokeLinecap="round"/><Polyline points="8.5,11 12,7.5 15.5,11" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"/></G>;
-  case 'waiting':case 'replied':return <G><Path d="M4 5.5h16a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5v-3.5H4A1.5 1.5 0 0 1 2.5 16V7A1.5 1.5 0 0 1 4 5.5Z" fill="none" stroke={color} strokeWidth={1.7} strokeLinejoin="round"/>{name==='waiting'?<G fill={color}><Circle cx={8} cy={11.5} r={1.2}/><Circle cx={12} cy={11.5} r={1.2}/><Circle cx={16} cy={11.5} r={1.2}/></G>:<Polyline points="8,11.5 11,14 16,9" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"/>}</G>;
   case 'warning':return <G><Path d="M12 3.5 21.5 20h-19Z" fill="none" stroke={color} strokeWidth={1.8} strokeLinejoin="round"/><Line x1={12} y1={9.5} x2={12} y2={14} stroke={color} strokeWidth={1.9} strokeLinecap="round"/><Circle cx={12} cy={17} r={1.1} fill={color}/></G>;
   case 'branch':return <G fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><Path d="M12 21v-7l-6-6"/><Path d="M12 14l6-6"/><Polyline points="3.5,8 6,5.5 8.5,8" transform="rotate(-45 6 6.5)"/><Polyline points="15.5,8 18,5.5 20.5,8" transform="rotate(45 18 6.5)"/></G>;
   case 'failed':return <G><Circle cx={12} cy={12} r={9.5} fill="none" stroke={color} strokeWidth={1.8}/><Line x1={8.8} y1={8.8} x2={15.2} y2={15.2} stroke={color} strokeWidth={2} strokeLinecap="round"/><Line x1={15.2} y1={8.8} x2={8.8} y2={15.2} stroke={color} strokeWidth={2} strokeLinecap="round"/></G>;
+  // The AI's mark beside its name in a conversation, filled in its tool colour.
+  case 'sparkle':return <Path d="M12 2c.6 5.2 4.8 9.4 10 10-5.2.6-9.4 4.8-10 10-.6-5.2-4.8-9.4-10-10 5.2-.6 9.4-4.8 10-10Z" fill={color}/>;
   case 'check':return <Polyline points="5,12.5 10,17.5 19,6.5" fill="none" stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"/>;
  }})();
  return <Svg width={size} height={size} viewBox="0 0 24 24">{body}</Svg>;
