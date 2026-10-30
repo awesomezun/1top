@@ -70,6 +70,14 @@ it('round-trips large snapshots across Durable Object storage value limits and r
    expect((await i.devices())[0].snapshot.sessions).toHaveLength(250);
    const stored=await state.storage.list({prefix:'snapshot-part:'});expect(stored.size).toBeGreaterThan(1);
    for(const value of stored.values())expect(new TextEncoder().encode(JSON.stringify(value)).length).toBeLessThan(128000);
-   await i.removeDevice(device.id);expect((await state.storage.list()).size).toBe(0);
+   await i.storeDevice({...device,id:'second'});
  });
+ const viewer=await socket(hub,'browser',crypto.randomUUID());
+ const initial=next(viewer,'state'),overflow=next(viewer,'snapshot');
+ const first=await initial,second=await overflow;
+ expect(first.devices).toHaveLength(1);
+ expect(new Set([first.devices[0].id,second.device.id])).toEqual(new Set([device.id,'second']));
+ expect(new TextEncoder().encode(JSON.stringify(first)).length).toBeLessThan(4*1024*1024);
+ viewer.close();
+ await runInDurableObject(hub,async(i:any,state:any)=>{await i.removeDevice(device.id);await i.removeDevice('second');expect((await state.storage.list()).size).toBe(0);});
 });
