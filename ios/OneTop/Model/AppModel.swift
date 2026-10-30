@@ -383,30 +383,24 @@ final class AppModel {
             kept.error = L.t("This session cannot receive messages right now.", "현재 이 세션에 메시지를 보낼 수 없습니다."); drafts[key] = kept; return
         }
         let text = typed.isEmpty ? Self.photoPrompt : draft.text
-        let id = UUID().uuidString.lowercased(), created = Date().timeIntervalSince1970, photos = draft.photos
+        let id = UUID().uuidString.lowercased(), created = DemoData.shownNow(), photos = draft.photos
         let listed = photos.enumerated().map { i, p in MailAttachment(id: nil, name: "photo-\(i + 1).jpg", mime: "image/jpeg", bytes: Double(p.jpeg.count)) }
         func bubble(_ status: String, reply: String? = nil) -> MailMessage {
             MailMessage(id: id, text: text, created: created, status: status, reply: reply, replyAt: reply == nil ? nil : created,
                         truncated: false, local: true, attachments: listed.isEmpty ? nil : listed)
         }
         if connection == .demo {
-            // The demo session answers over a few seconds, going through each response phase the
-            // computer can report, so the typing indicator and its end can be seen.
-            mailboxes[key, default: Mailbox()].messages.append(bubble("awaiting_reply"))
+            // The conversation script (demo-world.js), as on the web and Android: taken in, delivered, the
+            // session's three phases, then the scripted reply, each at its time after sending.
+            mailboxes[key, default: Mailbox()].messages.append(bubble("sending"))
             if !photos.isEmpty { sentPhotos[id] = photos.map(\.preview) }
             drafts[key] = Draft()
             Task { [weak self] in
-                for phase in ["responding", "working", "writing", nil] as [String?] {
-                    try? await Task.sleep(for: .seconds(2.5))
+                var elapsed = 0.0
+                for step in DemoWorld.script.steps {
+                    try? await Task.sleep(for: .seconds(step.at - elapsed)); elapsed = step.at
                     guard let self, var box = self.mailboxes[key], let i = box.messages.firstIndex(where: { $0.id == id }) else { return }
-                    if let phase {
-                        box.messages[i].activity = MailActivity(phase: phase, observedAt: Date().timeIntervalSince1970)
-                    } else {
-                        box.messages[i].activity = nil
-                        box.messages[i].status = "replied"
-                        box.messages[i].reply = L.t("Demo reply: I have finished the first checks and am reviewing the remaining failures.", "예시 답신: 첫 검사를 마쳤고 남은 오류를 확인하고 있습니다.")
-                        box.messages[i].replyAt = Date().timeIntervalSince1970
-                    }
+                    box.messages[i] = DemoData.scriptStep(step, box.messages[i], at: DemoData.shownNow())
                     self.mailboxes[key] = box
                 }
             }
@@ -563,7 +557,6 @@ final class AppModel {
         resetAccountState()
         devices = DemoData.devices()
         mailboxes = DemoData.mailboxes()
-        sentPhotos[DemoData.photoMessage] = PhotoPrep.demo(2).map(\.preview)
         controlOff = DemoData.controlOff
         connection = .demo
     }

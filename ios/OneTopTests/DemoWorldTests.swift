@@ -40,4 +40,26 @@ final class DemoWorldTests: XCTestCase {
         for s in DemoWorld.sessions { XCTAssertEqual(sessions[s.id]?.capabilities, s.caps, s.id) }
         XCTAssertEqual(DemoData.controlOff, ["demo-1"])
     }
+
+    /// The conversation demo opens on its earlier messages with nothing being answered, and a sent message
+    /// follows the script: delivery only moves forward, the phases come and go, and the reply ends them.
+    @MainActor func testConversationFollowsTheWorld() {
+        let saved = L.language
+        defer { L.language = saved }
+        L.language = .en
+        let at = DemoWorldExpected.checkAt, box = DemoData.mailboxes(now: at)["demo-0:s1"]
+        XCTAssertEqual(box?.messages.map(\.text), DemoWorld.earlierMessages.map { $0.text.en })
+        XCTAssertEqual(box?.messages.map(\.status), ["replied", "replied", "delivery_unconfirmed"])
+        XCTAssertEqual(box?.messages.compactMap(\.activity).count, 0)
+        XCTAssertEqual(box?.messages.compactMap { $0.attachments?.map(\.name) }.flatMap { $0 }, ["receipt.png"])
+        var sent = MailMessage(id: "q", text: "Mine", created: at, status: "sending", reply: nil, replyAt: nil, truncated: false, local: true)
+        var seen: [String] = []
+        for step in DemoWorld.script.steps {
+            sent = DemoData.scriptStep(step, sent, at: at + step.at)
+            seen.append(sent.status + (sent.activity.map { ":" + $0.phase } ?? ""))
+        }
+        XCTAssertEqual(seen, ["queued", "awaiting_reply", "awaiting_reply:responding", "awaiting_reply:working", "awaiting_reply:writing", "replied"])
+        XCTAssertEqual(sent.text, "Mine")
+        XCTAssertEqual(sent.reply, DemoWorld.script.reply.en)
+    }
 }

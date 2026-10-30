@@ -124,9 +124,12 @@ struct SessionDetail: View {
             if let action = defaults.string(forKey: "screenConfirm"), current.can(action) {
                 request = ControlRequest(session: current, action: action, instruction: action == "prompt" ? "이어서 테스트하고 오류 고쳐줘" : nil)
             }
-            let count = defaults.integer(forKey: "qaDemoImages")
+            // -qaDemoScript YES: the conversation script's message (demo-world.js), its text in the chosen
+            // language and its photo, ready to send for filming, as Android's onetop://?qaDemoScript=1.
+            let script = defaults.bool(forKey: "qaDemoScript"), count = max(defaults.integer(forKey: "qaDemoImages"), script ? 1 : 0)
             if count > 0, (model.drafts[current.key]?.photos ?? []).isEmpty {
                 model.drafts[current.key, default: Draft()].photos = PhotoPrep.demo(count)
+                if script { model.drafts[current.key, default: Draft()].text = DemoWorld.script.text[L.language.rawValue] }
             }
         }
         #endif

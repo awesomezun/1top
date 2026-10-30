@@ -21,6 +21,7 @@ export const WORLD:DemoWorld=${JSON.stringify(world,null,1)};
 
 const num=n=>{const s=String(n);return s.includes('e')||s.includes('.')?s:s+(Number.isInteger(n)?'':'')};
 const str=v=>v===null||v===undefined?'nil':JSON.stringify(v);
+const C=WORLD.conversation,words=w=>`Words(ko: ${str(w.ko)}, en: ${str(w.en)}, zh: ${str(w.zh)})`;
 const swift=`// ${HEAD}
 // swiftlint:disable all
 enum DemoWorld {
@@ -31,6 +32,10 @@ enum DemoWorld {
     struct Earlier { let computer: Int, kind: String, account: String?, model: String?, project: String, weight: Double }
     struct Goal { let runtime: String, status: String, tokensUsed: Double, timeUsedSeconds: Double, sessionConnected: Bool }
     struct Operations { let installedSkills: Int, observedEvents: Int, goals: [Goal] }
+    struct Words { let ko: String, en: String, zh: String; subscript(_ lang: String) -> String { lang == "ko" ? ko : lang == "zh" ? zh : en } }
+    struct Message { let ago: Double, status: String, replied: Double?, photos: [String], text: Words, reply: Words? }
+    struct Step { let at: Double, status: String, activity: String? }
+    struct Script { let text: Words, photo: String, steps: [Step], reply: Words }
     static let rest: UInt32 = ${WORLD.rest}
     static let computers: [Computer] = [
 ${WORLD.computers.map(c=>`        Computer(id: ${str(c.id)}, name: ${str(c.name)}, platform: ${str(c.platform)}, seed: ${c.seed}, scale: ${num(c.scale)}, duty: ${num(c.duty)}, control: ${c.control}, cores: ${c.cores}, memory: ${num(c.memory)}, used: ${num(c.used)}, cpu: (${num(c.cpu[0])}, ${num(c.cpu[1])})),`).join('\n')}
@@ -47,6 +52,14 @@ ${WORLD.children.map(([lead,name,share,status])=>`        Child(lead: ${str(lead
     static let earlier: [Earlier] = [
 ${WORLD.earlier.map(([c,kind,account,model,project,weight])=>`        Earlier(computer: ${c}, kind: ${str(kind)}, account: ${str(account)}, model: ${str(model)}, project: ${str(project)}, weight: ${num(weight)}),`).join('\n')}
     ]
+    /// The conversation demo (site/src/demo-world.js conversation): its session, earlier messages and script.
+    static let conversationSession = ${str(C.session)}
+    static let earlierMessages: [Message] = [
+${C.earlier.map(m=>`        Message(ago: ${num(m.ago)}, status: ${str(m.status)}, replied: ${m.replied?num(m.replied):'nil'}, photos: ${JSON.stringify(m.photos||[])}, text: ${words(m.text)}, reply: ${m.reply?words(m.reply):'nil'}),`).join('\n')}
+    ]
+    static let script = Script(text: ${words(C.script.text)}, photo: ${str(C.script.photo)}, steps: [
+${C.script.steps.map(s=>`        Step(at: ${num(s.at)}, status: ${str(s.status)}, activity: ${str(s.activity)}),`).join('\n')}
+    ], reply: ${words(C.script.reply)})
     static let operations: [Operations] = [
 ${WORLD.operations.map(o=>`        Operations(installedSkills: ${o.installed_skills}, observedEvents: ${o.observed_events}, goals: [${o.goals.map(g=>`Goal(runtime: ${str(g.runtime)}, status: ${str(g.status)}, tokensUsed: ${num(g.tokens_used)}, timeUsedSeconds: ${num(g.time_used_seconds)}, sessionConnected: ${g.session_connected})`).join(', ')}]),`).join('\n')}
     ]
@@ -81,11 +94,16 @@ ${limitRows.join('\n')}
 `;
 
 const files=[['mobile/src/demo-world.ts',ts],['ios/OneTop/Model/DemoWorld.swift',swift],['ios/OneTopTests/DemoWorldExpected.swift',expected]];
+// The script's photo, which the phones carry in their own bundles.
+const photo=readFileSync(new URL('site/public/'+C.script.photo,root));
+const photos=[['mobile/assets/demo/checkout.png',photo],['ios/OneTop/Resources/Assets.xcassets/DemoCheckout.imageset/checkout.png',photo]];
 if(import.meta.url===`file://${process.argv[1]}`){
  const check=process.argv.includes('--check'),stale=[];
  for(const [path,text] of files){const url=new URL(path,root);let old='';try{old=readFileSync(url,'utf8');}catch{}
   if(old!==text){if(check)stale.push(path);else writeFileSync(url,text);}}
+ for(const [path,data] of photos){const url=new URL(path,root);let old=null;try{old=readFileSync(url);}catch{}
+  if(!old||!old.equals(data)){if(check)stale.push(path);else writeFileSync(url,data);}}
  if(check&&stale.length){console.error('Out of date; run node scripts/demo-world.mjs: '+stale.join(', '));process.exit(1);}
  console.log(check?'The phones carry the demo world.':'Wrote '+files.map(f=>f[0]).join(', '));
 }
-export {files};
+export {files,photos};

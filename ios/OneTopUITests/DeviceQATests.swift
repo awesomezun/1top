@@ -361,10 +361,15 @@ final class DeviceQATests: XCTestCase {
             shot(app, "26-\(lang)-1-sent")
             let dots = element(app, "typing-indicator")
             XCTAssertTrue(dots.waitForExistence(timeout: 10), "No dots while the session answers")
-            sleep(3)
-            let phase = dots.value as? String ?? ""
-            XCTAssertEqual(dots.label, words[lang]?[phase], "The phase is not read out")
-            XCTAssertFalse(app.staticTexts[dots.label].exists, "The phase is written beside the dots")
+            sleep(1)
+            // The script moves to the next phase every 2.2 seconds: read the phase and its words in one step.
+            var phase = "", label = ""
+            for _ in 0..<3 {
+                phase = dots.value as? String ?? ""; label = dots.label
+                if phase == dots.value as? String { break }
+            }
+            XCTAssertEqual(label, words[lang]?[phase], "The phase is not read out")
+            XCTAssertFalse(app.staticTexts[label].exists, "The phase is written beside the dots")
             shot(app, "26-\(lang)-2-dots")
             let reply = app.staticTexts.matching(identifier: "mail-reply")
             XCTAssertTrue(wait(reply.element(boundBy: replies), "exists == true", timeout: 20), "No reply")
@@ -374,19 +379,51 @@ final class DeviceQATests: XCTestCase {
         }
     }
 
-    /// Demo: the one conversation screen. Two sample photos in the composer (debug -qaDemoImages),
-    /// one removed; the send confirmation opened and closed with the draft kept; every delivery state
-    /// and a session reply in the timeline; work state and controls reachable; a prompt-only session's notice.
+    /// Simulator only, held at one moment: the conversation script (demo-world.js) as filmed for the landing
+    /// page. The conversation opens on its earlier messages with no dots; the script's message and photo are
+    /// in the composer (-qaDemoScript); sent, it is taken in, the dots show while the session answers, and the
+    /// scripted reply ends them. Korean, English and Chinese.
+    func test27_ScriptForFilming() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Filmed in the simulator.")
+        #endif
+        for lang in ["ko", "en", "zh"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--demo", "-qaGuard", "YES", "-appearance", "dark", "-language", lang, "-qaDemoNow", "1800000000",
+                                   "-screenDetail", "s1", "-qaDemoScript", "YES"]
+            app.launch()
+            let draft = element(app, "mail-draft")
+            XCTAssertTrue(draft.waitForExistence(timeout: 15), "Conversation did not open")
+            XCTAssertTrue(element(app, "photo-preview-0").waitForExistence(timeout: 10), "The script's photo is not in the composer")
+            XCTAssertFalse(element(app, "typing-indicator").waitForExistence(timeout: 2), "Dots before anything was sent")
+            shot(app, "27-\(lang)-0-open")
+            let replies = app.staticTexts.matching(identifier: "mail-reply").count
+            tapWhenReady(element(app, "mail-send"), "Send")
+            tapWhenReady(element(app, "confirm-action"), "Confirm send")
+            sleep(1)
+            shot(app, "27-\(lang)-1-sent")
+            XCTAssertTrue(element(app, "typing-indicator").waitForExistence(timeout: 10), "No dots while the session answers")
+            sleep(2)
+            shot(app, "27-\(lang)-2-dots")
+            XCTAssertTrue(wait(app.staticTexts.matching(identifier: "mail-reply").element(boundBy: replies), "exists == true", timeout: 15), "No reply")
+            sleep(1)
+            shot(app, "27-\(lang)-3-reply")
+            app.terminate()
+        }
+    }
+
+    /// Demo: the one conversation screen. It opens on the conversation demo's earlier messages (demo-world.js)
+    /// with nothing being answered; two sample photos in the composer (debug -qaDemoImages), one removed;
+    /// the send confirmation opened and closed with the draft kept; replies, a photo listed by name and an
+    /// unconfirmed delivery in the timeline; work state and controls reachable; a sent message following
+    /// the script to its reply; a prompt-only session's notice.
     func test24_ConversationAndPhotos() {
         let app = launch(["--demo", "-screenDetail", "s1", "-qaDemoImages", "2"])
         let state = element(app, "work-status")
         XCTAssertTrue(state.waitForExistence(timeout: 15), "Conversation did not open")
         XCTAssertEqual(state.value as? String, "working")
-        // The computer reports this request being answered (row activity "writing"): the indicator, not a bubble.
-        let typing = element(app, "typing-indicator")
-        XCTAssertTrue(typing.waitForExistence(timeout: 5), "No typing indicator for a request with activity")
-        XCTAssertEqual(typing.value as? String, "writing")
-        XCTAssertEqual(typing.label, "답변 작성 중…")
+        // Nothing is being answered when the conversation opens: no dots before anything is sent.
+        XCTAssertFalse(element(app, "typing-indicator").waitForExistence(timeout: 3), "Dots before anything was sent")
         XCTAssertTrue(element(app, "photo-preview-0").waitForExistence(timeout: 10) && element(app, "photo-preview-1").exists, "Sample photos not in the composer")
         XCTAssertTrue(element(app, "photo-pick").exists, "No photo button for a session that takes photos")
         shot(app, "24a-two-photos")
@@ -404,12 +441,11 @@ final class DeviceQATests: XCTestCase {
         XCTAssertFalse(confirm.waitForExistence(timeout: 2), "Confirmation still open")
         XCTAssertTrue((draft.value as? String ?? "").contains("QA demo question"), "Draft lost after closing the confirmation")
         XCTAssertTrue(element(app, "photo-preview-0").exists, "Photo lost after closing the confirmation")
-        // Every delivery state is its own line; a reply reads as the session's.
+        // The earlier messages: two replies and one unconfirmed delivery, each delivery on its own line.
         let states = app.descendants(matching: .any).matching(identifier: "mail-status")
-        XCTAssertGreaterThanOrEqual(states.count, 8, "Delivery states missing")
-        for code in ["queued", "sending", "awaiting_reply", "replied", "delivery_unconfirmed", "source_changed", "not_delivered"] {
-            XCTAssertTrue(states.matching(NSPredicate(format: "value == %@", code)).count > 0, "No \(code) message")
-        }
+        XCTAssertEqual(states.count, 3, "Earlier messages missing")
+        XCTAssertEqual(states.matching(NSPredicate(format: "value == 'replied'")).count, 2)
+        XCTAssertEqual(states.matching(NSPredicate(format: "value == 'delivery_unconfirmed'")).count, 1)
         // Controls stay reachable while composing.
         XCTAssertTrue(element(app, "control-pause").isHittable && element(app, "control-terminate").isHittable, "Controls not reachable")
         tapWhenReady(element(app, "control-terminate"), "Quit CLI")
@@ -423,32 +459,16 @@ final class DeviceQATests: XCTestCase {
         XCTAssertTrue(reply.exists, "No session reply")
         XCTAssertTrue(element(app, "mail-attachments").exists, "Photos not listed")
         shot(app, "24d-replies")
-        // The other two phases, each from its own demo session.
         app.terminate()
-        for (id, phase, words) in [("s3", "working", "작업 중…"), ("s5", "responding", "응답 준비 중…")] {
-            let other = launch(["--demo", "-screenDetail", id])
-            let indicator = element(other, "typing-indicator")
-            XCTAssertTrue(indicator.waitForExistence(timeout: 15), "No typing indicator in \(id)")
-            XCTAssertEqual(indicator.value as? String, phase)
-            XCTAssertEqual(indicator.label, words)
-            shot(other, "24e-phase-\(phase)")
-            other.terminate()
-        }
-        // Awaiting a reply without reported activity: no indicator, whatever the session is doing.
-        let quiet = launch(["--demo", "-screenDetail", "s4"])
-        XCTAssertTrue(element(quiet, "work-status").waitForExistence(timeout: 15))
-        XCTAssertTrue(quiet.descendants(matching: .any).matching(identifier: "mail-status").matching(NSPredicate(format: "value == 'awaiting_reply'")).count > 0)
-        XCTAssertFalse(element(quiet, "typing-indicator").waitForExistence(timeout: 2), "Typing without request activity")
-        shot(quiet, "24f-awaiting-without-activity")
-        quiet.terminate()
-        // A stale report hides the indicator even though the row still has activity.
+        // A stale report shows as stale, with no dots.
         let stale = launch(["--demo", "-screenDetail", "s1", "-qaStaleDevice", "demo-0"])
         XCTAssertTrue(element(stale, "work-status").waitForExistence(timeout: 15))
         XCTAssertEqual(element(stale, "work-status").value as? String, "stale")
         XCTAssertFalse(element(stale, "typing-indicator").waitForExistence(timeout: 2), "Typing shown on a stale report")
         shot(stale, "24g-stale")
         stale.terminate()
-        // A send to a working session: the phases come and go, and the indicator ends with the reply.
+        // A send to a working session follows the script: delivered, the phases come and go, and the dots end
+        // with the reply.
         let fresh = launch(["--demo", "-screenDetail", "s2"])
         XCTAssertTrue(element(fresh, "work-status").waitForExistence(timeout: 15))
         XCTAssertFalse(element(fresh, "typing-indicator").exists, "Typing before anything was sent")
@@ -458,7 +478,7 @@ final class DeviceQATests: XCTestCase {
         tapWhenReady(element(fresh, "mail-send"), "Send")
         tapWhenReady(element(fresh, "confirm-action"), "Confirm send")
         let live = element(fresh, "typing-indicator")
-        XCTAssertTrue(live.waitForExistence(timeout: 6), "No typing once the session responds")
+        XCTAssertTrue(live.waitForExistence(timeout: 10), "No typing once the session responds")
         let first = live.value as? String ?? ""
         XCTAssertTrue(["responding", "working", "writing"].contains(first), "Unknown phase \(first)")
         shot(fresh, "24h-typing-\(first)")

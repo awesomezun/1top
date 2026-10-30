@@ -9,7 +9,7 @@
 // anchor is when the demo began: sessions stopped before it stay stopped, and limits reset relative to it.
 import {vector} from '../site/src/demo-usage.js';
 import {WORLD} from '../site/src/demo-world.js';
-import {machines as worldMachines,accounts as worldAccounts,DAY,WEEK,HISTORY_DAYS,STARTED} from '../site/src/demo-model.js';
+import {machines as worldMachines,accounts as worldAccounts,earlierMessages,DAY,WEEK,HISTORY_DAYS,STARTED} from '../site/src/demo-model.js';
 
 const PERIODS=[['24h','24시간',86400],['12h','12시간',43200],['5h','5시간',18000],['1h','1시간',3600],['30m','30분',1800],['10m','10분',600]];
 const HOME='/Users/demo',ORCA=HOME+'/orca/workspaces';
@@ -51,15 +51,12 @@ function accountUsage(all,now,anchor){
 }
 
 /** The collector's /api/state at now for a period key (10m … 24h, custom:<seconds>, all). */
-// What people wrote (goal objectives, the resume prompt, messages) in the demo's language.
+// What people wrote (goal objectives, the resume prompt) in the demo's language. Messages are the
+// conversation demo's (demo-world.js).
 const WRITTEN={
  goal1:{ko:'청구서 화면을 새 결제 흐름에 맞춥니다.',en:'Match the invoice screen to the new payment flow.',zh:'让账单页面符合新的支付流程。'},
  goal2:{ko:'문서 검색 결과의 정렬 기준을 정리합니다.',en:'Settle how docs search results are sorted.',zh:'整理文档搜索结果的排序规则。'},
  resume:{ko:'이어서 진행해 주세요.',en:'Please continue.',zh:'请继续。'},
- ask:{ko:'지금 어디까지 진행됐어?',en:'How far along are you?',zh:'现在进展到哪里了？'},
- reply:{ko:'결제 화면의 카드 입력 단계를 새 컴포넌트로 옮겼고, 남은 작업은 영수증 화면과 테스트 두 개입니다.',en:'I moved the card entry step of checkout to the new component. The receipt screen and two tests are left.',zh:'已将结账页面的银行卡输入步骤移到新组件，剩下收据页面和两个测试。'},
- receipt:{ko:'영수증 화면도 같은 기준으로 맞춰 줘.',en:'Match the receipt screen to the same rules.',zh:'收据页面也按同样的标准调整。'},
- tests:{ko:'테스트가 끝나면 알려 줘.',en:'Let me know when the tests finish.',zh:'测试完成后告诉我。'},
 };
 const say=(key,lang)=>WRITTEN[key][lang]||WRITTEN[key].ko;
 
@@ -198,13 +195,10 @@ export function demoHistory(now=Date.now()/1000,{period='1h',step='60',kind=null
   series:{bins,by_model:byModel,by_project:byProject,end:now,start:bins[0]??now,step:String(step),total}};
 }
 
-/** A session's mailbox as POST /api/mailbox answers it: a reply, a request being written, and one waiting. */
+/** A session's mailbox as POST /api/mailbox answers it: the conversation demo's earlier messages
+ *  (demo-world.js), the same on the web and both phones. A sent message follows CONVERSATION.script. */
 export function demoMailbox(sessionId,now=Date.now()/1000,lang='ko'){
- if(sessionId!=='s1')return [];
- const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
- return [{id:id(1),text:say('ask',lang),created:now-1500,changed:now-1440,status:'replied',reply:say('reply',lang),reply_at:now-1440,truncated:false,attachments:[],activity:null},
-  {id:id(2),text:say('receipt',lang),created:now-300,changed:now-5,status:'awaiting_reply',reply:'',reply_at:null,truncated:false,attachments:[],activity:{phase:'writing',observed_at:now-5}},
-  {id:id(3),text:say('tests',lang),created:now-60,changed:now-60,status:'queued',reply:'',reply_at:null,truncated:false,attachments:[],activity:null}];
+ return earlierMessages(sessionId,now,lang);
 }
 
 if(import.meta.url===`file://${process.argv[1]}`)process.stdout.write(JSON.stringify(demoState(Number(process.argv[2])||Date.now()/1000,{period:process.argv[3]||'1h'})));

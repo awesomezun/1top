@@ -6,6 +6,9 @@ import {Text} from './typography';
 import {useWorkspace} from './workspace';
 import {StateMark} from './state-mark';
 import {demoThread} from './demo';
+import {WORLD} from './demo-world';
+import {scriptStep} from './demo-model';
+import {now as shownNow} from './clock';
 import {fresh,projectName} from './metrics';
 import {accountTags,short} from './fleet';
 import {toolWithAccount,shortModel,periodLabel} from './ui';
@@ -13,17 +16,18 @@ import {Icon,type IconName} from './icons';
 import {resetComposer} from '../modules/composer-reset';
 import {onTheme,quick as c} from './theme';
 import {pickPhotos,rejectionText} from './photos';
-import {activityLabel,attachmentSummary,bringBack,defaultPrompt,deliveryIcon,deliveryLabel,deliveryTone,effectiveStatus,EMPTY,kb,mergeMailbox,PHOTO_MAX,responseActivity,sendFailed,sendMode,sendOutcome,sendUnconfirmed,startSend,TEXT_MAX,workLabel,workState,type Convo,type Mail,type Phase,type Work} from './thread';
+import {activityLabel,attachmentSummary,bringBack,defaultPrompt,deliveryIcon,deliveryLabel,deliveryTone,effectiveStatus,EMPTY,forward,kb,mergeMailbox,PHOTO_MAX,responseActivity,sendFailed,sendMode,sendOutcome,sendUnconfirmed,startSend,TEXT_MAX,workLabel,workState,type Convo,type Mail,type Work} from './thread';
 import type {SessionRow} from './types';
 
 // One conversation per session: its live work at the top, then messages and replies, then one composer.
 // Delivery of each message is shown on the message; the session's work is shown apart from it.
-// The demo's two sent pictures, drawn like the iPhone demo's; the relay itself returns no image data.
-const DEMO_PHOTOS:Record<string,number>={'demo:1':require('../assets/demo/photo-1.png'),'demo:2':require('../assets/demo/photo-2.png')};
+// The demo's pictures: the conversation script's checkout screen (demo-world.js) and a plain one, as on
+// the iPhone; the relay itself returns no image data.
+const DEMO_PHOTOS:Record<string,number>={'demo:checkout':require('../assets/demo/checkout.png'),'demo:2':require('../assets/demo/photo-2.png')};
 const photoSource=(uri:string)=>DEMO_PHOTOS[uri]??{uri};
-// QA only (onetop://?qaDemoImages=N in the demo): the same pictures in the composer, as on the iPhone.
+// QA and filming only (onetop://?qaDemoImages=N in the demo): the same pictures in the composer, the script's first, as on the iPhone.
 const TINY_PNG='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-const QA_PHOTOS=[1,2,3].map(n=>({id:'qa-'+n,uri:'demo:'+Math.min(n,2),name:'IMG_04'+(13+n)+'.png',mime:'image/png',data:TINY_PNG,bytes:180_000}));
+const QA_PHOTOS=[1,2,3].map(n=>({id:'qa-'+n,uri:n===1?'demo:checkout':'demo:2',name:n===1?'checkout.png':'IMG_04'+(13+n)+'.png',mime:'image/png',data:TINY_PNG,bytes:180_000}));
 const mark=(work:Work)=>work==='working'||work==='waiting'||work==='paused'?work:'idle';
 const motion=Platform.OS!=='web';
 
@@ -39,7 +43,7 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
  const noControl=row.device.allow_control===false,caps:string[]=row.capabilities||[],{mode,photos:photosOk,replies}=sendMode(caps);
  const work=workState(row,now);
  // This session's own draft and timeline live in the workspace, keyed by device and session.
- const seed=():Mail[]=>w.demo?demoThread(row.id,t):[];
+ const seed=():Mail[]=>w.demo?demoThread(row.id,w.lang):[];
  const convo:Convo=w.convos[key]??{draft:EMPTY,thread:seed()};
  const change=(fn:(c:Convo)=>Convo)=>w.updateConvo(key,fn,seed());
  const draft=convo.draft,thread=convo.thread;
@@ -48,7 +52,7 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
  // A send hands the composer back to Android's keyboard afresh (modules/composer-reset); otherwise the
  // keyboard types the word it was composing back in front of the next key.
  const field=useRef<React.ComponentRef<typeof TextInput>>(null);
- useEffect(()=>{if(w.demo&&w.qaPhotos>0&&photosOk&&!w.convos[key])change(c=>({...c,draft:{...c.draft,photos:QA_PHOTOS.slice(0,w.qaPhotos)}}));
+ useEffect(()=>{if(w.demo&&w.qaPhotos>0&&photosOk&&!w.convos[key])change(c=>({...c,draft:{...c.draft,photos:QA_PHOTOS.slice(0,w.qaPhotos),...(w.qaScript?{text:WORLD.conversation.script.text[w.lang as 'ko'|'en'|'zh']}:{})}}));
   // Once, when a demo conversation first opens.
   // eslint-disable-next-line react-hooks/exhaustive-deps
  },[]);
@@ -88,22 +92,22 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
    // Older computers take a text instruction only; it is confirmed first and cannot be answered here.
    w.control(live,'prompt',body,(id:string,outcome:string)=>{if(outcome==='failed')return;
     if(draft.text===sent.text)resetComposer(field.current,sent.text);
-    w.updateConvo(key,(c:Convo)=>({draft:c.draft.text===sent.text?{...c.draft,text:''}:c.draft,thread:[...c.thread,{id,text:body,created:Date.now()/1000,status:outcome==='sent'?(w.demo?'instruction_sent':'sending'):'delivery_unconfirmed',reply:'',local:true,instruction:true}]}));});
+    w.updateConvo(key,(c:Convo)=>({draft:c.draft.text===sent.text?{...c.draft,text:''}:c.draft,thread:[...c.thread,{id,text:body,created:shownNow()/1000,status:outcome==='sent'?(w.demo?'instruction_sent':'sending'):'delivery_unconfirmed',reply:'',local:true,instruction:true}]}));});
    return;
   }
   const id=Crypto.randomUUID();
   // The composer empties now, so the next message can be written while this one travels.
   resetComposer(field.current,sent.text);
-  change(c=>startSend(c,{id,text:body,created:Date.now()/1000,status:'sending',reply:'',local:true,draft:sent,photos:sent.photos.map(p=>({uri:p.uri})),attachments:sent.photos.map(p=>({name:p.name,mime:p.mime,bytes:p.bytes}))}));
+  change(c=>startSend(c,{id,text:body,created:shownNow()/1000,status:'sending',reply:'',local:true,draft:sent,photos:sent.photos.map(p=>({uri:p.uri})),attachments:sent.photos.map(p=>({name:p.name,mime:p.mime,bytes:p.bytes}))}));
   try{
    await w.sendMessage(live,body,id,sent.photos.map(p=>({mime:p.mime,data:p.data})));
    // Success leaves every draft alone: the reader may already be writing here or in another session.
    if(w.demo){
-    // Demo only: delivered at once, then the computer's three phases, then the reply ends the activity.
-    const step=(after:number,patch:Partial<Mail>)=>setTimeout(()=>w.updateConvo(key,(c:Convo)=>({...c,thread:c.thread.map(m=>m.id===id?{...m,...patch}:m)})),after);
-    step(0,{status:'awaiting_reply'});
-    (['responding','working','writing'] as Phase[]).forEach((phase,i)=>step(i*2000,{activity:{phase,observed_at:Date.now()/1000+i*2}}));
-    step(6500,{status:'replied',activity:null,reply:t('Demo reply: I looked at it and will fix it after the current test run.','예시 답신: 확인했습니다. 지금 돌고 있는 테스트가 끝나면 고치겠습니다.'),reply_at:Date.now()/1000+6.5});
+    // Demo only: the conversation script (demo-world.js), as on the web: taken in, delivered, the session's
+    // three phases, then the scripted reply, each at its time after sending. The text and photos stay, and
+    // delivery only moves forward, except that the computer's queue is the truth over 'sending', as on the web.
+    for(const step of WORLD.conversation.script.steps)setTimeout(()=>{const at=shownNow()/1000;
+     w.updateConvo(key,(c:Convo)=>({...c,thread:c.thread.map(m=>{if(m.id!==id)return m;const next=scriptStep(WORLD,step,w.lang,at);return {...m,...next,status:next.status==='queued'&&m.status==='sending'?'queued':forward(m.status,next.status)};})}));},step.at*1000);
    }
   }catch(e:any){
    // A refusal (4xx) brings the text and photos back only into an empty composer; otherwise they stay on

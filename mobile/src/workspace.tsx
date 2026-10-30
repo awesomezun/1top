@@ -39,12 +39,13 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
   const prefs=Promise.all([SecureStore.getItemAsync(SAVED.lang),SecureStore.getItemAsync(SAVED.appearance),SecureStore.getItemAsync(SAVED.tokens)]).then(([l,a,k])=>{
    if(l==='ko'||l==='en'||l==='zh')setLangState(l);if(a==='system'||a==='light'||a==='dark')setAppearanceState(a);setTokensState(k==='1');}).catch(()=>{});
   Promise.all([prefs,loadToken().then(value=>{setToken(value);setRelay(API);}).catch(()=>setMessage('Unable to read saved sign-in.'))]).finally(()=>setLoading(false));},[]);
- // QA only: onetop://?qaDemoImages=2 puts that many drawn pictures in a demo conversation's composer, as the
- // iPhone's -qaDemoImages does; onetop://?qaDemoNow=<unix seconds> holds the demo at that moment, as the web
+ // QA only: onetop://?qaDemoImages=2 puts that many pictures in a demo conversation's composer, as the
+ // iPhone's -qaDemoImages does; onetop://?qaDemoScript=1 puts the conversation script's message there, its
+ // text in the chosen language and its photo (demo-world.js), as the iPhone's -qaDemoScript YES does; onetop://?qaDemoNow=<unix seconds> holds the demo at that moment, as the web
  // page and the iPhone's -qaDemoNow do, for screenshots alike on every surface. Only the demo reads them,
  // and the demo never sends anything.
- const [qaPhotos,setQaPhotos]=useState(0);
- useEffect(()=>{const read=(url:string|null)=>{if(!url)return;const q=Linking.parse(url).queryParams,n=Number(q?.qaDemoImages),at=Number(q?.qaDemoNow);if(n>0)setQaPhotos(Math.min(3,Math.floor(n)));if(at>0){setDemoNow(at);setClock(shownNow());}};
+ const [qaPhotos,setQaPhotos]=useState(0),[qaScript,setQaScript]=useState(false);
+ useEffect(()=>{const read=(url:string|null)=>{if(!url)return;const q=Linking.parse(url).queryParams,n=Number(q?.qaDemoImages),at=Number(q?.qaDemoNow);if(n>0)setQaPhotos(Math.min(3,Math.floor(n)));if(q?.qaDemoScript==='1'){setQaScript(true);setQaPhotos(old=>Math.max(old,1));}if(at>0){setDemoNow(at);setClock(shownNow());}};
   Linking.getInitialURL().then(read).catch(()=>{});const sub=Linking.addEventListener('url',e=>read(e.url));return()=>sub.remove();},[]);
  const setLang=(next:Lang)=>{setLangState(next);SecureStore.setItemAsync(SAVED.lang,next).catch(()=>{});};
  const setAppearance=(next:Appearance)=>{setAppearanceState(next);SecureStore.setItemAsync(SAVED.appearance,next).catch(()=>{});};
@@ -111,7 +112,7 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
    setTimeout(()=>setPending(old=>{if(old[row.key]!==id)return old;const next={...old};delete next[row.key];report(t('Result unconfirmed. Check the computer before retrying.','결과 미확인. 다시 요청하기 전에 컴퓨터를 확인하세요.'),true);return next;}),25000);
   }}]);
  }
- return <Context.Provider value={{relay,changeRelay,token,loading,demo,setDemo,lang,setLang,shownLang:shownLang??lang,ko:lang==='ko',appearance,setAppearance,theme,toggleTheme,cycleLang,tokensChosen,setTokensChosen,qaPhotos,when,t,selected,setSelected,period,setPeriod,busy,message,setMessage,pending,controlMessages,clock,devices,visible,rows,connection,login,logout,control,sendMessage,convos,updateConvo}}><View style={{flex:1}}>{children}
+ return <Context.Provider value={{relay,changeRelay,token,loading,demo,setDemo,lang,setLang,shownLang:shownLang??lang,ko:lang==='ko',appearance,setAppearance,theme,toggleTheme,cycleLang,tokensChosen,setTokensChosen,qaPhotos,qaScript,when,t,selected,setSelected,period,setPeriod,busy,message,setMessage,pending,controlMessages,clock,devices,visible,rows,connection,login,logout,control,sendMessage,convos,updateConvo}}><View style={{flex:1}}>{children}
   {cover&&<Animated.View pointerEvents="none" style={{position:'absolute',left:cover.x-cover.r,top:cover.y-cover.r,width:cover.r*2,height:cover.r*2,borderRadius:cover.r,backgroundColor:cover.color,opacity:fade,transform:[{scale:grow}]}}/>}
  </View></Context.Provider>;
 }

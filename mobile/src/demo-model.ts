@@ -14,9 +14,14 @@ export type DemoWorld={
  children:[string,string,number,string][];
  earlier:[number,string,string|null,string|null,string,number][];
  noReplies:string[];
+ conversation:Conversation;
  operations:{installed_skills:number;observed_events:number;goals:{thread_id:string;runtime:string;status:string;tokens_used:number;time_used_seconds:number;session_connected:boolean;evidence:string}[]}[];
  caps:Record<string,string[]>;
 };
+type Words={ko:string;en:string;zh:string};
+export type Step={at:number;status:string;activity?:'responding'|'working'|'writing'};
+export type Conversation={session:string;earlier:{ago:number;status:string;replied?:number;photos?:string[];text:Words;reply?:Words}[];
+ script:{text:Words;photo:string;steps:Step[];reply:Words}};
 export type Part=Stream&{id:string;kind:string;project:string;model:string|null;account:string|null;status?:string;row?:number;child?:{lead:string;name:string;status:string};earlier?:boolean};
 export type Machine={c:number;list:Part[];u:Usage;n:number;sum:(j:number,from:number,to?:number)=>number};
 
@@ -63,6 +68,20 @@ export function sessionNumbers(m:Machine,j:number,now:number,anchor:number,keys:
 export function host(world:DemoWorld,m:Machine){
  const computer=world.computers[m.c],busy=Math.min(1,m.u.minutes.reduce((n,row)=>n+row[row.length-2],0)/(computer.scale*3));
  return {cpu:Math.round((computer.cpu[0]+computer.cpu[1]*busy)*10)/10,used_memory:Math.round(computer.used*2**30),total_memory:computer.memory*2**30,cores:computer.cores};
+}
+
+/** The conversation's earlier messages at now, in a language (site/src/demo-model.js earlierMessages). */
+export function earlierMessages(world:DemoWorld,sessionId:string,now:number,lang:keyof Words){
+ const c=world.conversation;if(sessionId!==c.session)return [];
+ return c.earlier.map((m,i)=>{const created=now-m.ago,reply_at=m.replied?created+m.replied:null;
+  return {id:'00000000-0000-4000-8000-'+String(i+1).padStart(12,'0'),text:m.text[lang],created,changed:reply_at??created,status:m.status,
+   reply:m.reply?m.reply[lang]:'',reply_at,truncated:false,attachments:(m.photos||[]).map(name=>({id:name,name,mime:'image/png',bytes:184320})),activity:null};});
+}
+
+/** What a sent message shows once the script reaches a step, at time at (site/src/demo-model.js scriptStep). */
+export function scriptStep(world:DemoWorld,step:Step,lang:keyof Words,at:number){
+ const {reply}=world.conversation.script;
+ return {status:step.status,activity:step.activity?{phase:step.activity,observed_at:at}:null,...(step.status==='replied'?{reply:reply[lang],reply_at:at}:{})};
 }
 
 export type Limits=Omit<DemoWorld['accounts'][number],'five'>&{resetAt:number;start:number;reportAt:number;used:(from:number,to?:number)=>number;weekly:number;five:number|null;fiveReset:number|null};

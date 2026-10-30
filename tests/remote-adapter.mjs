@@ -2,7 +2,7 @@
 // the demo relay goes through the same adapter, and the dashboard markup the site edits is still there.
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-import {remoteState,findSession} from '../site/src/remote-adapter.js';
+import {remoteState,findSession,mergeHistory} from '../site/src/remote-adapter.js';
 import {dashboardMarkup,dashboardFiles} from '../site/scripts/dashboard-pages.mjs';
 const require=createRequire(import.meta.url),{measure}=require('../agent/onetop/dist/speed.js'),weekly=require('../agent/onetop/dist/weekly.js');
 
@@ -55,6 +55,40 @@ assert.equal(weekly.sessionBurn(e,2,state.account_quotas[0],t),null);
 // Scope: one computer alone.
 assert.deepEqual(remoteState([a,b],{now,scope:'d2'}).sessions.map(s=>s.id),['d2:s1']);
 
+// Relay parity contract v1.0.1: what a 4.3 companion adds reads as the local collector's fields.
+const flowWeek={step:2520,start:t-604800,end:t,as_of:t,reported:true,bins:Array.from({length:240},(_,i)=>({Codex:i})) };
+const full=device('d4','Workstation',[session('w1',{title:'Fix the checkout total',effort:'high',effort_source:'codex_turn_context',effort_updated:t-60,last_usage:t-30,request_input:1200,context_size:400000,
+  terminal_note:'note',pids:[4242],usage:{last_minute:vec(1),last_five_minutes:vec(4),output_rate:.5,history:[[t-60,9],[t,10]]},capabilities:['focus','rename'],
+  windows:{'1h':vec(5),'custom:604800':vec(50)},weekly_estimate:{'custom:604800':{used_pp:4,partial:false,period_seconds:604800,tokens:150,account_id:'claude:abc123',calibration:{pp_per_token:.02,seconds:3600,used_pp:1,tokens:50}}}})],
+ {features:['history','account_alias'],periods:[{key:'1h',label:'1h',tokens:vec(100),partial:false,observed_seconds:3600},{key:'custom:604800',seconds:604800,label:'',tokens:vec(1000),partial:true,observed_seconds:400000}],
+  flow:{'custom:604800':flowWeek},host:{cpu:40,used_memory:8,total_memory:32,cores:16,network:{rx:10,tx:20,interfaces:['Ethernet']},disk:{total:100,free:40,percent:60,read:1,write:2},
+   swap:{used:1,total:4},load:[1,2,3],uptime:9000,battery:null,process_count:300,unreadable_processes:2,platform:'Windows',os:'Windows 11'},
+  system:{sampler_ms:30,monitor:{pid:7,cpu:1.5,rss:100},history:[{t:t-3,cpu:20,memory:30,rx:1,tx:2},{t,cpu:22,memory:31,rx:1,tx:2}],top:[{pid:1,ppid:0,name:'node',created:t-9,cpu:9,rss:5}],shared:[{pid:2,ppid:1,name:'codex',created:t-9,cpu:3,rss:6,id:'backend:2',count:4,pids:[2,3]}]},
+  collection_ms:120,actions:[{t:t-30,action:'pause',sid:'w1',terminal:'T',project:'web',message:'done'}],resume_prompt:'Please continue.',quotas:[{kind:'GLM',plan:'',updated:t,stale:true,note:'n',windows:[]}],
+  orca_terminals:1,process_counts:{Codex:2},account_quotas:[{id:'claude:abc123',kind:'Claude',account_label:'Claude · abc123',plan:'max',updated:t-5,stale:false,note:'',windows:[],weekly:{},usage_points:[],calibration:{pp_per_token:.02,seconds:3600,used_pp:1,tokens:50}}]});
+const one=remoteState([full],{now,period:'custom:604800'}),w1=one.sessions[0];
+assert.equal(w1.title,'Fix the checkout total');assert.equal(remoteState([a],{now}).sessions[0].title,'');assert.equal(w1.cwd,'Workstation');
+assert.deepEqual([w1.effort_source,w1.last_usage,w1.request_input,w1.context_size,w1.terminal_note,w1.pids,w1.resources.pids],['codex_turn_context',t-30,1200,400000,'note',[4242],[4242]]);
+assert.deepEqual(w1.usage.history,[[t-60,9],[t,10]]);assert.equal(w1.usage.output_rate,.5);assert.deepEqual(w1.usage.last_five_minutes,vec(4));
+assert.equal(w1.usage.weekly_estimate['custom:604800'].calibration.tokens,50);assert.ok(w1.capabilities.includes('rename'));
+// A range the computer reports reads like the six: its total, its own bins and bounds, every computer counted.
+const weekWindow=one.period_usage.windows.at(-1);assert.deepEqual(weekWindow.tokens,vec(1000));assert.equal(weekWindow.partial,true);assert.equal(weekWindow.observed_seconds,400000);
+assert.deepEqual(one.chart_range,{start:t-604800,end:t,step:2520});assert.equal(one.events.reduce((n,e)=>n+e.n,0),239*240/2);
+assert.equal(measure(one,'custom:604800',t).computers,1);assert.equal(one.workspace_usage.devices.length,0);
+// One computer's host, collector and log as reported; ids in the log carry the computer.
+assert.deepEqual([one.system.host.load,one.system.host.uptime,one.system.host.process_count,one.system.host.os,one.system.host.swap.total,one.system.host.disk.percent],[[1,2,3],9000,300,'Windows 11',4,60]);
+assert.equal(one.system.history.length,2);assert.equal(one.system.top[0].name,'node');assert.equal(one.system.shared[0].count,4);assert.equal(one.system.monitor.cpu,1.5);
+assert.deepEqual([one.collection_ms,one.resume_prompt,one.orca_terminals,one.process_counts.Codex,one.quotas[0].kind,one.actions[0].sid],[120,'Please continue.',1,2,'GLM','d4:w1']);
+assert.equal(one.weekly_usage.accounts[0].calibration.tokens,50);
+// Several computers: load and uptime belong to one; processes name their computer; samples line up by time.
+const both=remoteState([full,{...full,id:'d5',name:'Laptop'}],{now});
+assert.equal(both.system.host.load,null);assert.equal(both.system.host.process_count,600);assert.equal(both.system.top[0].name,'node · Workstation');assert.equal(both.system.history.length,2);
+assert.equal(both.system.monitor.cpu,3);assert.equal(both.orca_terminals,2);
+// Histories of several computers add up by bins; a computer with other bins is left out.
+const hist=(total,bins=[0,3600])=>({as_of:t,coverage:[{source:'collector'}],series:{start:0,end:7200,step:'3600',bins,total,by_model:[{key:'m',kind:'Claude',tokens:total}],by_project:[]},heatmap:{hours:[['2026-10-30',1,total[0]]],days:[['2026-10-30',total[0]]]}});
+const merged=mergeHistory([{data:hist([1,null])},{data:hist([2,3])},{data:hist([5,5],[60,3660])}]);
+assert.deepEqual(merged.series.total,[3,3]);assert.deepEqual(merged.series.by_model[0].tokens,[3,3]);assert.deepEqual(merged.heatmap.days,[['2026-10-30',3]]);
+
 // The dashboard markup the site edits is still where the site expects it.
 const {assets,body}=dashboardMarkup();
 for(const id of ['remoteScope','remoteIdentity','remoteSignOut','remoteNotice','remoteComputers','remoteDisconnect','remoteDisconnectConfirm','helpButton','localVersion'])assert.ok(body.includes(`id="${id}"`),id);
@@ -70,7 +104,21 @@ const result=new Promise(done=>demo.onResult(done));
 assert.equal((await demo.send({action:'pause',request_id:'r1',device_id:demo.devices()[0].id,session_id:target.id,control_key:'demo'})).status,'sent');
 assert.equal((await result).status,'completed');
 assert.equal(remoteState(demo.devices()).sessions.find(s=>s.source_id===target.id&&s.device_id==='demo-0').display_status,'paused');
+// The demo relay carries the same fields and answers history, renames and account names.
+const snap=demo.devices()[0].snapshot,keys=snap.periods.map(p=>p.key);
+assert.deepEqual(snap.features,['history','account_alias']);assert.equal(keys.length,19);assert.ok(['custom:604800','custom:31536000','all'].every(k=>keys.includes(k)&&snap.flow[k]?.bins.length<=240));
+assert.ok(snap.sessions.find(s=>s.tokens).windows['custom:2592000'].some(n=>n>0));assert.equal(snap.system.history.length,300);assert.ok(snap.host.swap.total>0&&snap.collection_ms>0&&snap.actions.length>=2);
+const demoWeek=remoteState(demo.devices(),{period:'custom:604800'});assert.ok(demoWeek.events.length>0&&demoWeek.chart_range.step>=60&&demoWeek.period_usage.windows.at(-1).tokens.some(n=>n>0));
+const history=await demo.history({device_id:'demo-0',period:'custom:604800',step:'3600'});
+assert.equal(history.series.bins.length,history.series.total.length);assert.ok(history.series.by_project.every(r=>r.key.startsWith('project:')));assert.ok(history.heatmap.hours.length>=720);
+const orca=demo.devices()[0].snapshot.sessions.find(s=>s.capabilities.includes('rename'));
+const renamed=new Promise(done=>demo.onResult(m=>{if(m.request.action==='rename')done(m);}));
+await demo.send({action:'rename',request_id:'r2',device_id:'demo-0',session_id:orca.id,control_key:orca.control_key,title:'Renamed tab'});
+assert.match((await renamed).message,/Renamed tab/);assert.equal(demo.devices()[0].snapshot.sessions.find(s=>s.id===orca.id).terminal,'Renamed tab');
+const named=new Promise(done=>demo.onResult(m=>{if(m.request.action==='account_alias')done(m);}));
+await demo.alias({request_id:'r3',device_id:'demo-0',account_id:'demo-claude-4f1c2a',alias:'Main'});await named;
+assert.equal(demo.devices()[0].snapshot.account_quotas.find(q=>q.id==='demo-claude-4f1c2a').alias,'Main');
 // Disconnecting a demo computer takes it off this page only.
 await demo.revoke('demo-1');assert.deepEqual(demo.devices().map(d=>d.id),['demo-0','demo-2']);
-console.log('Remote workspace: relay snapshots as the collector state, trees, scope, periods, flow, speed, accounts, markup, demo relay and disconnecting passed.');
+console.log('Remote workspace: relay snapshots as the collector state, trees, scope, periods, flow, speed, accounts, markup, contract v1.0.1 fields, history merge, demo relay requests and disconnecting passed.');
 process.exit(0);

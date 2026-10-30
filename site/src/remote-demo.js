@@ -4,7 +4,8 @@
 // steps the desktop demo collector and both phones take, so every surface shows the same world.
 import {bins,vector} from './demo-usage.js';
 import {WORLD} from './demo-world.js';
-import {machines,accounts as worldAccounts,sessionNumbers,capabilities,host,DAY} from './demo-model.js';
+import {machines,accounts as worldAccounts,sessionNumbers,capabilities,host,earlierMessages,scriptStep,DAY} from './demo-model.js';
+import {parity,parityRelay} from './remote-demo-parity.js';
 const PERIODS=[['24h',86400],['12h',43200],['5h',18000],['1h',3600],['30m',1800],['10m',600]];
 const LONGER=[900,7200,10800,21600,172800,259200,604800,1209600,2592000,7776000,15552000,31536000];
 const total=v=>Array.isArray(v)?v.reduce((a,b)=>a+b,0):0;
@@ -17,9 +18,7 @@ const ANSWERS={
  terminate:'CLI 종료를 확인했습니다. Orca 탭과 대화 기록은 유지됩니다.',
  prompt:'AI 지시를 보냈고 새 작업 시작을 확인했습니다.',
 };
-// What a session answers in the demo, in the page's language: session content, not interface text.
-const REPLY={ko:'예시 답신: 첫 검사를 마쳤고 남은 오류를 확인하고 있습니다.',en:'Demo reply: I have finished the first checks and am reviewing the remaining failures.',zh:'示例回复：第一轮检查已完成，正在查看剩余的错误。'};
-const PHOTO_REPLY={ko:' 보내 주신 사진도 확인했습니다.',en:' I have looked at the photos too.',zh:' 也已查看您发送的照片。'};
+// Messages and replies are in the page's language: session content, not interface text.
 const pageLanguage=()=>{const lang=globalThis.document?.documentElement.lang||'ko';return lang.startsWith('zh')?'zh':lang==='en'?'en':'ko';};
 
 
@@ -50,7 +49,7 @@ function report(now,started,controls){
   const flow=Object.fromEntries(PERIODS.map(([key,seconds])=>{const step=seconds>18000?900:seconds>3600?300:60;return [key,{step,...bins(u,kinds,now,seconds,step),as_of:now,reported:true}];}));
   const h=host(m,now);
   const used=new Set(shown.map(s=>rows.find(r=>r[1]===s.root_session_id)?.[6]).filter(Boolean));
-  return {id:computer.id,name:computer.name,platform:computer.platform,online:true,received:now*1000,snapshot:{
+  return parity(m,now,started,limits,controls,{id:computer.id,name:computer.name,platform:computer.platform,online:true,received:now*1000,snapshot:{
    version:'demo',updated:now,recording_started:started-259200,sessions:shown,periods,flow,
    speed_periods:[...periods.map(p=>({key:p.key,seconds:p.observed_seconds,tokens:total(p.tokens),known:true,partial:false})),
     ...LONGER.map(seconds=>({key:'custom:'+seconds,seconds,tokens:Math.round(seconds<=86400?list.reduce((n,s,j)=>n+(s.weight>0&&!s.earlier?m.sum(j,now-seconds):0),0):day*seconds/86400*.7),known:true,partial:seconds>259200})),
@@ -63,7 +62,7 @@ function report(now,started,controls){
     windows:[...(a.five!==null?[{label:'5H',pct:a.five,reset:a.fiveReset}]:[]),{label:'Weekly',pct:a.weekly,reset:a.resetAt}],
     weekly:Object.fromEntries(PERIODS.map(([key,seconds])=>[key,{used_pp:Math.round(a.used(now-seconds)*a.per*1e4)/1e4,observed_seconds:seconds,partial:false}])),
     usage_points:Array.from({length:Math.floor((a.reportAt-a.start)/600)+1},(_,k)=>{const t=a.start+k*600;return [t,Math.round(a.used(a.start,t)*a.per),a.resetAt];})})),
-  }};
+  }});
  });
 }
 
@@ -76,7 +75,7 @@ export function demoRelay({demoNow=null}={}){
  const reportNow=()=>report(clock(),started,controls).filter(d=>!removed.has(d.id));
  let devices=report(started,started,controls);
  setInterval(()=>{devices=reportNow();},3000);
- return {
+ return parityRelay({
   devices:()=>devices,
   async send(command){
    await new Promise(done=>setTimeout(done,400));
@@ -94,25 +93,25 @@ export function demoRelay({demoNow=null}={}){
   onResult:listener=>results.add(listener),
   // The demo's computers leave this page only; a reload brings them back.
   async revoke(id){await new Promise(done=>setTimeout(done,600));removed.add(id);devices=devices.filter(d=>d.id!==id);},
-  // The session's latest messages, as the computer reads them: at most ten recently changed rows.
+  // The session's latest messages, as the computer reads them: at most ten recently changed rows, the
+  // conversation demo's earlier ones (demo-world.js) first.
   async mailbox(request){
    await new Promise(done=>setTimeout(done,250));
-   return [...(mailboxes.get(request.session_id)||[])].sort((a,b)=>b.changed-a.changed).slice(0,10).sort((a,b)=>a.created-b.created).map(({changed,...row})=>({...row}));
+   const rows=[...earlierMessages(request.session_id,started,pageLanguage()),...(mailboxes.get(request.session_id)||[])];
+   return rows.sort((a,b)=>b.changed-a.changed).slice(0,10).sort((a,b)=>a.created-b.created).map(({changed,...row})=>({...row}));
   },
   signOut:async()=>{},
- };
- // A message waits for a working session's turn, then the session prepares, works and writes its
- // reply, a few seconds each, so every delivery state and the typing indicator can be seen.
+ },{clock,started,results,refresh:()=>{devices=reportNow();},devices:()=>devices});
+ // A sent message follows the conversation script (demo-world.js): taken in, delivered, the session's
+ // three phases, then the scripted reply, each at its time after sending. Its own text and photos stay.
  function converse(command){
   const rows=mailboxes.get(command.session_id)||[];mailboxes.set(command.session_id,rows);
   if(rows.some(r=>r.id===command.request_id))return {status:'sent'};
-  const session=devices.flatMap(d=>d.snapshot.sessions).find(s=>s.id===command.session_id),now=()=>Date.now()/1000;
-  const row={id:command.request_id,text:command.prompt,created:now(),changed:now(),status:session?.status==='working'?'queued':'awaiting_reply',reply:'',reply_at:null,truncated:false,activity:null,
+  const now=()=>Date.now()/1000;
+  const row={id:command.request_id,text:command.prompt,created:now(),changed:now(),status:'queued',reply:'',reply_at:null,truncated:false,activity:null,
    attachments:(command.attachments||[]).map((a,i)=>({id:String(i).padStart(64,'0'),name:`photo-${i+1}.jpg`,mime:a.mime,bytes:Math.floor(a.data.length*3/4)}))};
   rows.push(row);
-  const steps=[...(row.status==='queued'?[()=>{row.status='awaiting_reply';}]:[]),...['responding','working','writing'].map(phase=>()=>{row.activity={phase,observed_at:now()};}),
-   ()=>{const lang=pageLanguage();row.status='replied';row.activity=null;row.reply=REPLY[lang]+(row.attachments.length?PHOTO_REPLY[lang]:'');row.reply_at=now();}];
-  steps.forEach((step,i)=>setTimeout(()=>{step();row.changed=now();},2500*(i+1)));
+  for(const step of WORLD.conversation.script.steps)setTimeout(()=>{Object.assign(row,scriptStep(step,pageLanguage(),now()));row.changed=now();},step.at*1000);
   return {status:'sent'};
  }
 }
