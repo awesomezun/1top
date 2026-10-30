@@ -78,28 +78,45 @@ export function computerMinutes(seed:number,scale:number,first:number,last:numbe
  *  than a day). The current minute counts for the part of it that has passed. */
 export type Stream={weight:number,start:number,stop:number};
 export type Usage={first:number,last:number,minutes:number[][]};
-export function usage(seed:number,scale:number,streams:Stream[],now:number,anchor:number,rest=seed,duty=1,awake=true,span=1455):Usage{
- const last=Math.floor(now/60),first=last-span,anchorHour=Math.floor(anchor/3600);
- const total=computerMinutes(seed,scale,first,last,awake?[anchorHour-1,anchorHour+1]:[0,0],rest,duty),part=(now-last*60)/60;
+// Whole minutes once allocated stay as they are (every minute is fixed by the seeds), so each computer's
+// minutes are kept and a later call only works out the minutes that passed since.
+type Kept={first:number;last:number;rows:number[][]};
+const kept=new Map<string,Kept>();
+function allocate(seed:number,scale:number,streams:Stream[],from:number,to:number,awake:[number,number],rest:number,duty:number):number[][]{
+ const total=computerMinutes(seed,scale,from,to,awake,rest,duty);
  const minutes:number[][]=streams.map(()=>new Array(total.length).fill(0));
  let hour:number|null=null,shares:number[]=[];
  for(let i=0;i<total.length;i++){
-  const m=first+i,t=m*60;if(!total[i])continue;
+  const m=from+i,t=m*60;if(!total[i])continue;
   if(Math.floor(m/60)!==hour){const h=Math.floor(m/60);hour=h;shares=streams.map((s,j)=>s.weight*quantile(unit(seed,h,10+j),SHARE));}
   let sum=0;for(let j=0;j<streams.length;j++)if(t>=streams[j].start&&t<streams[j].stop)sum+=shares[j];
   if(!sum)continue;
   let pick=unit(seed,m,6)*sum,chosen=-1;
   for(let j=0;j<streams.length;j++)if(t>=streams[j].start&&t<streams[j].stop){chosen=j;pick-=shares[j];if(pick<0)break;}
-  minutes[chosen][i]=m===last?total[i]*part:total[i];
+  minutes[chosen][i]=total[i];
  }
+ return minutes;
+}
+export function usage(seed:number,scale:number,streams:Stream[],now:number,anchor:number,rest=seed,duty=1,awake=true,span=1455):Usage{
+ const last=Math.floor(now/60),first=last-span,anchorHour=Math.floor(anchor/3600),window:[number,number]=awake?[anchorHour-1,anchorHour+1]:[0,0];
+ const key=[seed,scale,rest,duty,window,streams.map(s=>[s.weight,s.start,s.stop])].join('|');
+ let k=kept.get(key);
+ if(!k||first<k.first||first>k.last+1){k={first,last:first-1,rows:streams.map(()=>[])};if(kept.size>16)kept.clear();kept.set(key,k);}
+ if(last>k.last){const add=allocate(seed,scale,streams,k.last+1,last,window,rest,duty);k.rows=k.rows.map((row,j)=>row.concat(add[j]));k.last=last;}
+ if(first>k.first){const drop=first-k.first;k.rows=k.rows.map(row=>row.slice(drop));k.first=first;}
+ // The current minute counts for the part of it that has passed.
+ const part=(now-last*60)/60,minutes=k.rows.map(row=>{const out=row.slice(0,last-first+1);if(out[last-first])out[last-first]*=part;return out;});
  return {first,last,minutes};
 }
 
+// Tokens from each minute to the end of a usage, summed once, so since() is a lookup.
+const tails=new WeakMap<Usage,Float64Array[]>();
 /** A session's tokens from since to now, from usage() minutes. */
 export function since(u:Usage,j:number,from:number):number{
- let n=0;const row=u.minutes[j];
- for(let i=0;i<row.length;i++)if((u.first+i)*60>=from)n+=row[i];
- return n;
+ let rows=tails.get(u);if(!rows){rows=[];tails.set(u,rows);}
+ let tail=rows[j];
+ if(!tail){const row=u.minutes[j];tail=new Float64Array(row.length+1);for(let i=row.length-1;i>=0;i--)tail[i]=tail[i+1]+row[i];rows[j]=tail;}
+ return tail[Math.min(u.minutes[j].length,Math.max(0,Math.ceil(from/60)-u.first))];
 }
 /** Bins of step seconds over the last seconds, aligned to the clock as a collector aligns them:
  *  [{kind: tokens}] for the sessions' kinds. */

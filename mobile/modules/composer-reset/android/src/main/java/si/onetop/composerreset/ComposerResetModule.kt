@@ -14,8 +14,8 @@ import expo.modules.kotlin.modules.ModuleDefinition
  * the word it was composing and types it back in front of the next key ("hello" sent, "n" typed,
  * "hellon" in the field). The sent text leaves the field here, where the field's own text is current:
  * keys typed after the tap but before the app caught up stay as the start of the next message. Then
- * the composing mark is dropped, so nothing is committed again, and the keyboard's connection restarts
- * on the field as it is now.
+ * the composing mark is dropped, so nothing is committed again, and the keyboard is told that nothing is
+ * being composed.
  */
 class ComposerResetModule : Module() {
   override fun definition() = ModuleDefinition {
@@ -27,7 +27,9 @@ class ComposerResetModule : Module() {
       if (sent.isNotEmpty() && text.startsWith(sent)) text.delete(0, sent.length)
       BaseInputConnection.removeComposingSpans(text)
       val keyboard = field.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-      keyboard.restartInput(field)
+      // Tell the keyboard there is no word being composed, without dropping its connection: a restart
+      // would lose a key pressed while it reconnects.
+      keyboard.updateSelection(field, field.selectionStart, field.selectionEnd, -1, -1)
     }.runOnQueue(Queues.MAIN)
   }
 }

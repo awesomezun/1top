@@ -1,4 +1,4 @@
-import React,{createContext,useContext,useEffect,useRef,useState} from 'react';
+import React,{createContext,useContext,useEffect,useMemo,useRef,useState} from 'react';
 import {AccessibilityInfo,Alert,Animated,Dimensions,Easing,useColorScheme,View} from 'react-native';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
@@ -72,7 +72,10 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
   setPending(old=>Object.fromEntries(Object.entries(old).filter(([,id])=>!ids.has(id))));setMessage(last.status+': '+(last.message||''));
   setControlMessages(old=>{const out={...old};for(const r of next)out[r.request.device_id+':'+r.request.session_id]={id:r.request.request_id,message:r.status+': '+(r.message||''),final:true};return out;});
   setConvos(old=>Object.fromEntries(Object.entries(old).map(([k,c])=>[k,{...c,thread:applyReceipts(c.thread,all)}])));},[connection.receipts]);
- const devices:Device[]=demo?demoDevices(t):connection.devices;
+ // The demo moves with the clock and follows the language; typing and other state changes reuse it.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ const demoNow=useMemo(()=>demo?demoDevices(t):[],[demo,lang,clock]);
+ const devices:Device[]=demo?demoNow:connection.devices;
  // Computers in view by name, as on the iPhone.
  const visible=devices.filter(d=>selected==='all'||d.id===selected).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
  const rows:SessionRow[]=sortSessions(visible.flatMap(d=>d.snapshot.sessions.map(s=>({...s,device:d,key:d.id+':'+s.id}))),period);

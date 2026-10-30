@@ -26,7 +26,20 @@ enum DemoUsage {
     static let mix: [Double] = [0.005, 0.981, 0.009, 0.005]
 
     struct Stream { var weight: Double; var start: Double; var stop: Double }
-    struct Usage { var first: Int; var last: Int; var minutes: [[Double]] }
+    struct Usage {
+        let first: Int, last: Int, minutes: [[Double]]
+        /// Each session's tokens from each minute to the end, with a 0 past the last minute, so a period's
+        /// total is a lookup.
+        let tails: [[Double]]
+        init(first: Int, last: Int, minutes: [[Double]]) {
+            self.first = first; self.last = last; self.minutes = minutes
+            tails = minutes.map { row in
+                var tail = [Double](repeating: 0, count: row.count + 1)
+                for i in stride(from: row.count - 1, through: 0, by: -1) { tail[i] = tail[i + 1] + row[i] }
+                return tail
+            }
+        }
+    }
 
     /// A number in [0, 1) from three whole numbers.
     static func unit(_ seed: UInt32, _ a: Int, _ b: Int) -> Double {
@@ -92,12 +105,45 @@ enum DemoUsage {
     static func usage(_ seed: UInt32, _ scale: Double, _ streams: [Stream], now: Double, anchor: Double,
                       rest: UInt32? = nil, duty: Double = 1, awake: Bool = true, span: Int = 1455) -> Usage {
         let last = Int(floor(now / 60)), first = last - span, anchorHour = Int(floor(anchor / 3600))
-        let total = computerMinutes(seed, scale, first, last, awake ? (anchorHour - 1, anchorHour + 1) : (0, 0), rest: rest, duty: duty)
-        let part = (now - Double(last * 60)) / 60
+        let window = awake ? (anchorHour - 1, anchorHour + 1) : (0, 0)
+        let key = "\(seed)|\(scale)|\(rest ?? seed)|\(duty)|\(window.0),\(window.1)|" + streams.map { "\($0.weight),\($0.start),\($0.stop)" }.joined(separator: ";")
+        var k = kept[key] ?? Kept(first: first, last: first - 1, rows: streams.map { _ in [] })
+        if first < k.first || first > k.last + 1 { k = Kept(first: first, last: first - 1, rows: streams.map { _ in [] }) }
+        if last > k.last {
+            let add = allocate(seed, scale, streams, k.last + 1, last, window, rest: rest, duty: duty)
+            for j in k.rows.indices { k.rows[j] += add[j] }
+            k.last = last
+        }
+        if first > k.first {
+            let drop = first - k.first
+            k.rows = k.rows.map { Array($0.dropFirst(drop)) }
+            k.first = first
+        }
+        if kept.count > 16 { kept.removeAll() }
+        kept[key] = k
+        // The current minute counts for the part of it that has passed.
+        let part = (now - Double(last * 60)) / 60, count = last - first + 1
+        let minutes = k.rows.map { row -> [Double] in
+            var out = Array(row.prefix(count))
+            if out[count - 1] != 0 { out[count - 1] *= part }
+            return out
+        }
+        return Usage(first: first, last: last, minutes: minutes)
+    }
+
+    /// Whole minutes once allocated stay as they are (every minute is fixed by the seeds), so each
+    /// computer's minutes are kept and a later call only works out the minutes that passed since.
+    private struct Kept { var first: Int; var last: Int; var rows: [[Double]] }
+    nonisolated(unsafe) private static var kept: [String: Kept] = [:]
+
+    /// Each minute from `from` to `to` (inclusive), whole, given to the session that took it.
+    private static func allocate(_ seed: UInt32, _ scale: Double, _ streams: [Stream], _ from: Int, _ to: Int, _ awake: (Int, Int),
+                                 rest: UInt32?, duty: Double) -> [[Double]] {
+        let total = computerMinutes(seed, scale, from, to, awake, rest: rest, duty: duty)
         var minutes = streams.map { _ in [Double](repeating: 0, count: total.count) }
         var hour: Int?, shares: [Double] = []
         for i in 0..<total.count {
-            let m = first + i, t = Double(m * 60)
+            let m = from + i, t = Double(m * 60)
             if total[i] == 0 { continue }
             if m / 60 != hour {
                 let h = m / 60
@@ -113,16 +159,15 @@ enum DemoUsage {
                 pick -= shares[j]
                 if pick < 0 { break }
             }
-            minutes[chosen][i] = m == last ? total[i] * part : total[i]
+            minutes[chosen][i] = total[i]
         }
-        return Usage(first: first, last: last, minutes: minutes)
+        return minutes
     }
 
-    /// A session's tokens from a moment until now.
+    /// A session's tokens from a moment until now: a lookup in the usage's sums from each minute to the end.
     static func since(_ u: Usage, _ j: Int, _ from: Double) -> Double {
-        var n = 0.0
-        for (i, v) in u.minutes[j].enumerated() where Double((u.first + i) * 60) >= from { n += v }
-        return n
+        let row = u.tails[j]
+        return row[min(row.count - 1, max(0, Int(ceil(from / 60)) - u.first))]
     }
 
     /// Bins of step seconds over the last seconds, aligned to the clock as a collector aligns them.
