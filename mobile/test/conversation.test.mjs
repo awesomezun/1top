@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-const {base64Bytes,fitted,fitPlan,fitPhoto,checkAttachments,sendMode,defaultPrompt,deliveryLabel,deliveryTone,effectiveStatus,workState,workLabel,sendOutcome,attachmentSummary,responseActivity,activityLabel,EMPTY,startSend,sendFailed,sendUnconfirmed,bringBack,mergeMailbox,applyReceipts,forward,PHOTO_LIMIT,EDGES,QUALITIES}=await import('../src/thread.ts');
+const {base64Bytes,fitted,fitPlan,fitPhoto,checkAttachments,sendMode,defaultPrompt,deliveryLabel,deliveryTone,effectiveStatus,workState,workLabel,sendOutcome,inTurn,attachmentSummary,responseActivity,activityLabel,EMPTY,startSend,sendFailed,sendUnconfirmed,bringBack,mergeMailbox,applyReceipts,forward,PHOTO_LIMIT,EDGES,QUALITIES}=await import('../src/thread.ts');
 const en=(e)=>e,ko=(_,k)=>k,b64=n=>Buffer.alloc(n,7).toString('base64');
 
 test('decoded base64 size counts padding',()=>{
@@ -138,4 +138,24 @@ test('every receipt that arrives together is applied once to the send it names',
 });
 test('stored photos show as a count and their names',()=>{
  assert.equal(attachmentSummary([],ko),'');assert.equal(attachmentSummary([{name:'a.jpg',bytes:1}],ko),'사진 1장 · a.jpg');assert.equal(attachmentSummary([{bytes:1},{bytes:2}],en),'2 photos');
+});
+
+// A fake relay: a request reaches it after its upload time, then is answered (or refused) at once.
+function fakeRelay(){const arrived=[];return {arrived,send:(name,upload,refuse=false)=>()=>new Promise((ok,fail)=>setTimeout(()=>{arrived.push(name);refuse?fail(Object.assign(Error('Refused'),{status:400})):ok({status:'sent'});},upload))};}
+test('one session\'s sends reach the relay in order: a slow photo send first, then a quick text',async()=>{
+ const lanes=new Map(),relay=fakeRelay();
+ const first=inTurn(lanes,'dev:s1',relay.send('1 photo',300)),second=inTurn(lanes,'dev:s1',relay.send('2 text',10));
+ await Promise.all([first,second]);
+ assert.deepEqual(relay.arrived,['1 photo','2 text']);assert.equal(lanes.size,0);
+});
+test('another session does not wait for this session\'s slow upload',async()=>{
+ const lanes=new Map(),relay=fakeRelay();
+ const slow=inTurn(lanes,'dev:s1',relay.send('A photo',300));await inTurn(lanes,'dev:s2',relay.send('B text',10));
+ assert.deepEqual(relay.arrived,['B text']);await slow;assert.deepEqual(relay.arrived,['B text','A photo']);
+});
+test('a refused send ends only its own turn: the next one still goes, in order, and the refusal stays definite',async()=>{
+ const lanes=new Map(),relay=fakeRelay();
+ const first=inTurn(lanes,'dev:s1',relay.send('1 refused',200,true)),second=inTurn(lanes,'dev:s1',relay.send('2 next',10));
+ const failure=await first.then(()=>null,e=>e);assert.equal(sendOutcome(failure),'failed');
+ assert.deepEqual(await second,{status:'sent'});assert.deepEqual(relay.arrived,['1 refused','2 next']);
 });

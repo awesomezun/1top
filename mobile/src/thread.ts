@@ -58,10 +58,12 @@ export const defaultPrompt=(t:T)=>t('Please inspect the attached image(s).','첨
 export type Delivery='queued'|'sending'|'awaiting_reply'|'replied'|'delivery_unconfirmed'|'source_changed'|'not_delivered'|'instruction_sent';
 /** Delivery of one message, kept apart from the session's work. "Replied" covers this message only. */
 export function deliveryLabel(status:string,t:T){
- return ({queued:t('Queued · enters when the current turn ends','대기 중 · 현재 작업이 끝나면 전달'),sending:t('Sending','전송 중'),awaiting_reply:t('Delivered · waiting for a reply','전달됨 · 답신 대기'),replied:t('Replied','답신 도착'),
-  delivery_unconfirmed:t('Delivery unconfirmed · check the session before sending again','전달 미확인 · 다시 보내기 전에 세션 확인'),source_changed:t('Reply source changed · the session was replaced','답신 연결 변경됨 · 세션이 바뀌었습니다'),
-  not_delivered:t('Not delivered · the session changed or the wait expired','미전달 · 세션이 바뀌었거나 대기가 만료됨'),not_sent:t('Not sent · refused before delivery','보내지 못함 · 전달 전에 거절됨'),instruction_sent:t('Instruction delivered · this session cannot reply','지시 전달됨 · 이 세션은 답신할 수 없음')} as Record<string,string>)[status]||status;
+ return ({queued:t('Waiting for this session to finish its current turn','현재 작업이 끝나면 전달'),sending:t('Sending','전송 중'),awaiting_reply:t('Waiting for a reply','답신 대기'),replied:t('Replied','답신 도착'),
+  delivery_unconfirmed:t('Delivery unconfirmed — check the session before resending','전달 미확인 · 재전송 전에 세션 확인'),source_changed:t('Reply source changed','답신 연결 변경됨'),
+  not_delivered:t('Not delivered — the session changed or the wait expired','미전달 · 세션 변경 또는 대기 만료'),not_sent:t('Not sent · refused before delivery','보내지 못함 · 전달 전에 거절됨'),instruction_sent:t('Instruction delivered · this session cannot reply','지시 전달됨 · 이 세션은 답신할 수 없음')} as Record<string,string>)[status]||status;
 }
+/** The symbol beside each delivery state, as on the iPhone. */
+export const deliveryIcon=(status:string)=>({queued:'clock',sending:'sending',awaiting_reply:'waiting',replied:'replied',instruction_sent:'replied',delivery_unconfirmed:'warning',source_changed:'branch',not_delivered:'failed',not_sent:'failed'} as Record<string,'clock'|'sending'|'waiting'|'replied'|'warning'|'branch'|'failed'>)[status]||'waiting';
 /** A message this phone sent that no receipt or mailbox moved past "sending" for 30 s is unconfirmed. */
 export const effectiveStatus=(m:{status:string;local?:boolean;created:number},nowSeconds:number)=>m.local&&m.status==='sending'&&nowSeconds-m.created>30?'delivery_unconfirmed':m.status;
 export function deliveryTone(status:string):'progress'|'done'|'problem'{return status==='replied'||status==='instruction_sent'?'done':['delivery_unconfirmed','source_changed','not_delivered','not_sent'].includes(status)?'problem':'progress';}
@@ -75,6 +77,15 @@ export function workState(row:{status:string;device:{online:boolean;received:num
 }
 export function workLabel(work:Work,t:T){return ({working:t('Working','작업 중'),waiting:t('Waiting for input','입력 대기'),idle:t('Idle','대기'),paused:t('Paused','일시정지'),offline:t('Computer offline','컴퓨터 오프라인'),stale:t('Report is old','오래된 보고')} as Record<Work,string>)[work];}
 
+/** One session's sends reach the relay in the order they were made: each goes out once the one before it
+ *  has its answer (accepted, refused or lost), so a text-only message never overtakes a slower one with
+ *  photos. Nothing waits for the session's reply, and other sessions (other keys) do not wait. A failure
+ *  ends only its own turn; the next send still goes. */
+export function inTurn<T>(lanes:Map<string,Promise<unknown>>,key:string,work:()=>Promise<T>):Promise<T>{
+ const mine=(lanes.get(key)??Promise.resolve()).then(work),turn=mine.catch(()=>{});
+ lanes.set(key,turn);turn.then(()=>{if(lanes.get(key)===turn)lanes.delete(key);});
+ return mine;
+}
 /** Only a send refused on the phone or by the relay (4xx) failed for sure. A server error (5xx), a timeout
  *  or a dropped connection may still have delivered it: unconfirmed, and never resent automatically. */
 export const sendOutcome=(error:{status?:unknown;local?:boolean}):'failed'|'unconfirmed'=>error?.local===true||(typeof error?.status==='number'&&error.status>=400&&error.status<500)?'failed':'unconfirmed';

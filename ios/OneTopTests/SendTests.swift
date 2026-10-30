@@ -157,4 +157,64 @@ final class SendTests: XCTestCase {
         XCTAssertEqual(rows.filter { $0.status == "replied" }.count, 10)
         XCTAssertEqual(Set(rows.map(\.id)).count, 12)
     }
+
+    /// A fake relay: each request reaches it after its own upload time and is answered at once. `arrived`
+    /// lists the requests in the order the relay received them.
+    private var arrived: [String] = []
+    private func relay(upload: @escaping (MessagePayload) -> Int, refuse: Set<String> = []) {
+        model.transport = { [weak self] payload, _, _ in
+            try await Task.sleep(for: .milliseconds(upload(payload)))
+            self?.arrived.append(payload.prompt)
+            if refuse.contains(payload.prompt) { throw Relay.Failure(status: 400, message: "Refused") }
+            return Data(#"{"status":"sent"}"#.utf8)
+        }
+    }
+    private func start(_ text: String, photos: [PickedPhoto] = [], in s: Session) -> Task<Void, Never> {
+        model.drafts[s.key] = Draft(text: text, photos: photos)
+        let task = Task { await model.sendConversation(s) }
+        return task
+    }
+
+    /// A message with a photo, slow to upload, then a text-only one: the relay receives them in that
+    /// order, and the composer was free for the second one at once.
+    func testPhotoThenTextReachTheRelayInOrder() async throws {
+        arrived = []
+        relay(upload: { $0.attachments == nil ? 20 : 600 })
+        let first = start("1 photo", photos: [try photo()], in: session)
+        try? await Task.sleep(for: .milliseconds(40))
+        XCTAssertTrue(model.drafts[session.key]?.isEmpty ?? true, "Composer not free while the photo uploads")
+        let second = start("2 text", in: session)
+        await first.value; await second.value
+        XCTAssertEqual(arrived, ["1 photo", "2 text"], "A later text overtook the photo")
+        XCTAssertEqual(model.mailboxes[session.key]?.messages.map(\.status), ["awaiting_reply", "awaiting_reply"])
+    }
+
+    /// Another session does not wait for this session's slow upload.
+    func testOtherSessionDoesNotWait() async throws {
+        arrived = []
+        relay(upload: { $0.attachments == nil ? 20 : 600 })
+        let slow = start("A photo", photos: [try photo()], in: session)
+        try? await Task.sleep(for: .milliseconds(40))
+        let quick = start("B text", in: other)
+        await quick.value
+        XCTAssertEqual(arrived, ["B text"], "The other session waited for this one")
+        await slow.value
+        XCTAssertEqual(arrived, ["B text", "A photo"])
+    }
+
+    /// A refused send ends only its own turn: the next one still goes, in order. The refused one comes
+    /// back into the composer, which the second send had left empty.
+    func testRefusalDoesNotStopTheNextSend() async throws {
+        arrived = []
+        relay(upload: { $0.prompt.hasPrefix("1") ? 300 : 20 }, refuse: ["1 refused"])
+        let first = start("1 refused", in: session)
+        try? await Task.sleep(for: .milliseconds(40))
+        let second = start("2 next", in: session)
+        await first.value; await second.value
+        XCTAssertEqual(arrived, ["1 refused", "2 next"])
+        XCTAssertEqual(model.mailboxes[session.key]?.messages.map(\.text), ["2 next"])
+        XCTAssertEqual(model.mailboxes[session.key]?.messages.map(\.status), ["awaiting_reply"])
+        XCTAssertEqual(model.drafts[session.key]?.text, "1 refused", "The refused send is not back in the composer")
+        XCTAssertEqual(model.drafts[session.key]?.error, "Refused")
+    }
 }

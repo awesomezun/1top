@@ -247,7 +247,6 @@ struct QuickView: View {
     @State private var request: ControlRequest?
     @State private var narrow = false
     @State private var themeFrame = CGRect.zero
-    @State private var languageFrame = CGRect.zero
     private static let paceColumn: CGFloat = 54, valueColumn: CGFloat = 70
     private var theme: QuickTheme { QuickTheme(light: scheme == .light) }
 
@@ -352,10 +351,7 @@ struct QuickView: View {
                     .accessibilityIdentifier("theme-toggle")
                     .accessibilityValue(scheme == .dark ? "dark" : "light")
                     .fixedSize()
-                    GlassSegments(items: Language.allCases.map { .init(value: $0, label: Self.languageMark[$0] ?? $0.name, spoken: $0.name, identifier: "header-language-" + $0.rawValue) },
-                                  selection: Binding(get: { model.language }, set: { chooseLanguage($0) }), height: 30, fontSize: 11.5)
-                        .frame(width: 102)
-                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { languageFrame = $0 }
+                    LanguageButton(identifier: "header-language")
                     Menu {
                         Button(L.t("Reconnect now", "지금 다시 연결")) { model.connect() }.disabled(model.connection == .demo)
                         Button(tokensChosen ? L.t("Show sessions as weekly limit %", "세션을 주간 한도 %로 보기") : L.t("Show sessions as tokens", "세션을 토큰으로 보기")) { tokensChosen.toggle() }
@@ -373,21 +369,11 @@ struct QuickView: View {
         .onGeometryChange(for: Bool.self) { $0.size.width < 390 } action: { narrow = $0 }
     }
 
-    private static let languageMark: [Language: String] = [.ko: "한", .en: "EN", .zh: "中"]
-
     /// Dark and light in one tap, from what is on screen now (a System setting flips to the other
     /// side). The System choice itself lives in Workspace settings.
     private func toggleTheme() {
         let next: Appearance = scheme == .dark ? .light : .dark
         Reveal.perform(at: CGPoint(x: themeFrame.midX, y: themeFrame.midY)) { model.appearance = next }
-    }
-
-    /// The new language spreads out from the segment that was tapped.
-    private func chooseLanguage(_ next: Language) {
-        guard next != model.language else { return }
-        let index = CGFloat(Language.allCases.firstIndex(of: next) ?? 0), count = CGFloat(Language.allCases.count)
-        let point = CGPoint(x: languageFrame.minX + languageFrame.width * (index + 0.5) / count, y: languageFrame.midY)
-        Reveal.perform(at: point) { model.language = next }
     }
 
     private var periodPicker: some View {
@@ -506,6 +492,7 @@ struct QuickView: View {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Circle().fill(color).frame(width: 6, height: 6).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
                 Text(Tool.name(q.kind)).font(.system(size: 12.5, weight: .semibold)).lineLimit(1).fixedSize()
+                if let tag = model.accountTag(q.id) { AccountChip(text: tag) }
                 Spacer(minLength: 4)
                 Text(Format.percent(w?.pct)).font(.system(size: 17, weight: .semibold)).monospacedDigit().fixedSize()
                     .foregroundStyle(q.stale ? theme.muted : theme.ink)
@@ -627,6 +614,7 @@ struct QuickView: View {
                 }
                 HStack(spacing: 4) {
                     Text(Tool.name(s.kind)).foregroundStyle(Tool.color(s.kind))
+                    if let tag = model.accountTag(model.account(of: s)) { AccountChip(text: tag) }
                     if let project = s.displayProject { Text("· " + project).foregroundStyle(theme.muted) }
                     if model.reportingDevices.count > 1, let device = model.device(for: s) { Text("· " + device.name).foregroundStyle(theme.dim) }
                 }.font(.system(size: 11.5)).lineLimit(1)

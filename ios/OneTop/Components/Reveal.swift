@@ -12,7 +12,9 @@ enum Reveal {
 
     /// Runs `change` under a circular reveal centred on `point` (window coordinates).
     static func perform(at point: CGPoint, _ change: () -> Void) {
-        guard !running else { return }
+        // A tap during a reveal still counts: the change applies at once under the running reveal, so
+        // rapid taps move on in order instead of being dropped.
+        guard !running else { change(); return }
         guard !UIAccessibility.isReduceMotionEnabled,
               let window = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
                 .flatMap(\.windows).first(where: \.isKeyWindow),

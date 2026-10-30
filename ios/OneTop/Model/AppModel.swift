@@ -21,7 +21,11 @@ final class AppModel {
     var account: RelayAccount?
     var relay: URL = Relay.current
     var language: Language = Language.saved {
-        didSet { language.save(); L.language = language }
+        didSet {
+            language.save(); L.language = language
+            // The demo's computers, sessions and conversation follow the language.
+            if connection == .demo { refreshDemoText() }
+        }
     }
     /// Light, dark or the iPhone's own setting, applied at the root.
     var appearance: Appearance = Appearance.saved {
@@ -40,6 +44,8 @@ final class AppModel {
     /// Drafts of sends the relay refused while a new draft was already being written, by message ID,
     /// so they can be brought back into the composer instead of overwriting it.
     var failedSends: [String: Draft] = [:]
+    /// Each session's sends, one after another up to the relay's answer (see `inTurn`).
+    @ObservationIgnored private var lanes: [String: Task<Void, Never>] = [:]
     /// The network step of a message send; tests replace it.
     var transport: @MainActor (MessagePayload, String, URL) async throws -> Data = { payload, token, relay in
         try await Relay.request("/api/action", token: token, payload: payload, relay: relay)
@@ -89,6 +95,25 @@ final class AppModel {
         return devices.count == 1 ? devices[0].name : L.t("All computers", "모든 컴퓨터") + " · \(devices.count)"
     }
     func device(for session: Session) -> Device? { devices.first { $0.id == session.deviceId } }
+
+    /// The account a session's weekly estimate belongs to in the selected period.
+    func account(of session: Session) -> String? { session.weeklyEstimate?[period.rawValue]?.accountId ?? session.weeklyAccount }
+    /// What tells same-tool accounts apart, as on the desktop dashboard: the name given in the desktop
+    /// app, or 1, 2… by account label once a tool has two or more accounts. Nil for a tool's only account.
+    func accountTag(_ id: String?) -> String? {
+        guard let id else { return nil }
+        var all: [String: Quota] = [:]
+        for d in devices { for q in d.snapshot?.accountQuotas ?? [] where all[q.id] == nil || (q.updated ?? 0) > (all[q.id]?.updated ?? 0) { all[q.id] = q } }
+        guard let quota = all[id] else { return nil }
+        if let alias = quota.alias?.trimmingCharacters(in: .whitespaces), !alias.isEmpty { return alias }
+        let same = all.values.filter { $0.kind == quota.kind }.sorted { $0.accountLabel.lowercased() < $1.accountLabel.lowercased() }
+        guard same.count >= 2, let index = same.firstIndex(where: { $0.id == id }) else { return nil }
+        return String(index + 1)
+    }
+    /// "Claude Code 2", "Codex Team", or just the tool's name.
+    func toolName(_ session: Session) -> String {
+        [Tool.name(session.kind), accountTag(account(of: session))].compactMap { $0 }.joined(separator: " ")
+    }
 
     /// A computer paired without remote control offers no controls, instructions or messages.
     private func sessions(of list: [Device]) -> [Session] {
@@ -397,8 +422,9 @@ final class AppModel {
         if !photos.isEmpty { sentPhotos[id] = photos.map(\.preview) }
         let payload = MessagePayload(requestId: id, deviceId: device.id, sessionId: s.id, controlKey: s.controlKey ?? "", prompt: text,
                                      attachments: photos.isEmpty ? nil : photos.map { .init(mime: "image/jpeg", data: $0.jpeg.base64EncodedString()) })
+        let relay = relay
         do {
-            let data = try await transport(payload, token, relay)
+            let data = try await inTurn(key) { [transport] in try await transport(payload, token, relay) }
             let receipt = (try? JSONDecoder.relay().decode(ActionReceipt.self, from: data))?.status
             setStatus(receipt == "unconfirmed" ? "delivery_unconfirmed" : "awaiting_reply", id: id, key: key)
         } catch let failure as Relay.Failure where (400..<500).contains(failure.status ?? 0) {
@@ -423,6 +449,23 @@ final class AppModel {
             setStatus("delivery_unconfirmed", id: id, key: key)
             message = L.t("Delivery unconfirmed — check the session before resending", "전달 미확인 · 재전송 전에 세션 확인")
         }
+    }
+
+    /// One session's sends reach the relay in the order they were made: each goes out once the one before
+    /// it has its answer (accepted, refused or lost), so a text-only message never overtakes a slower one
+    /// with photos. Nothing waits for the session's reply, the composer is already free, and other
+    /// sessions do not wait. A failure ends only its own turn; the next send still goes.
+    private func inTurn(_ key: String, _ work: @escaping @MainActor () async throws -> Data) async throws -> Data {
+        let previous = lanes[key]
+        let attempt = Task { @MainActor () -> Result<Data, Error> in
+            await previous?.value
+            do { return .success(try await work()) } catch { return .failure(error) }
+        }
+        let turn = Task { @MainActor in _ = await attempt.value }
+        lanes[key] = turn
+        let result = await attempt.value
+        if lanes[key] == turn { lanes[key] = nil }
+        return try result.get()
     }
 
     /// Puts a refused draft back into an empty composer.
@@ -519,8 +562,19 @@ final class AppModel {
         resetAccountState()
         devices = DemoData.devices(now: Date().timeIntervalSince1970)
         mailboxes = DemoData.mailboxes(now: Date().timeIntervalSince1970)
+        sentPhotos[DemoData.photoMessage] = PhotoPrep.demo(2).map(\.preview)
         controlOff = DemoData.controlOff
         connection = .demo
+    }
+
+    /// Re-reads the demo in the current language; messages written here stay.
+    private func refreshDemoText() {
+        let now = Date().timeIntervalSince1970, seeded = DemoData.mailboxes(now: now)
+        devices = DemoData.devices(now: now)
+        for (key, box) in seeded {
+            let ids = Set(box.messages.map(\.id))
+            mailboxes[key] = .init(messages: box.messages + (mailboxes[key]?.messages ?? []).filter { !ids.contains($0.id) })
+        }
     }
 
     func leaveDemo() {

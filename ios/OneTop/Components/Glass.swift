@@ -4,6 +4,31 @@ import SwiftUI
 /// and the selected one is a tinted, interactive glass capsule that morphs to the next choice.
 /// With Reduce Motion the selection moves without the morph; with Reduce Transparency the system
 /// draws the glass opaque.
+/// The language in one glass button: it shows the current language and each tap moves to the next,
+/// 한 → EN → 中 → 한, spreading out in a circle from the button like the theme toggle.
+struct LanguageButton: View {
+    @Environment(AppModel.self) private var model
+    var identifier: String
+    var size: CGFloat = 30
+    @State private var frame = CGRect.zero
+    var body: some View {
+        Button {
+            let next = model.language.next
+            Reveal.perform(at: CGPoint(x: frame.midX, y: frame.midY)) { model.language = next }
+        } label: {
+            Text(model.language.mark).font(.system(size: 12, weight: .semibold)).frame(minWidth: size - 12)
+                .accessibilityHidden(true)
+        }
+        .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.small)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
+        .accessibilityLabel(L.t("Language", "언어"))
+        .accessibilityValue(model.language.rawValue)
+        .accessibilityHint(L.t("Switches to ", "다음으로 바꿉니다: ") + model.language.next.name)
+        .accessibilityIdentifier(identifier)
+        .fixedSize()
+    }
+}
+
 struct GlassSegments<Value: Hashable>: View {
     struct Item {
         var value: Value

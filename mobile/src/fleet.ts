@@ -39,6 +39,20 @@ export function fleetQuotas(devices:Device[]):Quota[]{
  return [...by.values()];
 }
 
+/** What tells same-tool accounts apart, as on the desktop dashboard: the name given in the desktop app,
+ *  or 1, 2… by account label once a tool has two or more accounts. A tool's only account has none. */
+export function accountTags(devices:Device[]):Record<string,string>{
+ const by=new Map<string,Quota[]>(),out:Record<string,string>={};
+ for(const q of fleetQuotas(devices))by.set(q.kind,[...(by.get(q.kind)||[]),q]);
+ for(const list of by.values()){
+  const sorted=[...list].sort((a,b)=>{const x=a.account_label.toLowerCase(),y=b.account_label.toLowerCase();return x<y?-1:x>y?1:0;});
+  sorted.forEach((q,i)=>{const alias=(q.alias||'').trim();if(alias)out[q.id]=alias;else if(sorted.length>=2)out[q.id]=String(i+1);});
+ }
+ return out;
+}
+/** The account a session's weekly estimate belongs to in the selected period. */
+export const sessionAccount=(s:Session,period:WindowKey)=>s.weekly_estimate?.[period]?.account_id||s.weekly_account||null;
+
 /** Weekly % needs at least one numeric estimate; an empty object is not an estimate. */
 export const hasEstimate=(s:Session)=>!!s.weekly_estimate&&Object.keys(s.weekly_estimate).some(k=>valid(s.weekly_estimate?.[k as WindowKey]?.used_pp));
 

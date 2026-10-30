@@ -41,9 +41,7 @@ struct WelcomeView: View {
                         Label(L.t("Connection server · ", "연결 서버 · ") + Relay.label(model.relay), systemImage: "server.rack").font(.footnote)
                     }
                     Link(L.t("Desktop downloads ↗", "데스크톱 다운로드 ↗"), destination: URL(string: "https://1top.si/#download")!).font(.footnote)
-                    GlassSegments(items: Language.allCases.map { .init(value: $0, label: $0.name, identifier: "language-" + $0.rawValue) },
-                                  selection: $model.language)
-                        .frame(width: 260)
+                    LanguageButton(identifier: "welcome-language", size: 36)
                     Text(L.t("Sign-in stays in this iPhone's keychain only.", "로그인 정보는 이 iPhone의 키체인에만 저장됩니다."))
                         .font(.caption).foregroundStyle(.tertiary)
                 }

@@ -149,9 +149,10 @@ assert.match(nodes.sessionsBody.innerHTML,/&lt;script&gt;alert\(1\)&lt;\/script&
 assert.doesNotMatch(nodes.sessionsBody.innerHTML,/<script>/);
 assert.equal((nodes.sessionsBody.innerHTML.match(/reasoning effort/g)||[]).length,4);
 vm.runInContext("renderDetail('effort-1')",context);
-assert.match(nodes.detailContent.innerHTML,/추론 강도 \(effort\)<\/dt><dd>xhigh<\/dd>/);
+// The figures, effort among them, sit below the conversation in #detailMore.
+assert.match(nodes.detailMore.innerHTML,/추론 강도 \(effort\)<\/dt><dd>xhigh<\/dd>/);
 vm.runInContext("renderDetail('effort-4')",context);
-assert.doesNotMatch(nodes.detailContent.innerHTML,/추론 강도/);
+assert.doesNotMatch(nodes.detailContent.innerHTML+nodes.detailMore.innerHTML,/추론 강도/);
 assert.doesNotMatch(source,/setLineDash\(\[4,4\]\)|보고 공백/);
 console.log('Effort: actual high/xhigh/max values render and escape safely; missing values are omitted. Quota chart has no dashed-gap rendering.');
 

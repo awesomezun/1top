@@ -205,7 +205,7 @@ struct SessionDetail: View {
     }
 
     private func place(_ s: Session) -> String {
-        [model.device(for: s)?.name, s.app, s.terminal == s.name ? nil : s.terminal, Tool.name(s.kind), Tool.model(s.model)]
+        [model.device(for: s)?.name, s.app, s.terminal == s.name ? nil : s.terminal, model.toolName(s), Tool.model(s.model)]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }

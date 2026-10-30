@@ -116,6 +116,12 @@ struct QuotaWindow: Codable, Hashable, Sendable {
     var label: String
     var pct: Double?
     var reset: Double?
+    /// "5 hours" or "Weekly" in the chosen language, from the window's key; other labels as reported.
+    var name: String {
+        if key == "5h" || label == "5H" { return L.t("5 hours", "5시간") }
+        if key == "7d" || key == "weekly" || label == "주간" || label == "Weekly" { return L.t("Weekly", "주간") }
+        return label
+    }
 }
 
 struct Quota: Codable, Identifiable, Hashable, Sendable {
@@ -132,6 +138,8 @@ struct Quota: Codable, Identifiable, Hashable, Sendable {
     var weekly: [String: WeeklyPeriod]?
     /// [time, weekly %, reset] report points, newest last.
     var usagePoints: [[Double]]?
+    /// The name given to the account in the desktop app; it replaces the account's number.
+    var alias: String? = nil
     /// The account's sign-in on the computer has to be renewed before the limit can update.
     var needsReconnect: Bool { ["login_required", "login_expired", "credential_store_unavailable", "access_denied"].contains(status ?? "") }
     /// What a stale value says instead of a rate: reconnect needed, or how old it is.

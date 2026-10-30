@@ -19,6 +19,36 @@ enum Chinese {
     }
 
     static let exact: [String: String] = [
+        // Demo computers, sessions and conversation (shared with the Android demo).
+        "5 hours": "5小时",
+        "Switches to ": "切换到 ",
+        "Clear search": "清除搜索",
+        "Account names are the ones given in the desktop app.": "账户名称沿用桌面应用中设置的名称。",
+        "Also do the cleanup I asked for yesterday.": "把昨天让你做的整理也做了。",
+        "Better docs search": "文档搜索改进",
+        "Change how search results are sorted.": "修改搜索结果的排序方式。",
+        "Checkout redesign": "结账页面改版",
+        "Compare it with the previous branch too.": "也和之前分支的结果比较一下。",
+        "Demo Mac Studio": "演示 Mac Studio",
+        "Demo Mac mini": "演示 Mac mini",
+        "Deploy script": "部署脚本",
+        "Design token cleanup": "设计令牌整理",
+        "How far along are you?": "现在进展到哪里了？",
+        "I checked both photos. The pay button's bottom margin was 8 pt off, so I matched it.": "两张照片都看过了。支付按钮的下边距差了 8pt，已经对齐。",
+        "I moved the card entry step of checkout to the new component. The receipt screen and two tests are left.": "结账页面的银行卡输入步骤已迁移到新组件，还剩收据页面和两个测试。",
+        "Invoice template": "账单模板",
+        "Let me know when the tests finish.": "测试结束后告诉我。",
+        "Match the receipt screen to the same rules.": "收据页面也按同样的标准调整。",
+        "Nightly sync": "夜间同步",
+        "Notification settings": "通知设置页面",
+        "Polish the notification copy.": "润色一下通知文案。",
+        "Rate limit tests": "限流测试",
+        "Sum up the current screen in one line.": "用一句话总结当前页面。",
+        "The buttons look misaligned on these two screens. Please check.": "这两个页面的按钮看起来没对齐，请检查一下。",
+        "Training data cleanup": "训练数据整理",
+        "Translation review": "翻译审校",
+        "What rules do you use to clean the data?": "告诉我数据整理的标准。",
+        "Where is the log file?": "告诉我日志文件的路径。",
         "Bring back to the composer": "放回输入框",
         "Not sent — the relay refused it": "未发送 · 中继服务器拒绝了请求",
         "Working…": "正在处理…",
@@ -252,6 +282,7 @@ enum Chinese {
     /// Strings with numbers, times or names in them: `{0}`, `{1}` are the captured parts.
     /// Order matters: the first match wins, so longer forms come before shorter ones.
     nonisolated(unsafe) static let patterns: [(Regex<AnyRegexOutput>, String)] = [
+        (try! Regex(#"^Account (.+)$"#), "账户 {0}"),
         (try! Regex(#"^\+(.+) sub$"#), "子会话 {0}"),
         (try! Regex(#"^Average token speed over the last (.+): (.+) tokens per hour$"#), "最近{0}平均 token 速度：每小时 {1} tokens"),
         (try! Regex(#"^Last (.+) · reported tokens, including cache$"#), "最近{0} · 已报告 token（含缓存）"),

@@ -15,7 +15,7 @@ function fixture(rates){
    getContext:()=>({scale(){},beginPath(){},stroke(){},fill(){},moveTo(){},lineTo(){},arc:(...v)=>arcs.push(v),fillText:(...v)=>labels.push(v)})};
  });
  const context=vm.createContext({window:{},localStorage:{getItem:()=>null},performance:{now:()=>now},devicePixelRatio:1,
-  document:{documentElement:{dataset:{},style:{}},querySelectorAll:()=>canvases,querySelector:()=>label},
+  document:{documentElement:{dataset:{},style:{}},querySelectorAll:()=>canvases,querySelector:()=>label,addEventListener(){}},
   getComputedStyle:()=>({getPropertyValue:()=> '#888'})});
  vm.runInContext(source,context);
  return {api:context.window.OneTopDashboard,canvases,label,tick(ms){now+=ms;}};

@@ -13,6 +13,7 @@ jobs:
       - run: pip install -e .
       - run: python -m unittest discover -s tests -q
       - run: xcrun swiftc desktop/DashboardModel.swift tests/desktop/ModelChecks.swift -o /tmp/onetop-model-checks && /tmp/onetop-model-checks
+      - run: xcrun swiftc desktop/QuickText.swift tests/desktop/QuickTextChecks.swift -o /tmp/onetop-text-checks && /tmp/onetop-text-checks
       - run: xcrun swiftc -framework AppKit -framework SwiftUI -framework WebKit desktop/*.swift -o /tmp/onetop-desktop-check
   cloud-and-web:
     runs-on: ubuntu-latest
@@ -21,7 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node tests/weekly.mjs && node tests/maps.mjs && node tests/relay-settings.mjs && node tests/session-groups.mjs && node tests/dashboard-gauges.mjs && node tests/ranges.mjs && node tests/cockpit.mjs
+      - run: node tests/weekly.mjs && node tests/maps.mjs && node tests/relay-settings.mjs && node tests/session-groups.mjs && node tests/dashboard-gauges.mjs && node tests/ranges.mjs && node tests/speed.mjs && node tests/history.mjs && node tests/conversation.mjs && node tests/remote-adapter.mjs && node tests/demo-usage.mjs && node tests/i18n-collector.mjs && node tests/quick-view.mjs && node site/scripts/check-zh.mjs && node site/scripts/check-site-zh.mjs site/src/main.js site/src/relay-settings.js site/src/mobile-connect.js
       - run: npm ci --legacy-peer-deps && npm test && npm run check
         working-directory: cloud
       - run: npm ci && npm run build
@@ -34,5 +35,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm ci && npm run check && npm run lint && node --experimental-strip-types --test test/metrics.test.mjs test/fleet.test.mjs test/conversation.test.mjs
+      - run: npm ci && npm run check && npm run lint && node --experimental-strip-types --test test/metrics.test.mjs test/fleet.test.mjs test/conversation.test.mjs test/parity.test.mjs
         working-directory: mobile
