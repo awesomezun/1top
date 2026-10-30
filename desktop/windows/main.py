@@ -381,8 +381,11 @@ def quick_native_checks(shell):
     def prefs(view):
         return view.evaluate_js('({lang:document.documentElement.lang,theme:document.documentElement.dataset.theme})') or {}
     initial = prefs(quick)
+    result['motion_environment'] = quick.evaluate_js('({supported:!!document.startViewTransition,reduced:matchMedia("(prefers-reduced-motion: reduce)").matches,visible:!document.hidden})')
     languages = []
     for lang in ('en', 'zh', 'ko'):
+        shell.show_quick(shell.quick_point)
+        time.sleep(.2)
         quick.evaluate_js('document.querySelector("[data-act=language]").click()')
         ok = wait_for(lambda: prefs(quick).get('lang') == ('zh-CN' if lang == 'zh' else lang) and prefs(window).get('lang') == ('zh-CN' if lang == 'zh' else lang))
         wait_for(lambda: not quick.evaluate_js('OneTopEffects.running'))
@@ -390,6 +393,8 @@ def quick_native_checks(shell):
     result['languages'] = languages
     themes = []
     for theme in ('light', 'dark'):
+        shell.show_quick(shell.quick_point)
+        time.sleep(.2)
         quick.evaluate_js('document.querySelector("[data-act=theme]").click()')
         ok = wait_for(lambda: prefs(quick).get('theme') == theme and prefs(window).get('theme') == theme)
         wait_for(lambda: not quick.evaluate_js('OneTopEffects.running'))

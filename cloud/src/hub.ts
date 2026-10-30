@@ -11,32 +11,38 @@ const json=(value:unknown,status=200)=>Response.json(value,{status});
 export class AccountHub extends DurableObject<Env> {
   constructor(ctx:DurableObjectState,env:Env){super(ctx,env);ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping','pong'));}
   async readDevice(id:string):Promise<StoredDevice|undefined>{
-    const row=await this.ctx.storage.get<StoredDevice&{parts?:number}>('snapshot:'+id);
-    if(!row?.parts)return row;
-    const keys=Array.from({length:row.parts},(_,i)=>'snapshot-part:'+id+':'+i);
-    const parts=await this.ctx.storage.get<string>(keys);
-    if(keys.some(k=>!parts.has(k)))return undefined;
-    const {parts:count,...metadata}=row;
-    return {...metadata,snapshot:JSON.parse(keys.map(k=>parts.get(k)).join(''))};
+    return this.ctx.storage.transaction(async storage=>{
+      const row=await storage.get<StoredDevice&{parts?:number}>('snapshot:'+id);
+      if(!row?.parts)return row;
+      const keys=Array.from({length:row.parts},(_,i)=>'snapshot-part:'+id+':'+i);
+      const parts=await storage.get<string>(keys);
+      if(keys.some(k=>!parts.has(k)))return undefined;
+      const {parts:count,...metadata}=row;
+      return {...metadata,snapshot:JSON.parse(keys.map(k=>parts.get(k)).join(''))};
+    });
   }
   async devices(){
     const rows=await this.ctx.storage.list<StoredDevice>({prefix:'snapshot:'});
     return (await Promise.all([...rows.keys()].map(k=>this.readDevice(k.slice(9))))).filter((r):r is StoredDevice=>!!r);
   }
   async storeDevice(device:StoredDevice){
-    const raw=JSON.stringify(device.snapshot),key='snapshot:'+device.id;
-    const old=await this.ctx.storage.get<{parts?:number}>(key);
-    const count=raw.length>24000?Math.ceil(raw.length/24000):0;
-    if(count){
-      const values:Record<string,unknown>={[key]:{...device,snapshot:undefined,parts:count}};
-      for(let i=0;i<count;i++)values['snapshot-part:'+device.id+':'+i]=raw.slice(i*24000,(i+1)*24000);
-      await this.ctx.storage.put(values);
-    }else await this.ctx.storage.put(key,device);
-    for(let i=count;i<(old?.parts||0);i++)await this.ctx.storage.delete('snapshot-part:'+device.id+':'+i);
+    return this.ctx.storage.transaction(async storage=>{
+      const raw=JSON.stringify(device.snapshot),key='snapshot:'+device.id;
+      const old=await storage.get<{parts?:number}>(key);
+      const count=raw.length>24000?Math.ceil(raw.length/24000):0;
+      if(count){
+        const values:Record<string,unknown>={[key]:{...device,snapshot:undefined,parts:count}};
+        for(let i=0;i<count;i++)values['snapshot-part:'+device.id+':'+i]=raw.slice(i*24000,(i+1)*24000);
+        await storage.put(values);
+      }else await storage.put(key,device);
+      for(let i=count;i<(old?.parts||0);i++)await storage.delete('snapshot-part:'+device.id+':'+i);
+    });
   }
   async removeDevice(id:string){
-    const old=await this.ctx.storage.get<{parts?:number}>('snapshot:'+id);
-    await this.ctx.storage.delete(['snapshot:'+id,...Array.from({length:old?.parts||0},(_,i)=>'snapshot-part:'+id+':'+i)]);
+    return this.ctx.storage.transaction(async storage=>{
+      const old=await storage.get<{parts?:number}>('snapshot:'+id);
+      await storage.delete(['snapshot:'+id,...Array.from({length:old?.parts||0},(_,i)=>'snapshot-part:'+id+':'+i)]);
+    });
   }
   reportPolicy(){
     const watching=this.ctx.getWebSockets('browser').some(ws=>ws.readyState===1&&(ws.deserializeAttachment() as Attachment).expires>Date.now());

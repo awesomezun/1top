@@ -93,7 +93,10 @@ with tempfile.TemporaryDirectory() as tmp:
             native=result['quick_native']
             assert all(native[k] for k in ('tool_window','not_app_window','within_work_area','blur_dismissed','preferences_restored','login_enabled','login_disabled','login_quick_view')), native
             assert all(r['synced'] for r in native['languages']+native['themes']), native
-            assert native['circle_animations'] >= 5, native
+            if native['motion_environment']['supported'] and not native['motion_environment']['reduced']:
+                assert native['circle_animations'] >= 5, native
+            else:
+                assert native['circle_animations'] == 0, native
             assert result['collector_owned'] == (name != 'existing-collector'), result
             if agent:
                 assert agent.poll() is None, 'Closing the UI must preserve an external collector'
