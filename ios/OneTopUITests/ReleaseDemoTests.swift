@@ -43,10 +43,9 @@ final class ReleaseDemoTests: XCTestCase {
         let draft = element(app, "mail-draft")
         draft.tap()
         draft.typeText("Does this screen look right?")
+        // It goes at once, as in a chat app, with no confirmation.
         element(app, "mail-send").tap()
-        let confirm = element(app, "confirm-action")
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "No send confirmation")
-        confirm.tap()
+        XCTAssertFalse(element(app, "confirm-action").waitForExistence(timeout: 1), "A confirmation opened before sending")
         XCTAssertFalse(element(app, "photo-preview-0").waitForExistence(timeout: 3), "The composer kept the photo after sending")
         // The sent message shows the picture itself; earlier demo photos are only listed by name.
         let sent = app.descendants(matching: .any).matching(NSPredicate(format: "identifier == 'mail-attachments' AND label == 'Photos: 1'")).firstMatch

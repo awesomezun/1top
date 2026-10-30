@@ -323,11 +323,8 @@ final class DeviceQATests: XCTestCase {
             tapWhenReady(draft, "Composer")
             draft.typeText(sent)
             tapWhenReady(element(app, "mail-send"), "Send")
-            let confirm = element(app, "confirm-action")
-            XCTAssertTrue(confirm.waitForExistence(timeout: 5), "No send confirmation")
-            confirm.tap()
-            // The confirmation takes the focus, so the next message starts with a tap on the composer.
-            tapWhenReady(draft, "Composer after sending")
+            // It goes at once and the keyboard stays: the next message is written straight away.
+            XCTAssertFalse(element(app, "confirm-action").waitForExistence(timeout: 1), "A confirmation opened before sending")
             draft.typeText(next)
             XCTAssertEqual(draft.value as? String, next, "The sent words came back into the composer")
             XCTAssertTrue(app.staticTexts[sent].waitForExistence(timeout: 5), "\(sent) not in the conversation")
@@ -355,9 +352,6 @@ final class DeviceQATests: XCTestCase {
             tapWhenReady(draft, "Composer")
             draft.typeText(text)
             tapWhenReady(element(app, "mail-send"), "Send")
-            let confirm = element(app, "confirm-action")
-            XCTAssertTrue(confirm.waitForExistence(timeout: 5), "No send confirmation")
-            confirm.tap()
             shot(app, "26-\(lang)-1-sent")
             let dots = element(app, "typing-indicator")
             XCTAssertTrue(dots.waitForExistence(timeout: 10), "No dots while the session answers")
@@ -399,7 +393,7 @@ final class DeviceQATests: XCTestCase {
             shot(app, "27-\(lang)-0-open")
             let replies = app.staticTexts.matching(identifier: "mail-reply").count
             tapWhenReady(element(app, "mail-send"), "Send")
-            tapWhenReady(element(app, "confirm-action"), "Confirm send")
+            XCTAssertFalse(element(app, "confirm-action").exists, "A confirmation opened before sending")
             sleep(1)
             shot(app, "27-\(lang)-1-sent")
             XCTAssertTrue(element(app, "typing-indicator").waitForExistence(timeout: 10), "No dots while the session answers")
@@ -420,9 +414,9 @@ final class DeviceQATests: XCTestCase {
 
     /// Demo: the one conversation screen. It opens on the conversation demo's earlier messages (demo-world.js)
     /// with nothing being answered; two sample photos in the composer (debug -qaDemoImages), one removed;
-    /// the send confirmation opened and closed with the draft kept; replies, a photo listed by name and an
-    /// unconfirmed delivery in the timeline; work state and controls reachable; a sent message following
-    /// the script to its reply; a prompt-only session's notice.
+    /// answers, a photo listed by name and an unconfirmed delivery in the timeline; a message sent at once
+    /// with no confirmation, its photo with it; work state and controls reachable; a sent message following
+    /// the script to its answer; a prompt-only session's notice and an instruction sent at once.
     func test24_ConversationAndPhotos() {
         let app = launch(["--demo", "-screenDetail", "s1", "-qaDemoImages", "2"])
         let state = element(app, "work-status")
@@ -436,22 +430,25 @@ final class DeviceQATests: XCTestCase {
         tapWhenReady(element(app, "photo-remove-1"), "Remove photo 2")
         XCTAssertFalse(element(app, "photo-preview-1").waitForExistence(timeout: 2), "Photo 2 still shown")
         XCTAssertTrue(element(app, "photo-preview-0").exists, "Photo 1 lost")
-        let draft = element(app, "mail-draft")
-        draft.tap()
-        draft.typeText("QA demo question with a photo")
-        tapWhenReady(element(app, "mail-send"), "Send")
-        let confirm = element(app, "confirm-action")
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "No send confirmation")
-        shot(app, "24b-send-confirmation")
-        dismissConfirmation(app)
-        XCTAssertFalse(confirm.waitForExistence(timeout: 2), "Confirmation still open")
-        XCTAssertTrue((draft.value as? String ?? "").contains("QA demo question"), "Draft lost after closing the confirmation")
-        XCTAssertTrue(element(app, "photo-preview-0").exists, "Photo lost after closing the confirmation")
         // The earlier messages: two answered, with nothing under them, and one not confirmed, with its state.
         let states = app.descendants(matching: .any).matching(identifier: "mail-status")
         XCTAssertEqual(states.count, 1, "Earlier messages missing")
         XCTAssertEqual(states.matching(NSPredicate(format: "value == 'delivery_unconfirmed'")).count, 1)
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "mail-from").count, 2, "The AI's messages carry no name")
+        // A working session says where the message is written that it waits for the current work.
+        let draft = element(app, "mail-draft")
+        XCTAssertEqual(draft.placeholderValue, "지금 작업이 끝나면 차례로 보냅니다…")
+        draft.tap()
+        draft.typeText("QA demo question with a photo")
+        tapWhenReady(element(app, "mail-send"), "Send")
+        // It goes at once, as in a chat app: no confirmation, the composer empties and the message carries its photo.
+        let confirm = element(app, "confirm-action")
+        XCTAssertFalse(confirm.waitForExistence(timeout: 2), "A confirmation opened before sending")
+        XCTAssertFalse(element(app, "photo-preview-0").exists, "The photo stayed in the composer")
+        XCTAssertFalse((draft.value as? String ?? "").contains("QA demo question"), "The text stayed in the composer")
+        let sent = app.descendants(matching: .any).matching(NSPredicate(format: "identifier == 'mail-attachments' AND label == '사진 1장'")).firstMatch
+        XCTAssertTrue(sent.waitForExistence(timeout: 5), "The sent message shows no photo")
+        shot(app, "24b-sent")
         // Controls stay reachable while composing.
         XCTAssertTrue(element(app, "control-pause").isHittable && element(app, "control-terminate").isHittable, "Controls not reachable")
         tapWhenReady(element(app, "control-terminate"), "Quit CLI")
@@ -482,7 +479,6 @@ final class DeviceQATests: XCTestCase {
         box.tap()
         box.typeText("QA demo question")
         tapWhenReady(element(fresh, "mail-send"), "Send")
-        tapWhenReady(element(fresh, "confirm-action"), "Confirm send")
         let live = element(fresh, "typing-indicator")
         XCTAssertTrue(live.waitForExistence(timeout: 10), "No typing once the session responds")
         let first = live.value as? String ?? ""
@@ -496,7 +492,16 @@ final class DeviceQATests: XCTestCase {
         let old = launch(["--demo", "-screenDetail", "s6"])
         XCTAssertTrue(element(old, "prompt-only").waitForExistence(timeout: 15), "No prompt-only notice")
         XCTAssertFalse(element(old, "photo-pick").exists, "Photo button for a session without photos")
+        // An instruction goes at once too; the composer says the session takes instructions only.
+        let instruction = element(old, "mail-draft")
+        XCTAssertEqual(instruction.placeholderValue, "지시만 받는 세션입니다. 지시를 입력하세요…")
         shot(old, "24j-prompt-only")
+        instruction.tap()
+        instruction.typeText("QA demo instruction")
+        tapWhenReady(element(old, "mail-send"), "Send instruction")
+        XCTAssertFalse(element(old, "confirm-action").waitForExistence(timeout: 2), "A confirmation opened before the instruction")
+        XCTAssertTrue(element(old, "control-note").waitForExistence(timeout: 5), "No demo note for the instruction")
+        shot(old, "24k-instruction-sent")
     }
 
     /// Simulator only: two period changes, slow enough to film. A screen recording around this test
@@ -644,8 +649,7 @@ final class DeviceQATests: XCTestCase {
         return app
     }
 
-    /// Writes in the conversation composer, sends after the confirmation and waits for the message
-    /// to show in the timeline.
+    /// Writes in the conversation composer and sends it, which goes at once with no confirmation.
     private func sendFromComposer(_ app: XCUIApplication, _ text: String, step: String) {
         let draft = element(app, "mail-draft")
         XCTAssertTrue(draft.waitForExistence(timeout: 10))
@@ -655,10 +659,8 @@ final class DeviceQATests: XCTestCase {
         let send = element(app, "mail-send")
         XCTAssertTrue(wait(send, "isEnabled == true", timeout: 20), "Send not available")
         send.tap()
-        let confirm = element(app, "confirm-action")
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "No send confirmation")
-        shot(app, step + "b-confirmation")
-        confirm.tap()
+        XCTAssertFalse(element(app, "confirm-action").waitForExistence(timeout: 2), "A confirmation opened before sending")
+        shot(app, step + "b-sent")
     }
 
     /// Confirms one control on the test session and waits for the computer's receipt.
