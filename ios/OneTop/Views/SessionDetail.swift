@@ -363,11 +363,12 @@ struct ConversationTimeline: View {
 }
 
 /// What the session is doing for the request, under the last message: three small dots that rise
-/// and fade in turn, not a message bubble. Still with Reduce Motion. VoiceOver reads the words once,
-/// not the animation.
+/// and fade in turn, not a message bubble, with no words beside them: the work state above already says
+/// the session is working. Still with Reduce Motion. VoiceOver reads the phase once, not the animation.
 struct TypingIndicator: View {
     var phase: String
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
 
     static func words(_ phase: String) -> String {
         switch phase {
@@ -379,19 +380,18 @@ struct TypingIndicator: View {
 
     var body: some View {
         let words = Self.words(phase)
-        HStack(spacing: 8) {
-            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
-                let t = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
-                HStack(spacing: 4) {
-                    ForEach(0..<3, id: \.self) { i in
-                        let lift = reduceMotion ? 0.5 : (sin(t * 5.5 - Double(i) * 0.75) + 1) / 2
-                        Circle().fill(Color.secondary).frame(width: 6, height: 6)
-                            .opacity(0.3 + 0.6 * lift).offset(y: -2.5 * lift)
-                    }
+        // The desktop's muted colour, so the dots match on every screen.
+        let muted = QuickTheme(light: scheme == .light).muted
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { timeline in
+            let t = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 4) {
+                ForEach(0..<3, id: \.self) { i in
+                    let lift = reduceMotion ? 0.5 : (sin(t * 5.5 - Double(i) * 0.75) + 1) / 2
+                    Circle().fill(muted).frame(width: 6, height: 6)
+                        .opacity(0.3 + 0.6 * lift).offset(y: -2.5 * lift)
                 }
-                .frame(height: 12)
             }
-            Text(words).font(.caption).foregroundStyle(.secondary)
+            .frame(height: 12)
         }
         .padding(.leading, 6).padding(.top, 2)
         .accessibilityElement(children: .ignore)

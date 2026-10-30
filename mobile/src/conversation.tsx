@@ -172,18 +172,21 @@ function Conversation({row,live,close}:{row:SessionRow;live:SessionRow|undefined
  </SafeAreaView>;
 }
 
-/** The computer's activity on the latest request: three dots that rise in turn, apart from the messages.
- *  One label for screen readers, not a live region, so it is not read again on every phase. */
+/** The computer's activity on the latest request: three dots that rise in turn, apart from the messages,
+ *  sized like the desktop's. The phase is only read out to screen readers; the work state above already
+ *  says the session is working. */
 function Typing({label}:{label:string}){
  const [phase]=useState(()=>new Animated.Value(0)),[still,setStill]=useState(false);
  useEffect(()=>{let alive=true;AccessibilityInfo.isReduceMotionEnabled().then(v=>{if(alive)setStill(v);}).catch(()=>{});return()=>{alive=false;};},[]);
- useEffect(()=>{if(still)return;const loop=Animated.loop(Animated.timing(phase,{toValue:1,duration:1400,easing:Easing.linear,useNativeDriver:motion}));loop.start();return()=>{loop.stop();phase.setValue(0);};},[still,phase]);
+ useEffect(()=>{if(still)return;const loop=Animated.loop(Animated.timing(phase,{toValue:1,duration:1150,easing:Easing.linear,useNativeDriver:motion}));loop.start();return()=>{loop.stop();phase.setValue(0);};},[still,phase]);
  return <View testID="typing-indicator" accessible accessibilityLabel={label} style={st.typing}>
-  <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={{flexDirection:'row',alignItems:'center',gap:3,height:10}}>
-   {[0,1,2].map(i=>{const a=.08+i*.14,b=a+.14,e=b+.14;return <Animated.View key={i} style={{width:5,height:5,borderRadius:3,backgroundColor:c.muted,
-    opacity:still?.75:phase.interpolate({inputRange:[0,a,b,e,1],outputRange:[.4,.4,1,.4,.4]}),transform:[{translateY:still?0:phase.interpolate({inputRange:[0,a,b,e,1],outputRange:[0,0,-2.5,0,0]})}]}}/>;})}
+  <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={{flexDirection:'row',alignItems:'center',gap:4,height:12}}>
+   {[0,1,2].map(i=>{
+    // The desktop's beat: a 1.15s cycle, each dot .14s after the last, highest at 40% of its own cycle.
+    const d=i*.14/1.15,w=d/.6,lift=still?null:phase.interpolate({inputRange:i?[0,d,d+.4,1]:[0,.4,1],outputRange:i?[w,0,1,w]:[0,1,0],easing:Easing.inOut(Easing.ease)});
+    return <Animated.View key={i} style={{width:6,height:6,borderRadius:3,backgroundColor:c.muted,
+     opacity:lift?lift.interpolate({inputRange:[0,1],outputRange:[.3,.9]}):.6,transform:[{translateY:lift?lift.interpolate({inputRange:[0,1],outputRange:[0,-2.5]}):0}]}}/>;})}
   </View>
-  <Text importantForAccessibility="no" style={{color:c.muted,fontSize:12}}>{label}</Text>
  </View>;
 }
 

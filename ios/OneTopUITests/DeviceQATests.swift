@@ -336,6 +336,44 @@ final class DeviceQATests: XCTestCase {
         shot(app, "25-typing-after-sending")
     }
 
+    /// Demo, held at one moment: send, then three moving dots with no words while the session answers
+    /// (the phase is only read out), then the reply. Korean, English and Chinese.
+    func test26_SendShowsDotsThenReply() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Filmed in the simulator.")
+        #endif
+        let words: [String: [String: String]] = ["ko": ["responding": "응답 준비 중…", "working": "작업 중…", "writing": "답변 작성 중…"],
+                                                 "en": ["responding": "Preparing a reply…", "working": "Working…", "writing": "Writing a reply…"],
+                                                 "zh": ["responding": "正在准备回复…", "working": "工作中…", "writing": "正在撰写回复…"]]
+        for (lang, text) in [("ko", "지금 어디까지 했어?"), ("en", "How far along are you?"), ("zh", "现在进展到哪里了？")] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--demo", "-qaGuard", "YES", "-appearance", "dark", "-language", lang, "-qaDemoNow", "1800000000", "-screenDetail", "s1"]
+            app.launch()
+            let draft = element(app, "mail-draft")
+            XCTAssertTrue(draft.waitForExistence(timeout: 15), "Conversation did not open")
+            let replies = app.staticTexts.matching(identifier: "mail-reply").count
+            tapWhenReady(draft, "Composer")
+            draft.typeText(text)
+            tapWhenReady(element(app, "mail-send"), "Send")
+            let confirm = element(app, "confirm-action")
+            XCTAssertTrue(confirm.waitForExistence(timeout: 5), "No send confirmation")
+            confirm.tap()
+            shot(app, "26-\(lang)-1-sent")
+            let dots = element(app, "typing-indicator")
+            XCTAssertTrue(dots.waitForExistence(timeout: 10), "No dots while the session answers")
+            sleep(3)
+            let phase = dots.value as? String ?? ""
+            XCTAssertEqual(dots.label, words[lang]?[phase], "The phase is not read out")
+            XCTAssertFalse(app.staticTexts[dots.label].exists, "The phase is written beside the dots")
+            shot(app, "26-\(lang)-2-dots")
+            let reply = app.staticTexts.matching(identifier: "mail-reply")
+            XCTAssertTrue(wait(reply.element(boundBy: replies), "exists == true", timeout: 20), "No reply")
+            sleep(1)
+            shot(app, "26-\(lang)-3-reply")
+            app.terminate()
+        }
+    }
+
     /// Demo: the one conversation screen. Two sample photos in the composer (debug -qaDemoImages),
     /// one removed; the send confirmation opened and closed with the draft kept; every delivery state
     /// and a session reply in the timeline; work state and controls reachable; a prompt-only session's notice.

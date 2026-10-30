@@ -49,7 +49,7 @@ enum Chinese {
         "Where is the log file?": "告诉我日志文件的路径。",
         "Bring back to the composer": "放回输入框",
         "Not sent — the relay refused it": "未发送 · 中继服务器拒绝了请求",
-        "Working…": "正在处理…",
+        "Working…": "工作中…",
         "Preparing a reply…": "正在准备回复…",
         "The computer is offline": "电脑已离线",
         "The computer's report is stale": "电脑报告已过时",
