@@ -22,6 +22,13 @@ it('keeps every period and numeric evidence while dropping private nested fields
  expect(Object.keys(clean.flow!)).toHaveLength(13);expect(clean.sessions[0].effort).toBe('high');
  expect(clean.account_quotas[0].calibration?.seconds).toBe(300);expect(clean.host.network.rx).toBe(10);expect(JSON.stringify(clean)).not.toContain('PRIVATE');
 });
+it('keeps process ownership only for present sessions and verified shared backend IDs',()=>{
+ const owners=['s','backend:7','backend:8','/private/path','gone',null,{}];
+ const clean=snapshot({sessions:[{id:'s'}],system:{shared:[{pid:7,id:'backend:7'}],
+  top:owners.map((owner,i)=>({pid:i+1,owner,cmdline:'PRIVATE',cwd:'/private'}))}});
+ expect(clean.system.top.map(r=>r.owner)).toEqual(['s','backend:7',null,null,null,null,null]);
+ expect(JSON.stringify(clean)).not.toContain('PRIVATE');expect(JSON.stringify(clean)).not.toContain('/private');
+});
 it('validates rename, alias, history bounds without truncating commands',()=>{
  const ids={request_id:crypto.randomUUID(),device_id:crypto.randomUUID(),session_id:'s',control_key:'k'};
  expect(action({...ids,action:'rename',title:'New'}).title).toBe('New');

@@ -24,15 +24,18 @@ export function hostMetrics(h:any){return {
  process_count:num(h?.process_count,1e6),unreadable_processes:num(h?.unreadable_processes,1e6),platform:str(h?.platform,40),os:str(h?.os,40)
 };}
 const process=(r:any)=>({pid:pid(r?.pid),ppid:pid(r?.ppid),name:str(r?.name,80).split(/[\\/]/).pop()||'',created:num(r?.created),cpu:num(r?.cpu,100000),rss:num(r?.rss)});
-export function systemMetrics(s:any){return {
+export function systemMetrics(s:any,sessionIds:ReadonlySet<string>=new Set()){
+ const shared=rows(s?.shared,30).map(r=>({...process(r),id:str(r?.id,80),count:num(r?.count,10000),pids:rows(r?.pids,64).filter(n=>pid(n)!==null)}));
+ const owners=new Set([...sessionIds,...shared.filter(r=>r.pid!==null&&r.pid>0&&r.id===`backend:${r.pid}`).map(r=>r.id)]);
+ return {
  sampler_ms:num(s?.sampler_ms),monitor:{pid:pid(s?.monitor?.pid),cpu:num(s?.monitor?.cpu,100000),rss:num(s?.monitor?.rss)},
  history:rows(s?.history,300).map(r=>({t:num(r?.t),cpu:num(r?.cpu,100),memory:num(r?.memory,100),rx:num(r?.rx),tx:num(r?.tx)})),
- top:rows(s?.top,15).map(process),shared:rows(s?.shared,30).map(r=>({...process(r),id:str(r?.id,80),count:num(r?.count,10000),pids:rows(r?.pids,64).filter(n=>pid(n)!==null)}))
+ top:rows(s?.top,15).map(r=>({...process(r),owner:typeof r?.owner==='string'&&owners.has(r.owner)?r.owner:null})),shared
 };}
 export function quota(q:any){return {kind:str(q?.kind,40),plan:str(q?.plan,40),updated:num(q?.updated)||0,stale:q?.stale!==false,note:str(q?.note,180),
  windows:rows(q?.windows,8).map(w=>({label:str(w?.label,30),pct:num(w?.pct,100),reset:num(w?.reset)||0,t:num(w?.t)}))};}
-export function extras(v:any){return {
- system:systemMetrics(v.system),collection_ms:num(v.collection_ms),resume_prompt:str(v.resume_prompt,4000),
+export function extras(v:any,sessionIds:ReadonlySet<string>=new Set()){return {
+ system:systemMetrics(v.system,sessionIds),collection_ms:num(v.collection_ms),resume_prompt:str(v.resume_prompt,4000),
  actions:rows(v.actions,20).map(a=>({t:num(a?.t),action:str(a?.action,30),sid:str(a?.sid,200),terminal:str(a?.terminal,120),project:str(a?.project,100),message:str(a?.message,400)})),
  quotas:rows(v.quotas,24).map(quota),orca_terminals:num(v.orca_terminals,10000),
  process_counts:Object.fromEntries(['Claude','Codex','GLM','Aside','Antigravity','Gemini','OpenCode','Unknown'].flatMap(k=>num(v.process_counts?.[k],10000)===null?[]:[[k,v.process_counts[k]]]))

@@ -102,7 +102,7 @@ export function snapshot(value: any): DeviceSnapshot {
   if (new Set(sessions.map(s=>s.id)).size!==sessions.length) throw new Error('Duplicate session identity');
   return {
     features:['history','account_alias'].filter(f=>Array.isArray(value.features)&&value.features.includes(f)),
-    ...extras(value), speed_periods:speedPeriods(value.speed_periods),
+    ...extras(value,new Set(sessions.map(s=>s.id))), speed_periods:speedPeriods(value.speed_periods),
     flow:tokenFlow(value.flow),
     updated:number(value.updated)||0,recording_started:number(value.recording_started)||0,
     sessions,version:text(value.version,30),

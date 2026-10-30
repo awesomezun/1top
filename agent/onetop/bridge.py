@@ -133,7 +133,7 @@ def export_snapshot(state):
     return {'version':__version__,'updated':state.get('updated',0),'recording_started':state.get('started',0),
         'features':['history','account_alias'],
         'flow':{**export_flow(state), **state.get('remote_flows', {})},
-        'system':system_metrics(state.get('system', {})),
+        'system':system_metrics(state.get('system', {}), (s['id'] for s in sessions)),
         'collection_ms':state.get('collection_ms'), 'resume_prompt':state.get('resume_prompt',''),
         'actions':[select(a, ('t','action','sid','terminal','project','message')) for a in state.get('actions', [])[-20:]],
         'orca_terminals':state.get('orca_terminals'), 'process_counts':state.get('process_counts',{}),

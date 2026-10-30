@@ -43,6 +43,17 @@ class RelayParity(unittest.TestCase):
         self.assertEqual(data['sessions'][0]['effort'],'high');self.assertEqual(data['host']['network']['rx'],12)
         self.assertEqual(data['system']['monitor']['cpu'],3)
 
+    def test_process_owners_only_reference_exported_sessions_or_shared_backends(self):
+        state={'sessions':[{'id':'s','kind':'Claude'}], 'system':{
+            'shared':[{'id':'backend:7','pid':7}],
+            'top':[{'pid':i,'owner':owner,'cmdline':'PRIVATE','cwd':'/private'}
+                for i,owner in enumerate(['s','backend:7','backend:8','/private/project','gone',None,{}],1)]}}
+        payload=export_snapshot(state)
+        self.assertEqual([r['owner'] for r in payload['system']['top']],
+                         ['s','backend:7',None,None,None,None,None])
+        self.assertNotIn('PRIVATE',json.dumps(payload));self.assertNotIn('/private',json.dumps(payload))
+        self.assertEqual(state['system']['top'][3]['owner'],'/private/project')
+
     def test_history_is_correlated_read_only_and_paths_are_hashed(self):
         with tempfile.TemporaryDirectory() as folder:
             collector=Mock();collector.lock=threading.Lock();collector.snapshot={}
