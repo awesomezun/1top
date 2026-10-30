@@ -312,6 +312,30 @@ final class DeviceQATests: XCTestCase {
         }
     }
 
+    /// Demo: send, then type the next message at once, in English and in Korean. The composer holds only
+    /// the new words: nothing of the sent message comes back (Android's keyboard can restore a word it
+    /// was composing; the iPhone must not).
+    func test25_TypingRightAfterSending() {
+        let app = launch(["--demo", "-screenDetail", "d1"])
+        let draft = element(app, "mail-draft")
+        XCTAssertTrue(draft.waitForExistence(timeout: 15), "Conversation did not open")
+        for (sent, next) in [("hello", "next"), ("안녕", "다음")] {
+            tapWhenReady(draft, "Composer")
+            draft.typeText(sent)
+            tapWhenReady(element(app, "mail-send"), "Send")
+            let confirm = element(app, "confirm-action")
+            XCTAssertTrue(confirm.waitForExistence(timeout: 5), "No send confirmation")
+            confirm.tap()
+            // The confirmation takes the focus, so the next message starts with a tap on the composer.
+            tapWhenReady(draft, "Composer after sending")
+            draft.typeText(next)
+            XCTAssertEqual(draft.value as? String, next, "The sent words came back into the composer")
+            XCTAssertTrue(app.staticTexts[sent].waitForExistence(timeout: 5), "\(sent) not in the conversation")
+            draft.typeText(XCUIKeyboardKey.delete.rawValue.repeated(next.count))
+        }
+        shot(app, "25-typing-after-sending")
+    }
+
     /// Demo: the one conversation screen. Two sample photos in the composer (debug -qaDemoImages),
     /// one removed; the send confirmation opened and closed with the draft kept; every delivery state
     /// and a session reply in the timeline; work state and controls reachable; a prompt-only session's notice.
@@ -618,3 +642,5 @@ final class DeviceQATests: XCTestCase {
     func test13_Resume() throws { try control("resume", step: "13") }
     func test14_Terminate() throws { try control("terminate", step: "14") }
 }
+
+private extension String { func repeated(_ n: Int) -> String { String(repeating: self, count: n) } }
