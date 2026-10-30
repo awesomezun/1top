@@ -48,6 +48,7 @@ def main():
     from .account_login import AccountLogin
     server.account_login=AccountLogin()
     server.controller=Controller(collector,Collector,state_file=DATA/'controls-v5.json')
+    collector.controller=server.controller
     threading.Thread(target=collector.loop,daemon=True).start()
     threading.Thread(target=server.serve_forever,daemon=True).start()
     bridge=CloudLink(collector,server.controller,DATA,relay=args.relay)

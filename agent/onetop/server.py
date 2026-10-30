@@ -284,6 +284,7 @@ class Collector:
         self.session_metadata = {}
         self.telemetry = None
         self.history = None
+        self.controller = None
 
     def initialize(self):
         DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -812,6 +813,11 @@ class Collector:
                 with self.lock:self.snapshot={**self.snapshot,'error':type(e).__name__}
                 command = os.path.basename(e.cmd[0]) if isinstance(e,subprocess.TimeoutExpired) and isinstance(e.cmd,list) else ''
                 print('collector:',type(e).__name__,command,flush=True)
+            # Local conversations must work without pairing or a relay socket.
+            # One collector tick owns dispatch; the relay only admits requests.
+            if self.controller is not None:
+                try:self.controller.flush_mailbox()
+                except Exception as e:print('mailbox:',type(e).__name__,flush=True)
             time.sleep(max(.2,3-(time.monotonic()-before)))
 
     def agy_loop(self):
@@ -890,14 +896,16 @@ class Handler(BaseHTTPRequestHandler):
             not secrets.compare_digest(self.headers.get('X-Monitor-Token',''),self.server.action_token)):
             self.send_error(403);return
         route=urlsplit(self.path).path
-        if route not in ('/api/action','/api/accounts/login','/api/accounts/authorize','/api/accounts/alias'):self.send_error(404);return
+        if route not in ('/api/action','/api/mailbox','/api/accounts/login','/api/accounts/authorize','/api/accounts/alias'):self.send_error(404);return
         try:
             length=int(self.headers.get('Content-Length','0'))
             if length<1 or length>(2200000 if route=='/api/action' else 4096) or self.headers.get('Content-Type')!='application/json':
                 self.send_error(400);return
             payload=json.loads(self.rfile.read(length))
             if not isinstance(payload,dict):raise ValueError()
-            if route=='/api/accounts/login':
+            if route=='/api/mailbox':
+                result={'messages':self.server.controller.read_mailbox(payload.get('session_id'),payload.get('control_key'))}
+            elif route=='/api/accounts/login':
                 result=self.server.account_login.start(payload.get('kind'))
             elif route=='/api/accounts/authorize':
                 result=self.server.account_login.authorize_claude(payload.get('account_id'))
@@ -996,6 +1004,7 @@ def main():
     from .account_login import AccountLogin
     server.account_login=AccountLogin()
     server.controller=Controller(collector,Collector,state_file=DATA/'controls-v5.json')
+    collector.controller=server.controller
     threading.Thread(target=collector.loop,daemon=True).start()
     threading.Thread(target=collector.agy_loop,daemon=True).start()
     threading.Thread(target=collector.glm_loop,daemon=True).start()

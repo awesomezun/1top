@@ -241,10 +241,8 @@ class CloudLink:
                 self.ws=websocket.create_connection(self.relay.replace('https://','wss://')+'/api/device/socket',
                     header={'Authorization':'Bearer '+self.config['device_token'],'User-Agent':'1top/'+__version__},timeout=3,
                     suppress_origin=True,redirect_limit=0,sslopt={'ca_certs':certifi.where()})
-                self.status='Connected';delay=1;last=0;interval=60;mailbox_tick=0
+                self.status='Connected';delay=1;last=0;interval=60
                 while not self.stop.is_set():
-                    if time.monotonic()-mailbox_tick>=3:
-                        mailbox_tick=time.monotonic();threading.Thread(target=self.flush_mailbox,daemon=True).start()
                     if time.monotonic()-last>=interval:
                         with self.collector.lock:state=self.collector.snapshot
                         if state.get('ready'):
