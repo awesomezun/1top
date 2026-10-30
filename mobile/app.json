@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "si.onetop.mobile",
-      "versionCode": 11,
+      "versionCode": 12,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0d1218"
