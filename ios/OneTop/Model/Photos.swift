@@ -72,11 +72,12 @@ enum PhotoPrep {
         }
     }
 
-    #if DEBUG
-    /// UI tests cannot drive the system photo picker; `-qaDemoImages N` puts N drawn pictures in the
-    /// composer instead. Debug builds only.
+    /// The demo's pictures: the conversation script's checkout screen (demo-world.js), then drawn ones.
+    /// Release builds keep it, since the demo runs there too (App Review, first use); only the way UI tests
+    /// put them in the composer instead of the system photo picker (`-qaDemoImages N`) is Debug-only.
     static func demo(_ count: Int) -> [PickedPhoto] {
         (0..<min(count, maxPhotos)).compactMap { i in
+            if i == 0, let checkout = UIImage(named: "DemoCheckout")?.jpegData(compressionQuality: 0.9) { return try? prepare(checkout) }
             let size = CGSize(width: 1200, height: 900)
             let format = UIGraphicsImageRendererFormat()
             format.scale = 1
@@ -90,5 +91,4 @@ enum PhotoPrep {
             return image.jpegData(compressionQuality: 0.9).flatMap { try? prepare($0) }
         }
     }
-    #endif
 }
