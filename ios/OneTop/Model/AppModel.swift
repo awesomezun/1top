@@ -442,8 +442,13 @@ final class AppModel {
         } catch {
             // It may or may not have arrived. Keep the bubble as unconfirmed; never resend by itself.
             setStatus("delivery_unconfirmed", id: id, key: key)
-            message = L.t("Delivery unconfirmed — check the session before resending", "전달 미확인 · 재전송 전에 세션 확인")
+            message = Self.unconfirmed
         }
+    }
+
+    /// What an unconfirmed send means, under its message and in the conversation, in the chosen language.
+    static var unconfirmed: String {
+        L.t("Could not confirm it was sent. Check the session before sending again.", "보냈는지 확인하지 못했습니다. 다시 보내기 전에 세션을 확인하세요.")
     }
 
     /// One session's sends reach the relay in the order they were made: each goes out once the one before

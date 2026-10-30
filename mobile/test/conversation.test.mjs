@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-const {base64Bytes,fitted,fitPlan,fitPhoto,checkAttachments,sendMode,defaultPrompt,deliveryLabel,deliveryTone,effectiveStatus,workState,workLabel,sendOutcome,inTurn,attachmentSummary,responseActivity,activityLabel,EMPTY,startSend,sendFailed,sendUnconfirmed,bringBack,mergeMailbox,applyReceipts,forward,PHOTO_LIMIT,EDGES,QUALITIES}=await import('../src/thread.ts');
+const {base64Bytes,fitted,fitPlan,fitPhoto,checkAttachments,sendMode,defaultPrompt,deliveryLabel,deliveryMeaning,deliveryTone,effectiveStatus,workState,workLabel,sendOutcome,inTurn,attachmentSummary,responseActivity,activityLabel,EMPTY,startSend,sendFailed,sendUnconfirmed,bringBack,mergeMailbox,applyReceipts,forward,PHOTO_LIMIT,EDGES,QUALITIES}=await import('../src/thread.ts');
 const en=(e)=>e,ko=(_,k)=>k,b64=n=>Buffer.alloc(n,7).toString('base64');
 
 test('decoded base64 size counts padding',()=>{
@@ -35,9 +35,12 @@ test('questions and instructions go as one message; prompt-only computers cannot
  assert.deepEqual(sendMode(['focus','pause']),{mode:'none',photos:false,replies:false});
  assert.equal(defaultPrompt(en),'Please inspect the attached image(s).');assert.equal(defaultPrompt(ko),'첨부한 사진을 확인해 주세요.');
 });
-test('every delivery status has its own words in both languages and a tone apart from the work state',()=>{
+test('every delivery status has its own short words in both languages, none once answered, and a tone apart from the work state',()=>{
  const all=['queued','sending','awaiting_reply','replied','delivery_unconfirmed','source_changed','not_delivered','instruction_sent'];
- for(const t of [en,ko]){const words=all.map(s=>deliveryLabel(s,t));assert.equal(new Set(words).size,all.length);assert.ok(words.every((w,i)=>w!==all[i]));}
+ for(const t of [en,ko]){const words=all.map(s=>deliveryLabel(s,t));assert.equal(new Set(words).size,all.length);assert.ok(words.every((w,i)=>w!==all[i]));
+  // As in a chat app: the AI's message is the sign of an answer, and no state says "reply".
+  assert.equal(deliveryLabel('replied',t),'');assert.ok(words.every(w=>!/repl|답신/i.test(w)));
+  for(const s of ['delivery_unconfirmed','source_changed','not_delivered'])assert.ok(deliveryMeaning(s,t).length>deliveryLabel(s,t).length);}
  assert.equal(deliveryLabel('later_status',ko),'later_status');
  assert.deepEqual(all.map(deliveryTone),['progress','progress','progress','done','problem','problem','problem','done']);
  assert.equal(effectiveStatus({status:'sending',local:true,created:100},131),'delivery_unconfirmed');assert.equal(effectiveStatus({status:'sending',local:true,created:100},120),'sending');assert.equal(effectiveStatus({status:'sending',created:100},500),'sending');
@@ -62,8 +65,8 @@ test('the typing indicator follows request-scoped activity only, the latest one,
  assert.deepEqual(responseActivity([{status:'sending',activity:act('responding',5)}],'working'),act('responding',5));
  // Unknown phases and missing times are ignored.
  assert.equal(responseActivity([{status:'awaiting_reply',activity:act('thinking',5)},{status:'awaiting_reply',activity:{phase:'writing'}}],'working'),null);
- assert.deepEqual(['responding','working','writing'].map(p=>activityLabel(p,ko)),['응답 준비 중…','작업 중…','답변 작성 중…']);
- assert.deepEqual(['responding','working','writing'].map(p=>activityLabel(p,en)),['Preparing a reply…','Working…','Writing a reply…']);
+ assert.deepEqual(['responding','working','writing'].map(p=>activityLabel(p,ko)),['생각하는 중…','작업 중…','작성 중…']);
+ assert.deepEqual(['responding','working','writing'].map(p=>activityLabel(p,en)),['Thinking…','Working…','Writing…']);
 });
 test('only a refusal (4xx) or a check on the phone is a definite failure; 5xx, timeouts and dropped connections are unconfirmed',()=>{
  for(const status of [400,401,404,409,413,422,429,499])assert.equal(sendOutcome({status}),'failed',String(status));

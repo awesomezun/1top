@@ -48,7 +48,7 @@ private struct ControlConfirmation: ViewModifier {
             if r.photos > 0 { lines.append(L.t("Photos: \(r.photos)", "사진 \(r.photos)장")) }
             lines.append("")
             lines.append(r.action == "message"
-                ? L.t("Sends a message to this AI session; its reply appears here. It may use tokens.", "이 AI 세션에 메시지를 보내며 답신이 이 화면에 표시됩니다. 토큰을 사용할 수 있습니다.")
+                ? L.t("Sends a message to this AI session; its answer shows up here. It may use tokens.", "이 AI 세션에 메시지를 보냅니다. AI의 답은 이 화면에 나오며, 토큰을 사용할 수 있습니다.")
                 : L.t("Sends a new instruction to this AI session. It may use tokens.", "이 AI 세션에 새 지시를 보내며 토큰을 사용할 수 있습니다."))
             return lines.joined(separator: "\n")
         case "terminate":
@@ -234,23 +234,28 @@ struct WorkState: View {
     }
 }
 
-/// Messages to the session and its replies. The full work conversation stays on the computer; the
-/// relay carries the latest ten when asked. Delivery is shown per message, apart from the work state.
+/// A chat with the session: the messages sent from 1top and the AI's under them. The full work conversation
+/// stays on the computer; the relay carries the latest ten when asked. A small state sits under each sent
+/// message, apart from the work state.
 struct ConversationTimeline: View {
     @Environment(AppModel.self) private var model
     var session: Session
 
-    static func delivery(_ status: String) -> (text: String, icon: String, color: Color) {
+    /// Under a sent message, as in a chat app: a short state, its icon and, where the word is not enough,
+    /// what it means (read out with it). A message the session answered shows none; the AI's message says it all.
+    static func delivery(_ status: String) -> (text: String, icon: String, color: Color, meaning: String?)? {
         switch status {
-        case "queued": (L.t("Waiting for this session to finish its current turn", "현재 작업이 끝나면 전달"), "clock", .secondary)
-        case "sending": (L.t("Sending", "전송 중"), "arrow.up.circle", .secondary)
-        case "awaiting_reply": (L.t("Waiting for a reply", "답신 대기"), "ellipsis.bubble", .secondary)
-        case "replied": (L.t("Replied", "답신 도착"), "checkmark.bubble", .secondary)
-        case "delivery_unconfirmed": (L.t("Delivery unconfirmed — check the session before resending", "전달 미확인 · 재전송 전에 세션 확인"), "exclamationmark.triangle", .orange)
-        case "source_changed": (L.t("Reply source changed", "답신 연결 변경됨"), "arrow.triangle.branch", .orange)
-        case "not_delivered": (L.t("Not delivered — the session changed or the wait expired", "미전달 · 세션 변경 또는 대기 만료"), "xmark.circle", .red)
-        case "send_failed": (L.t("Not sent — the relay refused it", "보내지 못함 · 릴레이가 거부했습니다"), "exclamationmark.circle", .red)
-        default: (status, "questionmark.circle", .secondary)
+        case "replied": nil
+        case "queued": (L.t("Queued", "차례 기다리는 중"), "clock", .secondary, L.t("Sends when the current work finishes.", "지금 작업이 끝나면 보냅니다."))
+        case "sending": (L.t("Sending", "보내는 중"), "arrow.up.circle", .secondary, nil)
+        case "awaiting_reply": (L.t("Sent", "보냄"), "checkmark", .secondary, nil)
+        case "delivery_unconfirmed": (L.t("Not confirmed", "확인 안 됨"), "exclamationmark.triangle", .orange, AppModel.unconfirmed)
+        case "source_changed": (L.t("Session changed", "세션이 바뀜"), "arrow.triangle.branch", .orange,
+                                L.t("The session that got this message changed.", "이 메시지를 받은 세션이 바뀌었습니다."))
+        case "not_delivered": (L.t("Not sent", "보내지 못함"), "xmark.circle", .red,
+                               L.t("Not sent: the session changed or the wait ran out.", "세션이 바뀌었거나 기다리는 시간이 지나 보내지 못했습니다."))
+        case "send_failed": (L.t("Not sent", "보내지 못함"), "xmark.circle", .red, nil)
+        default: (status, "questionmark.circle", .secondary, nil)
         }
     }
 
@@ -259,11 +264,10 @@ struct ConversationTimeline: View {
         let readable = session.can("mailbox"), live = model.connection == .live
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text(L.t("Messages to this session and its replies. Your full work conversation stays on the computer.",
-                         "이 세션에게 보낸 메시지와 답신입니다. 전체 작업 대화는 컴퓨터에 남습니다."))
+                Text(L.t("Only chats from 1top show here.", "1top에서 나눈 대화만 표시됩니다."))
                     .font(.footnote).foregroundStyle(.secondary)
                 if !session.can("message") && session.can("prompt") {
-                    Label(L.t("This session cannot send replies, so only the instruction is delivered.", "이 세션은 답신을 받을 수 없어 지시만 전달됩니다."),
+                    Label(L.t("This session takes instructions only. See the result on the computer.", "이 세션은 지시만 받습니다. 결과는 컴퓨터에서 확인하세요."),
                           systemImage: "arrow.up.message")
                         .font(.footnote).foregroundStyle(.orange)
                         .accessibilityIdentifier("prompt-only")
@@ -313,7 +317,7 @@ struct ConversationTimeline: View {
     }
 
     private func bubble(_ m: MailMessage) -> some View {
-        let state = Self.delivery(m.status), previews = model.sentPhotos[m.id] ?? []
+        let previews = model.sentPhotos[m.id] ?? []
         return VStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 6) {
                 if !previews.isEmpty {
@@ -331,33 +335,48 @@ struct ConversationTimeline: View {
                         .accessibilityIdentifier("mail-attachments")
                 }
                 Text(m.text).textSelection(.enabled)
-                Label(state.text, systemImage: state.icon)
-                    .font(.caption).foregroundStyle(state.color)
-                    .accessibilityIdentifier("mail-status")
-                    .accessibilityValue(m.status)
-                if model.failedSends[m.id] != nil {
-                    // Refused while a new draft was being written: nothing is lost, it comes back on request.
-                    Button(L.t("Bring back to the composer", "입력창으로 다시 가져오기"), systemImage: "arrow.uturn.down") {
-                        model.bringBack(m.id, key: session.key)
-                    }
-                    .font(.caption.weight(.semibold)).buttonStyle(.glass).controlSize(.small)
-                    .accessibilityIdentifier("bring-back")
-                }
             }
             .padding(12)
             .background(Color.mint1top.opacity(0.18), in: RoundedRectangle(cornerRadius: 16))
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.leading, 32)
-            if let reply = m.reply, !reply.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L.t("Session reply", "세션의 답신")).font(.caption.weight(.semibold)).foregroundStyle(Color.mint1top)
-                    Text(reply).textSelection(.enabled).accessibilityIdentifier("mail-reply")
-                    if m.truncated == true {
-                        Text(L.t("Long reply shortened.", "긴 답신의 일부를 표시합니다.")).font(.caption).foregroundStyle(.secondary)
-                    }
+            if let state = Self.delivery(m.status) {
+                Label(state.text, systemImage: state.icon)
+                    .font(.caption).foregroundStyle(state.color)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.trailing, 4).padding(.top, -4)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(state.meaning.map { state.text + (L.language == .zh ? "，" : ". ") + $0 } ?? state.text)
+                    .accessibilityIdentifier("mail-status")
+                    .accessibilityValue(m.status)
+            }
+            if model.failedSends[m.id] != nil {
+                // Refused while a new draft was being written: nothing is lost, it comes back on request.
+                Button(L.t("Try again", "다시 시도"), systemImage: "arrow.clockwise") {
+                    model.bringBack(m.id, key: session.key)
                 }
-                .padding(12)
-                .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 16))
+                .font(.caption.weight(.semibold)).buttonStyle(.glass).controlSize(.small)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .accessibilityIdentifier("bring-back")
+            }
+            if let reply = m.reply, !reply.isEmpty {
+                // The AI's message, as in a chat app: its name and a sparkle in its tool colour over it.
+                VStack(alignment: .leading, spacing: 6) {
+                    Label { Text(Tool.name(session.kind)) } icon: { Image(systemName: "sparkle").foregroundStyle(Tool.color(session.kind)) }
+                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        .padding(.leading, 2)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(Tool.name(session.kind))
+                        .accessibilityIdentifier("mail-from")
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(reply).textSelection(.enabled).accessibilityIdentifier("mail-reply")
+                        if m.truncated == true {
+                            Text(L.t("Long message shortened.", "길어서 앞부분만 표시합니다.")).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(12)
+                    .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 16))
+                }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.trailing, 32)
             }
@@ -375,9 +394,9 @@ struct TypingIndicator: View {
 
     static func words(_ phase: String) -> String {
         switch phase {
-        case "responding": L.t("Preparing a reply…", "응답 준비 중…")
+        case "responding": L.t("Thinking…", "생각하는 중…")
         case "working": L.t("Working…", "작업 중…")
-        default: L.t("Writing a reply…", "답변 작성 중…")
+        default: L.t("Writing…", "작성 중…")
         }
     }
 
@@ -483,7 +502,7 @@ struct Composer: View {
                 .accessibilityLabel(L.t("Send message", "메시지 보내기"))
                 .accessibilityIdentifier("mail-send")
             }
-            Text(L.t("A busy session may reply later. Sending can use AI tokens.", "작업 중인 세션은 답신이 늦을 수 있습니다. 메시지 전송은 AI 토큰을 사용할 수 있습니다."))
+            Text(L.t("Messages can use AI tokens.", "메시지를 보내면 AI 토큰이 쓰일 수 있습니다."))
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 6)

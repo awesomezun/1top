@@ -56,14 +56,21 @@ export function sendMode(capabilities:string[]):{mode:'message'|'prompt'|'none';
 export const defaultPrompt=(t:T)=>t('Please inspect the attached image(s).','첨부한 사진을 확인해 주세요.');
 
 export type Delivery='queued'|'sending'|'awaiting_reply'|'replied'|'delivery_unconfirmed'|'source_changed'|'not_delivered'|'instruction_sent';
-/** Delivery of one message, kept apart from the session's work. "Replied" covers this message only. */
+/** Under a sent message, as in a chat app: a short state, kept apart from the session's work. A message the
+ *  session answered shows none; the AI's message says it all. */
 export function deliveryLabel(status:string,t:T){
- return ({queued:t('Waiting for this session to finish its current turn','현재 작업이 끝나면 전달'),sending:t('Sending','전송 중'),awaiting_reply:t('Waiting for a reply','답신 대기'),replied:t('Replied','답신 도착'),
-  delivery_unconfirmed:t('Delivery unconfirmed — check the session before resending','전달 미확인 · 재전송 전에 세션 확인'),source_changed:t('Reply source changed','답신 연결 변경됨'),
-  not_delivered:t('Not delivered — the session changed or the wait expired','미전달 · 세션 변경 또는 대기 만료'),not_sent:t('Not sent · refused before delivery','보내지 못함 · 전달 전에 거절됨'),instruction_sent:t('Instruction delivered · this session cannot reply','지시 전달됨 · 이 세션은 답신할 수 없음')} as Record<string,string>)[status]||status;
+ return ({queued:t('Queued','차례 기다리는 중'),sending:t('Sending','보내는 중'),awaiting_reply:t('Sent','보냄'),replied:'',
+  delivery_unconfirmed:t('Not confirmed','확인 안 됨'),source_changed:t('Session changed','세션이 바뀜'),
+  not_delivered:t('Not sent','보내지 못함'),not_sent:t('Not sent','보내지 못함'),instruction_sent:t('Instruction sent','지시 보냄')} as Record<string,string>)[status]??status;
 }
+/** What a state means where its short word is not enough, read out with it (the desktop's title). */
+export const deliveryMeaning=(status:string,t:T)=>({queued:t('Sends when the current work finishes.','지금 작업이 끝나면 보냅니다.'),
+ delivery_unconfirmed:t('Could not confirm it was sent. Check the session before sending again.','보냈는지 확인하지 못했습니다. 다시 보내기 전에 세션을 확인하세요.'),
+ source_changed:t('The session that got this message changed.','이 메시지를 받은 세션이 바뀌었습니다.'),
+ not_delivered:t('Not sent: the session changed or the wait ran out.','세션이 바뀌었거나 기다리는 시간이 지나 보내지 못했습니다.'),
+ instruction_sent:t('This session takes instructions only. See the result on the computer.','이 세션은 지시만 받습니다. 결과는 컴퓨터에서 확인하세요.')} as Record<string,string>)[status]||'';
 /** The symbol beside each delivery state, as on the iPhone. */
-export const deliveryIcon=(status:string)=>({queued:'clock',sending:'sending',awaiting_reply:'waiting',replied:'replied',instruction_sent:'replied',delivery_unconfirmed:'warning',source_changed:'branch',not_delivered:'failed',not_sent:'failed'} as Record<string,'clock'|'sending'|'waiting'|'replied'|'warning'|'branch'|'failed'>)[status]||'waiting';
+export const deliveryIcon=(status:string)=>({queued:'clock',sending:'sending',awaiting_reply:'check',instruction_sent:'check',delivery_unconfirmed:'warning',source_changed:'branch',not_delivered:'failed',not_sent:'failed'} as Record<string,'clock'|'sending'|'check'|'warning'|'branch'|'failed'>)[status]||'check';
 /** A message this phone sent that no receipt or mailbox moved past "sending" for 30 s is unconfirmed. */
 export const effectiveStatus=(m:{status:string;local?:boolean;created:number},nowSeconds:number)=>m.local&&m.status==='sending'&&nowSeconds-m.created>30?'delivery_unconfirmed':m.status;
 export function deliveryTone(status:string):'progress'|'done'|'problem'{return status==='replied'||status==='instruction_sent'?'done':['delivery_unconfirmed','source_changed','not_delivered','not_sent'].includes(status)?'problem':'progress';}
@@ -112,7 +119,7 @@ export function responseActivity(messages:{status:string;activity?:Activity|null
   if(!latest||a.observed_at>latest.observed_at)latest=a;}
  return latest;
 }
-export const activityLabel=(phase:Phase,t:T)=>({responding:t('Preparing a reply…','응답 준비 중…'),working:t('Working…','작업 중…'),writing:t('Writing a reply…','답변 작성 중…')})[phase];
+export const activityLabel=(phase:Phase,t:T)=>({responding:t('Thinking…','생각하는 중…'),working:t('Working…','작업 중…'),writing:t('Writing…','작성 중…')})[phase];
 
 // Conversations are kept per session (device id : session id): each has its own draft and timeline,
 // so sends that finish late only touch the session they were sent to.

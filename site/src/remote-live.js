@@ -50,7 +50,7 @@ export function liveRelay({onStatus}){
   async revoke(id){await api('/api/devices/revoke',{device_id:id});devices.delete(id);deviceList=deviceList.filter(d=>d.id!==id);},
   // One mailbox read: the computer answers on the socket with at most ten recently changed rows.
   mailbox(request){
-   if(ws?.readyState!==1)return Promise.reject(Object.assign(Error('컴퓨터 연결이 끊겼습니다. 재연결하면 답신을 확인할 수 있습니다.'),{status:503}));
+   if(ws?.readyState!==1)return Promise.reject(Object.assign(Error('컴퓨터 연결이 끊겼습니다. 다시 연결되면 대화를 확인할 수 있습니다.'),{status:503}));
    const request_id=crypto.randomUUID();
    return new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>{mailboxes.delete(request_id);reject(Object.assign(Error('메시지 연결을 확인하지 못했습니다.'),{status:504}));},15000);
