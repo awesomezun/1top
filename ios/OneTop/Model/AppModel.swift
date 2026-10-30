@@ -44,6 +44,8 @@ final class AppModel {
     /// Drafts of sends the relay refused while a new draft was already being written, by message ID,
     /// so they can be brought back into the composer instead of overwriting it.
     var failedSends: [String: Draft] = [:]
+    /// Each session's sends, one after another up to the relay's answer (see `inTurn`).
+    @ObservationIgnored private var lanes: [String: Task<Void, Never>] = [:]
     /// The network step of a message send; tests replace it.
     var transport: @MainActor (MessagePayload, String, URL) async throws -> Data = { payload, token, relay in
         try await Relay.request("/api/action", token: token, payload: payload, relay: relay)
@@ -420,8 +422,9 @@ final class AppModel {
         if !photos.isEmpty { sentPhotos[id] = photos.map(\.preview) }
         let payload = MessagePayload(requestId: id, deviceId: device.id, sessionId: s.id, controlKey: s.controlKey ?? "", prompt: text,
                                      attachments: photos.isEmpty ? nil : photos.map { .init(mime: "image/jpeg", data: $0.jpeg.base64EncodedString()) })
+        let relay = relay
         do {
-            let data = try await transport(payload, token, relay)
+            let data = try await inTurn(key) { [transport] in try await transport(payload, token, relay) }
             let receipt = (try? JSONDecoder.relay().decode(ActionReceipt.self, from: data))?.status
             setStatus(receipt == "unconfirmed" ? "delivery_unconfirmed" : "awaiting_reply", id: id, key: key)
         } catch let failure as Relay.Failure where (400..<500).contains(failure.status ?? 0) {
@@ -446,6 +449,23 @@ final class AppModel {
             setStatus("delivery_unconfirmed", id: id, key: key)
             message = L.t("Delivery unconfirmed — check the session before resending", "전달 미확인 · 재전송 전에 세션 확인")
         }
+    }
+
+    /// One session's sends reach the relay in the order they were made: each goes out once the one before
+    /// it has its answer (accepted, refused or lost), so a text-only message never overtakes a slower one
+    /// with photos. Nothing waits for the session's reply, the composer is already free, and other
+    /// sessions do not wait. A failure ends only its own turn; the next send still goes.
+    private func inTurn(_ key: String, _ work: @escaping @MainActor () async throws -> Data) async throws -> Data {
+        let previous = lanes[key]
+        let attempt = Task { @MainActor () -> Result<Data, Error> in
+            await previous?.value
+            do { return .success(try await work()) } catch { return .failure(error) }
+        }
+        let turn = Task { @MainActor in _ = await attempt.value }
+        lanes[key] = turn
+        let result = await attempt.value
+        if lanes[key] == turn { lanes[key] = nil }
+        return try result.get()
     }
 
     /// Puts a refused draft back into an empty composer.

@@ -9,7 +9,7 @@ import {API,selectRelay,api,loadToken,signIn,signOut,useConnection} from './conn
 import {demoDevices} from './demo';
 import {fresh} from './metrics';
 import {sortSessions} from './session-order';
-import {applyReceipts,checkAttachments,EMPTY,sendOutcome,TEXT_MAX,type Attachment,type Convo,type Mail} from './thread';
+import {applyReceipts,checkAttachments,EMPTY,inTurn,sendOutcome,TEXT_MAX,type Attachment,type Convo,type Mail} from './thread';
 import type {Device,SessionRow,WindowKey} from './types';
 const Context=createContext<any>(null);
 export const useWorkspace=()=>useContext(Context);
@@ -24,6 +24,8 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
  // or a receipt, only changes the session it belongs to, even after the reader moved on.
  const [convos,setConvos]=useState<Record<string,Convo>>({});
  const seen=useRef(new Set<string>());
+ // Each session's sends, one after another up to the relay's answer (thread.ts inTurn).
+ const lanes=useRef(new Map<string,Promise<unknown>>());
  function updateConvo(key:string,change:(c:Convo)=>Convo,seed?:Mail[]){setConvos(old=>({...old,[key]:change(old[key]??{draft:EMPTY,thread:seed??[]})}));}
  const [appearance,setAppearanceState]=useState<Appearance>('system'),[tokensChosen,setTokensState]=useState(false);
  const system=useColorScheme(),theme:ThemeName=appearance==='system'?(system==='light'?'light':'dark'):appearance;
@@ -84,7 +86,7 @@ export function WorkspaceProvider({children}:{children:React.ReactNode}){
   if(attachments.length&&!row.capabilities.includes('message_images'))throw refuse(t('This session cannot receive photos.','이 세션은 사진을 받을 수 없습니다.'));
   if(checkAttachments(attachments))throw refuse(t('Up to 3 JPEG or PNG photos, each at most 512KB.','사진은 JPEG·PNG 3장까지, 장당 512KB 이하입니다.'));
   if(demo)return;
-  await api('/api/action',token!,{action:'message',request_id:id,device_id:row.device.id,session_id:row.id,control_key:row.control_key,prompt:text,...(attachments.length?{attachments}:{})},undefined,attachments.length?60000:15000);
+  await inTurn(lanes.current,row.key,()=>api('/api/action',token!,{action:'message',request_id:id,device_id:row.device.id,session_id:row.id,control_key:row.control_key,prompt:text,...(attachments.length?{attachments}:{})},undefined,attachments.length?60000:15000));
  }
  function control(row:SessionRow,action:string,instruction?:string,after?:(id:string,outcome:'sent'|'failed'|'unconfirmed')=>void){
   if(!row||!fresh(row.device,20000)||!row.capabilities.includes(action)||pending[row.key])return;

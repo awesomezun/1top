@@ -77,6 +77,15 @@ export function workState(row:{status:string;device:{online:boolean;received:num
 }
 export function workLabel(work:Work,t:T){return ({working:t('Working','작업 중'),waiting:t('Waiting for input','입력 대기'),idle:t('Idle','대기'),paused:t('Paused','일시정지'),offline:t('Computer offline','컴퓨터 오프라인'),stale:t('Report is old','오래된 보고')} as Record<Work,string>)[work];}
 
+/** One session's sends reach the relay in the order they were made: each goes out once the one before it
+ *  has its answer (accepted, refused or lost), so a text-only message never overtakes a slower one with
+ *  photos. Nothing waits for the session's reply, and other sessions (other keys) do not wait. A failure
+ *  ends only its own turn; the next send still goes. */
+export function inTurn<T>(lanes:Map<string,Promise<unknown>>,key:string,work:()=>Promise<T>):Promise<T>{
+ const mine=(lanes.get(key)??Promise.resolve()).then(work),turn=mine.catch(()=>{});
+ lanes.set(key,turn);turn.then(()=>{if(lanes.get(key)===turn)lanes.delete(key);});
+ return mine;
+}
 /** Only a send refused on the phone or by the relay (4xx) failed for sure. A server error (5xx), a timeout
  *  or a dropped connection may still have delivered it: unconfirmed, and never resent automatically. */
 export const sendOutcome=(error:{status?:unknown;local?:boolean}):'failed'|'unconfirmed'=>error?.local===true||(typeof error?.status==='number'&&error.status>=400&&error.status<500)?'failed':'unconfirmed';
