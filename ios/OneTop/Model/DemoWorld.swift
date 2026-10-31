@@ -13,6 +13,8 @@ enum DemoWorld {
     struct Step { let at: Double, status: String, activity: String? }
     struct Script { let text: Words, photo: String, steps: [Step], reply: Words }
     static let rest: UInt32 = 7
+    /// Sessions whose context window is nearly full: the share of it their last request used.
+    static let context: [String: Double] = ["s3": 0.93, "w1": 0.91]
     static let computers: [Computer] = [
         Computer(id: "demo-0", name: "MacBook Pro", platform: "Darwin", seed: 23, scale: 1300000, duty: 1, control: true, cores: 12, memory: 36, used: 22.032, cpu: (9, 45)),
         Computer(id: "demo-1", name: "Mac mini", platform: "Darwin", seed: 61, scale: 300000, duty: 0.2, control: false, cores: 10, memory: 24, used: 15, cpu: (12.25, 48)),

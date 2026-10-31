@@ -25,6 +25,9 @@ import Foundation
         precondition(en.working(4) == "Working 4" && zh.children(2) == "子会话 2" && en.count(3) == "3 more" && ko.perHour == "/시간")
         // Limits from providers with 5-hour or monthly windows (Agy, GLM).
         precondition(en("계정 한도") == "Account limits" && zh("MCP · 월간") == "MCP · 月度" && en("값 없음") == "No value" && zh("조회 중단") == "已停止查询")
+        // The cluster view reads the dashboard's cluster words.
+        precondition(en("계기판 보기") == "Cluster view" && zh("기본 보기") == "标准视图" && en("소진 속도") == "Burn rate")
+        precondition(en("%/시간 · 주간 한도 기준") == "%/h of the weekly limit" && en("최근 10분") == "Last 10m" && zh("남은 주간 한도") == "剩余每周额度")
         // Names never pass through a translation.
         precondition(en("checkout-web") == "checkout-web" && en("Orca · Gateway") == "Orca · Gateway")
         print("Quick text checks passed: three languages, model labels, formatted values, names left as they are.")

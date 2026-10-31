@@ -564,6 +564,18 @@ final class AppModel {
         mailboxes = DemoData.mailboxes()
         controlOff = DemoData.controlOff
         connection = .demo
+        // A demo on the phone's clock moves on like a live one: fresh readings every ten seconds. A held
+        // demo (QA, filming) stays at its moment.
+        guard DemoData.held == nil else { return }
+        liveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard !Task.isCancelled else { return }
+                let next = await Task.detached(priority: .utility) { DemoData.devices(now: DemoData.now()) }.value
+                guard let self, self.connection == .demo else { return }
+                self.devices = next
+            }
+        }
     }
 
     /// Re-reads the demo in the current language; messages written here stay.
@@ -577,6 +589,7 @@ final class AppModel {
     }
 
     func leaveDemo() {
+        liveTask?.cancel(); liveTask = nil
         resetAccountState()
         connection = token == nil ? .signedOut : .connecting
         if token != nil { connect() }

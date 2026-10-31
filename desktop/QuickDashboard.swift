@@ -4,7 +4,7 @@ import SwiftUI
 // Quick view for the menu bar. The period picker governs every number below it:
 // a token card (average speed on the scope, usage by session), weekly limits with
 // their trend over the period, and the session list.
-private struct QuickTheme {
+struct QuickTheme {
     let light: Bool
     private func pick(_ dark: (Double, Double, Double), _ day: (Double, Double, Double)) -> Color {
         let c = light ? day : dark
@@ -30,7 +30,7 @@ private struct QuickTheme {
 // Sizes for the quick view. Text uses named roles like the dashboard's type tokens, and every size,
 // space and stroke follows the app zoom (보기 › 확대·축소). The panel is laid out again at the new
 // size rather than stretched, so text, digits and charts stay sharp.
-private struct QuickMetrics {
+struct QuickMetrics {
     enum Role: Double {
         case tiny = 9.5, caption = 10.5, label = 11.5, body = 12.5, title = 13, figure = 17, display = 22
     }
@@ -393,6 +393,8 @@ struct QuickDashboard: View {
     @State private var hoveredSession: String?
     @State private var selectedAccount: AccountQuota?
     @AppStorage("weeklyTokensMode") private var tokensMode = false
+    // The cluster (계기판) in place of the token card, weekly limits and resources; remembered.
+    @AppStorage("quickCluster") private var showCluster = false
     @AppStorage("dashboardTheme") private var dashboardTheme = "dark"
     // The dashboard's language (한·EN·中); the quick view, the menus and the dashboard window share it.
     @AppStorage("dashboardLanguage") private var language = "ko"
@@ -409,9 +411,14 @@ struct QuickDashboard: View {
         VStack(spacing: 0) {
             header
             periodPicker.padding(.horizontal, m(14)).padding(.bottom, m(10))
-            tokenSection.padding(.horizontal, m(16))
-            weeklyCard.padding(.horizontal, m(14)).padding(.top, m(14))
-            resources.padding(.horizontal, m(16)).padding(.top, m(12)).padding(.bottom, m(10))
+            if showCluster {
+                QuickCluster(model: model, theme: theme, m: m, tr: tr, caption: periodLabel)
+                    .padding(.horizontal, m(14)).padding(.bottom, m(10))
+            } else {
+                tokenSection.padding(.horizontal, m(16))
+                weeklyCard.padding(.horizontal, m(14)).padding(.top, m(14))
+                resources.padding(.horizontal, m(16)).padding(.top, m(12)).padding(.bottom, m(10))
+            }
             sessionList
             if let message = model.message {
                 HStack(alignment: .top) {
@@ -472,7 +479,15 @@ struct QuickDashboard: View {
         let light = dashboardTheme == "light", themeLabel = tr(light ? "다크 모드" : "화이트 모드")
         let at = Self.languages.firstIndex { $0.0 == tr.lang } ?? 0, next = Self.languages[(at + 1) % Self.languages.count]
         let languageLabel = "\(tr("언어")): \(Self.languages[at].2) → \(next.2)"
+        let clusterLabel = tr(showCluster ? "기본 보기" : "계기판 보기")
         return HStack(spacing: m(8)) {
+            // The cluster view, one tap each way.
+            Button { showCluster.toggle() } label: {
+                Image(systemName: "gauge.with.needle").font(.system(size: m(14), weight: .semibold))
+                    .foregroundStyle(showCluster ? theme.accent : theme.muted)
+                    .frame(width: m(24), height: m(24)).contentShape(Rectangle())
+            }.buttonStyle(.plain).help(clusterLabel).accessibilityLabel(clusterLabel)
+                .accessibilityAddTraits(showCluster ? .isSelected : [])
             Button(action: switchTheme) {
                 Text(light ? "☾" : "☀").font(.system(size: m(15))).foregroundStyle(theme.muted)
                     .frame(width: m(24), height: m(24)).contentShape(Rectangle())
