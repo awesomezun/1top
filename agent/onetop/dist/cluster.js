@@ -166,21 +166,28 @@
   stalled:'<path d="M6.6 3.6h10.8M6.6 20.4h10.8"/><path d="M8 3.6c0 4.6 8 4.4 8 8.4s-8 3.8-8 8.4M16 3.6c0 4.6-8 4.4-8 8.4s8 3.8 8 8.4"/>',
   live:'<path d="M5.2 18.8a9.6 9.6 0 0 1 0-13.6M18.8 5.2a9.6 9.6 0 0 1 0 13.6M8.6 15.4a4.8 4.8 0 0 1 0-6.8M15.4 8.6a4.8 4.8 0 0 1 0 6.8"/><circle cx="12" cy="12" r="1.5"/>'};
  const LAMPS=[['waiting','확인 필요'],['reconnect','재연결 필요'],['empty','한도 바닥 예상'],['context','컨텍스트 거의 참'],['stalled','멈춤 의심'],['live','수집 지연']];
+ const LAMPS_MARKUP=`<div class="cl-lamps" role="group" aria-label="경고등">${LAMPS.map(([k,label])=>`<button type="button" class="cl-lamp ${k}" data-cluster-alert="${k}"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg><span class="cl-tip" role="tooltip"><span class="cl-lamp-name">${label}</span> <b></b></span></button>`).join('')}</div>`;
+ const ODO_MARKUP=`<div class="cl-odo"><small><span>토큰</span> · <span class="cl-odo-span"></span></small><div role="img">${digits}</div>
+     <div class="cl-trip"><div class="cl-trip-h"><b>작업 트립</b><span class="cl-trip-since"></span><button type="button" data-cluster-trip>리셋</button></div><div class="cl-trip-v"><b class="cl-trip-n"></b> <span>토큰</span> · <span>평균</span> <b class="cl-trip-r"></b> <span>tokens/시간</span><span class="cl-trip-out" hidden>기록 범위 밖</span></div><div class="cl-trip-a"></div></div></div>`;
  const stored=()=>{try{return JSON.parse(root.localStorage?.getItem(STORE)||'{}')||{};}catch{return {};}};
  const save=patch=>{try{root.localStorage?.setItem(STORE,JSON.stringify({...stored(),...patch}));}catch{}};
  const now=()=>Date.now()/1000;
  let mounted=null,pick=null,mode=null,rangeOpen=false,rangeFrom=null,last=null,igniting=false,ignition=false,tripStart=null,ticker=null;
  // A warning light points at what it is about: each press picks the next session (or account) it lights for,
  // on the page that shows it.
+ function nextPick(r,kind,current){
+  const ids=r?.tells[kind]||[];if(!Array.isArray(ids)||!ids.length)return null;
+  const type=kind==='empty'||kind==='reconnect'?'account':'session',at=current?.type===type?ids.indexOf(current.id):-1;
+  return {type,id:ids[(at+1)%ids.length]};
+ }
  function alert(rootEl,kind){
-  const ids=last?.r.tells[kind]||[];if(!Array.isArray(ids)||!ids.length)return;
-  const type=kind==='empty'||kind==='reconnect'?'account':'session',at=pick?.type===type?ids.indexOf(pick.id):-1;
-  pick={type,id:ids[(at+1)%ids.length]};setMode(rootEl,type==='account'?'weekly':'sessions');
+  const next=nextPick(last?.r,kind,pick);if(!next)return;
+  pick=next;setMode(rootEl,next.type==='account'?'weekly':'sessions');
  }
  function mount(rootEl,ctx){
   mode=MODES.some(([k])=>k===stored().mode)?stored().mode:'sessions';
   rootEl.innerHTML=`<div class="cluster" aria-label="계기판"><div class="cl-body"></div>
-   <div class="cl-top"><div class="cl-kinds"></div><div class="cl-lamps" role="group" aria-label="경고등">${LAMPS.map(([k,label])=>`<button type="button" class="cl-lamp ${k}" data-cluster-alert="${k}"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg><span class="cl-tip" role="tooltip"><span class="cl-lamp-name">${label}</span> <b></b></span></button>`).join('')}</div></div>
+   <div class="cl-top"><div class="cl-kinds"></div>${LAMPS_MARKUP}</div>
    <div class="cl-main">${dial('cl-tach','토큰 속도')}<div class="cl-window" aria-live="off">
     <div class="cl-head"><div class="cl-modes" role="tablist" aria-label="표시창">${MODES.map(([k,label])=>`<button type="button" role="tab" data-cluster-mode="${k}">${label}</button>`).join('')}</div><span class="cl-span"></span></div>
     <div class="cl-page" data-page="sessions" role="tabpanel"><div class="cl-sessions"></div></div>
@@ -191,8 +198,7 @@
      <div class="cl-fuel"><small>남은 주간 한도</small><div></div></div></div>
     <div class="cl-gear"><small>기간</small><div role="group" aria-label="기간"></div>
      <div class="range-toolbar cl-range" hidden><h2 data-range-label>최근 1시간</h2><div class="chart-periods range-buttons" role="group" aria-label="계기판 기간"></div></div></div>
-    <div class="cl-odo"><small><span>토큰</span> · <span class="cl-odo-span"></span></small><div role="img">${digits}</div>
-     <div class="cl-trip"><div class="cl-trip-h"><b>작업 트립</b><span class="cl-trip-since"></span><button type="button" data-cluster-trip>리셋</button></div><div class="cl-trip-v"><b class="cl-trip-n"></b> <span>토큰</span> · <span>평균</span> <b class="cl-trip-r"></b> <span>tokens/시간</span><span class="cl-trip-out" hidden>기록 범위 밖</span></div><div class="cl-trip-a"></div></div></div></div></div>`;
+    ${ODO_MARKUP}</div></div>`;
   const ctxNow=()=>last?.ctx||ctx;
   const choose=next=>{pick=next;render(rootEl,ctxNow());};
   const session=row=>{const id=row.dataset.clusterSession;if(pick?.type==='session'&&pick.id===id)ctxNow().open?.(id);else choose({type:'session',id});};
@@ -244,29 +250,29 @@
  }
  // Between readings the odometer, the trip and the flow chart's current bar run on at the last minute's
  // rate. Capped so a stalled refresh does not run away.
- function tick(rootEl){
-  if(!last||!rootEl.isConnected||rootEl.hidden||calm())return;
-  const {r,ctx,at}=last,el=Math.min(30,Math.max(0,now()-at));if(!el)return;
+ function tick(rootEl,L=last){
+  if(!L||!rootEl.isConnected||rootEl.hidden||calm())return;
+  const {r,ctx,at}=L,el=Math.min(30,Math.max(0,now()-at));if(!el)return;
   const total=Math.max(0,(r.tach.tokens||0)+r.tach.climb*el);odometer(rootEl,total);
   const big=rootEl.querySelector('.cl-page[data-page="flow"] .cl-big b');if(big&&ctx.fmt)big.textContent=ctx.fmt(total);
   const tr=r.trip,add=valid(r.tach.instant)?r.tach.instant/HOUR*el:0;
   if(tr?.inRange){const n=tr.tokens+add,h=(now()-tr.start)/HOUR;rootEl.querySelector('.cl-trip-n').textContent=ctx.fmt?ctx.fmt(n):String(Math.round(n));if(h>0)rootEl.querySelector('.cl-trip-r').textContent=ctx.fmt?ctx.fmt(n/h):reading(n/h);}
-  if(mode==='flow'&&add>0)ctx.drawFlow?.(Object.entries(r.tach.byKind).filter(([,v])=>v>0).map(([kind,v])=>({t:now(),kind,n:v/HOUR*el})));
+  if(L===last&&mode==='flow'&&add>0)ctx.drawFlow?.(Object.entries(r.tach.byKind).filter(([,v])=>v>0).map(([kind,v])=>({t:now(),kind,n:v/HOUR*el})));
  }
- function render(rootEl,ctx){
-  if(mounted!==rootEl||!rootEl.querySelector('.cluster'))mount(rootEl,ctx);
-  // The trip runs from the last reset, kept in this browser; the first visit starts it.
-  tripStart=stored().trip;if(!valid(tripStart)){tripStart=Math.floor(now());save({trip:tripStart});}
-  const r=readings(ctx.state,{...ctx,pick,trip:tripStart});last={r,ctx,at:now()};
-  // A pick that left the readings (a session that ended) lets the speedometer go back to the fastest account.
-  if(pick&&!r.speed.picked)pick=null;
-  if(rangeOpen&&r.period!==rangeFrom)toggleRange(rootEl,false);
-  const q=s=>rootEl.querySelector(s),t=k=>root.OneTopI18n?root.OneTopI18n.t(k):k,lang=root.OneTopI18n?.language||'ko',W=ctx.weekly;
-  const color=k=>ctx.colors[k]||'var(--dim)',chip=id=>ctx.accountChip(id)||'',locale=root.OneTopI18n?.locale()||'ko-KR',fmt=v=>ctx.fmt?ctx.fmt(v):reading(v);
+ // What every painter reads: the page's translation and locale, the dashboard's colours, numbers and account chips.
+ function kit(rootEl,ctx){
+  const locale=root.OneTopI18n?.locale()||'ko-KR';
   const when=t=>{const d=new Date(t*1000);return d.toLocaleDateString(locale,{weekday:'short'})+' '+d.toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'});};
-  // Range line: when this account's limit runs out at its current burn, or that it lasts to the reset.
-  const eta=a=>!a.range?'':a.range.state==='idle'?'<span class="eta idle">지금은 쓰지 않음</span>':a.range.state==='enough'?'<span class="eta ok">초기화 전까지 충분</span>'
-   :`<span class="eta${a.range.early?' warn':''}"><span>이 속도면</span> <b>${esc(when(a.range.at))}</b> <span>바닥</span></span>`;
+  return {q:s=>rootEl.querySelector(s),t:k=>root.OneTopI18n?root.OneTopI18n.t(k):k,lang:root.OneTopI18n?.language||'ko',W:ctx.weekly,locale,
+   color:k=>ctx.colors[k]||'var(--dim)',chip:id=>ctx.accountChip(id)||'',fmt:v=>ctx.fmt?ctx.fmt(v):reading(v),
+   // Range line: when this account's limit runs out at its current burn, or that it lasts to the reset.
+   eta:a=>!a.range?'':a.range.state==='idle'?'<span class="eta idle">지금은 쓰지 않음</span>':a.range.state==='enough'?'<span class="eta ok">초기화 전까지 충분</span>'
+    :`<span class="eta${a.range.early?' warn':''}"><span>이 속도면</span> <b>${esc(when(a.range.at))}</b> <span>바닥</span></span>`};
+ }
+ // The two dials, the warning lights, the fuel gauges and the odometer with its trip, drawn the same on the
+ // dashboard's cluster and on the panels' compact one. busy holds the needles while the ignition sweep runs.
+ function paintDials(rootEl,r,ctx,busy){
+  const {q,t,W,color,chip,fmt}=kit(rootEl,ctx);
   // Tachometer (the smaller dial): tokens per hour on the dashboard's scale; the thin needle is the last minute.
   const tach=q('.cl-tach'),tg=marks(r.tach.max/1e6);scaleMarkup(tach,tg,scaleNumber);
   // The readout is the dashboard's own figure, so the two pages show the same number.
@@ -294,14 +300,59 @@
   speed.classList.toggle('over',c!==null&&r.speed.value!==null&&r.speed.value>c);
   speed.querySelector('.cl-aux').innerHTML=(c===null?'':`<span class="aux-cruise"><span>적정</span> <b>${W.burn(c)}</b></span>`)
    +(r.speed.recent===null?'':`<span class="aux-now"><span>최근 10분</span> <b>${W.burn(r.speed.recent)}</b></span>`);
-  if(!igniting){needle(tach,r.tach.rate===null?0:r.tach.rate/r.tach.max);needle(speed,r.speed.value===null?0:r.speed.value/r.speed.max);
+  if(!busy){needle(tach,r.tach.rate===null?0:r.tach.rate/r.tach.max);needle(speed,r.speed.value===null?0:r.speed.value/r.speed.max);
    needle2(tach,valid(r.tach.instant)?r.tach.instant/r.tach.max:null);needle2(speed,r.speed.recent===null?null:r.speed.recent/r.speed.max);}
-  // Top: the tools working now, then the warning lights.
-  q('.cl-kinds').innerHTML=r.tells.kinds.map(k=>`<span class="cl-kind" style="--c:${color(k.kind)}"><i></i><span>${esc(ctx.kindName(k.kind))}</span><b>${k.working}</b></span>`).join('');
+ }
+ function paintLamps(rootEl,r){
+  const q=s=>rootEl.querySelector(s),t=k=>root.OneTopI18n?root.OneTopI18n.t(k):k;
   for(const [k] of LAMPS){const el=q(`.cl-lamp.${k}`),n=k==='live'?null:r.tells[k].length,on=k==='live'?true:n>0;
    el.classList.toggle('lit',on);el.classList.toggle('stale',k==='live'&&!r.tells.fresh);el.setAttribute('aria-disabled',String(k==='live'||!n));
    const name=k==='live'?(r.tells.fresh?'실시간':'수집 지연'):LAMPS.find(x=>x[0]===k)[1];el.querySelector('.cl-lamp-name').textContent=name;el.querySelector('.cl-tip b').textContent=n===null?'':String(n);
    el.setAttribute('aria-label',`${t(name)}${n===null?'':' '+n}`);}
+ }
+ function paintFuel(rootEl,r,ctx){
+  const {q,W,color,chip,locale,eta}=kit(rootEl,ctx);
+  // Fuel: a gauge per account filled with what is left of its weekly limit, named by plan; the details
+  // show on hover or focus, and pressing one picks it for the speedometer.
+  const fuel=q('.cl-fuel>div');
+  if(!r.accounts.length){fuel.dataset.keys='';fuel.innerHTML='<div class="cl-empty">연결된 구독 계정이 없습니다.</div>';}
+  else keyed(fuel,r.accounts,a=>a.id,a=>`<button type="button" class="cl-can" data-cluster-account="${esc(a.id)}" style="--c:${color(a.kind)}"><i><s></s></i><b></b><span class="cl-tip" role="tooltip"></span></button>`,
+   (el,a)=>{const on=r.speed.account===a.id&&r.speed.picked,low=a.left!==null&&a.left<15;
+    el.classList.toggle('on',on);el.classList.toggle('low',low);el.classList.toggle('stale',!a.current);el.classList.toggle('warn',a.reconnect);el.setAttribute('aria-pressed',String(on));
+    el.querySelector('i>s').style.height=(a.left===null?0:a.left)+'%';
+    const name=a.plan?esc(a.plan):chip(a.id)||esc(ctx.kindName(a.kind)),nb=el.querySelector('b');if(nb.dataset.html!==name){nb.dataset.html=name;nb.innerHTML=name;}
+    const reset=a.reset?new Date(a.reset*1000).toLocaleString(locale,{month:'numeric',day:'numeric',weekday:'short',hour:'numeric',minute:'2-digit'}):'';
+    const tip=`<span class="cl-tip-h"><i></i><span>${esc(ctx.kindName(a.kind))}</span>${chip(a.id)}${a.plan?`<em>${esc(a.plan)}</em>`:''}</span>
+     ${a.reconnect?'<span class="warn">재연결 필요</span>':a.left===null?'<span>보고 대기</span>':`<span><b>${W.percent(a.left)}</b> <span>남음</span></span>`}
+     ${reset?`<span class="cl-reset"><span>초기화</span> <span>${esc(reset)}</span></span>`:''}<span><span>평균</span> <span>${W.burn(a.burn)}</span></span>${eta(a)}`;
+    const tp=el.querySelector('.cl-tip');if(tp.dataset.html!==tip){tp.dataset.html=tip;tp.innerHTML=tip;}});
+ }
+ function paintTrip(rootEl,r,ctx){
+  const {q,color,chip,locale,fmt,W}=kit(rootEl,ctx);
+  // Trip: since the last reset, the tokens used, their average speed and each account's weekly percent.
+  const tr=r.trip,outside=!!tr&&!tr.inRange;
+  q('.cl-trip-since').innerHTML=tr?`<span>${esc(new Date(tr.start*1000).toLocaleString(locale,{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}))}</span> <span>부터</span>`:'';
+  q('.cl-trip-v').classList.toggle('outside',outside);q('.cl-trip-out').hidden=!outside;
+  q('.cl-trip-n').textContent=tr?.inRange?fmt(tr.tokens):'';q('.cl-trip-r').textContent=tr?.inRange?fmt(tr.rate):'';
+  const legs=tr?tr.accounts.map(x=>{const a=r.accounts.find(a=>a.id===x.id);if(!a)return '';
+   return `<span style="--c:${color(a.kind)}"><i></i>${a.plan?esc(a.plan):chip(a.id)||esc(ctx.kindName(a.kind))} <b>${x.used===null?'—':'+'+W.percent(x.used)}</b></span>`;}).join(''):'',ta=q('.cl-trip-a');
+  if(ta.dataset.html!==legs){ta.dataset.html=legs;ta.innerHTML=legs;}
+  // Odometer: the period's tokens, digit wheels rolling to the new count.
+  q('.cl-odo-span').textContent=ctx.caption;odometer(rootEl,r.tach.tokens);
+ }
+ function render(rootEl,ctx){
+  if(mounted!==rootEl||!rootEl.querySelector('.cluster'))mount(rootEl,ctx);
+  // The trip runs from the last reset, kept in this browser; the first visit starts it.
+  tripStart=stored().trip;if(!valid(tripStart)){tripStart=Math.floor(now());save({trip:tripStart});}
+  const r=readings(ctx.state,{...ctx,pick,trip:tripStart});last={r,ctx,at:now()};
+  // A pick that left the readings (a session that ended) lets the speedometer go back to the fastest account.
+  if(pick&&!r.speed.picked)pick=null;
+  if(rangeOpen&&r.period!==rangeFrom)toggleRange(rootEl,false);
+  const {q,t,lang,W,color,chip,fmt,eta}=kit(rootEl,ctx);
+  paintDials(rootEl,r,ctx,igniting);
+  // Top: the tools working now, then the warning lights.
+  q('.cl-kinds').innerHTML=r.tells.kinds.map(k=>`<span class="cl-kind" style="--c:${color(k.kind)}"><i></i><span>${esc(ctx.kindName(k.kind))}</span><b>${k.working}</b></span>`).join('');
+  paintLamps(rootEl,r);
   q('.cl-span').textContent=ctx.caption;
   // Page 1, running sessions: a row picks the session for the speedometer; a second press, or ↗, opens its detail.
   // Its small gauge reads the session's burn on the speedometer's scale.
@@ -336,36 +387,14 @@
   if(gearBox.dataset.key!==gearKey){gearBox.dataset.key=gearKey;
    gearBox.innerHTML=GEARS.map(k=>`<button type="button" data-cluster-period="${k}" aria-pressed="${k===r.period}"${k===r.period?' class="on"':''}>${esc(root.OneTopRanges?root.OneTopRanges.label(k,lang):k)}</button>`).join('')
     +`<button type="button" data-cluster-period="custom" aria-haspopup="true" aria-expanded="${rangeOpen}" aria-pressed="${!preset}"${preset?'':' class="on"'}>${preset?'기간 지정':esc(r.period==='all'?'전체 기록':root.OneTopRanges?root.OneTopRanges.label(r.period,lang):r.period)}</button>`;}
-  // Fuel: a gauge per account filled with what is left of its weekly limit, named by plan; the details
-  // show on hover or focus, and pressing one picks it for the speedometer.
-  const fuel=q('.cl-fuel>div');
-  if(!r.accounts.length){fuel.dataset.keys='';fuel.innerHTML='<div class="cl-empty">연결된 구독 계정이 없습니다.</div>';}
-  else keyed(fuel,r.accounts,a=>a.id,a=>`<button type="button" class="cl-can" data-cluster-account="${esc(a.id)}" style="--c:${color(a.kind)}"><i><s></s></i><b></b><span class="cl-tip" role="tooltip"></span></button>`,
-   (el,a)=>{const on=r.speed.account===a.id&&r.speed.picked,low=a.left!==null&&a.left<15;
-    el.classList.toggle('on',on);el.classList.toggle('low',low);el.classList.toggle('stale',!a.current);el.classList.toggle('warn',a.reconnect);el.setAttribute('aria-pressed',String(on));
-    el.querySelector('i>s').style.height=(a.left===null?0:a.left)+'%';
-    const name=a.plan?esc(a.plan):chip(a.id)||esc(ctx.kindName(a.kind)),nb=el.querySelector('b');if(nb.dataset.html!==name){nb.dataset.html=name;nb.innerHTML=name;}
-    const reset=a.reset?new Date(a.reset*1000).toLocaleString(locale,{month:'numeric',day:'numeric',weekday:'short',hour:'numeric',minute:'2-digit'}):'';
-    const tip=`<span class="cl-tip-h"><i></i><span>${esc(ctx.kindName(a.kind))}</span>${chip(a.id)}${a.plan?`<em>${esc(a.plan)}</em>`:''}</span>
-     ${a.reconnect?'<span class="warn">재연결 필요</span>':a.left===null?'<span>보고 대기</span>':`<span><b>${W.percent(a.left)}</b> <span>남음</span></span>`}
-     ${reset?`<span class="cl-reset"><span>초기화</span> <span>${esc(reset)}</span></span>`:''}<span><span>평균</span> <span>${W.burn(a.burn)}</span></span>${eta(a)}`;
-    const tp=el.querySelector('.cl-tip');if(tp.dataset.html!==tip){tp.dataset.html=tip;tp.innerHTML=tip;}});
+  paintFuel(rootEl,r,ctx);
   // Engine temperature: the hottest computer's load from cold (C) to hot (H); every computer on hover.
   const temp=q('.cl-temp'),hv=r.heat.value,pc=v=>v===null?'—':Math.round(v)+'%';
   temp.querySelector('.t-needle').style.transform=`rotate(${(-90+180*(hv??0)/100).toFixed(1)}deg)`;
   temp.classList.toggle('hot',hv!==null&&hv>=85);temp.querySelector('.t-read').textContent=pc(hv);
   temp.querySelector('.t-tip').innerHTML=r.heat.computers.length?r.heat.computers.map(c=>`<span class="cl-tip-h"><span>${c.name?esc(c.name):'이 컴퓨터'}</span><b>${pc(c.load)}</b></span><span><span>CPU</span> ${pc(c.cpu)} · <span>메모리</span> ${pc(c.memory)}</span>`).join(''):'<span>보고 대기</span>';
   temp.setAttribute('aria-label',`${t('부하')} ${pc(hv)}`);
-  // Trip: since the last reset, the tokens used, their average speed and each account's weekly percent.
-  const tr=r.trip,outside=!!tr&&!tr.inRange;
-  q('.cl-trip-since').innerHTML=tr?`<span>${esc(new Date(tr.start*1000).toLocaleString(locale,{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}))}</span> <span>부터</span>`:'';
-  q('.cl-trip-v').classList.toggle('outside',outside);q('.cl-trip-out').hidden=!outside;
-  q('.cl-trip-n').textContent=tr?.inRange?fmt(tr.tokens):'';q('.cl-trip-r').textContent=tr?.inRange?fmt(tr.rate):'';
-  const legs=tr?tr.accounts.map(x=>{const a=r.accounts.find(a=>a.id===x.id);if(!a)return '';
-   return `<span style="--c:${color(a.kind)}"><i></i>${a.plan?esc(a.plan):chip(a.id)||esc(ctx.kindName(a.kind))} <b>${x.used===null?'—':'+'+W.percent(x.used)}</b></span>`;}).join(''):'',ta=q('.cl-trip-a');
-  if(ta.dataset.html!==legs){ta.dataset.html=legs;ta.innerHTML=legs;}
-  // Odometer: the period's tokens, digit wheels rolling to the new count.
-  q('.cl-odo-span').textContent=ctx.caption;odometer(rootEl,r.tach.tokens);
+  paintTrip(rootEl,r,ctx);
   if(ignition){ignition=false;ignite(rootEl);}
  }
  // Ignition: when the view opens the ticks light in a sweep and both needles test full scale, then settle
@@ -373,17 +402,49 @@
  function ignite(rootEl){
   // Opened before the first reading arrives: the sweep runs on the first render instead.
   if(!rootEl?.querySelector('.cluster')||!last){ignition=true;return;}
-  if(calm())return;
+  if(!calm())sweep(rootEl,()=>last.r,v=>{igniting=v;});
+ }
+ function sweep(rootEl,now,hold){
   const dials=[rootEl.querySelector('.cl-tach'),rootEl.querySelector('.cl-speed')],start=performance.now(),D=1500;
-  const target=()=>[last.r.tach.rate===null?0:last.r.tach.rate/last.r.tach.max,last.r.speed.value===null?0:last.r.speed.value/last.r.speed.max];
+  const target=()=>{const r=now();return [r.tach.rate===null?0:r.tach.rate/r.tach.max,r.speed.value===null?0:r.speed.value/r.speed.max];};
   const out=p=>1-(1-p)**3,io=p=>p<.5?4*p*p*p:1-(-2*p+2)**3/2;
-  igniting=true;rootEl.querySelector('.cluster').classList.add('igniting');
+  hold(true);rootEl.querySelector('.cluster').classList.add('igniting');
   const step=t=>{const p=Math.min(1,(t-start)/D),lit=out(Math.min(1,p/.45)),up=io(Math.min(1,p/.4)),down=io(Math.max(0,(p-.45)/.55)),goal=target();
    dials.forEach((d,i)=>needle(d,p<.45?up:1-(1-goal[i])*down,lit));
-   if(p<1)root.requestAnimationFrame(step);else{igniting=false;rootEl.querySelector('.cluster').classList.remove('igniting');dials.forEach((d,i)=>needle(d,goal[i]));
-    needle2(dials[0],valid(last.r.tach.instant)?last.r.tach.instant/last.r.tach.max:null);needle2(dials[1],last.r.speed.recent===null?null:last.r.speed.recent/last.r.speed.max);}};
+   if(p<1)root.requestAnimationFrame(step);else{hold(false);rootEl.querySelector('.cluster').classList.remove('igniting');dials.forEach((d,i)=>needle(d,goal[i]));
+    const r=now();needle2(dials[0],valid(r.tach.instant)?r.tach.instant/r.tach.max:null);needle2(dials[1],r.speed.recent===null?null:r.speed.recent/r.speed.max);}};
   root.requestAnimationFrame(step);
  }
- const api={marks,readings,range,cruise,trip,heat,instant,render,ignite};
+ // The compact cluster on the menu bar and tray panels (desktop/QuickDashboard.swift draws the same): the
+ // speedometer large, the tachometer small, the warning lights, the odometer with the trip, then each account's
+ // weekly limit left. The panel's own period picker sets the window. Its pick is its own; the trip runs from
+ // the dashboard's reset, kept in the same storage. A warning light or a fuel gauge picks for the speedometer.
+ const P={el:null,last:null,pick:null,igniting:false,ignition:false,ticker:null};
+ function mountCompact(rootEl){
+  rootEl.innerHTML=`<div class="cluster compact" aria-label="계기판"><div class="cl-body"></div>
+   <div class="cl-main">${dial('cl-speed','소진 속도')}${dial('cl-tach','토큰 속도')}</div>
+   <div class="cl-top">${LAMPS_MARKUP}</div>${ODO_MARKUP}
+   <div class="cl-left"><div class="cl-fuel"><small>남은 주간 한도</small><div></div></div></div></div>`;
+  const again=()=>{if(P.last)compact(rootEl,P.last.ctx);};
+  rootEl.onclick=e=>{
+   const w=e.target.closest('[data-cluster-alert]');if(w){const next=nextPick(P.last?.r,w.dataset.clusterAlert,P.pick);if(next){P.pick=next;again();}return;}
+   if(e.target.closest('[data-cluster-trip]')){save({trip:Math.floor(now())});again();return;}
+   const a=e.target.closest('[data-cluster-account]');if(a){const id=a.dataset.clusterAccount;P.pick=P.pick?.type==='account'&&P.pick.id===id?null:{type:'account',id};again();}
+  };
+  P.el=rootEl;clearInterval(P.ticker);P.ticker=setInterval(()=>tick(rootEl,P.last),1000);
+ }
+ function compact(rootEl,ctx){
+  if(P.el!==rootEl||!rootEl.querySelector('.cluster'))mountCompact(rootEl);
+  let trip=stored().trip;if(!valid(trip)){trip=Math.floor(now());save({trip});}
+  const r=readings(ctx.state,{...ctx,pick:P.pick,trip});P.last={r,ctx,at:now()};
+  if(P.pick&&!r.speed.picked)P.pick=null;
+  paintDials(rootEl,r,ctx,P.igniting);paintLamps(rootEl,r);paintTrip(rootEl,r,ctx);paintFuel(rootEl,r,ctx);
+  if(P.ignition){P.ignition=false;igniteCompact(rootEl);}
+ }
+ function igniteCompact(rootEl){
+  if(!rootEl?.querySelector('.cluster')||!P.last){P.ignition=true;return;}
+  if(!calm())sweep(rootEl,()=>P.last.r,v=>{P.igniting=v;});
+ }
+ const api={marks,readings,range,cruise,trip,heat,instant,render,ignite,compact,igniteCompact};
  if(typeof module!=='undefined')module.exports=api;else root.OneTopCluster=api;
 })(typeof window!=='undefined'?window:globalThis);

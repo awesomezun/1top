@@ -241,6 +241,23 @@ try:
         page.locator('#clusterView [data-cluster-period="5h"]').click()
         page.wait_for_function("document.querySelector('#clusterView [data-cluster-period=\"5h\"]')?.getAttribute('aria-pressed')==='true'")
         checks.append('cluster view reads and sets the shared period, with its custom gear on the dashboard slider, and keeps every text inside its housing without overlaps')
+        # The tray panel's cluster view takes the place of its tokens, weekly limits and resources, inside its housing.
+        quick=browser.new_page(viewport={'width':440,'height':800},color_scheme='dark')
+        quick.on('pageerror',lambda e:(errors.append(str(e)),print('Browser error:',str(e),flush=True)))
+        quick.add_init_script("localStorage.setItem('onetop.quick.v1',JSON.stringify({cluster:true}))")
+        quick.goto(f'http://127.0.0.1:{server.server_port}/quick.html')
+        quick.locator('#qCluster .cl-speed .cl-ticks line').first.wait_for()
+        assert quick.locator('.q-tokens').is_hidden() and quick.locator('#qWeekly').is_hidden() and quick.locator('#qResources').is_hidden()
+        assert quick.locator('[data-act="cluster"]').get_attribute('aria-pressed')=='true'
+        assert quick.locator('#qCluster .cl-lamp').count()==6
+        quick.wait_for_timeout(1700)
+        fit=quick.evaluate((ROOT/'tests/cluster-housing.js').read_text())
+        assert not fit['out'] and not fit['overlap'] and fit['page']<=0,('quick',fit)
+        quick.locator('[data-act="cluster"]').click()
+        assert quick.locator('#qCluster').is_hidden() and quick.locator('.q-tokens').is_visible()
+        assert quick.evaluate("JSON.parse(localStorage.getItem('onetop.quick.v1')).cluster")==False
+        quick.close()
+        checks.append('the tray panel switches to its compact cluster and back, every text inside the housing without overlaps')
         page.locator('#views [data-view="sessions"]').click()
         page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 5시간'")
         select_stop(17)

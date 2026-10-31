@@ -222,3 +222,38 @@
  .cl-band circle,.cl-temp .t-needle,.cl-needle,.cl-needle2,.cl-arc,.cl-mini .mv,.cl-mini .mn,.cl-can>i>s,.cl-card-bar s,.cl-odo i>span{transition:none}
  .cl-lamp svg{animation:none!important}
 }
+
+/* The compact cluster on the menu bar and tray panels (OneTopCluster.compact): the speedometer large beside the
+   smaller tachometer, then the warning lights, the odometer with the trip and the fuel, in the panel's width.
+   It comes last so the phone-width rules above, which the 440px panel also meets, do not reach it. */
+.cluster.compact{gap:10px;padding:14px 16px 16px}
+/* The foot's named areas belong to the dashboard's layout; here each part takes its own row. */
+.compact .cl-odo,.compact .cl-left{grid-area:auto}
+.compact .cl-body{border-radius:28px}
+.compact .cl-main{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px;align-items:center}
+.compact .cl-speed,.compact .cl-tach{order:0;width:100%;justify-self:stretch}
+.compact .cl-speed svg{box-shadow:0 0 0 4px color-mix(in srgb,var(--bg) 70%,transparent),0 12px 28px -18px #000}
+.compact .cl-nums text{font-size:21px}
+.compact .cl-tach .cl-nums text{font-size:25px}
+.compact .cl-name{inset:29% 0 auto}
+.compact .cl-read{inset:46% 0 auto}
+.compact .cl-speed .cl-read>b{font-size:28px}
+.compact .cl-tach .cl-read>b{font-size:20px}
+.compact .cl-sub{top:auto;bottom:-3px;max-width:100%;padding:3px 8px;gap:4px}
+/* At this size the readout's extra lines would meet the 0 and full-scale numbers, so they sit below them, in the
+   open bottom of the dial where no needle goes; the name tag rests on the rim. 1cqi is 1% of the dial. */
+.compact .cl-aux{position:absolute;top:32cqi;left:0;right:0;margin:0}
+.compact .cl-top{gap:8px}
+.compact .cl-odo{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:end;justify-items:start;gap:5px 14px}
+.compact .cl-odo>small,.compact .cl-odo>[role=img]{grid-column:1}
+.compact .cl-odo i{font-size:16px}
+.compact .cl-odo em{font-size:13px}
+.compact .cl-trip{grid-column:2;grid-row:1/3;justify-self:end;justify-items:end;max-width:none;text-align:right}
+.compact .cl-trip-a{justify-content:flex-end}
+.compact .cl-left{display:block}
+/* Fuel: the label beside a row of shorter gauges. */
+.compact .cl-fuel{grid-template-columns:auto minmax(0,1fr);align-items:center;gap:14px}
+.compact .cl-fuel>small{white-space:nowrap}
+.compact .cl-fuel>div{gap:4px 12px}
+.compact .cl-can>i{height:30px}
+.compact .cl-can:nth-child(n+4) .cl-tip{left:auto;right:0}

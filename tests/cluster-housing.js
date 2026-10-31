@@ -1,5 +1,5 @@
-// Used by tests/dashboard-browser.py. Text and blocks of the cluster that fall outside its housing's curved edge, and text boxes that overlap.
-(()=>{const c=document.querySelector('#clusterView .cluster');if(!c)return {missing:true};const body=c.querySelector('.cl-body'),b=body.getBoundingClientRect(),cs=getComputedStyle(body);
+// Used by tests/dashboard-browser.py, on the dashboard's cluster or the tray panel's compact one. Text and blocks of the cluster that fall outside its housing's curved edge, and text boxes that overlap.
+(()=>{const c=document.querySelector('#clusterView .cluster,#qCluster .cluster');if(!c)return {missing:true};const body=c.querySelector('.cl-body'),b=body.getBoundingClientRect(),cs=getComputedStyle(body);
  const rad=k=>{const v=cs[k].split(' ').map(parseFloat),x=v[0],y=v[1]??v[0];return [Math.min(x,b.width/2),Math.min(y,b.height/2)];};
  const R={tl:rad('borderTopLeftRadius'),tr:rad('borderTopRightRadius'),br:rad('borderBottomRightRadius'),bl:rad('borderBottomLeftRadius')};
  const corner=(x,y,cx,cy,[rx,ry],sx,sy)=>{const dx=(x-cx)*sx,dy=(y-cy)*sy;return dx<=0||dy<=0||(dx/rx)**2+(dy/ry)**2<=1.0001;};

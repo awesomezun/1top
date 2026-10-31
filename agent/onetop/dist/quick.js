@@ -115,9 +115,9 @@
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const KEY='onetop.quick.v1';
  let saved={};try{saved=JSON.parse(localStorage.getItem(KEY)||'{}')||{};}catch{}
- const S={data:null,connected:false,period:'1h',tokensMode:saved.tokensMode===true,zoom:finite(saved.zoom)?Math.min(1.6,Math.max(.8,saved.zoom)):1,
+ const S={data:null,connected:false,period:'1h',tokensMode:saved.tokensMode===true,cluster:saved.cluster===true,zoom:finite(saved.zoom)?Math.min(1.6,Math.max(.8,saved.zoom)):1,
   lang:'ko',now:Date.now()/1000,shown:false,fetching:false,busy:false,authorizing:null,message:null,layer:null,login:{enabled:false,managed:false},html:{},hovered:null};
- const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify({tokensMode:S.tokensMode,zoom:S.zoom}));}catch{}};
+ const persist=()=>{try{localStorage.setItem(KEY,JSON.stringify({tokensMode:S.tokensMode,zoom:S.zoom,cluster:S.cluster}));}catch{}};
  const native=()=>root.pywebview?.api||null;
  const fallback={open_dashboard:()=>root.open('/','_blank'),open_browser:()=>root.open('/','_blank'),open_remote:()=>root.open('https://1top.si/app','_blank'),relay_default:()=>'https://onetop-relay.gitreels.workers.dev',login:()=>S.login};
  async function call(name,...args){const bridge=native();if(bridge&&typeof bridge[name]==='function'){try{return await bridge[name](...args);}catch{return null;}}return fallback[name]?fallback[name](...args):null;}
@@ -185,6 +185,7 @@
   more:'<svg width="15" height="4" viewBox="0 0 15 4" fill="currentColor"><circle cx="2" cy="2" r="1.6"/><circle cx="7.5" cy="2" r="1.6"/><circle cx="13" cy="2" r="1.6"/></svg>',
   plus:'<svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 1v8M1 5h8"/></svg>',
   open:'<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9 9.5 2.5M4 2.5h5.5V8"/></svg>',
+  gauge:'<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.6 12.2a6.2 6.2 0 1 1 10.8 0"/><path d="M8 9.6 11 5.4"/><circle cx="8" cy="9.6" r="1.1" fill="currentColor" stroke="none"/></svg>',
   close:'<svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7"/></svg>',
   dashboard:'<svg width="15" height="12" viewBox="0 0 15 12" fill="none"><rect x=".75" y=".75" width="13.5" height="10.5" rx="2" stroke="currentColor" stroke-width="1.4"/><rect x="2.8" y="2.8" width="9.4" height="6.4" rx=".8" fill="currentColor"/></svg>',
   browser:'<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.6"/><path d="M10.9 5.1 9.2 9.2 5.1 10.9l1.7-4.1z" stroke-linejoin="round"/></svg>',
@@ -200,8 +201,8 @@
 
  function renderHead(){
   const theme=preferences().theme,at=Math.max(0,LANGS.findIndex(l=>l[0]===S.lang)),[,mark,name]=LANGS[at],next=LANGS[(at+1)%LANGS.length][2];
-  const themeLabel=T(theme==='dark'?'화이트 모드':'다크 모드'),langLabel=`${T('언어')}: ${name} → ${next}`;
-  update('qHead',`<div class="q-brand"><img class="q-mark" src="/brand-mark_v1.1.0.png" alt="" width="28" height="28"><span>1top</span></div><span class="q-spacer"></span><span class="q-pill"><i class="q-dot${fresh()?'':' warn'}"></i><span id="quickConnection">${esc(connectionLabel())}</span></span><button class="q-pref q-theme" data-act="theme" aria-label="${esc(themeLabel)}" title="${esc(themeLabel)}">${theme==='dark'?'☀':'☾'}</button><button class="q-pref q-lang" data-act="language" lang="${S.lang}" aria-label="${esc(langLabel)}" title="${esc(langLabel)}">${mark}</button><button class="q-more" data-act="menu" data-menu="head" aria-label="${esc(T('1top 옵션'))}" aria-haspopup="menu">${icon.more}</button>`);
+  const themeLabel=T(theme==='dark'?'화이트 모드':'다크 모드'),langLabel=`${T('언어')}: ${name} → ${next}`,gaugeLabel=T(S.cluster?'기본 보기':'계기판 보기');
+  update('qHead',`<div class="q-brand"><img class="q-mark" src="/brand-mark_v1.1.0.png" alt="" width="28" height="28"><span>1top</span></div><span class="q-spacer"></span><span class="q-pill"><i class="q-dot${fresh()?'':' warn'}"></i><span id="quickConnection">${esc(connectionLabel())}</span></span><button class="q-pref q-gauge" data-act="cluster" aria-pressed="${S.cluster}" aria-label="${esc(gaugeLabel)}" title="${esc(gaugeLabel)}">${icon.gauge}</button><button class="q-pref q-theme" data-act="theme" aria-label="${esc(themeLabel)}" title="${esc(themeLabel)}">${theme==='dark'?'☀':'☾'}</button><button class="q-pref q-lang" data-act="language" lang="${S.lang}" aria-label="${esc(langLabel)}" title="${esc(langLabel)}">${mark}</button><button class="q-more" data-act="menu" data-menu="head" aria-label="${esc(T('1top 옵션'))}" aria-haspopup="menu">${icon.more}</button>`);
   update('qPeriods',PERIODS.map(([k,l])=>`<button type="button" data-act="period" data-period="${k}" aria-pressed="${S.period===k}" aria-label="${esc(T('최근 '+l))}">${esc(T(l))}</button>`).join(''));
   $('qPeriods').setAttribute('aria-label',T('사용량 기간'));
  }
@@ -343,11 +344,22 @@
   }
  }
 
+ // The cluster view: the dashboard's cluster (cluster.js) in its compact form, on the panel's period, with the
+ // dashboard's colours and number format so both show the same figures.
+ const clusterNumber=n=>n==null?'—':n>=1e9?(n/1e9).toFixed(2)+'B':n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':Number(n.toFixed(1)).toLocaleString(root.OneTopI18n?.locale()||'ko-KR');
+ function renderCluster(){
+  const on=S.cluster&&!!root.OneTopCluster&&!!root.OneTopWeekly;
+  document.querySelector('.q-tokens').hidden=on;$('qWeekly').hidden=on;$('qResources').hidden=on;$('qCluster').hidden=!on;
+  if(!on||!S.data?.ready)return;
+  root.OneTopCluster.compact($('qCluster'),{state:S.data,period:S.period,caption:periodLabel(),sessions:sessions(),display:s=>(s.children_working||0)>0?'working':stateOf(s),
+   colors:{...COLORS,Aside:color('Aside')},kindName:toolName,fmt:clusterNumber,speed:root.OneTopSpeed,weekly:root.OneTopWeekly,reconnect:RECONNECT,accountChip:chip,name:sessionName});
+ }
+
  /* Data and actions */
  let palette=null,timer=null;
  function render(){
   S.now=Date.now()/1000;
-  try{const r=reading();renderHead();renderTokens(r);renderWeekly();renderResources();renderSessions();renderMessage();renderFoot();setDial(r);
+  try{const r=reading();renderHead();renderTokens(r);renderWeekly();renderResources();renderCluster();renderSessions();renderMessage();renderFoot();setDial(r);
    if(S.layer?.type==='account')renderLayer();api.error=null;}
   catch(error){api.error=String(error?.stack||error);}
  }
@@ -489,7 +501,8 @@
  let last=0;
  function frame(t){
   const open=S.shown||!native();
-  if(open?t-last>=33||!last:dial.dirty){last=t;dial.dirty=false;drawDial();}
+  if(S.cluster)dial.dirty=true;
+  else if(open?t-last>=33||!last:dial.dirty){last=t;dial.dirty=false;drawDial();}
   requestAnimationFrame(frame);
  }
 
@@ -498,6 +511,7 @@
   const el=e.target.closest('[data-act]');if(!el||el.disabled)return;
   const act=el.dataset.act;
   if(act==='period'){S.period=el.dataset.period;dial.opened=performance.now()/1000;render();}
+  else if(act==='cluster'){S.cluster=!S.cluster;persist();render();if(S.cluster)root.OneTopCluster?.igniteCompact($('qCluster'));}
   else if(act==='theme')switchTheme(el);
   else if(act==='language')switchLanguage(el);
   else if(act==='menu'){const rect=el.getBoundingClientRect();S.layer={type:'menu',kind:el.dataset.menu,id:el.dataset.session||null,anchor:{top:rect.top,bottom:rect.bottom,right:rect.right}};renderLayer();}
@@ -542,7 +556,7 @@
   render();refresh().then(schedule);requestAnimationFrame(frame);
  }
  // Called by the shell each time the panel opens.
- api.opened=()=>{S.shown=true;dial.opened=performance.now()/1000;applyPreferences();render();refresh();schedule();call('login').then(r=>{if(r)S.login={enabled:!!r.enabled,managed:!!r.managed};});};
+ api.opened=()=>{S.shown=true;dial.opened=performance.now()/1000;applyPreferences();render();if(S.cluster)root.OneTopCluster?.igniteCompact($('qCluster'));refresh();schedule();call('login').then(r=>{if(r)S.login={enabled:!!r.enabled,managed:!!r.managed};});};
  api.refresh=refresh;api.askConnect=askConnect;api.ready=false;api.error=null;api.state=S;
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })(typeof window==='undefined'?globalThis:window);

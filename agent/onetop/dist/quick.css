@@ -35,6 +35,12 @@ body.quick-body{margin:0;background:var(--bg);color:var(--ink);font:var(--q-titl
 .q-periods{display:flex;gap:2px;margin:0 14px 10px;padding:3px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line);border-radius:9px}
 .q-periods button{flex:1;display:grid;place-items:center;height:24px;border-radius:6px;font-size:var(--q-body);font-weight:500;color:var(--muted)}
 .q-periods button[aria-pressed=true]{background:var(--raised);color:var(--ink);font-weight:600}
+/* The cluster switch, beside the theme switch; the compact cluster takes the place of the tokens, weekly limits and resources. */
+.q-gauge{width:24px;color:var(--muted)}
+.q-gauge:hover{color:var(--ink)}
+.q-gauge[aria-pressed=true]{color:var(--accent)}
+.q-cluster{flex:none;padding:0 14px 10px}
+.q-cluster[hidden],.q-tokens[hidden],.q-weekly[hidden],.q-resources[hidden]{display:none}
 
 /* Tokens */
 .q-tokens{padding:0 16px}
