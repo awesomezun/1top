@@ -2,8 +2,9 @@ import Foundation
 
 /// The cluster's readings on the iPhone (agent/onetop/dist/cluster.js `readings`), from the relay's reports as the
 /// 1top.si dashboard reads them (site/src/remote-adapter.js): the speedometer is one account's weekly-limit burn
-/// in %/h, the account picked or else the fastest; the tachometer is the dashboard's token speed; fuel is each
-/// account's weekly limit left; the warning lights, odometer and trip follow the dashboard's cluster.
+/// in %/h at its last minute's token speed, the account picked or else the one burning fastest now; the
+/// tachometer is tokens per minute over the last minute; fuel is each account's weekly limit left; the warning
+/// lights, odometer and trip follow the dashboard's cluster.
 struct ClusterReadings {
     struct Scale: Equatable { var max: Double; var major: Double; var minor: Double }
     struct Range: Equatable {
@@ -14,10 +15,17 @@ struct ClusterReadings {
         var id: String; var kind: String; var plan: String?; var tag: String?
         var pct: Double?; var left: Double?; var reset: Double?
         var current: Bool; var reconnect: Bool; var burn: Double?; var range: Range?
+        /// The burn at the last minute's token speed of the account's sessions; the period's burn without a report.
+        var live: Double? = nil
     }
-    struct Tach { var rate: Double?; var max: Double; var tokens: Double?; var instant: Double?; var climb: Double }
+    /// rate is the period's average per hour; now is the last minute per hour (the period's average without a
+    /// report); tpmMax is the dial's full scale in tokens per minute.
+    struct Tach { var rate: Double?; var max: Double; var tokens: Double?; var instant: Double?; var climb: Double
+                  var now: Double?; var live: Bool; var tpmMax: Double }
+    /// The tachometer's scale, held while the period stays so a burst grows it and it never jumps back.
+    final class TachHold { var period = ""; var tpm = 0.0 }
     struct Speed {
-        var value: Double?; var recent: Double?; var cruise: Double?; var max: Double
+        var value: Double?; var live: Double?; var recent: Double?; var cruise: Double?; var max: Double
         var kind: String?; var account: String?; var picked: Bool
     }
     struct Tells {
@@ -75,7 +83,7 @@ struct ClusterReadings {
     /// weekly.js accountBurn: a current provider report over at least two observed minutes.
     static func burn(_ q: Quota, _ period: String) -> Double? { q.stale ? nil : q.weekly?[period]?.burnPerHour }
 
-    @MainActor init(model: AppModel, now: Double, pick: String? = nil, trip: Double? = nil) {
+    @MainActor init(model: AppModel, now: Double, pick: String? = nil, trip: Double? = nil, hold: TachHold? = nil) {
         let period = model.period, devices = model.reportingDevices
         let live = devices.filter { model.isFresh($0) }
         // The relay's newest report; readings within 20 seconds are live.
@@ -90,28 +98,52 @@ struct ClusterReadings {
             guard let v = s.usage?.lastMinute else { continue }
             instant = (instant ?? 0) + v.reduce(0) { $0 + (Self.valid($1) ? $1 : 0) } * Self.hour / 60
         }
-        tach = Tach(rate: rate, max: Self.scaleMax(rate, seconds: period.seconds), tokens: tokens, instant: instant,
-                    climb: Self.valid(instant) ? instant! / Self.hour : 0)
+        // Tokens per minute, like rpm: the needle reads the last minute; the scale is round, at least two and a half
+        // times the period's average, and held while the period stays.
+        let now1 = Self.valid(instant) ? instant : rate, full = Self.scaleMax(rate, seconds: period.seconds)
+        var tpmMax = Self.niceMax(Swift.max(full / 60, (rate ?? 0) / 60 * 2.5, (now1 ?? 0) / 60))
+        if let hold {
+            if hold.period == period.rawValue && hold.tpm > tpmMax { tpmMax = hold.tpm }
+            hold.period = period.rawValue; hold.tpm = tpmMax
+        }
+        tach = Tach(rate: rate, max: full, tokens: tokens, instant: instant, climb: Self.valid(instant) ? instant! / Self.hour : 0,
+                    now: now1, live: Self.valid(instant), tpmMax: tpmMax)
 
         // Fuel: every account with what is left of its weekly limit.
-        let list = model.quotas.map { q in
+        var list = model.quotas.map { q in
             let week = Self.window(q), pct = Self.valid(week?.pct) ? week?.pct : nil, reset = Self.valid(week?.reset) ? week?.reset : nil
             let burn = q.burnAllowed ? Self.burn(q, period.rawValue) : nil, left = pct.map { Swift.max(0, 100 - $0) }
             return Account(id: q.id, kind: q.kind, plan: q.plan.flatMap { $0.isEmpty ? nil : $0 }, tag: model.accountTag(q.id), pct: pct, left: left,
                            reset: reset, current: pct != nil && !q.stale, reconnect: q.needsReconnect, burn: burn,
                            range: Self.range(left: left, burn: burn, reset: reset, now: now))
         }
+        // Live: each account's burn at its sessions' last-minute token speed, holding the period's percent per
+        // token, so the needle moves as tokens flow; without a last-minute report it is the period's burn.
+        func lastMinute(_ s: Session) -> Double? { s.usage?.lastMinute.map { $0.reduce(0) { $0 + (Self.valid($1) ? $1 : 0) } * Self.hour / 60 } }
+        func livePace(_ value: Double?, _ rows: [Session]) -> Double? {
+            guard let value else { return nil }
+            var n: Double?, t = 0.0
+            for s in rows { if let l = lastMinute(s) { n = (n ?? 0) + l }; t += s.tokens(in: period) ?? 0 }
+            let per = period.seconds > 0 ? t * Self.hour / period.seconds : 0
+            guard let n, per > 0 else { return value }
+            return value * n / per
+        }
+        for i in list.indices where Self.valid(list[i].burn) {
+            let id = list[i].id
+            list[i].live = livePace(list[i].burn, roots.filter { model.account(of: $0) == id })
+        }
         accounts = list
 
-        // Speedometer: the account picked, else the one burning fastest; never a sum across accounts. Its
-        // second needle reads the same account over the last ten minutes.
+        // Speedometer: the account picked, else the one burning fastest now; never a sum across accounts.
         let picked = pick.flatMap { id in list.first { $0.id == id } }
-        let subject = picked ?? list.filter { Self.valid($0.burn) }.max { ($0.burn ?? 0) < ($1.burn ?? 0) }
+        let subject = picked ?? list.filter { Self.valid($0.burn) }
+            .sorted { ($0.live ?? 0) != ($1.live ?? 0) ? ($0.live ?? 0) > ($1.live ?? 0) : ($0.burn ?? 0) > ($1.burn ?? 0) }.first
         let value = subject?.burn.flatMap { Self.valid($0) ? $0 : nil }
+        let liveBurn = subject == nil ? nil : subject!.live ?? value
         let target = subject.flatMap { s in model.quotas.first { $0.id == s.id }?.representativeWindow?.isWeekly == true ? Self.cruise(left: s.left, reset: s.reset, now: now) : nil }
         let ten = period == .m10 ? nil : subject.flatMap { a in model.quotas.first { $0.id == a.id }.flatMap { $0.burnAllowed ? Self.burn($0, Period.m10.rawValue) : nil } }
-        speed = Speed(value: value, recent: ten, cruise: target,
-                      max: Swift.max(2, Self.niceMax(Swift.max(value ?? 0, (target ?? 0) * 1.6, ten ?? 0))),
+        speed = Speed(value: value, live: liveBurn, recent: ten, cruise: target,
+                      max: Swift.max(2, Self.niceMax(Swift.max(value ?? 0, liveBurn ?? 0, (target ?? 0) * 1.6))),
                       kind: subject?.kind, account: subject?.id, picked: picked != nil)
 
         // Warning lights, for the dashboard's rows (a lead with its subagents): tools working now, sessions

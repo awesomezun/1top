@@ -8,18 +8,22 @@ import XCTest
         let model = AppModel()
         model.showDemo(); model.period = .h1
         let now = DemoData.now(), r = ClusterReadings(model: model, now: now)
-        // Speedometer: the fastest account's own burn; a picked account reads that account.
-        let burns = model.quotas.compactMap { q in ClusterReadings.burn(q, "1h").map { (q.id, $0) } }
-        let fastest = try XCTUnwrap(burns.max { $0.1 < $1.1 })
-        XCTAssertEqual(r.speed.account, fastest.0)
-        XCTAssertEqual(try XCTUnwrap(r.speed.value), fastest.1, accuracy: 1e-9)
+        // Speedometer: the account burning fastest now (its burn at the last minute's speed), then by the period's
+        // burn; the needle reads that live burn. A picked account reads that account.
+        let ranked = r.accounts.filter { ClusterReadings.valid($0.burn) }
+            .sorted { ($0.live ?? 0) != ($1.live ?? 0) ? ($0.live ?? 0) > ($1.live ?? 0) : ($0.burn ?? 0) > ($1.burn ?? 0) }
+        let fastest = try XCTUnwrap(ranked.first)
+        XCTAssertEqual(r.speed.account, fastest.id)
+        XCTAssertEqual(try XCTUnwrap(r.speed.value), try XCTUnwrap(fastest.burn), accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(r.speed.live), try XCTUnwrap(fastest.live ?? fastest.burn), accuracy: 1e-9)
+        for a in r.accounts { if let burn = a.burn { XCTAssertEqual(burn, try XCTUnwrap(model.quotas.first { $0.id == a.id }.flatMap { ClusterReadings.burn($0, "1h") }), accuracy: 1e-9) } }
         XCTAssertFalse(r.speed.picked)
-        XCTAssertGreaterThanOrEqual(r.speed.max, max(2, r.speed.value ?? 0))
-        let other = try XCTUnwrap(burns.first { $0.0 != fastest.0 })
-        let picked = ClusterReadings(model: model, now: now, pick: other.0)
-        XCTAssertEqual(picked.speed.account, other.0)
+        XCTAssertGreaterThanOrEqual(r.speed.max, max(2, r.speed.value ?? 0, r.speed.live ?? 0))
+        let other = try XCTUnwrap(ranked.first { $0.id != fastest.id })
+        let picked = ClusterReadings(model: model, now: now, pick: other.id)
+        XCTAssertEqual(picked.speed.account, other.id)
         XCTAssertTrue(picked.speed.picked)
-        XCTAssertEqual(try XCTUnwrap(picked.speed.value), other.1, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(picked.speed.value), try XCTUnwrap(other.burn), accuracy: 1e-9)
         // Fuel: every account with what is left of its weekly limit.
         XCTAssertEqual(r.accounts.map(\.id), model.quotas.map(\.id))
         for a in r.accounts { if let pct = a.pct { XCTAssertEqual(a.left, max(0, 100 - pct)) } }
@@ -28,9 +32,16 @@ import XCTest
         XCTAssertTrue(r.tells.context.contains { $0.hasSuffix(":s3") })
         XCTAssertTrue(r.tells.fresh)
         XCTAssertTrue(r.tells.kinds.allSatisfy { $0.working > 0 })
-        // Tachometer: the dashboard's token speed, on the dashboard's scale.
+        // Tachometer: the dashboard's token speed as the period's average; the needle reads the last minute in
+        // tokens per minute, on a round scale at least two and a half times the average, held while the period stays.
         XCTAssertEqual(try XCTUnwrap(r.tach.rate), try XCTUnwrap(model.averagePerHour), accuracy: 1e-6)
         XCTAssertEqual(r.tach.max, ClusterReadings.scaleMax(r.tach.rate, seconds: 3600))
+        XCTAssertTrue(r.tach.live)
+        XCTAssertEqual(try XCTUnwrap(r.tach.now), try XCTUnwrap(r.tach.instant), accuracy: 1e-9)
+        XCTAssertGreaterThanOrEqual(r.tach.tpmMax, try XCTUnwrap(r.tach.rate) / 60 * 2.5)
+        XCTAssertEqual(r.tach.tpmMax, ClusterReadings.niceMax(r.tach.tpmMax))
+        let hold = ClusterReadings.TachHold(); hold.period = "1h"; hold.tpm = r.tach.tpmMax * 10
+        XCTAssertEqual(ClusterReadings(model: model, now: now, hold: hold).tach.tpmMax, r.tach.tpmMax * 10)
         // Trip: tokens since the start from the token bins, inside the record.
         let trip = try XCTUnwrap(ClusterReadings(model: model, now: now, trip: now - 3600).trip)
         XCTAssertTrue(trip.inRange)

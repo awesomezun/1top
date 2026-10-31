@@ -5,9 +5,9 @@ import Foundation
     struct Cases: Decodable { var now: Double; var cases: [Case] }
     struct Case: Decodable { var period: String; var pick: String?; var state: String; var expected: Expected }
     struct Expected: Decodable {
-        struct Tach: Decodable { var rate: Double?; var max: Double; var tokens: Double?; var instant: Double? }
-        struct Speed: Decodable { var value: Double?; var recent: Double?; var cruise: Double?; var max: Double; var account: String?; var picked: Bool }
-        struct Account: Decodable { var id: String; var pct: Double?; var left: Double?; var burn: Double?; var reconnect: Bool; var range: String? }
+        struct Tach: Decodable { var rate: Double?; var max: Double; var tokens: Double?; var instant: Double?; var now: Double?; var live: Bool; var tpmMax: Double }
+        struct Speed: Decodable { var value: Double?; var live: Double?; var recent: Double?; var cruise: Double?; var max: Double; var account: String?; var picked: Bool }
+        struct Account: Decodable { var id: String; var pct: Double?; var left: Double?; var burn: Double?; var live: Double?; var reconnect: Bool; var range: String? }
         struct Tells: Decodable {
             var kinds: [[Value]]; var waiting: [String]; var reconnect: [String]; var empty: [String]
             var context: [String]; var stalled: [String]; var fresh: Bool
@@ -47,12 +47,15 @@ import Foundation
             let e = c.expected, tag = "\(c.period) pick \(c.pick ?? "none")"
             same(r.tach.rate, e.tach.rate, "\(tag) token speed"); same(r.tach.max, e.tach.max, "\(tag) tachometer scale")
             same(r.tach.tokens, e.tach.tokens, "\(tag) odometer"); same(r.tach.instant, e.tach.instant, "\(tag) last minute")
+            same(r.tach.now, e.tach.now, "\(tag) tachometer reading"); same(r.tach.tpmMax, e.tach.tpmMax, "\(tag) tachometer scale per minute")
+            precondition(r.tach.live == e.tach.live, "\(tag) tachometer reads the last minute")
+            same(r.speed.live, e.speed.live, "\(tag) live burn")
             same(r.speed.value, e.speed.value, "\(tag) burn"); same(r.speed.recent, e.speed.recent, "\(tag) last ten minutes")
             same(r.speed.cruise, e.speed.cruise, "\(tag) cruise"); same(r.speed.max, e.speed.max, "\(tag) speedometer scale")
             precondition(r.speed.account == e.speed.account && r.speed.picked == e.speed.picked, "\(tag) speedometer subject")
             precondition(r.accounts.map(\.id) == e.accounts.map(\.id), "\(tag) fuel accounts")
             for (a, x) in zip(r.accounts, e.accounts) {
-                same(a.pct, x.pct, "\(tag) \(a.id) used"); same(a.left, x.left, "\(tag) \(a.id) left"); same(a.burn, x.burn, "\(tag) \(a.id) burn")
+                same(a.pct, x.pct, "\(tag) \(a.id) used"); same(a.left, x.left, "\(tag) \(a.id) left"); same(a.burn, x.burn, "\(tag) \(a.id) burn"); same(a.live, x.live, "\(tag) \(a.id) live burn")
                 precondition(a.reconnect == x.reconnect, "\(tag) \(a.id) reconnect")
                 let range = a.range.map { $0.state == .idle ? "idle" : $0.state == .enough ? "enough" : "empty" }
                 precondition(range == x.range, "\(tag) \(a.id) range \(String(describing: range)) ≠ \(String(describing: x.range))")

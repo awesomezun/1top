@@ -1,17 +1,18 @@
 import SwiftUI
 
 /// The dashboard's cluster (계기판) on the Dashboard tab, as the dashboard lays it out at phone width: the burn
-/// speedometer first and large, the token tachometer, the warning lights (centred, as in the menu bar and tray
+/// speedometer first, the token tachometer at the same size, the warning lights (centred, as in the menu bar and tray
 /// panels), the odometer with the trip, and each account's weekly limit left as fuel. The period picker above and the session list below stay. The readings
 /// are ClusterReadings, the numbers the 1top.si dashboard's cluster shows for the same reports. Needles spring
-/// to each reading and the odometer and trip run on each second at the last minute's rate until the next
-/// reading; with Reduce Motion they change only with the readings.
+/// to each reading and shimmer while sessions work, and the odometer and trip run on each second at the last
+/// minute's rate until the next reading; with Reduce Motion they change only with the readings.
 struct ClusterCard: View {
     @Environment(AppModel.self) private var model
     var theme: QuickTheme
     @AppStorage("clusterTripStart") private var tripStart: Double = 0
     @State private var pick: String?
     @State private var readAt = Date()
+    @State private var hold = ClusterReadings.TachHold()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var caption: String { L.t("Last \(model.period.label)", "최근 \(model.period.label)") }
@@ -20,10 +21,10 @@ struct ClusterCard: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { timeline in
             let now = DemoData.onScreen && DemoData.held != nil ? DemoData.shownNow() : timeline.date.timeIntervalSince1970
-            let r = ClusterReadings(model: model, now: now, pick: pick, trip: tripStart > 0 ? tripStart : nil)
+            let r = ClusterReadings(model: model, now: now, pick: pick, trip: tripStart > 0 ? tripStart : nil, hold: hold)
             VStack(spacing: 14) {
                 speedometer(r).frame(width: 300, height: 300)
-                tachometer(r).frame(width: 220, height: 220)
+                tachometer(r).frame(width: 300, height: 300)
                 lamps(r, now: now)
                 VStack(alignment: .leading, spacing: 12) {
                     odometer(r, now: timeline.date)
@@ -90,6 +91,8 @@ struct ClusterCard: View {
 
     // MARK: Dials
     private func rate(_ v: Double) -> String { ClusterReadings.number(v) + L.t("%/h", "%/시간") }
+    /// The needles shimmer while any session works, as a running engine's do.
+    private func running(_ r: ClusterReadings) -> Bool { !reduceMotion && !r.tells.kinds.isEmpty }
     private func speedometer(_ r: ClusterReadings) -> some View {
         let s = r.speed, scale = ClusterReadings.marks(s.max), color = s.kind.map(Tool.color) ?? theme.dim
         let f = { (v: Double) in min(1, max(0, v / s.max)) }
@@ -98,14 +101,15 @@ struct ClusterCard: View {
             bands = [.init(from: 0, to: f(c), color: theme.accent), .init(from: f(c), to: f(c * 1.5), color: theme.amber),
                      .init(from: f(c * 1.5), to: 1, color: theme.red)].filter { $0.to > $0.from }
         }
-        let over = s.cruise != nil && s.value != nil && s.value! > s.cruise!
+        let over = s.cruise != nil && s.live != nil && s.live! > s.cruise!
         var aux: [ClusterAux] = []
         if let c = s.cruise { aux.append(.init(label: L.t("Cruise", "적정"), value: rate(c), color: over ? theme.amber : theme.accent)) }
-        if let recent = s.recent { aux.append(.init(label: L.t("Last 10 min", "최근 10분"), value: rate(recent), color: nil)) }
+        if let v = s.value, s.live != v { aux.append(.init(label: caption + " " + L.t("average", "평균"), value: rate(v), color: nil)) }
         let account = r.accounts.first { $0.id == s.account }
-        return ClusterDial(scale: scale, fraction: f(s.value ?? 0), second: s.recent.map(f), color: color, bands: bands,
-                           name: L.t("Burn rate", "소진 속도"), reading: ClusterReadings.reading(s.value),
-                           unit: L.t("%/h of the weekly limit", "%/시간 · 주간 한도 기준"), aux: aux, big: true, theme: theme, reduceMotion: reduceMotion) {
+        return ClusterDial(scale: scale, fraction: f(s.live ?? 0), color: color, bands: bands,
+                           name: L.t("Burn rate", "소진 속도"), reading: ClusterReadings.reading(s.live),
+                           unit: L.t("%/h of the weekly limit", "%/시간 · 주간 한도 기준"), aux: aux, lead: false,
+                           shimmer: running(r), phase: 1.7, theme: theme, reduceMotion: reduceMotion) {
             HStack(spacing: 4) {
                 if let kind = s.kind {
                     Circle().fill(color).frame(width: 6, height: 6)
@@ -119,19 +123,21 @@ struct ClusterCard: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(L.t("Burn rate", "소진 속도")) \(ClusterReadings.reading(s.value))%/h")
+        .accessibilityLabel("\(L.t("Burn rate", "소진 속도")) \(ClusterReadings.reading(s.live))%/h")
         .accessibilityIdentifier("cluster-speedometer")
     }
     private func tachometer(_ r: ClusterReadings) -> some View {
-        let t = r.tach, scale = ClusterReadings.marks(t.max / 1e6), f = { (v: Double) in min(1, max(0, v / t.max)) }
-        let shown = ClusterReadings.tokens(t.rate), unit = shown.last.flatMap { "kMBT".contains($0) ? String($0) : nil }
-        let digits = unit == nil ? shown : String(shown.dropLast())
-        let aux: [ClusterAux] = t.instant.map { [.init(label: L.t("Last 1 min", "최근 1분"), value: ClusterReadings.tokens($0), color: nil)] } ?? []
-        return ClusterDial(scale: scale, fraction: f(t.rate ?? 0), second: t.instant.map(f), color: theme.segmentOn, bands: [],
-                           name: L.t("Token speed", "토큰 속도"), reading: digits, unit: (unit.map { $0 + " " } ?? "") + L.t("tokens/h", "tokens/시간"),
-                           aux: aux, big: false, theme: theme, reduceMotion: reduceMotion) { Text(caption + " " + L.t("average", "평균")) }
+        // Tokens per minute, like rpm; the scale and the figure share one unit (k or M) so they agree.
+        let t = r.tach, div = t.tpmMax >= 1e6 ? 1e6 : 1e3, unit = (div == 1e6 ? "M" : "k") + " tpm"
+        let scale = ClusterReadings.marks(t.tpmMax / div), v = t.now.map { $0 / 60 / div }
+        let shown = v.map { String(format: $0 < 10 ? "%.2f" : $0 < 100 ? "%.1f" : "%.0f", $0) } ?? "—"
+        let minute = L.t("Last 1 min", "최근 1분"), average = caption + " " + L.t("average", "평균")
+        let aux: [ClusterAux] = t.live && t.rate != nil ? [.init(label: average, value: ClusterReadings.tokens(t.rate! / 60) + " tpm", color: nil)] : []
+        return ClusterDial(scale: scale, fraction: min(1, max(0, (t.now ?? 0) / 60 / t.tpmMax)), color: theme.segmentOn, bands: [],
+                           name: L.t("Token speed", "토큰 속도"), reading: shown, unit: unit, aux: aux, lead: true,
+                           shimmer: running(r), phase: 0, theme: theme, reduceMotion: reduceMotion) { Text(t.live ? minute : average) }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(L.t("Token speed", "토큰 속도")) \(shown) \(L.t("tokens/h", "tokens/시간")) · \(caption)")
+            .accessibilityLabel("\(L.t("Token speed", "토큰 속도")) \(shown) \(unit) · \(t.live ? minute : caption)")
     }
 
     // MARK: Odometer and trip
@@ -227,25 +233,30 @@ struct ClusterBand { var from: Double; var to: Double; var color: Color }
 struct ClusterAux { var label: String; var value: String; var color: Color? }
 
 /// One round dial of the cluster on a 340-unit face, as cluster.js draws it: a rim, the 270° track, the lit
-/// arc and ticks up to the reading, the scale numbers, cruise bands outside, a thin second needle and the main
-/// needle, then the name, the reading and its notes, and a chip at the bottom.
+/// arc and ticks up to the reading, the scale numbers, cruise bands outside and the needle, then the name, the
+/// reading and its notes, and a chip at the bottom. Both dials draw at one size.
 struct ClusterDial<Chip: View>: View {
     var scale: ClusterReadings.Scale
     var fraction: Double
-    var second: Double?
     var color: Color
     var bands: [ClusterBand]
     var name: String
     var reading: String
     var unit: String
     var aux: [ClusterAux]
-    var big: Bool
+    /// The reading in the segment display's colour (the tachometer) rather than ink.
+    var lead: Bool
+    /// While sessions work the needle shimmers about its reading; phase keeps two dials from moving together.
+    var shimmer: Bool
+    var phase: Double
     var theme: QuickTheme
     var reduceMotion: Bool
     @ViewBuilder var chip: () -> Chip
 
     private var spring: Animation? { reduceMotion ? nil : .spring(response: 0.9, dampingFraction: 0.58) }
     private static func angle(_ f: Double) -> Double { 135 + 270 * min(1, max(0, f)) }
+    /// A few degrees either way on uneven periods, so it never settles into a visible rhythm.
+    private static func wobble(_ t: Double) -> Double { 1.6 * sin(t * 2.7) + 1.0 * sin(t * 6.1 + 1.3) + 0.6 * sin(t * 11.3 + 0.4) }
 
     var body: some View {
         GeometryReader { geo in
@@ -277,30 +288,31 @@ struct ClusterDial<Chip: View>: View {
                         }
                     }
                 }
-                ClusterNeedle(thin: true).fill(theme.ink.opacity(0.78)).rotationEffect(.degrees(Self.angle(second ?? 0)))
-                    .opacity(second == nil ? 0 : 1).animation(spring, value: second)
-                ClusterNeedle(thin: false).fill(color).shadow(color: .black.opacity(0.6), radius: 6 * k)
-                    .rotationEffect(.degrees(Self.angle(fraction))).animation(spring, value: fraction)
+                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !shimmer)) { tl in
+                    ClusterNeedle(thin: false).fill(color).shadow(color: .black.opacity(0.6), radius: 6 * k)
+                        .rotationEffect(.degrees(Self.angle(fraction))).animation(spring, value: fraction)
+                        .rotationEffect(.degrees(shimmer ? Self.wobble(tl.date.timeIntervalSinceReferenceDate + phase) : 0))
+                }
                 Circle().fill(theme.raised).overlay(Circle().stroke(theme.line, lineWidth: 1.5 * k)).frame(width: 26 * k, height: 26 * k)
                 Circle().fill(theme.background).frame(width: 10 * k, height: 10 * k)
-                Text(name).font(.system(size: max(10, side * (big ? 0.042 : 0.055)), weight: .semibold)).kerning(0.6)
+                Text(name).font(.system(size: max(10, side * 0.042), weight: .semibold)).kerning(0.6)
                     .foregroundStyle(theme.muted).lineLimit(1).position(x: side / 2, y: side * 0.34)
                 VStack(spacing: 2 * k) {
                     Text(reading).font(.system(size: side * 0.15, weight: .semibold)).monospacedDigit()
-                        .foregroundStyle(big ? theme.ink : theme.segmentLead).contentTransition(.numericText()).lineLimit(1).fixedSize()
+                        .foregroundStyle(lead ? theme.segmentLead : theme.ink).contentTransition(.numericText()).lineLimit(1).fixedSize()
                         .animation(reduceMotion ? nil : .easeOut(duration: 0.7), value: reading)
-                    Text(unit).font(.system(size: max(9, side * (big ? 0.042 : 0.05)))).foregroundStyle(theme.muted).lineLimit(1).minimumScaleFactor(0.7)
-                        .frame(maxWidth: side * (big ? 0.7 : 0.32))
+                    Text(unit).font(.system(size: max(9, side * 0.042))).foregroundStyle(theme.muted).lineLimit(1).minimumScaleFactor(0.7)
+                        .frame(maxWidth: side * 0.62)
                     ForEach(Array(aux.enumerated()), id: \.offset) { _, a in
                         // One text per line, so a long note shrinks as a whole between the scale's end numbers.
                         Text("\(a.label) \(Text(a.value).fontWeight(.bold).foregroundColor(a.color ?? theme.ink))")
-                            .font(.system(size: max(9, side * (big ? 0.04 : 0.05)), weight: .semibold)).monospacedDigit()
+                            .font(.system(size: max(9, side * 0.04), weight: .semibold)).monospacedDigit()
                             .foregroundStyle(a.color ?? theme.muted).lineLimit(1).minimumScaleFactor(0.5)
-                            .frame(maxWidth: side * (big ? 0.7 : 0.32))
+                            .frame(maxWidth: side * 0.62)
                     }
                 }
-                // The small dial's notes stay between its 0 and its full-scale number.
-                .position(x: side / 2, y: side * (big ? 0.62 : 0.59))
+                // The notes stay between the scale's 0 and its full-scale number.
+                .position(x: side / 2, y: side * 0.62)
                 chip().font(.system(size: max(9, side * 0.04))).foregroundStyle(theme.muted).lineLimit(1)
                     .padding(.horizontal, 8 * k).padding(.vertical, 3 * k)
                     .background(theme.card.opacity(0.85), in: Capsule()).overlay(Capsule().stroke(theme.line))
