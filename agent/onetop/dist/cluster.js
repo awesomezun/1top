@@ -50,6 +50,8 @@
  }
  // The last minute's tokens per hour, in all and by tool, from each top-level session's sliding last
  // minute (a lead's figures include its subagents). null when no session reports one.
+ // A session's last minute per hour; null without a report.
+ const lastMinute=s=>{const v=s?.usage?.last_minute;return Array.isArray(v)?v.reduce((a,b)=>a+(valid(b)?b:0),0)*HOUR/(s.usage.window_seconds||60):null;};
  function instant(state){
   const rows=state?.root_sessions?.length?state.root_sessions:(state?.sessions||[]).filter(s=>!s.is_subagent),by={};let all=null;
   for(const s of rows){const v=s.usage?.last_minute;if(!Array.isArray(v))continue;const n=v.reduce((a,b)=>a+(valid(b)?b:0),0)*HOUR/(s.usage.window_seconds||60);
@@ -58,13 +60,20 @@
  }
  // The tachometer reads the same totals as the dashboard's speed panel (OneTopSpeed.measure).
  // pick is {type:'session'|'account',id} or null.
+ // The tachometer's scale, held per page while the period stays (see readings).
+ const tachHold={};
  function readings(state,o){
   const W=o.weekly,now=o.now??Date.now()/1000,w=state?.period_usage?.windows?.find(x=>x.key===o.period);
   const m=o.speed.measure(state,o.period,now),rate=m.rate===null?null:m.rate*3600;
   // The dashboard hands over its own dial scale, which holds a while before shrinking; alone it is computed.
   // Between readings the window's total runs on at the last minute's rate; the next reading sets it true.
   const live=instant(state),climb=valid(live.rate)?live.rate/HOUR:0;
-  const tach={rate,max:o.tachMax||o.speed.scaleMax(rate,w?.seconds),tokens:m.tokens,computers:m.computers,expected:m.expected,instant:live.rate,byKind:live.by,climb};
+  // The tachometer reads tokens per minute, like rpm: the needle and the big figure the last minute, the line
+  // under them the period's average. Its scale is the dashboard's, per minute, on a round number.
+  const now1=valid(live.rate)?live.rate:rate,max=Math.max(o.tachMax||0,o.speed.scaleMax(rate,w?.seconds));
+  let tpmMax=o.speed.niceMax(Math.max(max/60,(rate||0)/60*2.5,(now1||0)/60));
+  if(o.hold){if(o.hold.period===o.period&&o.hold.tpm>tpmMax)tpmMax=o.hold.tpm;o.hold.period=o.period;o.hold.tpm=tpmMax;}
+  const tach={rate,now:now1,live:valid(live.rate),max,tpmMax,tokens:m.tokens,computers:m.computers,expected:m.expected,instant:live.rate,byKind:live.by,climb};
   // Each account reads its representative window (weekly, else 5 hours, else daily); only a verified
   // account's weekly window gets a burn, a range and a cruise, which are all in %/h of the weekly limit.
   const accounts=(state?.account_quotas||[]).map(q=>{
@@ -91,15 +100,22 @@
   const rows=shown.map(row);
   // The speedometer reads one subject and never adds rates across accounts: the session or account picked,
   // else the account burning fastest. A pick with no rate yet reads as not measured rather than falling back.
+  // Live: a burn at the last minute's token speed, holding the period's percent per token, so the needles move
+  // as tokens flow; without a last-minute report it is the period's burn.
+  const accountOf=s=>s.usage?.weekly_estimate?.[o.period]?.account_id||s.usage?.weekly_account||null;
+  const livePace=(value,rows)=>{if(value===null||value===undefined)return null;let n=null,t=0;for(const x of rows){const l=lastMinute(x.s);if(l!==null)n=(n||0)+l;t+=x.tokens;}
+   const per=valid(w?.seconds)&&w.seconds>0?t*HOUR/w.seconds:null;return n===null||!per?value:value*n/per;};
+  for(const a of accounts)a.live=valid(a.burn)?livePace(a.burn,list.filter(x=>accountOf(x.s)===a.id)):null;
   let subject=null;const pick=o.pick;
   // Its second, thinner needle reads the same subject over the last ten minutes.
   const RECENT='10m',recentOf=a=>{const q=state.account_quotas?.find(q=>q.id===a.id),p=state.weekly_usage?.accounts?.find(x=>x.id===a.id)?.periods?.[RECENT];return p?W.accountBurn(p,q):null;};
   if(pick?.type==='session'){const l=list.find(x=>x.s.id===pick.id);if(l){const r=row(l);subject={type:'session',id:r.id,kind:r.kind,value:r.burn,account:r.account,session:r.session,recent:burn(l.s,RECENT)};}}
   else if(pick?.type==='account'){const a=accounts.find(x=>x.id===pick.id);if(a)subject={type:'account',id:a.id,kind:a.kind,value:a.burn,account:a.id,recent:recentOf(a)};}
   const picked=!!subject;
-  if(!subject){const a=accounts.filter(a=>valid(a.burn)).sort((a,b)=>b.burn-a.burn)[0];if(a)subject={type:'account',id:a.id,kind:a.kind,value:a.burn,account:a.id,recent:recentOf(a)};}
+  if(!subject){const a=accounts.filter(a=>valid(a.burn)).sort((a,b)=>(b.live||0)-(a.live||0)||b.burn-a.burn)[0];if(a)subject={type:'account',id:a.id,kind:a.kind,value:a.burn,account:a.id,recent:recentOf(a)};}
   const value=valid(subject?.value)?subject.value:null,target=cruise(accounts.find(a=>a.id===subject?.account),now),recent=o.period!==RECENT&&valid(subject?.recent)?subject.recent:null;
-  const speed={value,recent,cruise:target,max:Math.max(2,o.speed.niceMax(Math.max(value||0,(target||0)*1.6,recent||0))),subject,picked,account:subject?.type==='account'?subject.id:null,session:subject?.type==='session'?subject.id:null};
+  const liveBurn=!subject?null:subject.type==='session'?livePace(value,list.filter(x=>x.s.id===subject.id)):accounts.find(a=>a.id===subject.account)?.live??value;
+  const speed={value,live:liveBurn,recent,cruise:target,max:Math.max(2,o.speed.niceMax(Math.max(value||0,liveBurn||0,(target||0)*1.6))),subject,picked,account:subject?.type==='account'?subject.id:null,session:subject?.type==='session'?subject.id:null};
   // Tell-tales light only for what is there: tools with working sessions, sessions waiting for a look,
   // accounts to sign in again, and whether the readings are live.
   const working={};for(const r of list)if(r.state==='working')working[r.s.kind]=(working[r.s.kind]||0)+1;
@@ -121,7 +137,7 @@
   <circle class="cl-track" cx="170" cy="170" r="147" pathLength="360" stroke-dasharray="270 360" transform="rotate(135 170 170)"/>${ring('cl-arc',147)}
   <g class="cl-band">${ring('ok',155)}${ring('hi',155)}${ring('over',155)}</g><g class="cl-ticks"></g><g class="cl-nums"></g>
   <g class="cl-needle2"><path d="M170 168.9 L292 169.6 L292 170.4 L170 171.1 Z"/><circle cx="292" cy="170" r="3"/></g>
-  <g class="cl-needle"><path d="M158 166.4 L301 169.3 L301 170.7 L158 173.6 Z"/></g><circle class="cl-hub" cx="170" cy="170" r="13"/><circle class="cl-hub2" cx="170" cy="170" r="5"/></svg>
+  <g class="cl-needle"><g class="cl-shake"><path d="M158 166.4 L301 169.3 L301 170.7 L158 173.6 Z"/></g></g><circle class="cl-hub" cx="170" cy="170" r="13"/><circle class="cl-hub2" cx="170" cy="170" r="5"/></svg>
   <div class="cl-name">${name}</div><div class="cl-read"><b>—</b><small></small><em class="cl-aux"></em></div><div class="cl-sub"></div></div>`;
  function scaleMarkup(el,g,fmt){
   if(el.dataset.max===String(g.max))return;el.dataset.max=String(g.max);
@@ -276,34 +292,34 @@
  function paintDials(rootEl,r,ctx,busy){
   const {q,t,W,color,chip,fmt}=kit(rootEl,ctx);
   // Tachometer (the smaller dial): tokens per hour on the dashboard's scale; the thin needle is the last minute.
-  const tach=q('.cl-tach'),tg=marks(r.tach.max/1e6);scaleMarkup(tach,tg,scaleNumber);
-  // The readout is the dashboard's own figure, so the two pages show the same number.
-  const shown=fmt(r.tach.rate),unit=String(shown).match(/^(.+?)([kMBT])$/);
-  tach.querySelector('.cl-read b').textContent=unit?unit[1]:shown;
-  tach.querySelector('.cl-read small').innerHTML=(unit?`<span>${unit[2]}</span> `:'')+'<span>tokens/시간</span>';
-  tach.querySelector('.cl-aux').innerHTML=valid(r.tach.instant)?`<span class="aux-now"><span>최근 1분</span> <b>${esc(fmt(r.tach.instant))}</b></span>`:'';
-  tach.querySelector('.cl-sub').innerHTML=`<span>${esc(ctx.caption)}</span> <span>평균</span>`;
-  tach.setAttribute('aria-label',`${t('토큰 속도')} ${shown} ${t('tokens/시간')} · ${ctx.caption}`);
+  // The scale and the figure share one unit (k or M tokens per minute), so the needle and the number agree.
+  const div=r.tach.tpmMax>=1e6?1e6:1e3,tach=q('.cl-tach'),tg=marks(r.tach.tpmMax/div);scaleMarkup(tach,tg,scaleNumber);
+  const v=r.tach.now===null?null:r.tach.now/60/div,shown=v===null?'—':v.toFixed(v<10?2:v<100?1:0);
+  tach.querySelector('.cl-read b').textContent=shown;
+  tach.querySelector('.cl-read small').innerHTML=`<span>${div===1e6?'M':'k'}</span> <span>tpm</span>`;
+  tach.querySelector('.cl-aux').innerHTML=r.tach.live&&r.tach.rate!==null?`<span class="aux-now"><span>${esc(ctx.caption)}</span> <span>평균</span> <b>${esc(fmt(r.tach.rate/60))}</b> <span>tpm</span></span>`:'';
+  tach.querySelector('.cl-sub').innerHTML=r.tach.live?'<span>최근 1분</span>':`<span>${esc(ctx.caption)}</span> <span>평균</span>`;
+  tach.setAttribute('aria-label',`${t('토큰 속도')} ${shown}${div===1e6?'M':'k'} tpm · ${r.tach.live?t('최근 1분'):ctx.caption}`);
   // Speedometer (the main dial): the subject's %/h of its account's weekly limit, in that tool's colour,
   // labelled 'session · tool' or 'tool · plan'; the thin needle is its last ten minutes.
   const speed=q('.cl-speed'),sg=marks(r.speed.max),sub=r.speed.subject;scaleMarkup(speed,sg,scaleNumber);
   speed.style.setProperty('--subject',sub?color(sub.kind):'var(--dim)');
-  speed.querySelector('.cl-read b').textContent=reading(r.speed.value);
+  speed.querySelector('.cl-read b').textContent=reading(r.speed.live);
   speed.querySelector('.cl-read small').textContent='%/시간 · 주간 한도 기준';
   const acct=sub&&r.accounts.find(a=>a.id===sub.account);
   speed.querySelector('.cl-sub').innerHTML=!sub?'<span>계정 소진 속도 측정 중</span>':sub.type==='session'
    ?`<i style="background:${color(sub.kind)}"></i><b data-user-content>${esc(ctx.name(sub.session))}</b><span>·</span><span>${esc(ctx.kindName(sub.kind))}</span>`
    :`<i style="background:${color(sub.kind)}"></i><b>${esc(ctx.kindName(sub.kind))}</b>${chip(sub.id)}${acct?.plan?`<span>·</span><span>${esc(acct.plan)}</span>`:''}${r.speed.picked?'':'<span class="cl-pick">가장 빠름</span>'}`;
-  speed.setAttribute('aria-label',`${t('소진 속도')} ${reading(r.speed.value)}%/h`);
+  speed.setAttribute('aria-label',`${t('소진 속도')} ${reading(r.speed.live)}%/h`);
   // Cruise zones on the speedometer: green up to the steady rate that lasts until the reset, amber past it,
   // red past one and a half times it.
   const c=r.speed.cruise,f=v=>Math.max(0,Math.min(1,v/r.speed.max)),band=[[0,c],[c,c*1.5],[c*1.5,r.speed.max]];
   speed.querySelectorAll('.cl-band circle').forEach((el,i)=>{const [a,b]=band[i];el.setAttribute('stroke-dasharray',c===null||!(f(b)>f(a))?'0 360':`0 ${(270*f(a)).toFixed(2)} ${(270*(f(b)-f(a))).toFixed(2)} 360`);});
-  speed.classList.toggle('over',c!==null&&r.speed.value!==null&&r.speed.value>c);
+  speed.classList.toggle('over',c!==null&&r.speed.live!==null&&r.speed.live>c);
   speed.querySelector('.cl-aux').innerHTML=(c===null?'':`<span class="aux-cruise"><span>적정</span> <b>${W.burn(c)}</b></span>`)
-   +(r.speed.recent===null?'':`<span class="aux-now"><span>최근 10분</span> <b>${W.burn(r.speed.recent)}</b></span>`);
-  if(!busy){needle(tach,r.tach.rate===null?0:r.tach.rate/r.tach.max);needle(speed,r.speed.value===null?0:r.speed.value/r.speed.max);
-   needle2(tach,valid(r.tach.instant)?r.tach.instant/r.tach.max:null);needle2(speed,r.speed.recent===null?null:r.speed.recent/r.speed.max);}
+   +(r.speed.value===null||r.speed.live===r.speed.value?'':`<span class="aux-now"><span>${esc(ctx.caption)}</span> <span>평균</span> <b>${W.burn(r.speed.value)}</b></span>`);
+  rootEl.querySelector('.cluster')?.classList.toggle('running',r.working>0);
+  if(!busy){needle(tach,r.tach.now===null?0:r.tach.now/60/r.tach.tpmMax);needle(speed,r.speed.live===null?0:r.speed.live/r.speed.max);needle2(tach,null);needle2(speed,null);}
  }
  function paintLamps(rootEl,r){
   const q=s=>rootEl.querySelector(s),t=k=>root.OneTopI18n?root.OneTopI18n.t(k):k;
@@ -347,7 +363,7 @@
   if(mounted!==rootEl||!rootEl.querySelector('.cluster'))mount(rootEl,ctx);
   // The trip runs from the last reset, kept in this browser; the first visit starts it.
   tripStart=stored().trip;if(!valid(tripStart)){tripStart=Math.floor(now());save({trip:tripStart});}
-  const r=readings(ctx.state,{...ctx,pick,trip:tripStart});last={r,ctx,at:now()};
+  const r=readings(ctx.state,{...ctx,pick,trip:tripStart,hold:tachHold});last={r,ctx,at:now()};
   // A pick that left the readings (a session that ended) lets the speedometer go back to the fastest account.
   if(pick&&!r.speed.picked)pick=null;
   if(rangeOpen&&r.period!==rangeFrom)toggleRange(rootEl,false);
@@ -409,13 +425,13 @@
  }
  function sweep(rootEl,now,hold){
   const dials=[rootEl.querySelector('.cl-tach'),rootEl.querySelector('.cl-speed')],start=performance.now(),D=1500;
-  const target=()=>{const r=now();return [r.tach.rate===null?0:r.tach.rate/r.tach.max,r.speed.value===null?0:r.speed.value/r.speed.max];};
+  const target=()=>{const r=now();return [r.tach.now===null?0:r.tach.now/60/r.tach.tpmMax,r.speed.live===null?0:r.speed.live/r.speed.max];};
   const out=p=>1-(1-p)**3,io=p=>p<.5?4*p*p*p:1-(-2*p+2)**3/2;
   hold(true);rootEl.querySelector('.cluster').classList.add('igniting');
   const step=t=>{const p=Math.min(1,(t-start)/D),lit=out(Math.min(1,p/.45)),up=io(Math.min(1,p/.4)),down=io(Math.max(0,(p-.45)/.55)),goal=target();
    dials.forEach((d,i)=>needle(d,p<.45?up:1-(1-goal[i])*down,lit));
    if(p<1)root.requestAnimationFrame(step);else{hold(false);rootEl.querySelector('.cluster').classList.remove('igniting');dials.forEach((d,i)=>needle(d,goal[i]));
-    const r=now();needle2(dials[0],valid(r.tach.instant)?r.tach.instant/r.tach.max:null);needle2(dials[1],r.speed.recent===null?null:r.speed.recent/r.speed.max);}};
+    needle2(dials[0],null);needle2(dials[1],null);}};
   root.requestAnimationFrame(step);
  }
  // The compact cluster on the menu bar and tray panels (desktop/QuickDashboard.swift draws the same): the
@@ -439,7 +455,7 @@
  function compact(rootEl,ctx){
   if(P.el!==rootEl||!rootEl.querySelector('.cluster'))mountCompact(rootEl);
   let trip=stored().trip;if(!valid(trip)){trip=Math.floor(now());save({trip});}
-  const r=readings(ctx.state,{...ctx,pick:P.pick,trip});P.last={r,ctx,at:now()};
+  const r=readings(ctx.state,{...ctx,pick:P.pick,trip,hold:P.hold||(P.hold={})});P.last={r,ctx,at:now()};
   if(P.pick&&!r.speed.picked)P.pick=null;
   paintDials(rootEl,r,ctx,P.igniting);paintLamps(rootEl,r);paintTrip(rootEl,r,ctx);paintFuel(rootEl,r,ctx);
   if(P.ignition){P.ignition=false;igniteCompact(rootEl);}
