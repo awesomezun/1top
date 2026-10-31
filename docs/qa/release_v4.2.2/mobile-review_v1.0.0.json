@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-29",
+  "version": "4.2.0",
+  "android_version_code": 10,
+  "source_commit": "815d8a3",
+  "scope": "Signed native APK on Android emulator-5554; demo data, not a real relay or physical phone.",
+  "passed": [
+    "Install and launch signed APK",
+    "Single conversation with controls and photo entry point",
+    "Typed draft retained after leaving and reopening the same conversation",
+    "Demo send clears only the sent draft",
+    "Response indicator renders outside message bubbles with changing dot opacity",
+    "Indicator disappears when the demo reply arrives"
+  ],
+  "blocking_findings": [
+    {
+      "platforms": [
+        "iOS",
+        "Android"
+      ],
+      "finding": "Same-session sends currently start independent HTTP requests. A larger first request can be accepted after a smaller later request.",
+      "basis": "Source inspection of iOS AppModel.transport and Android workspace.sendMessage",
+      "required": "Serialize HTTP admission per session while allowing the composer to continue immediately; different sessions remain independent."
+    },
+    {
+      "platforms": [
+        "Android"
+      ],
+      "finding": "Opening the keyboard covers the conversation composer and send button.",
+      "basis": "Native emulator screenshot android-compose.png",
+      "required": "Keep the composer and send button visible with the keyboard open."
+    }
+  ],
+  "physical_device_status": {
+    "iphone": "New conversation build compiles; not physically tested yet. Existing installed theme/language build is 4.1.0 build 5.",
+    "android": "Not visible to adb; emulator only."
+  },
+  "evidence_sha256": {
+    "android-compose.png": "b2c30a3b2acfe2dcdeb34edd000a928f2ace66d9a5776f9902b3d36880671199",
+    "android-draft-reopened.png": "d0d09798c987211f28b5eed9e87d78eb7d534961b12d11c400816791780b8307",
+    "android-after-send.png": "4159123059ad1e57d4b8fcec862d70507428f87136b4c105a2ddbed6065585d1",
+    "android-demo-activity-verified.mp4": "dfdf2e9d4e6a0b5357daf092d4e918614268a2890ea1b1333b42971f04829112",
+    "android-demo-replied.png": "90e77bfcb7ca585582bd09b1d91ce569489fee53af691541ed270d25beddc324"
+  },
+  "release_ready": false
+}

@@ -1,15 +1,18 @@
 import type {Session,SessionRow,Tile,WindowKey} from './types';
+import {now} from './clock';
 export const palette=['#75cbb1','#86a6df','#bd9bdb','#ddb777','#83b9c7','#cf939c'];
 export const valid=(n:unknown):n is number=>typeof n==='number'&&Number.isFinite(n)&&n>=0;
 export const total=(v:unknown):number|null=>Array.isArray(v)&&v.length===4&&v.every(valid)?v.reduce((a,b)=>a+b,0):null;
 export const format=(n:number|null|undefined)=>!valid(n)?'—':n>=1e6?(n/1e6).toFixed(2)+'M':n>=1000?(n/1000).toFixed(1)+'k':Math.round(n).toLocaleString();
 export const tool=(s:Session)=>s.kind==='Aside'?'':s.kind==='Claude'||s.kind==='GLM'?'Claude Code':s.kind;
-export const fresh=(d:SessionRow['device'],limit=30000)=>d.online&&Date.now()-d.received<limit;
-export function usage(rows:SessionRow[],period:WindowKey,group:string){
+/** A session's project as the screens name it: Aside's default workspace is project 0, as on the iPhone. */
+export const projectName=(s:{project:string;kind:string},t:(en:string,ko:string)=>string)=>s.project==='0'&&s.kind==='Aside'?t('Aside default workspace','Aside 기본 작업공간'):s.project;
+export const fresh=(d:SessionRow['device'],limit=30000)=>d.online&&now()-d.received<limit;
+export function usage(rows:SessionRow[],period:WindowKey,group:string,t:(en:string,ko:string)=>string=(en)=>en){
  const groups=new Map<string,Tile>();let known=0,unknown=0,zero=0;
  for(const s of rows.filter(s=>fresh(s.device))){const value=total(s.windows[period]);if(value===null){unknown++;continue;}known++;if(value===0){zero++;continue;}
   const id=group==='app'?s.app:group==='tool'?(tool(s)||'In-app runtime unreported'):group==='model'?(s.model||'Model unreported'):s.key;
-  const old=groups.get(id);if(old)old.value+=value;else groups.set(id,{id,label:group==='session'?(s.project||s.title):id,value,color:'',detail:[s.device.name,s.app,s.terminal,tool(s),s.model].filter(Boolean).join(' · '),session:group==='session'?s:undefined});
+  const old=groups.get(id);if(old)old.value+=value;else groups.set(id,{id,label:group==='session'?(projectName(s,t)||s.title):id,value,color:'',detail:[s.device.name,s.app,s.terminal,tool(s),s.model].filter(Boolean).join(' · '),session:group==='session'?s:undefined});
  }
  let items=[...groups.values()].sort((a,b)=>b.value-a.value);const sum=items.reduce((a,b)=>a+b.value,0);
  if(items.length>32){const rest=items.splice(31);items.push({id:'other',label:'Other sessions',value:rest.reduce((a,b)=>a+b.value,0),color:''});}

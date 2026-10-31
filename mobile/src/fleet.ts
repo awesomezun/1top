@@ -1,5 +1,5 @@
 import {fresh,total,valid} from './metrics';
-import type {Device,Flow,Quota,Session,WindowKey} from './types';
+import type {Device,Flow,Quota,QuotaWindow,Session,WindowKey} from './types';
 
 // One reading for every computer in view: the same rules as the 1top.si cockpit.
 // Computers with a fresh report count; when none is fresh, the last reports stand in.
@@ -38,6 +38,42 @@ export function fleetQuotas(devices:Device[]):Quota[]{
  for(const d of devices)for(const q of d.snapshot.account_quotas||[]){const old=by.get(q.id);if(!old||(old.stale&&!q.stale)||(old.stale===q.stale&&(q.updated||0)>(old.updated||0)))by.set(q.id,q);}
  return [...by.values()];
 }
+
+// Older Claude and Codex windows carry only a label; Agy and GLM also report a period.
+const PERIOD_LABELS:Record<string,string>={'주간':'weekly',Weekly:'weekly','5H':'5h','5시간':'5h','24H':'daily'};
+export const periodOf=(w:QuotaWindow|null|undefined)=>w?.period&&w.period!=='unknown'?w.period:w?.key==='7d'||w?.key==='weekly'?'weekly':w?.key==='5h'?'5h':PERIOD_LABELS[w?.label||'']||'unknown';
+export const isWeekly=(w:QuotaWindow|null|undefined)=>!!w&&w.scope!=='mcp'&&periodOf(w)==='weekly';
+/** The one window a tile shows: model weekly, then 5 hours, then daily, then any other model window.
+ *  An MCP or other budget stands in only when the account reports no model window. */
+export function representative(q:Quota):QuotaWindow|null{
+ const all=(q.windows||[]).filter(Boolean),model=all.filter(w=>w.scope!=='mcp'),list=model.length?model:all;
+ for(const period of ['weekly','5h','daily']){const w=list.find(w=>periodOf(w)===period);if(w)return w;}
+ return list[0]||null;
+}
+/** A verified account's weekly window is the only one a burn rate is measured against. */
+export const burnAllowed=(q:Quota)=>q.identity_verified!==false&&isWeekly(representative(q));
+/** Four tiles: every provider gets one before any gets a second, in the computers' order. */
+export function pickTiles(rows:Quota[],n=4):Quota[]{
+ const kinds=[...new Set(rows.map(q=>q.kind))],taken=new Set<Quota>();
+ for(let round=0;round<rows.length&&taken.size<Math.min(n,rows.length);round++)for(const kind of kinds){const q=rows.filter(r=>r.kind===kind)[round];if(q&&taken.size<n)taken.add(q);}
+ return rows.filter(q=>taken.has(q));
+}
+
+/** What tells same-tool accounts apart, as on the desktop dashboard: the name given in the desktop app,
+ *  or 1, 2… by account label once a tool has two or more accounts. A tool's only account has none. */
+export function accountTags(devices:Device[]):Record<string,string>{
+ const by=new Map<string,Quota[]>(),out:Record<string,string>={};
+ for(const q of fleetQuotas(devices))by.set(q.kind,[...(by.get(q.kind)||[]),q]);
+ for(const list of by.values()){
+  const sorted=[...list].sort((a,b)=>{const x=a.account_label.toLowerCase(),y=b.account_label.toLowerCase();return x<y?-1:x>y?1:0;});
+  // Pools of one Agy installation carry their own names and are not numbered.
+  const numbered=sorted.filter(q=>!q.pool);
+  sorted.forEach(q=>{const alias=(q.alias||'').trim()||(q.pool||'').trim();if(alias)out[q.id]=alias;else if(numbered.length>=2)out[q.id]=String(numbered.indexOf(q)+1);});
+ }
+ return out;
+}
+/** The account a session's weekly estimate belongs to in the selected period. */
+export const sessionAccount=(s:Session,period:WindowKey)=>s.weekly_estimate?.[period]?.account_id||s.weekly_account||null;
 
 /** Weekly % needs at least one numeric estimate; an empty object is not an estimate. */
 export const hasEstimate=(s:Session)=>!!s.weekly_estimate&&Object.keys(s.weekly_estimate).some(k=>valid(s.weekly_estimate?.[k as WindowKey]?.used_pp));

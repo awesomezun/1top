@@ -28,7 +28,11 @@ def account_for(spec, roots):
 
 
 def event_account(spec, timestamp):
-    binding=spec.get('account_binding')
+    intervals=spec.get('_routing_intervals')
+    if intervals and timestamp>=min(row[2] for row in intervals):
+        from .routing_attribution import account_at
+        return account_at(intervals,timestamp)
+    binding=spec.get('_routing_original_binding',spec.get('account_binding'))
     return binding[0] if binding and timestamp>=binding[1] else None
 
 
@@ -55,6 +59,9 @@ def initialize(db):
 
 def record(db, quotas, now):
     for q in quotas:
+        # Agy /usage reports pools but not the signed-in account. Do not join
+        # account history across potentially different CLI logins.
+        if q.get('identity_verified') is False:continue
         t=q.get('updated')
         if q.get('stale',True) or not valid_number(t) or not 0<=now-t<=FRESH:continue
         w=next((w for w in q.get('windows',[]) if w.get('label')=='주간'),{})

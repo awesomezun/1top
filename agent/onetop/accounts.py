@@ -25,6 +25,7 @@ import certifi
 import psutil
 from .account_login import managed_profiles_dir
 from .claude_profiles import CredentialError, keychain_document, refresh_managed, managed
+from .discovery import cli_kind
 
 
 def read_json(path):
@@ -161,10 +162,10 @@ def codex_executable():
     return next((str(p) for p in candidates if p.is_file() and os.access(p,os.X_OK)),None)
 
 
-def codex_rpc(root,executable=None):
+def codex_rpc(root,executable=None,refresh=False):
     executable=executable or codex_executable()
     if not executable:raise OSError('Codex unavailable')
-    # The owned subprocess handles its own auth. These are read-only RPCs, not turns.
+    # The owned subprocess handles auth/refresh; these RPCs never start a model turn.
     env={**os.environ,'CODEX_HOME':str(root)}
     env['PATH']=str(Path(executable).parent)+os.pathsep+env.get('PATH','')
     p=subprocess.Popen(cli_command(executable,'app-server'),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,env=env)
@@ -204,7 +205,7 @@ def codex_rpc(root,executable=None):
                 if rid==1:
                     if 'error' in message:raise ValueError('Initialization failed')
                     send(None,'initialized',{})
-                    send(2,'account/read',{'refreshToken':False})
+                    send(2,'account/read',{'refreshToken':refresh})
                     send(3,'account/rateLimits/read',None)
                 elif rid in (2,3):
                     if 'error' in message:raise ValueError('Usage unavailable')
@@ -226,9 +227,9 @@ def profile_roots(home=Path.home()):
             if path.is_dir() and not path.is_symlink():roots.add((kind,str(path)))
     for kind,key in [('Claude','CLAUDE_CONFIG_DIR'),('Codex','CODEX_HOME')]:
         if os.environ.get(key):roots.add((kind,os.environ[key]))
-    for process in psutil.process_iter(['name']):
-        name=(process.info.get('name') or '').lower().removesuffix('.exe')
-        if name not in ('claude','codex'):continue
+    for process in psutil.process_iter(['name','exe','cmdline']):
+        info=process.info
+        if cli_kind(info.get('name') or '',info.get('cmdline') or [],info.get('exe')) not in ('Claude','Codex'):continue
         try:
             env=process.environ()
             for kind,key in [('Claude','CLAUDE_CONFIG_DIR'),('Codex','CODEX_HOME')]:
@@ -257,11 +258,14 @@ def claude_credentials(root):
 
 class AccountQuotaSampler:
     def __init__(self):
+        from .provider_quotas import ProviderQuotaSampler
+        self.providers=ProviderQuotaSampler()
         self.lock=threading.Lock();self.rows=[];self.cached={};self.thread=None;self.refresh_failures={};self.profile_accounts={};self.profile_jobs={};self.profile_timeout=25
         self.local_refresh_lock=threading.Lock();self.next_local_refresh=0
         self.claude_verified={};self.claude_backoff={}
     def start(self):
         if self.thread:return
+        self.providers.start()
         self.thread=threading.Thread(target=self.loop,daemon=True);self.thread.start()
     def loop(self):
         while True:
@@ -276,7 +280,7 @@ class AccountQuotaSampler:
             row['stale']=row['stale'] or now-row['updated']>300
             for w in row['windows']:
                 if w['reset'] and w['reset']<=now:w['pct']=None
-        return rows
+        return rows+self.providers.snapshot(now)
     def refresh_claude_reports(self,now):
         """Refresh known local reports without spawning CLIs or rediscovering profiles."""
         if time.monotonic()<self.next_local_refresh or not self.local_refresh_lock.acquire(blocking=False):return
@@ -368,14 +372,20 @@ class AccountQuotaSampler:
             if not credentials.get('accessToken'):raise CredentialError('login_required')
             if timestamp(credentials.get('expiresAt'))<=now+30:
                 credentials=refresh_managed(root,now)
-            token=credentials['accessToken'];fingerprint=hashlib.sha256(token.encode()).hexdigest()
-            # A profile's name/config does not prove who owns its stored token.
-            # Confirm with the provider before accepting any usage measurement.
-            if self.claude_verified.get(fingerprint)!=key:
-                if claude_identity(token)!=key:raise CredentialError('account_changed')
-                if len(self.claude_verified)>128:self.claude_verified.clear()
-                self.claude_verified[fingerprint]=key
-            usage=claude_usage(token)
+            for attempt in range(2):
+                token=credentials['accessToken'];fingerprint=hashlib.sha256(token.encode()).hexdigest()
+                try:
+                    # Config labels do not establish the actual token owner.
+                    if self.claude_verified.get(fingerprint)!=key:
+                        if claude_identity(token)!=key:raise CredentialError('account_changed')
+                        if len(self.claude_verified)>128:self.claude_verified.clear()
+                        self.claude_verified[fingerprint]=key
+                    usage=claude_usage(token)
+                    break
+                except urllib.error.HTTPError as error:
+                    if error.code!=401 or attempt or not managed(root):raise
+                    error.close()
+                    credentials=refresh_managed(root,now,force=True)
             after=self.claude(root,now)
             if after is None or after['id']!=key:return None
             windows=claude_windows(usage,now)

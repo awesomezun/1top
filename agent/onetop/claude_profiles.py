@@ -195,7 +195,7 @@ def refresh_request(credentials):
     return value
 
 
-def refresh_managed(root, now=None):
+def refresh_managed(root, now=None, force=False):
     from .accounts import claude_credentials, read_json, timestamp
     from .credential_store import enrolled_document, save_enrolled
     root = Path(root)
@@ -204,7 +204,7 @@ def refresh_managed(root, now=None):
     now = now or time.time()
     with refresh_lock(root):
         current = claude_credentials(root)
-        if current.get('accessToken') and timestamp(current.get('expiresAt')) > now + 60:
+        if not force and current.get('accessToken') and timestamp(current.get('expiresAt')) > now + 60:
             return current
         if not current.get('refreshToken'):
             raise CredentialError('login_required')

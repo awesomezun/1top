@@ -97,6 +97,10 @@ class ContinuationTests(unittest.TestCase):
         for status in ('busy', 'waiting', 'idle'):
             self.assertIsNone(completed_shell_turn({**reg,'status':status}, path))
         self.assertIsNone(completed_shell_turn({**reg,'statusUpdatedAt':(stamp+3)*1000}, path))
+        with path.open('a') as stream:stream.write('{"type":"api-')
+        self.assertIsNone(completed_shell_turn(reg, path))
+        with path.open('a') as stream:stream.write('request"}\n')
+        self.assertIsNone(completed_shell_turn(reg, path))
         with path.open('a') as stream:stream.write(json.dumps({'type':'api-request'})+'\n')
         self.assertIsNone(completed_shell_turn(reg, path))
 

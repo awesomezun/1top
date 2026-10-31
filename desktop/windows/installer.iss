@@ -1,10 +1,11 @@
 #ifndef AppVersion
-  #define AppVersion "3.0.0"
+  #error "AppVersion must be supplied by scripts/build-windows.ps1"
 #endif
 [Setup]
 AppId={{5645D56E-3CEB-4C67-A1C2-42043DE2F8B1}
 AppName=1top
 AppVersion={#AppVersion}
+VersionInfoVersion={#AppVersion}.0
 AppPublisher=1top
 AppPublisherURL=https://1top.si
 DefaultDirName={localappdata}\Programs\1top

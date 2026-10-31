@@ -38,6 +38,8 @@ describe('account and device boundaries',()=>{
   const list:any=await(await fetch('/api/devices',undefined,'a'.repeat(30))).json();expect(list.devices.some((d:any)=>d.id===id)).toBe(false);
   const result=await fetch('/api/action',{device_id:id,session_id:'session',control_key:'key',action:'terminate',request_id:crypto.randomUUID()},'a'.repeat(30));expect(result.status).toBe(404);
   expect((await fetch('/api/devices/revoke',{device_id:id},'a'.repeat(30))).status).toBe(404);
+  expect((await fetch('/api/accounts/alias',{device_id:id,account_id:'a',alias:'Private',request_id:crypto.randomUUID()},'a'.repeat(30))).status).toBe(404);
+  expect((await fetch('/api/action',{device_id:id,session_id:'session',control_key:'key',action:'rename',title:'Private',request_id:crypto.randomUUID()},'a'.repeat(30))).status).toBe(404);
  });
  it('pairing secret must be known and can only be claimed once',async()=>{
   const secret='f'.repeat(64),code='ABCDEF0123';await e.DB.prepare('INSERT INTO pairings VALUES(?,?,?,?,?,?,?)').bind(code,await hash(secret),'Test Mac','Darwin',Math.floor(Date.now()/1000)+60,'a',1).run();

@@ -17,6 +17,144 @@ def desktop_size():
     return 1200, 800
 
 
+# The quick view at 100%, like the macOS menu bar panel: 440 × 800, never taller than the work area.
+QUICK_SIZE = (440, 800)
+QUICK_GAP = 8
+
+
+def quick_frame(cursor, work, screen, scale=1.0, zoom=1.0):
+    """Where the quick view opens: next to the notification area, on the taskbar's side.
+
+    Everything is in physical pixels: the cursor, and the work area and full bounds (left, top,
+    right, bottom) of the monitor the tray was clicked on. Returns x, y, width, height.
+    """
+    scale = scale if scale and scale > 0 else 1.0
+    left, top, right, bottom = work
+    s_left, s_top, s_right, s_bottom = screen
+    x, y = cursor
+    gap = QUICK_GAP * scale
+    width = min(round(QUICK_SIZE[0] * scale * zoom), int(right - left - 2 * gap))
+    height = min(round(QUICK_SIZE[1] * scale * zoom), int(bottom - top - 2 * gap))
+    # The taskbar sits on the side where the work area is shorter than the monitor; an
+    # auto-hidden taskbar leaves no gap, and Windows puts it at the bottom by default.
+    gaps = {'bottom': s_bottom - bottom, 'top': top - s_top, 'left': left - s_left, 'right': s_right - right}
+    edge = max(gaps, key=gaps.get) if any(v > 0 for v in gaps.values()) else 'bottom'
+    if edge in ('bottom', 'top'):
+        px = x - width / 2
+        py = bottom - height - gap if edge == 'bottom' else top + gap
+    else:
+        px = left + gap if edge == 'left' else right - width - gap
+        py = y - height / 2
+    px = min(max(px, left + gap), right - width - gap)
+    py = min(max(py, top + gap), bottom - height - gap)
+    return int(round(px)), int(round(py)), int(width), int(height)
+
+
+def window_handle(window):
+    native = getattr(window, 'native', None)
+    handle = getattr(native, 'Handle', None)
+    return int(handle.ToInt64()) if handle is not None else None
+
+
+def place_panel(hwnd, frame):
+    """Topmost, outside the taskbar and Alt+Tab like a tray panel, at a physical-pixel frame."""
+    user32 = ctypes.windll.user32
+    user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+    user32.SetWindowLongPtrW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_ssize_t]
+    style = user32.GetWindowLongPtrW(ctypes.c_void_p(hwnd), -20)  # GWL_EXSTYLE
+    user32.SetWindowLongPtrW(ctypes.c_void_p(hwnd), -20, (style | 0x80) & ~0x40000)  # +TOOLWINDOW −APPWINDOW
+    x, y, width, height = frame
+    user32.SetWindowPos(ctypes.c_void_p(hwnd), ctypes.c_void_p(-1), x, y, width, height, 0x0010 | 0x0020)  # TOPMOST, NOACTIVATE|FRAMECHANGED
+
+
+def bring_forward(hwnd):
+    ctypes.windll.user32.SetForegroundWindow(ctypes.c_void_p(hwnd))
+
+
+def cursor_position():
+    from ctypes import wintypes
+    point = wintypes.POINT()
+    ctypes.windll.user32.GetCursorPos(ctypes.byref(point))
+    return point.x, point.y
+
+
+def monitor_areas(point):
+    """Work area and full bounds of the monitor under a physical point."""
+    from ctypes import wintypes
+
+    class MonitorInfo(ctypes.Structure):
+        _fields_ = [('cbSize', wintypes.DWORD), ('rcMonitor', wintypes.RECT),
+                    ('rcWork', wintypes.RECT), ('dwFlags', wintypes.DWORD)]
+    user32 = ctypes.windll.user32
+    user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
+    user32.MonitorFromPoint.restype = wintypes.HMONITOR
+    user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MonitorInfo)]
+    user32.GetMonitorInfoW.restype = wintypes.BOOL
+    monitor = user32.MonitorFromPoint(wintypes.POINT(*point), 2)  # MONITOR_DEFAULTTONEAREST
+    info = MonitorInfo()
+    info.cbSize = ctypes.sizeof(MonitorInfo)
+    if not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+        width, height = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+        return (0, 0, width, height), (0, 0, width, height)
+    rect = lambda r: (r.left, r.top, r.right, r.bottom)
+    return rect(info.rcWork), rect(info.rcMonitor)
+
+
+def scale_factor(point=None):
+    # Resolve the clicked monitor, rather than always using the primary monitor.
+    try:
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
+        user32.MonitorFromPoint.restype = wintypes.HMONITOR
+        monitor = user32.MonitorFromPoint(wintypes.POINT(*(point or cursor_position())), 2)
+        get_dpi = ctypes.windll.shcore.GetDpiForMonitor
+        get_dpi.argtypes = [wintypes.HMONITOR, ctypes.c_int, ctypes.POINTER(wintypes.UINT), ctypes.POINTER(wintypes.UINT)]
+        get_dpi.restype = ctypes.c_long
+        x, y = wintypes.UINT(), wintypes.UINT()
+        if get_dpi(monitor, 0, ctypes.byref(x), ctypes.byref(y)) == 0 and x.value:
+            return x.value / 96
+    except (AttributeError, OSError):
+        pass
+    try:
+        return ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100
+    except (AttributeError, OSError):
+        return 1.0
+
+
+RUN_KEY = r'Software\Microsoft\Windows\CurrentVersion\Run'
+RUN_VALUE = '1top'
+
+
+def login_command():
+    # Opening at login shows the quick view, like the macOS login item.
+    return f'"{sys.executable}" --quick-view'
+
+
+def opens_at_login():
+    if sys.platform != 'win32' or package_identity():
+        return False
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_READ) as key:
+            return bool(winreg.QueryValueEx(key, RUN_VALUE)[0])
+    except OSError:
+        return False
+
+
+def set_open_at_login(enabled):
+    """Per-user Run entry for the installer build. Store builds are managed in Windows Settings."""
+    import winreg
+    with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
+        if enabled:
+            winreg.SetValueEx(key, RUN_VALUE, 0, winreg.REG_SZ, login_command())
+        else:
+            try:
+                winreg.DeleteValue(key, RUN_VALUE)
+            except FileNotFoundError:
+                pass
+
+
 def package_identity():
     if sys.platform != 'win32':
         return None
@@ -80,7 +218,8 @@ def webview_runtime_version():
     return None
 
 
-def ensure_webview_runtime():
+def ensure_webview_runtime(lang='ko'):
+    from .windows_text import text
     if webview_runtime_version():
         return True
     installer = Path(sys.executable).parent / 'MicrosoftEdgeWebview2Setup.exe'
@@ -88,10 +227,7 @@ def ensure_webview_runtime():
         return False
     # The build checks this bundled Microsoft's Authenticode signature. The
     # MSIX signature protects it on disk. Run as the current user, never elevate.
-    answer = ctypes.windll.user32.MessageBoxW(None,
-        '1top needs Microsoft Edge WebView2 Runtime to display the dashboard.\n\n'
-        'Install it now? This downloads the runtime from Microsoft and may take a few minutes.',
-        '1top — WebView2 setup', 0x24)
+    answer = ctypes.windll.user32.MessageBoxW(None, text('webview_setup', lang), text('webview_setup_title', lang), 0x24)
     if answer != 6:
         return False
     try:

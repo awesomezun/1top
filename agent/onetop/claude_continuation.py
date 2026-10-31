@@ -43,7 +43,10 @@ def completed_shell_turn(record, path):
             stream.seek(0, 2)
             size = stream.tell()
             stream.seek(max(0, size - 262144))
-            lines = stream.read().splitlines()
+            raw = stream.read()
+            if raw and not raw.endswith(b'\n'):
+                return None
+            lines = raw.splitlines()
         if size > 262144:
             lines = lines[1:]
         completed = None
@@ -51,6 +54,7 @@ def completed_shell_turn(record, path):
             try:
                 row = json.loads(line)
             except (ValueError, UnicodeError):
+                completed = None
                 continue
             if not isinstance(row, dict):
                 continue

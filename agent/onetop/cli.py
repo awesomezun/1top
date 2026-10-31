@@ -5,13 +5,20 @@ from .platform_support import lock_instance
 
 def main():
     parser=argparse.ArgumentParser(prog='1top',description='Your AI agents, across apps and computers.')
-    parser.add_argument('command',nargs='?',choices=['run','connect','local','version','statusline','telemetry-enable','telemetry-disable','telemetry-status','authorize-claude'],default='run')
+    parser.add_argument('command',nargs='?',choices=['run','connect','local','version','statusline','telemetry-enable','telemetry-disable','telemetry-status','authorize-claude','gateway','gateway-claude','gateway-codex','gateway-glm'],default='run')
     parser.add_argument('--profile',help='Exact existing 1top Claude profile to connect once')
     parser.add_argument('--config',help='Local statusline wrapper specification (statusline only)')
     parser.add_argument('--port',type=int,default=18766)
+    parser.add_argument('--gateway-port',type=int,default=18767)
     parser.add_argument('--headless',action='store_true')
     parser.add_argument('--relay',help='Explicit HTTPS origin of your own relay (connect only)')
-    args=parser.parse_args()
+    # Native CLI arguments are accepted only after an explicit separator.
+    raw=sys.argv[1:];client_args=[]
+    if '--' in raw:
+        separator=raw.index('--');client_args=raw[separator+1:];raw=raw[:separator]
+    args=parser.parse_args(raw)
+    if client_args and args.command not in ('gateway-claude','gateway-codex','gateway-glm'):
+        parser.error('native arguments require a gateway client command')
     if args.relay and args.command!='connect':parser.error('--relay requires connect')
     if args.command=='version':print(__version__);return
     if args.command=='authorize-claude':
@@ -30,6 +37,18 @@ def main():
         from .claude_statusline import run
         sys.exit(run(args.config))
     if args.config:parser.error('--config requires statusline')
+    if args.command in ('gateway-claude','gateway-codex','gateway-glm'):
+        from .gateway_client import run
+        from .platform_support import data_directory
+        provider={'gateway-claude':'Claude','gateway-codex':'Codex','gateway-glm':'GLM'}[args.command]
+        try:code=run(provider,client_args,data_directory(),args.gateway_port)
+        except (OSError,ValueError):
+            print('1top gateway 또는 원래 CLI에 연결하지 못했습니다. 먼저 1top gateway를 실행하세요.',file=sys.stderr);code=1
+        sys.exit(code)
+    if args.command=='gateway':
+        from .gateway import run
+        from .platform_support import data_directory
+        run(data_directory(),args.gateway_port);return
     if platform.system() not in ('Darwin','Windows'):
         print('This release supports macOS and Windows.',file=sys.stderr);sys.exit(2)
     from .server import Collector,Handler,DATA,DashboardHTTPServer
@@ -43,11 +62,15 @@ def main():
         print('1top is already running.',file=sys.stderr);return
     server=DashboardHTTPServer(('127.0.0.1',args.port),Handler)
     collector=Collector();server.collector=collector;server.action_token=secrets.token_urlsafe(32)
+    from .gateway import GatewayService
+    server.routing=GatewayService(DATA,collector.accounts)
+    server.routing.start_saved()
     from .telemetry import receiver_key
     server.telemetry_key=receiver_key(DATA)
     from .account_login import AccountLogin
     server.account_login=AccountLogin()
     server.controller=Controller(collector,Collector,state_file=DATA/'controls-v5.json')
+    collector.controller=server.controller
     threading.Thread(target=collector.loop,daemon=True).start()
     threading.Thread(target=server.serve_forever,daemon=True).start()
     bridge=CloudLink(collector,server.controller,DATA,relay=args.relay)
@@ -83,6 +106,6 @@ def main():
         bridge.status='Connection failed. Reopen 1top to try again.'
         save_private(DATA/'status.json',{'updated':time.time(),'status':bridge.status,'detail':'Your AI sessions are unaffected.'})
         raise
-    finally:bridge.stop.set();server.shutdown();server.server_close();lock.close()
+    finally:bridge.stop.set();server.routing.close();server.shutdown();server.server_close();lock.close()
 
 if __name__=='__main__':main()

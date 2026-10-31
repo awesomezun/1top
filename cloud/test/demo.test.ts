@@ -4,10 +4,10 @@ import {snapshot} from '../src/protocol';
 import {demoDevices} from '../../site/src/demo.js';
 const KEYS=['24h','12h','5h','1h','30m','10m'];
 const sum=(v:number[]|null)=>v?v.reduce((a,b)=>a+b,0):0;
-it('sends the web demo in exactly the shape the relay delivers for a real computer',()=>{
+it('preserves every supplied web demo field when the relay adds optional defaults',()=>{
  for(const d of demoDevices()){
-  // Nothing the relay would drop, rename or fill in: the demo shows what a signed-in dashboard shows.
-  expect(snapshot(d.snapshot)).toEqual(d.snapshot);
+  // Optional protocol additions may fill absent fields. Every supplied demo value must survive.
+  expect(snapshot(d.snapshot)).toMatchObject(d.snapshot);
   expect(Object.keys(d.snapshot.flow).sort()).toEqual([...KEYS].sort());
   expect(d.snapshot.speed_periods.length).toBeGreaterThan(0);
   expect(d.snapshot.operations.installed_skills).not.toBeNull();

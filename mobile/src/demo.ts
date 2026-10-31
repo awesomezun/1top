@@ -1,13 +1,69 @@
-import type {Device,Session} from './types';
-export function demoDevices():Device[]{const now=Date.now();const sessions:Session[]=[
- {id:'demo-a',control_key:'demo',kind:'Claude',app:'Cursor',terminal:'Frontend',project:'website',title:'website',model:'claude-sonnet-4-6',status:'working',tokens:[14000,62000,4000,5000],rate:820,windows:{'24h':[50000,220000,10000,30000],'12h':[30000,160000,8000,22000],'5h':[20000,100000,5000,12000],'1h':[14000,62000,4000,5000],'30m':[8000,30000,2000,3000],'10m':[2000,9000,500,800]},cpu:12,rss:220000000,capabilities:['focus','pause'],context_usage:{basis:'last_request_input',input_tokens:64000,capacity:null,parts:[12000,48000,4000],observed_at:now/1000,model:'claude-sonnet-4-6'}},
- {id:'demo-b',control_key:'demo',kind:'Codex',app:'Orca',terminal:'Backend',project:'api-service',title:'api-service',model:'gpt-5.4',status:'working',tokens:[22000,48000,0,8000],rate:470,windows:{'24h':[60000,150000,0,40000],'12h':[35000,100000,0,27000],'5h':[25000,80000,0,16000],'1h':[22000,48000,0,8000],'30m':[10000,22000,0,4000],'10m':[4000,7000,0,1000]},cpu:8,rss:180000000,capabilities:['focus','pause','terminate'],context_usage:{basis:'last_request_input',input_tokens:70000,capacity:200000,parts:[22000,48000,0],observed_at:now/1000,model:'gpt-5.4'}},
- {id:'demo-c',control_key:'demo',kind:'Aside',app:'Aside',terminal:'Research',project:'literature',title:'literature',model:'gpt-5.4',status:'idle',tokens:null,rate:null,windows:{},cpu:null,rss:null,capabilities:['focus','prompt','message','mailbox']}
- ];return [{id:'demo-mac',name:'MacBook Pro',platform:'Darwin',online:true,received:now,snapshot:{version:'demo',sessions,host:{cpu:24,used_memory:28*2**30,total_memory:64*2**30,cores:12},account_quotas:[{id:'claude-demo',kind:'Claude',account_label:'Claude Code · Personal',plan:'Max',updated:now/1000,stale:false,windows:[{key:'5h',label:'5H',pct:28,reset:now/1000+7200},{key:'weekly',label:'Weekly',pct:61,reset:now/1000+172800}]},{id:'codex-demo',kind:'Codex',account_label:'Codex · Work',plan:'Pro',updated:now/1000,stale:false,windows:[{key:'weekly',label:'Weekly',pct:72,reset:now/1000+190000}]}],operations:{installed_skills:18,observed_events:7,goals:[{runtime:'Codex',status:'active',tokens_used:12000,session_connected:true}]}}},
- // A second computer so "All computers" shows its sessions, meters, the shared Codex account once,
- // a limit that could not be refreshed and the waiting and paused shapes.
- {id:'demo-mini',name:'Mac mini',platform:'Darwin',online:true,received:now,snapshot:{version:'demo',sessions:[
-  {id:'demo-d',control_key:'demo',kind:'GLM',app:'Terminal',terminal:'Docs',project:'docs',title:'docs',model:'glm-5',status:'working',tokens:[6000,30000,0,2000],rate:210,windows:{'24h':[20000,90000,0,6000],'12h':[12000,60000,0,4000],'5h':[9000,42000,0,3000],'1h':[6000,30000,0,2000],'30m':[3000,14000,0,1000],'10m':[1000,4000,0,300]},cpu:6,rss:150000000,capabilities:['focus','pause','resume','terminate','prompt','message','mailbox']},
-  {id:'demo-e',control_key:'demo',kind:'Codex',app:'Terminal',terminal:'Release',project:'release-notes',title:'release-notes',model:'gpt-5.4',status:'waiting',tokens:[2000,9000,0,500],rate:0,windows:{'24h':[4000,18000,0,1000],'12h':[2000,9000,0,500],'5h':[1000,4000,0,200],'1h':[300,1200,0,50],'30m':[0,0,0,0],'10m':[0,0,0,0]},cpu:0.2,rss:90000000,capabilities:['focus','terminate']},
-  {id:'demo-f',control_key:'demo',kind:'Claude',app:'Terminal',terminal:'Migrate',project:'data-pipeline',title:'data-pipeline',model:'claude-sonnet-4-6',status:'paused',tokens:[1000,6000,0,300],rate:0,windows:{'24h':[3000,12000,0,600],'12h':[1000,6000,0,300],'5h':[500,2000,0,100],'1h':[0,0,0,0],'30m':[0,0,0,0],'10m':[0,0,0,0]},cpu:0.1,rss:80000000,capabilities:['focus','resume','terminate']}
- ],host:{cpu:31,used_memory:44*2**30,total_memory:64*2**30,cores:10},account_quotas:[{id:'codex-demo',kind:'Codex',account_label:'Codex · Work',plan:'Pro',updated:now/1000-60,stale:false,windows:[{key:'weekly',label:'Weekly',pct:71,reset:now/1000+190000}]},{id:'claude-team-demo',kind:'Claude',account_label:'Claude Code · Team',plan:'Team',updated:now/1000-38*60,stale:true,windows:[{key:'weekly',label:'Weekly',pct:44,reset:now/1000+250000}]}]}}];}
+import type {Device,Flow,Quota,Session,Vector,WindowKey} from './types';
+import type {Mail} from './thread';
+import {bins,vector} from './demo-usage';
+import {WORLD} from './demo-world';
+import {machines,accounts,sessionNumbers,host,earlierMessages,type Machine} from './demo-model';
+import type {Lang} from './i18n';
+import {holdDemo,heldDemo} from './clock';
+type T=(en:string,ko:string)=>string;
+
+// The demo world every surface shows (site/src/demo-world.js, copied to demo-world.ts): the web demo, the
+// desktop demo collector and the iPhone show these computers, sessions and accounts with the same numbers.
+// Names are the world's own and read the same in every language.
+const PERIODS:[WindowKey,number][]=[['10m',600],['30m',1800],['1h',3600],['5h',18000],['12h',43200],['24h',86400]];
+/** When this demo began: the hours around it never rest, and sessions stopped before it stay stopped. */
+let anchor=Date.now()/1000;
+/** QA and filming (onetop://?qaDemoNow=<unix seconds>): hold the demo at one moment, the same moment the
+ *  web page (/app?demo&demoNow=…), the desktop demo collector and the iPhone (-qaDemoNow) take (clock.ts). */
+export function setDemoNow(seconds:number|null){holdDemo(seconds);anchor=heldDemo()??Date.now()/1000;}
+export const demoClock=()=>heldDemo()??Date.now()/1000;
+const total=(v:number[])=>v.reduce((a,b)=>a+b,0);
+// The measured reference a collector reports with an estimate, as the web demo relay gives it (remote-demo.js).
+const calibration=(per:number,now:number)=>({seconds:3600,used_pp:10,tokens:Math.round(10/per),pp_per_token:per,confidence:'limited',from:now-7200,to:now-3600,valid_until:now+86400,source:''});
+// The last request's share of the context window; a world session may say it nearly filled it.
+const context=(kind:string,share:number|undefined,input:number)=>{const capacity=kind==='Codex'?400000:kind==='Claude'?1000000:null;return {input_tokens:capacity&&share?Math.round(capacity*share):input,capacity};};
+
+export function demoDevices(_t:T=(en)=>en,now=demoClock(),start=anchor):Device[]{
+ const all=machines(WORLD,now,start),limits=accounts(WORLD,all,now,start),limitOf=(key:string|null)=>limits.find(a=>a.key===key);
+ return all.map((m:Machine)=>{
+  const computer=WORLD.computers[m.c],rows=WORLD.sessions.filter(r=>r[0]===m.c);
+  const sessions=m.list.flatMap((s,j):Session[]=>{
+   if(s.earlier)return [];
+   const row=rows.find(r=>r[1]===(s.child?.lead||s.id))!,[,,kind,project,model,,,weight,app,terminal]=row,i=WORLD.sessions.indexOf(row);
+   const status=s.child?s.child.status:row[5],n=weight>0?sessionNumbers(m,j,now,start,PERIODS):null,a=limitOf(s.account);
+   const windows=(n?.windows||{}) as Partial<Record<WindowKey,Vector>>;
+   return [{id:s.id,control_key:s.child?'':'demo-'+i,kind,app,terminal:s.child?'':terminal,project,title:project+' · '+kind,model:model||'',status,
+    tokens:n?.tokens||null,rate:n?status==='working'?n.rate:0:null,windows,
+    cpu:s.child?null:status==='working'?Math.round((1.5+Math.min(30,m.u.minutes[j][m.u.minutes[j].length-2]/4e4)+i%5*.7)*10)/10:status==='unknown'?.6:.3,rss:s.child?null:(160+i*24)*2**20,
+    // The context in use, as the web demo shows it.
+    context_usage:n?{basis:'last_request_input',...context(kind,WORLD.context?.[s.child?'':s.id],64000+i*6000),parts:[12000+i*2000,48000+i*4000,4000],observed_at:now,model:model||''}:null,
+    // The sliding last minutes and the last minute with usage, as a 4.3 companion reports them (remote-demo-parity.js).
+    usage:{last_minute:vector(m.sum(j,now-60)),last_five_minutes:vector(m.sum(j,now-300))},last_usage:lastUse(m,j,now)??(n?now-1800:null),
+    capabilities:s.child?[]:WORLD.caps[s.id],root_session_id:s.child?s.child.lead:s.id,parent_session_id:s.child?s.child.lead:null,
+    weekly_account:a&&n?a.id:null,weekly_estimate:a&&n?Object.fromEntries(PERIODS.map(([k])=>[k,{used_pp:Math.round(total(windows[k]!)*a.per*1e4)/1e4,partial:false,account_id:a.id,period_seconds:PERIODS.find(p=>p[0]===k)![1],tokens:total(windows[k]!),calibration:calibration(a.per,now)}])):null}];
+  });
+  const used=new Set(rows.map(r=>r[6]).filter(Boolean));
+  const quotas=limits.filter(a=>used.has(a.key)).map((a):Quota=>{const points:number[][]=[];for(let t=a.start;t<=a.reportAt;t+=600)points.push([t,Math.round(a.used(a.start,t)*a.per),a.resetAt]);
+   // The relay names an account by its tool and the end of its id; providers report limits in whole percent.
+   return {id:a.id,kind:a.kind,account_label:a.kind+' · '+a.id.slice(-6),plan:a.plan,updated:a.reportAt,stale:!!a.stale,status:a.status??null,...(a.alias?{alias:a.alias}:{}),calibration:calibration(a.per,now),
+    windows:[...(a.five!==null?[{key:'5h',label:'5H',pct:a.five,reset:a.fiveReset!}]:[]),{key:'7d',label:'주간',pct:a.weekly,reset:a.resetAt}],
+    weekly:Object.fromEntries(PERIODS.map(([k,seconds])=>[k,{used_pp:Math.round(a.used(now-seconds)*a.per*1e4)/1e4,observed_seconds:seconds,partial:false}])),usage_points:points};});
+  const kinds=m.list.map(s=>s.weight>0?s.kind:null);
+  const flow=Object.fromEntries(PERIODS.map(([k,seconds])=>{const step=seconds<=3600?60:seconds<=18000?300:900;return [k,{step,...bins(m.u,kinds,now,seconds,step),reported:true} as Flow];}));
+  const ops=WORLD.operations[m.c];
+  // The computer's own period totals, the sum of its sessions' as the web demo relay reports them.
+  const periods=PERIODS.map(([key,seconds])=>({key,label:key,tokens:[0,1,2,3].map(k=>sessions.reduce((n,s)=>n+(s.windows?.[key]?.[k]||0),0)),partial:false,observed_seconds:seconds}));
+  return {id:computer.id,name:computer.name,platform:computer.platform,online:true,received:now*1000,...(computer.control?{}:{allow_control:false}),
+   snapshot:{version:'4.0.0',updated:now,sessions,periods,host:host(WORLD,m),
+    account_quotas:quotas,flow,operations:{installed_skills:ops.installed_skills,observed_events:ops.observed_events,goals:ops.goals.map(g=>({runtime:g.runtime,status:g.status,tokens_used:g.tokens_used,session_connected:g.session_connected}))}}};
+ });
+}
+
+/** The start of a session's last minute with usage within the hour. */
+function lastUse(m:Machine,j:number,now:number){for(let k=59;k>=0;k--){const t=Math.floor(now/60-59+k)*60;if(Math.round(m.sum(j,t,t+60))>0)return t;}return null;}
+
+/** The conversation demo's earlier messages, as on the web and the desktop (demo-world.js): replies, a
+ *  photo listed by name, one delivery not confirmed, and nothing being answered. Nothing here is sent. */
+export function demoThread(sessionId:string,lang:Lang):Mail[]{
+ return earlierMessages(WORLD,sessionId,demoClock(),lang).map(({changed,reply_at,...m})=>({...m,...(reply_at===null?{}:{reply_at})}));
+}

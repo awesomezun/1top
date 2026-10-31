@@ -249,6 +249,8 @@ footer{margin-top:8px;padding:12px 0 0;border-top:1px solid var(--line);color:va
 .session-summary .session-account .summary-mini-track{left:18px;right:18px;bottom:12px;height:4px;border-radius:0;background:repeating-linear-gradient(90deg,var(--line) 0 6px,transparent 6px 9px)}
 .session-account .summary-mini-track>i{border-radius:0;background:repeating-linear-gradient(90deg,var(--account-color) 0 6px,transparent 6px 9px)}
 .session-account.is-last-report .summary-mini-track>i{opacity:.5}
+.session-account-more{flex:none;padding:0 18px;border:0;border-left:1px solid var(--line);background:transparent;color:var(--muted);font-size:var(--type-title);font-weight:620;font-variant-numeric:tabular-nums}
+.session-account-more:hover{background:var(--hover);color:var(--ink)}
 .session-accounts-empty{padding:0 18px;border:0;background:transparent;color:var(--muted);font-size:var(--type-body)}
 
 /* ---------- Charts and map cards ---------- */
@@ -329,12 +331,12 @@ footer{margin-top:8px;padding:12px 0 0;border-top:1px solid var(--line);color:va
 .sessions-table .status{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:var(--type-caption);white-space:nowrap}
 /* States read by shape and motion, never by a tool's hue (Codex is green, GLM indigo):
    working is a moving wave in the LCD green, waiting an amber diamond, paused two bars, the rest a hollow ring. */
-:is(.sessions-table .status,.session-stat,.group-row) .dot{flex:none;width:8px;height:8px;margin:0;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 1.5px var(--dim)}
-:is(.sessions-table .status,.session-stat,.group-row).working .dot{width:10px;height:9px;border-radius:0;box-shadow:none;--w:linear-gradient(var(--lcd),var(--lcd));background:var(--w) 0 100%/2px 40% no-repeat,var(--w) 4px 100%/2px 100% no-repeat,var(--w) 8px 100%/2px 65% no-repeat;animation:state-wave 1.2s ease-in-out infinite}
-:is(.sessions-table .status,.session-stat,.group-row).waiting .dot{width:7px;height:7px;border-radius:1.5px;background:var(--amber);box-shadow:none;transform:rotate(45deg)}
-:is(.sessions-table .status,.session-stat,.group-row):is(.paused,.resuming) .dot{width:8px;height:9px;border-radius:0;box-shadow:none;--w:linear-gradient(var(--muted),var(--muted));background:var(--w) 0 0/3px 100% no-repeat,var(--w) 5px 0/3px 100% no-repeat}
+:is(.sessions-table .status,.session-stat,.group-row,.cl-state) .dot{flex:none;width:8px;height:8px;margin:0;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 1.5px var(--dim)}
+:is(.sessions-table .status,.session-stat,.group-row,.cl-state).working .dot{width:10px;height:9px;border-radius:0;box-shadow:none;--w:linear-gradient(var(--lcd),var(--lcd));background:var(--w) 0 100%/2px 40% no-repeat,var(--w) 4px 100%/2px 100% no-repeat,var(--w) 8px 100%/2px 65% no-repeat;animation:state-wave 1.2s ease-in-out infinite}
+:is(.sessions-table .status,.session-stat,.group-row,.cl-state).waiting .dot{width:7px;height:7px;border-radius:1.5px;background:var(--amber);box-shadow:none;transform:rotate(45deg)}
+:is(.sessions-table .status,.session-stat,.group-row,.cl-state):is(.paused,.resuming) .dot{width:8px;height:9px;border-radius:0;box-shadow:none;--w:linear-gradient(var(--muted),var(--muted));background:var(--w) 0 0/3px 100% no-repeat,var(--w) 5px 0/3px 100% no-repeat}
 @keyframes state-wave{0%,100%{background-size:2px 40%,2px 100%,2px 65%}33%{background-size:2px 100%,2px 50%,2px 85%}66%{background-size:2px 60%,2px 75%,2px 35%}}
-@media(prefers-reduced-motion:reduce){:is(.sessions-table .status,.session-stat,.group-row).working .dot{animation:none}}
+@media(prefers-reduced-motion:reduce){:is(.sessions-table .status,.session-stat,.group-row,.cl-state).working .dot{animation:none}}
 .sessions-table .status.working,:root[data-theme=light] .sessions-table .status.working{border-color:var(--line-strong);background:var(--hover);color:var(--ink);font-weight:600}
 .sessions-table .status.waiting{border-color:color-mix(in srgb,var(--amber) 40%,transparent);background:var(--amber-soft);color:var(--amber)}
 /* Status bands. */
@@ -553,3 +555,83 @@ dialog h2{font-size:var(--type-heading);font-weight:650}
 .weekly-reconnect{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:10px}
 .weekly-reconnect button{height:28px;padding:0 12px;border:1px solid var(--line-strong);border-radius:7px;background:var(--raised);color:var(--ink);font-size:var(--type-label);font-weight:600}
 .weekly-reconnect small{color:var(--muted);font-size:var(--type-caption)}
+
+/* Account number when one tool has several accounts: Claude Code 1, Claude Code 2. */
+.account-no{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 4px;margin-left:5px;border-radius:5px;background:var(--raised);color:var(--ink);font-size:var(--type-caption);font-weight:650;line-height:1;font-variant-numeric:tabular-nums;vertical-align:1px}
+
+/* A name the user gave an account, in place of its number; renamed from the account limits card. */
+.account-no.is-alias{max-width:9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.alias-edit{margin-left:4px;padding:0 4px;height:18px;border:0;border-radius:5px;background:transparent;color:var(--dim);font-size:var(--type-caption);line-height:1;vertical-align:1px}
+.alias-edit:hover:not(:disabled){background:var(--hover);color:var(--ink)}
+.alias-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 8px;margin-top:10px}
+.alias-form label{display:flex;flex-direction:column;gap:4px;flex:1 1 160px;color:var(--muted);font-size:var(--type-caption)}
+.alias-form input{height:30px;padding:0 9px;border:1px solid var(--line-strong);border-radius:7px;background:var(--panel);color:var(--ink);font-size:var(--type-label)}
+.alias-form button{height:30px;padding:0 12px;border:1px solid var(--line-strong);border-radius:7px;background:var(--raised);color:var(--ink);font-size:var(--type-label);font-weight:600}
+.alias-form small{flex-basis:100%;color:var(--muted);font-size:var(--type-caption)}
+
+/* Sidebar: smaller section labels, menu items one step smaller and set in from those labels. */
+.rail-label{font-size:var(--type-tiny);letter-spacing:.06em}
+.rail #views .nav,.rail #views .nav[data-view=sessions]{min-height:31px;padding:0 10px 0 18px;column-gap:9px;grid-template-columns:15px minmax(0,1fr);font-size:var(--type-body)}
+.rail #views .nav .nav-icon,.rail #views .nav[data-view=sessions] .nav-icon,.rail #views .nav-icon svg{width:15px;height:15px}
+.rail #providers .provider-nav,.rail #hostApps .provider-nav{min-height:28px;padding:0 10px 0 18px;font-size:var(--type-label)}
+/* One language button that moves to the next language on each tap, like the theme switch. A fixed
+   width keeps the header still while the mark changes between 한, EN and 中. */
+.language-button{display:inline-flex;align-items:center;justify-content:center;width:40px;height:32px;padding:0;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel);color:var(--ink);font-size:var(--type-label);font-weight:600}
+.language-button:hover{border-color:var(--muted)}
+/* Session conversation (conversation.js): the phone's conversation screen in the desktop tokens. Messages to
+   the session sit on the right in the accent tint, replies on the left; the composer stays in view. */
+.conversation{margin:4px 0 22px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding-top:14px}
+.conversation[hidden]{display:none}
+.conversation-log{display:flex;flex-direction:column;gap:12px;max-height:min(46dvh,460px);overflow:auto;padding:2px 2px 12px;overscroll-behavior:contain}
+.conversation-intro{margin:0;color:var(--muted);font-size:var(--type-label)}
+.conversation-note{margin:0;font-size:var(--type-label);color:var(--muted)}
+.conversation-note.warn{color:var(--amber)}.conversation-note.error{color:var(--red)}
+.conversation-empty{display:grid;gap:6px;padding:18px 0}
+.conversation-empty b{font-size:var(--type-figure);font-weight:600}.conversation-empty span{color:var(--muted)}
+.mail-pair{display:grid;gap:8px}
+.mail-out,.mail-in{display:grid;gap:6px;max-width:86%;padding:10px 12px;border-radius:14px;font-size:var(--type-body)}
+.mail-out{justify-self:end;background:var(--accent-soft);border:1px solid var(--accent-line,transparent)}
+.mail-in{justify-self:start;background:var(--panel-2);border:1px solid var(--line)}
+.mail-from{display:flex;align-items:center;gap:6px;justify-self:start;margin:4px 0 -4px 2px;color:var(--muted);font-size:var(--type-caption);font-weight:600}
+.mail-from svg{width:14px;height:14px;fill:var(--ai,var(--accent))}
+.mail-in>small{color:var(--dim);font-size:var(--type-caption)}
+.mail-text{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+.mail-photos{display:flex;gap:6px}.mail-photos img{width:72px;height:72px;object-fit:cover;border-radius:10px}
+.mail-files{margin:0;color:var(--muted);font-size:var(--type-caption)}
+.mail-status{display:flex;align-items:center;gap:4px;justify-self:end;margin:-4px 4px 0 0;color:var(--dim);font-size:var(--type-caption)}
+.mail-status i{font-style:normal;width:12px;text-align:center}
+.mail-status.warn{color:var(--amber)}.mail-status.error{color:var(--red)}
+.mail-back{justify-self:end;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--ink);font-size:var(--type-caption)}
+/* Under the latest message the session is answering: three small dots that rise and fade in turn. */
+.typing{display:flex;align-items:center;gap:8px;padding:2px 6px;color:var(--muted);font-size:var(--type-caption)}
+.typing-dots{display:inline-flex;gap:4px;height:12px;align-items:center}
+.typing-dots i{width:6px;height:6px;border-radius:50%;background:var(--muted);opacity:.3;animation:typing-dot 1.15s ease-in-out infinite}
+.typing-dots i:nth-child(2){animation-delay:.14s}.typing-dots i:nth-child(3){animation-delay:.28s}
+@keyframes typing-dot{0%,100%{opacity:.3;transform:translateY(0)}40%{opacity:.9;transform:translateY(-2.5px)}}
+@media (prefers-reduced-motion:reduce){.typing-dots i{animation:none;opacity:.6}}
+.composer{position:sticky;bottom:0;display:grid;gap:8px;margin:0 -2px;padding:10px 2px 12px;background:var(--panel);border-top:1px solid var(--line)}
+.composer-state{display:flex;align-items:center;gap:8px}
+.composer-state small{color:var(--dim);font-size:var(--type-caption)}
+.composer-photos{display:flex;gap:8px}.composer-photos:empty{display:none}
+.composer-preview{position:relative}.composer-preview img{width:64px;height:64px;object-fit:cover;border-radius:12px;display:block}
+.composer-preview button{position:absolute;top:-6px;right:-6px;width:22px;height:22px;padding:0;border:0;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:14px;line-height:22px}
+.composer-note{margin:0;font-size:var(--type-label);white-space:pre-line}.composer-note[hidden]{display:none}
+.composer-note.warn{color:var(--amber)}.composer-note.error{color:var(--red)}
+.composer-row{display:flex;align-items:flex-end;gap:8px}
+.composer-row textarea{flex:1;min-height:38px;max-height:140px;resize:none;padding:9px 13px;border:1px solid var(--line);border-radius:19px;background:var(--panel-2);color:var(--ink);font:inherit;font-size:var(--type-body);line-height:1.4}
+.composer-row textarea:focus{outline:none;border-color:var(--accent)}
+.composer-photo,.composer-send{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);font-size:18px;cursor:pointer}
+.composer-photo[hidden]{display:none}.composer-photo.disabled{opacity:.4;pointer-events:none}
+.composer-send{border:0;background:var(--accent);color:var(--bg);font-weight:700;position:relative}
+.composer-send:disabled{background:var(--line);color:var(--dim);cursor:default}
+.composer-send.busy::after{content:'';position:absolute;top:2px;right:2px;width:7px;height:7px;border-radius:50%;background:var(--ink)}
+.composer-foot{color:var(--dim);font-size:var(--type-caption)}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+/* The session detail's controls use the table's icon buttons; before, their icons had no stroke there. */
+.detail-actions .session-actions{display:flex;gap:6px}
+.detail-actions .action-button{display:inline-grid;place-items:center;width:34px;height:34px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted)}
+.detail-actions .action-button svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.detail-actions .action-button.resume svg{fill:currentColor;stroke:none}
+.detail-actions .action-button:not(:disabled):hover{border-color:var(--line-strong);background:var(--hover);color:var(--ink)}
+.detail-actions .action-button.terminate{color:var(--red)}
+.detail-actions .action-button:disabled{opacity:.25}

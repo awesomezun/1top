@@ -31,11 +31,18 @@ window.OneTopDashboard=(()=>{
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const queueDraw=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{hooks.layout?.();applyWidths();drawGauges();});};
  function move(array,from,to){const a=array.indexOf(from),b=array.indexOf(to);if(a<0||b<0||a===b)return;array.splice(a,1);array.splice(b,0,from);}
+ const LANGS=[['ko','한','한국어'],['en','EN','English'],['zh','中','中文']];
+ // The language the newest tap asked for, so quick taps keep moving forward before the page has switched.
+ let langTarget=null;
  function prefs(){
   const toolbar=document.getElementById('dashboardPreferences');if(!toolbar)return;
-  toolbar.innerHTML=`<button class="theme-switch" type="button" aria-label="${t(state.theme==='dark'?'화이트 모드':'다크 모드')}" title="${t(state.theme==='dark'?'화이트 모드':'다크 모드')}" data-theme-switch>${state.theme==='dark'?'☀':'☾'}</button><div class="pref-segment" role="group" aria-label="${t('언어')}">${[['en','EN'],['ko','한'],['zh','中']].map(([v,n])=>`<button type="button" data-language="${v}" lang="${v}" aria-pressed="${state.lang===v}">${n}</button>`).join('')}</div><button class="edit-dashboard" type="button" aria-pressed="${editing}" id="editDashboard">${editing?'Done':'Edit'}</button>`;
+  const at=Math.max(0,LANGS.findIndex(l=>l[0]===state.lang)),[,mark,name]=LANGS[at],next=LANGS[(at+1)%LANGS.length];
+  toolbar.innerHTML=`<button class="theme-switch" type="button" aria-label="${t(state.theme==='dark'?'화이트 모드':'다크 모드')}" title="${t(state.theme==='dark'?'화이트 모드':'다크 모드')}" data-theme-switch>${state.theme==='dark'?'☀':'☾'}</button><button class="language-button" type="button" aria-label="${t('언어')}: ${name} → ${next[2]}" title="${t('언어')}: ${name} → ${next[2]}" data-language-switch lang="${state.lang}" data-user-content>${mark}</button><button class="edit-dashboard" type="button" aria-pressed="${editing}" id="editDashboard">${editing?'Done':'Edit'}</button>`;
   toolbar.querySelector('[data-theme-switch]').onclick=e=>window.OneTopEffects.reveal(e.currentTarget,()=>{state.theme=state.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=state.theme;document.documentElement.style.colorScheme=state.theme;save();prefs();hooks.layout?.();drawGauges();});
-  toolbar.querySelectorAll('[data-language]').forEach(b=>b.onclick=()=>{const next=b.dataset.language;if(next===state.lang&&!window.OneTopEffects.running)return;window.OneTopEffects.reveal(b,()=>{state.lang=next;save();window.OneTopI18n.setLanguage(state.lang);prefs();hooks.refresh?.();afterTable();},next);});
+  // One language button, like the theme switch: each tap moves to the next language (한 → EN → 中),
+  // and the change spreads from the button itself. No menu.
+  toolbar.querySelector('[data-language-switch]').onclick=e=>{const from=Math.max(0,LANGS.findIndex(l=>l[0]===(langTarget||state.lang))),to=LANGS[(from+1)%LANGS.length][0];langTarget=to;
+   window.OneTopEffects.reveal(e.currentTarget,()=>{state.lang=to;if(langTarget===to)langTarget=null;save();window.OneTopI18n.setLanguage(state.lang);prefs();hooks.refresh?.();afterTable();},to);};
   document.getElementById('editDashboard').onclick=()=>{editing=!editing;document.getElementById('dashboardGrid').classList.toggle('editing',editing);prefs();queueDraw();};
  }
  function panelSetup(){
@@ -91,15 +98,34 @@ window.OneTopDashboard=(()=>{
  // Saved widths stay as they are. When the panel is narrower than their sum (a narrow window or app
  // zoom), CPU and memory give way before session names drop under about 190px, then each column
  // gives back its room above the minimum.
+ // Columns also never get narrower than their header in the page's language ('Total tokens' is wider than
+ // '세션 전체 누적'), and two never narrower than their widest content: the status badge ('Needs attention')
+ // and the tool, account and effort chips of the model column (up to 220px). Saved widths stay as set.
+ function fitted(table){
+  const fit={},pads=el=>{const css=getComputedStyle(el);return parseFloat(css.paddingLeft)+parseFloat(css.paddingRight);};
+  for(const th of table.querySelectorAll('thead th[data-column]')){
+   const label=Math.max(0,...[...th.children].filter(k=>!k.classList.contains('column-resize')).map(k=>k.scrollWidth));
+   if(label)fit[th.dataset.column]=Math.ceil(label+pads(th));
+  }
+  for(const id of ['status','model']){
+   const cells=[...table.querySelectorAll(`tbody td[data-column="${id}"]`)].filter(td=>td.firstElementChild);if(!cells.length)continue;
+   const content=Math.min(220,Math.ceil(Math.max(...cells.map(td=>Math.max(...[...td.querySelectorAll('*')].map(e=>e.scrollWidth))))+pads(cells[0])));
+   fit[id]=Math.max(fit[id]||0,content);
+  }
+  return fit;
+ }
  function applyWidths(){
   const table=document.querySelector('.sessions-table');if(!table)return;
-  const room=table.parentElement?.clientWidth||Infinity,spare=id=>Math.max(0,state.widths[id]-minima[id]);
-  const compact=room<190+state.columns.filter(id=>id!=='session').reduce((n,id)=>n+Math.min(state.widths[id],minima[id]),0);
-  const shown=compact?state.columns.filter(id=>id!=='cpu'&&id!=='memory'):state.columns,sum=shown.reduce((n,id)=>n+state.widths[id],0),slack=shown.reduce((n,id)=>n+spare(id),0);
-  const cut=sum>room&&slack>0?Math.min(1,(sum-room)/slack):0,width=id=>Math.floor(state.widths[id]-spare(id)*cut);
+  const fit=fitted(table),floor=id=>Math.max(minima[id],fit[id]||0),wanted=id=>Math.max(state.widths[id],fit[id]||0);
+  const room=table.parentElement?.clientWidth||Infinity,spare=id=>Math.max(0,wanted(id)-floor(id));
+  const compact=room<190+state.columns.filter(id=>id!=='session').reduce((n,id)=>n+Math.min(wanted(id),floor(id)),0);
+  const shown=compact?state.columns.filter(id=>id!=='cpu'&&id!=='memory'):state.columns,sum=shown.reduce((n,id)=>n+wanted(id),0),slack=shown.reduce((n,id)=>n+spare(id),0);
+  const cut=sum>room&&slack>0?Math.min(1,(sum-room)/slack):0,width=id=>Math.floor(wanted(id)-spare(id)*cut);
+  // Room left over goes to the terminal and project column, whose names would otherwise be cut first.
+  const total=shown.reduce((n,id)=>n+width(id),0),extra=Number.isFinite(room)?Math.max(0,room-total):0,final=id=>width(id)+(id==='session'?extra:0);
   table.classList.toggle('compact-columns',compact);
-  table.style.width=shown.reduce((n,id)=>n+width(id),0)+'px';table.style.minWidth='100%';
-  table.querySelectorAll('col[data-column]').forEach(c=>c.style.width=width(c.dataset.column)+'px');
+  table.style.width=total+extra+'px';table.style.minWidth='100%';
+  table.querySelectorAll('col[data-column]').forEach(c=>c.style.width=final(c.dataset.column)+'px');
  }
  function afterTable(){
   if(!initialized)return;const table=document.querySelector('.sessions-table');
@@ -142,6 +168,8 @@ window.OneTopDashboard=(()=>{
    x.font=css.getPropertyValue('--type-tiny').trim()+' '+css.getPropertyValue('--font').trim();x.fillStyle=muted;x.textAlign='center';x.fillText('0',cx-r,h-1);x.fillText(number(max)+'%',cx+r,h-1);
   }
  }
+ // The table is measured before the page's language is applied; size it again once the text is translated.
+ document.addEventListener('onetop-translated',()=>{if(initialized)applyWidths();});
  function init(options){hooks=options;window.OneTopI18n?.setLanguage(state.lang);prefs();panelSetup();setupColumns();initialized=true;afterTable();new ResizeObserver(queueDraw).observe(document.getElementById('dashboardGrid'));}
  return {init,afterTable,rateCell,drawGauges,state,validPeriod,toggleGroup(key,open){state.collapsed={...(state.collapsed||{}),[key]:open};save();},rememberPeriod(value){if(validPeriod(value)){state.period=value;save();}},get interacting(){return dragging;}};
 })();

@@ -241,13 +241,14 @@ struct QuickView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.colorScheme) private var scheme
     @AppStorage("weeklyTokensMode") private var tokensChosen = false
+    /// The cluster (계기판) in place of the token card, weekly limits and resources; remembered.
+    @AppStorage("quickCluster") private var showCluster = false
     /// Weekly % needs the collector's estimates; a collector that does not send them shows tokens.
     private var tokensMode: Bool { tokensChosen || !model.sessions.contains(where: \.hasEstimate) }
     @State private var detail: Session?
     @State private var request: ControlRequest?
     @State private var narrow = false
     @State private var themeFrame = CGRect.zero
-    @State private var languageFrame = CGRect.zero
     private static let paceColumn: CGFloat = 54, valueColumn: CGFloat = 70
     private var theme: QuickTheme { QuickTheme(light: scheme == .light) }
 
@@ -256,9 +257,13 @@ struct QuickView: View {
             VStack(spacing: 0) {
                 ConnectionNotice().padding(.horizontal, 14).padding(.bottom, 10)
                 periodPicker.padding(.horizontal, 14).padding(.bottom, 10)
-                tokenSection.padding(.horizontal, 16)
-                weeklyCard.padding(.horizontal, 14).padding(.top, 14)
-                resources.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 10)
+                if showCluster {
+                    ClusterCard(theme: theme).padding(.horizontal, 14).padding(.bottom, 12)
+                } else {
+                    tokenSection.padding(.horizontal, 16)
+                    weeklyCard.padding(.horizontal, 14).padding(.top, 14)
+                    resources.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 10)
+                }
                 sessionList
             }
             .padding(.bottom, 24)
@@ -342,6 +347,16 @@ struct QuickView: View {
                     .accessibilityIdentifier("connection")
                     .accessibilityValue(lastReport)
                     .layoutPriority(-1)
+                    // The cluster view, one tap each way.
+                    Button { showCluster.toggle() } label: {
+                        Image(systemName: "gauge.with.needle").font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(showCluster ? theme.accent : theme.ink).accessibilityHidden(true)
+                    }
+                    .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.small)
+                    .accessibilityLabel(showCluster ? L.t("Standard view", "기본 보기") : L.t("Cluster view", "계기판 보기"))
+                    .accessibilityIdentifier("cluster-toggle")
+                    .accessibilityAddTraits(showCluster ? .isSelected : [])
+                    .fixedSize()
                     Button { toggleTheme() } label: {
                         Image(systemName: scheme == .dark ? "moon.fill" : "sun.max.fill").font(.system(size: 13, weight: .semibold))
                             .accessibilityHidden(true)
@@ -352,10 +367,7 @@ struct QuickView: View {
                     .accessibilityIdentifier("theme-toggle")
                     .accessibilityValue(scheme == .dark ? "dark" : "light")
                     .fixedSize()
-                    GlassSegments(items: Language.allCases.map { .init(value: $0, label: Self.languageMark[$0] ?? $0.name, spoken: $0.name, identifier: "header-language-" + $0.rawValue) },
-                                  selection: Binding(get: { model.language }, set: { chooseLanguage($0) }), height: 30, fontSize: 11.5)
-                        .frame(width: 102)
-                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { languageFrame = $0 }
+                    LanguageButton(identifier: "header-language")
                     Menu {
                         Button(L.t("Reconnect now", "지금 다시 연결")) { model.connect() }.disabled(model.connection == .demo)
                         Button(tokensChosen ? L.t("Show sessions as weekly limit %", "세션을 주간 한도 %로 보기") : L.t("Show sessions as tokens", "세션을 토큰으로 보기")) { tokensChosen.toggle() }
@@ -373,21 +385,11 @@ struct QuickView: View {
         .onGeometryChange(for: Bool.self) { $0.size.width < 390 } action: { narrow = $0 }
     }
 
-    private static let languageMark: [Language: String] = [.ko: "한", .en: "EN", .zh: "中"]
-
     /// Dark and light in one tap, from what is on screen now (a System setting flips to the other
     /// side). The System choice itself lives in Workspace settings.
     private func toggleTheme() {
         let next: Appearance = scheme == .dark ? .light : .dark
         Reveal.perform(at: CGPoint(x: themeFrame.midX, y: themeFrame.midY)) { model.appearance = next }
-    }
-
-    /// The new language spreads out from the segment that was tapped.
-    private func chooseLanguage(_ next: Language) {
-        guard next != model.language else { return }
-        let index = CGFloat(Language.allCases.firstIndex(of: next) ?? 0), count = CGFloat(Language.allCases.count)
-        let point = CGPoint(x: languageFrame.minX + languageFrame.width * (index + 0.5) / count, y: languageFrame.midY)
-        Reveal.perform(at: point) { model.language = next }
     }
 
     private var periodPicker: some View {
@@ -481,10 +483,12 @@ struct QuickView: View {
 
     // MARK: Weekly limits · compact tiles
     private var weeklyCard: some View {
-        let rows = model.quotas
+        let rows = model.quotas, shown = Quota.pickTiles(rows)
         return VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(L.t("Weekly limits", "주간 한도")).font(.system(size: 12.5, weight: .semibold))
+                // A 5-hour or monthly tile among them makes the heading the providers' shared "계정 한도".
+                Text(shown.allSatisfy { $0.representativeWindow?.isWeekly == true } ? L.t("Weekly limits", "주간 한도") : L.t("Account limits", "계정 한도"))
+                    .font(.system(size: 12.5, weight: .semibold))
                 Text(L.t("100% per account", "계정별 100%")).font(.system(size: 11.5)).foregroundStyle(theme.muted)
                 Spacer()
             }.padding(.horizontal, 2)
@@ -492,30 +496,36 @@ struct QuickView: View {
                 Text(L.t("Connect subscription accounts in 1top on your computer.", "컴퓨터의 1top에서 구독 계정을 연결하면 표시됩니다.")).font(.system(size: 11.5)).foregroundStyle(theme.muted)
             } else {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                    ForEach(rows.prefix(4)) { weeklyTile($0) }
+                    ForEach(shown) { weeklyTile($0) }
                 }
             }
         }
     }
 
     private func weeklyTile(_ q: Quota) -> some View {
-        let w = q.weeklyWindow, color = Tool.color(q.kind), rate = fresh && !q.stale ? q.weekly?[model.period.rawValue]?.burnPerHour : nil
+        // A 5-hour or monthly window, or an unverified pool, shows its value without a weekly burn rate.
+        let w = q.representativeWindow, weekly = w?.isWeekly == true, color = Tool.color(q.kind)
+        let rate = fresh && !q.stale && q.burnAllowed ? q.weekly?[model.period.rawValue]?.burnPerHour : nil
+        // An Agy pool's long name sits under the tool name instead of on a chip. Where no weekly burn rate
+        // is measured, the window's own name takes the rate's place; an old value keeps it on the left.
+        let handle = (q.stale && !weekly && w != nil ? w!.name + " · " : "") + (q.pool ?? q.handle)
         let end = model.reportEnd, start = end - model.period.seconds
         let points = sparkPoints(q.usagePoints, start: start, end: end)
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Circle().fill(color).frame(width: 6, height: 6).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
                 Text(Tool.name(q.kind)).font(.system(size: 12.5, weight: .semibold)).lineLimit(1).fixedSize()
+                if q.pool == nil, let tag = model.accountTag(q.id) { AccountChip(text: tag) }
                 Spacer(minLength: 4)
                 Text(Format.percent(w?.pct)).font(.system(size: 17, weight: .semibold)).monospacedDigit().fixedSize()
                     .foregroundStyle(q.stale ? theme.muted : theme.ink)
             }
             // Fixed slots keep the small trend line in the same place in every tile.
             HStack(spacing: 6) {
-                Text(q.handle).font(.system(size: 10.5)).foregroundStyle(theme.muted).lineLimit(1).truncationMode(.middle)
+                Text(handle).font(.system(size: 10.5)).foregroundStyle(theme.muted).lineLimit(1).truncationMode(.middle)
                     .frame(width: 78, alignment: .leading)
                 WeeklySpark(points: points, start: start, end: end, color: color, faded: q.stale).frame(maxWidth: .infinity).frame(height: 14)
-                Text(q.stale ? q.staleLabel : rate.map { Format.percent($0) + L.t("/h", "/시간") } ?? L.t("Collecting", "수집 중"))
+                Text(q.stale ? q.staleLabel : rate.map { Format.percent($0) + L.t("/h", "/시간") } ?? (weekly && q.identityVerified != false ? L.t("Collecting", "수집 중") : w?.name ?? L.t("No value", "값 없음")))
                     .font(.system(size: 10.5, weight: .medium)).foregroundStyle(q.stale ? theme.amber : color).lineLimit(1).minimumScaleFactor(0.8)
                     .frame(width: 62, alignment: .trailing)
             }
@@ -627,6 +637,7 @@ struct QuickView: View {
                 }
                 HStack(spacing: 4) {
                     Text(Tool.name(s.kind)).foregroundStyle(Tool.color(s.kind))
+                    if let tag = model.accountTag(model.account(of: s)) { AccountChip(text: tag) }
                     if let project = s.displayProject { Text("· " + project).foregroundStyle(theme.muted) }
                     if model.reportingDevices.count > 1, let device = model.device(for: s) { Text("· " + device.name).foregroundStyle(theme.dim) }
                 }.font(.system(size: 11.5)).lineLimit(1)

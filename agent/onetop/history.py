@@ -25,6 +25,8 @@ def initialize_capture(db):
     for name in ('model', 'cwd'):
         if columns and name not in columns:
             db.execute(f'ALTER TABLE events ADD COLUMN {name} TEXT')
+    if columns:
+        db.execute('CREATE INDEX IF NOT EXISTS event_session_time ON events(sid,t)')
 
 
 def edges_for(start, end, step):

@@ -9,6 +9,23 @@ assert.equal(W.percent(NaN),'—');
 assert.equal(W.percent(100),'100%');
 assert.equal(W.weekly({windows:[{label:'5H',pct:14},{label:'주간',pct:29}]}).pct,29);
 console.log('Weekly presentation: unknown, observed zero, tiny estimates and weekly-only selection passed.');
+// Agy pools and GLM (provider-quotas-contract v1.0.2, tests/fixtures/provider-quotas_v1.0.2.json).
+{
+ const {readFileSync}=await import('node:fs');
+ const rows=JSON.parse(readFileSync(new URL('./fixtures/provider-quotas_v1.0.2.json',import.meta.url),'utf8')).account_quotas,by=Object.fromEntries(rows.map(q=>[q.id,q]));
+ assert.equal(W.representative(by['claude:fixture-a']).label,'주간');assert.ok(W.burnAllowed(by['claude:fixture-a']));
+ assert.equal(W.representative(by['antigravity:pool-claude-gpt']).key,'cg-weekly');
+ assert.equal(W.weekly(by['antigravity:pool-gemini']).pct,48.5);assert.equal(W.burnAllowed(by['antigravity:pool-gemini']),false);
+ assert.equal(W.representative(by['glm:fixture-key']).label,'5H');assert.equal(W.weekly(by['glm:fixture-key']),undefined);assert.equal(W.burnAllowed(by['glm:fixture-key']),false);
+ assert.equal(W.representative({windows:by['glm:fixture-key'].windows.filter(w=>w.scope==='mcp')}).key,'mcp');
+ assert.equal(W.representative(by['glm:fixture-down']),null);assert.ok(W.unavailable(by['glm:fixture-down']));
+ assert.equal(W.representative({windows:[{label:'5H',pct:3},{label:'주간 Opus',pct:4}]}).label,'5H');
+ assert.equal(W.poolName(by['antigravity:pool-gemini']),'Gemini Models');assert.equal(W.poolName(by['claude:fixture-a']),'');
+ assert.deepEqual(W.pick(rows).map(q=>q.id),['claude:fixture-a','codex:fixture-c','antigravity:pool-gemini','glm:fixture-key']);
+ assert.deepEqual(W.pick(rows.slice(0,3)).map(q=>q.id),['claude:fixture-a','claude:fixture-b','codex:fixture-c']);
+ assert.equal(W.accountBurn({used_pp:1,observed_seconds:600},{stale:false,identity_verified:false}),null);
+}
+
 
 assert.equal(W.pending(null,null,100),'계정 연결 필요');
 assert.equal(W.pending('a',{stale:true},100),'한도 조회 대기');

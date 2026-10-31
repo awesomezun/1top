@@ -13,6 +13,17 @@ from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from playwright.sync_api import sync_playwright
 
+
+LANG_ORDER = ['ko', 'en', 'zh']
+
+
+def pick_language(page,lang):
+    # One language button moves to the next language on each tap (한 → EN → 中); tap until the target.
+    now = page.locator('[data-language-switch]').get_attribute('lang')
+    for _ in range((LANG_ORDER.index(lang) - LANG_ORDER.index(now)) % len(LANG_ORDER)):
+        page.wait_for_function('!document.documentElement.dataset.preferenceTransition')
+        page.locator('[data-language-switch]').click()
+
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / 'agent/onetop/dist'
 sys.path.insert(0,str(ROOT/'agent'))
@@ -93,7 +104,7 @@ try:
         assert size['table']<=size['parent']+1,size
         assert page.locator('#pageTitle').inner_text()=='대시보드'
         assert page.locator('.workspace').count()==0
-        assert page.locator('#views button').evaluate_all('(xs)=>xs.map(x=>x.dataset.view)')==['sessions','accounts','maps','system','operations','benchmark']
+        assert page.locator('#views button').evaluate_all('(xs)=>xs.map(x=>x.dataset.view)')==['sessions','cluster','accounts','maps','system','operations','benchmark']
         assert page.locator('#views [data-view=accounts] span').inner_text()=='계정 한도'
         assert page.locator('#views [data-view=maps] span').inner_text()=='사용량 맵'
         menu_x=page.locator('#views button>span').evaluate_all('(xs)=>xs.map(x=>x.getBoundingClientRect().x)')
@@ -210,7 +221,45 @@ try:
             assert page.locator(f'#{view}View [data-range-label]').inner_text()=='최근 1주'
             assert page.locator(f'#{view}View .duration-slider').is_visible()
             assert_range_geometry(view)
+        # The cluster reads the same period, and its gear picks one for the whole dashboard.
+        page.locator('#views [data-view="cluster"]').click()
+        assert page.locator('#pageTitle').inner_text()=='계기판'
+        page.locator('#clusterView .cl-tach .cl-ticks line').first.wait_for()
+        assert page.locator('#clusterView [data-cluster-period="custom"]').get_attribute('aria-pressed')=='true'
+        assert page.locator('#clusterView [data-cluster-period="custom"]').inner_text()=='1주'
+        assert page.locator('#clusterView').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1')
+        assert page.locator('#clusterView [data-cluster-mode]').count()==3
+        # Nothing of the cluster crosses its housing's curved edge, and no two texts overlap, on any page.
+        for mode in ['flow','weekly','sessions']:
+            page.locator(f'#clusterView [data-cluster-mode="{mode}"]').click();page.wait_for_timeout(300)
+            fit=page.evaluate((ROOT/'tests/cluster-housing.js').read_text())
+            assert not fit['out'] and not fit['overlap'] and fit['page']<=0,(mode,fit)
+        page.locator('#clusterView [data-cluster-period="custom"]').click()
+        page.locator('#clusterView .cl-range .duration-slider').wait_for()
+        page.keyboard.press('Escape')
+        assert page.locator('#clusterView .cl-range').is_hidden()
+        page.locator('#clusterView [data-cluster-period="5h"]').click()
+        page.wait_for_function("document.querySelector('#clusterView [data-cluster-period=\"5h\"]')?.getAttribute('aria-pressed')==='true'")
+        checks.append('cluster view reads and sets the shared period, with its custom gear on the dashboard slider, and keeps every text inside its housing without overlaps')
+        # The tray panel's cluster view takes the place of its tokens, weekly limits and resources, inside its housing.
+        quick=browser.new_page(viewport={'width':440,'height':800},color_scheme='dark')
+        quick.on('pageerror',lambda e:(errors.append(str(e)),print('Browser error:',str(e),flush=True)))
+        quick.add_init_script("localStorage.setItem('onetop.quick.v1',JSON.stringify({cluster:true}))")
+        quick.goto(f'http://127.0.0.1:{server.server_port}/quick.html')
+        quick.locator('#qCluster .cl-speed .cl-ticks line').first.wait_for()
+        assert quick.locator('.q-tokens').is_hidden() and quick.locator('#qWeekly').is_hidden() and quick.locator('#qResources').is_hidden()
+        assert quick.locator('[data-act="cluster"]').get_attribute('aria-pressed')=='true'
+        assert quick.locator('#qCluster .cl-lamp').count()==6
+        quick.wait_for_timeout(1700)
+        fit=quick.evaluate((ROOT/'tests/cluster-housing.js').read_text())
+        assert not fit['out'] and not fit['overlap'] and fit['page']<=0,('quick',fit)
+        quick.locator('[data-act="cluster"]').click()
+        assert quick.locator('#qCluster').is_hidden() and quick.locator('.q-tokens').is_visible()
+        assert quick.evaluate("JSON.parse(localStorage.getItem('onetop.quick.v1')).cluster")==False
+        quick.close()
+        checks.append('the tray panel switches to its compact cluster and back, every text inside the housing without overlaps')
         page.locator('#views [data-view="sessions"]').click()
+        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 5시간'")
         select_stop(17)
         page.wait_for_function("document.getElementById('periodColumn').textContent.includes('1년')")
         assert range_requests[-1]=='custom:31536000'
@@ -280,7 +329,7 @@ try:
         page.screenshot(path=str(ROOT/'build/theme-reveal-v3.26.2.png'))
         finish_transition();assert page.locator('html').get_attribute('data-theme')=='light'
         pref_x=page.locator('[data-theme-switch]').bounding_box()['x']
-        page.locator('[data-language="en"]').click()
+        pick_language(page,'en')
         page.wait_for_function("[...document.querySelectorAll('canvas')].some(c=>c.style.viewTransitionName==='onetop-matrix')")
         page.wait_for_timeout(240)
         assert page.evaluate("[...document.querySelectorAll('canvas')].filter(c=>c.style.viewTransitionName==='onetop-matrix').some(c=>c.getContext('2d').getImageData(0,0,c.width,c.height).data.some((n,i)=>i%4===3&&n>0))")
@@ -291,17 +340,17 @@ try:
         assert page.locator('#fleetSpeedUnit').inner_text()=='tokens/h'
         assert 'Weekly limit' in page.locator('#periodColumn').inner_text()
         assert page.locator('#search').get_attribute('placeholder')=='Search terminal, project or model'
-        page.locator('[data-language="zh"]').click();finish_transition();assert page.locator('#pageTitle').inner_text()=='仪表盘'
+        pick_language(page,'zh');finish_transition();assert page.locator('#pageTitle').inner_text()=='仪表盘'
         assert_range_geometry()
         assert abs(page.locator('[data-theme-switch]').bounding_box()['x']-pref_x)<1
-        page.locator('[data-language="ko"]').click();finish_transition();assert page.locator('#pageTitle').inner_text()=='대시보드'
-        page.evaluate("for(const lang of ['en','zh','ko'])document.querySelector('[data-language='+lang+']').click()")
+        pick_language(page,'ko');finish_transition();assert page.locator('#pageTitle').inner_text()=='대시보드'
+        page.evaluate("for(let i=0;i<3;i++)document.querySelector('[data-language-switch]').click()")
         finish_transition();assert page.locator('#pageTitle').inner_text()=='대시보드'
         assert page.locator('canvas[style*="onetop-matrix"]').count()==0
         page.emulate_media(reduced_motion='reduce')
-        page.locator('[data-language="en"]').click();assert page.locator('#pageTitle').inner_text()=='Dashboard'
+        pick_language(page,'en');assert page.locator('#pageTitle').inner_text()=='Dashboard'
         assert page.locator('html').get_attribute('data-preference-transition') is None
-        page.locator('[data-language="ko"]').click()
+        pick_language(page,'ko')
         page.emulate_media(reduced_motion='no-preference')
         checks.append('circular theme reveal, rendered matrix language ring, rapid picks and reduced motion')
         # The wordmark follows the theme's ink colour rather than a fixed value.
@@ -327,7 +376,7 @@ try:
         page.locator('[data-theme-switch]').click()
         finish_transition()
         page.screenshot(path=str(ROOT/'build/dashboard-dark-v3.26.2.png'),full_page=False)
-        page.locator('[data-language="en"]').click();finish_transition()
+        pick_language(page,'en');finish_transition()
         for width in (1100,768,390):
             page.set_viewport_size({'width':width,'height':1000});page.wait_for_timeout(100)
             assert_range_geometry()

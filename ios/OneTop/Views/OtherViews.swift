@@ -19,6 +19,10 @@ struct SessionsView: View {
             List {
                 Section {
                     ConnectionNotice().listRowInsets(.init()).listRowBackground(Color.clear)
+                    // Always shown under the large title and above the periods, as on Android and above the
+                    // desktop dashboard's session table.
+                    SearchField(text: $query, prompt: L.t("Session, project, model, computer", "세션, 프로젝트, 모델, 컴퓨터"))
+                        .listRowBackground(Color.clear).listRowInsets(.init(top: 0, leading: 0, bottom: 6, trailing: 0))
                     GlassSegments.periods($model.period)
                         .listRowBackground(Color.clear).listRowInsets(.init())
                     HStack(spacing: 28) {
@@ -39,7 +43,6 @@ struct SessionsView: View {
                                            description: query.isEmpty ? Text(L.t("Connect a computer to your account. Its active sessions appear here.", "컴퓨터를 계정에 연결하면 활동 중인 세션이 표시됩니다.")) : nil)
                 }
             }
-            .searchable(text: $query, prompt: L.t("Session, project, model, computer", "세션, 프로젝트, 모델, 컴퓨터"))
             .navigationTitle(L.t("Sessions", "세션"))
             .toolbar {
                 if model.devices.count > 1 {
@@ -69,7 +72,7 @@ struct SessionsView: View {
             .accessibilityIdentifier("session-" + s.id)
             .swipeActions(edge: .trailing) {
                 if !model.isControlOff(s) {
-                    Button { detail = s } label: { Label(L.t("Messages", "메시지함"), systemImage: "bubble.left") }.tint(.blue)
+                    Button { detail = s } label: { Label(L.t("Conversation", "대화"), systemImage: "bubble.left") }.tint(.blue)
                 }
                 if s.can("terminate") {
                     Button { request = ControlRequest(session: s, action: "terminate") } label: { Label(AppModel.actionLabel("terminate"), systemImage: SessionDetail.icon("terminate")) }
@@ -87,6 +90,25 @@ struct SessionsView: View {
                 }
             }
             .contextMenu { SessionActions(session: s, open: { detail = s }, request: $request) }
+    }
+}
+
+/// A search field that stays in the list, so the large title stays large.
+private struct SearchField: View {
+    @Binding var text: String
+    var prompt: String
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
+            TextField(prompt, text: $text).textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.search)
+            if !text.isEmpty {
+                Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
+                    .buttonStyle(.plain).accessibilityLabel(L.t("Clear search", "검색어 지우기"))
+            }
+        }
+        .padding(.horizontal, 12).frame(height: 40)
+        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityIdentifier("sessions-search")
     }
 }
 
@@ -124,7 +146,7 @@ struct LimitsView: View {
                         ForEach(Array(quota.windows.enumerated()), id: \.offset) { _, window in
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
-                                    Text(window.label == "주간" ? L.t("Weekly", "주간") : window.label).font(.subheadline)
+                                    Text(window.name).font(.subheadline)
                                     Spacer()
                                     Text(window.pct == nil ? L.t("Unknown", "미확인") : Format.percent(window.pct) + L.t(" used", " 사용")).font(.subheadline.weight(.semibold).monospacedDigit())
                                 }
@@ -136,7 +158,9 @@ struct LimitsView: View {
                     } header: {
                         HStack(spacing: 6) {
                             Circle().fill(Tool.color(quota.kind)).frame(width: 8, height: 8)
-                            Text(Tool.name(quota.kind)); Text(quota.plan ?? "").foregroundStyle(.secondary)
+                            Text(Tool.name(quota.kind))
+                            if let tag = model.accountTag(quota.id) { AccountChip(text: tag) }
+                            Text(quota.plan ?? "").foregroundStyle(.secondary)
                         }
                     } footer: {
                         // A value that could not be refreshed shows its age instead of a clock time.
@@ -147,7 +171,8 @@ struct LimitsView: View {
                     }
                 }
                 Section {} footer: {
-                    Text(L.t("Add or switch AI accounts in the desktop app. Provider credentials stay on that computer.", "AI 계정 추가·전환은 데스크톱 앱에서 합니다. 제공업체 인증 정보는 해당 컴퓨터에 보관됩니다."))
+                    Text(L.t("Add or switch AI accounts in the desktop app. Provider credentials stay on that computer.", "AI 계정 추가·전환은 데스크톱 앱에서 합니다. 제공업체 인증 정보는 해당 컴퓨터에 보관됩니다.")
+                         + " " + L.t("Account names are the ones given in the desktop app.", "계정 이름은 데스크톱 앱에서 정한 이름을 따릅니다."))
                 }
             }
             .navigationTitle(L.t("Account limits", "계정 한도"))
@@ -245,12 +270,16 @@ struct SettingsView: View {
                     }
                 }
                 RelaySettings()
-                // The same choices as the dashboard's theme and language menu, stored in the same place.
+                // The same theme choices as the dashboard, and the same one-tap language button, stored in the same place.
                 Section(L.t("Theme and language", "테마와 언어")) {
                     Picker(L.t("Theme", "테마"), selection: $model.appearance) { ForEach(Appearance.allCases) { Text($0.label).tag($0) } }
                         .accessibilityIdentifier("settings-theme")
-                    Picker(L.t("Language", "언어"), selection: $model.language) { ForEach(Language.allCases) { Text($0.name).tag($0) } }
-                        .accessibilityIdentifier("settings-language")
+                    LabeledContent(L.t("Language", "언어")) {
+                        HStack(spacing: 8) {
+                            Text(model.language.name).foregroundStyle(.secondary)
+                            LanguageButton(identifier: "settings-language")
+                        }
+                    }
                 }
                 Section {
                     Link(L.t("Get the desktop app ↗", "데스크톱 앱 다운로드 ↗"), destination: URL(string: "https://1top.si/#download")!)

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 /// What the phone shows: the connected computers from the relay, or a demo with no account.
 @MainActor @Observable
@@ -11,7 +12,8 @@ final class AppModel {
     /// One session's messages and the last mailbox error.
     struct Mailbox: Equatable { var messages: [MailMessage] = []; var error: String? }
 
-    var connection: Connection = .signedOut
+    /// A demo held for filming shows its moment on the screens only while the demo is on screen.
+    var connection: Connection = .signedOut { didSet { DemoData.onScreen = connection == .demo } }
     var devices: [Device] = []
     /// One computer, or nil for every computer together.
     var selectedDeviceID: String?
@@ -20,7 +22,11 @@ final class AppModel {
     var account: RelayAccount?
     var relay: URL = Relay.current
     var language: Language = Language.saved {
-        didSet { language.save(); L.language = language }
+        didSet {
+            language.save(); L.language = language
+            // The demo's computers, sessions and conversation follow the language.
+            if connection == .demo { refreshDemoText() }
+        }
     }
     /// Light, dark or the iPhone's own setting, applied at the root.
     var appearance: Appearance = Appearance.saved {
@@ -30,11 +36,30 @@ final class AppModel {
     var pending: [String: String] = [:]
     var notes: [String: ControlNote] = [:]
     var mailboxes: [String: Mailbox] = [:]
+    /// What is being written to each session (text and photos), by session key.
+    var drafts: [String: Draft] = [:]
+    /// Previews of photos sent from this phone, by message ID; the relay never returns image data.
+    var sentPhotos: [String: [UIImage]] = [:]
+    /// Sends in flight per session. Several may run at once; each has its own request ID.
+    var sending: [String: Int] = [:]
+    /// Drafts of sends the relay refused while a new draft was already being written, by message ID,
+    /// so they can be brought back into the composer instead of overwriting it.
+    var failedSends: [String: Draft] = [:]
+    /// Each session's sends, one after another up to the relay's answer (see `inTurn`).
+    @ObservationIgnored private var lanes: [String: Task<Void, Never>] = [:]
+    /// The network step of a message send; tests replace it.
+    var transport: @MainActor (MessagePayload, String, URL) async throws -> Data = { payload, token, relay in
+        try await Relay.request("/api/action", token: token, payload: payload, relay: relay)
+    }
     /// Computers paired without remote control (`allow_control` 0 in /api/devices). Live snapshots do
     /// not carry the flag, so the device list is matched by id.
     var controlOff: Set<String> = []
     var busy = false
     private(set) var token: String?
+    #if DEBUG
+    /// Unit tests stand in a signed-in phone without the Keychain.
+    func useTestToken(_ value: String?) { token = value }
+    #endif
     private var liveTask: Task<Void, Never>?
     private var socket: URLSessionWebSocketTask?
 
@@ -51,6 +76,10 @@ final class AppModel {
     /// A report counts as fresh for 30 seconds; controls need one from the last 20.
     func isFresh(_ device: Device?, within milliseconds: Double = 30_000) -> Bool {
         guard let device else { return false }
+        #if DEBUG
+        // UI tests can make one demo computer's report stale: -qaStaleDevice demo-0.
+        if connection == .demo, UserDefaults.standard.string(forKey: "qaStaleDevice") == device.id { return false }
+        #endif
         if connection == .demo { return true }
         return device.online && Date().timeIntervalSince1970 * 1000 - device.received < milliseconds
     }
@@ -67,6 +96,27 @@ final class AppModel {
         return devices.count == 1 ? devices[0].name : L.t("All computers", "모든 컴퓨터") + " · \(devices.count)"
     }
     func device(for session: Session) -> Device? { devices.first { $0.id == session.deviceId } }
+
+    /// The account a session's weekly estimate belongs to in the selected period.
+    func account(of session: Session) -> String? { session.weeklyEstimate?[period.rawValue]?.accountId ?? session.weeklyAccount }
+    /// What tells same-tool accounts apart, as on the desktop dashboard: the name given in the desktop
+    /// app, or 1, 2… by account label once a tool has two or more accounts. Nil for a tool's only account.
+    func accountTag(_ id: String?) -> String? {
+        guard let id else { return nil }
+        var all: [String: Quota] = [:]
+        for d in devices { for q in d.snapshot?.accountQuotas ?? [] where all[q.id] == nil || (q.updated ?? 0) > (all[q.id]?.updated ?? 0) { all[q.id] = q } }
+        guard let quota = all[id] else { return nil }
+        if let alias = quota.alias?.trimmingCharacters(in: .whitespaces), !alias.isEmpty { return alias }
+        // Pools of one Agy installation carry their own names and are not numbered.
+        if let pool = quota.pool, !pool.isEmpty { return pool }
+        let same = all.values.filter { $0.kind == quota.kind && $0.pool == nil }.sorted { $0.accountLabel.lowercased() < $1.accountLabel.lowercased() }
+        guard same.count >= 2, let index = same.firstIndex(where: { $0.id == id }) else { return nil }
+        return String(index + 1)
+    }
+    /// "Claude Code 2", "Codex Team", or just the tool's name.
+    func toolName(_ session: Session) -> String {
+        [Tool.name(session.kind), accountTag(account(of: session))].compactMap { $0 }.joined(separator: " ")
+    }
 
     /// A computer paired without remote control offers no controls, instructions or messages.
     private func sessions(of list: [Device]) -> [Session] {
@@ -93,7 +143,7 @@ final class AppModel {
         return order.compactMap { seen[$0] }
     }
     /// The newest report time among the reporting computers, in seconds.
-    var reportEnd: Double { reportingDevices.compactMap { $0.snapshot?.updated }.max() ?? Date().timeIntervalSince1970 }
+    var reportEnd: Double { reportingDevices.compactMap { $0.snapshot?.updated }.max() ?? DemoData.shownNow() }
 
     /// Root sessions with their subagents folded in, in the shared order.
     var groups: [SessionGroup] {
@@ -172,12 +222,10 @@ final class AppModel {
 
     static func actionLabel(_ action: String) -> String {
         switch action {
-        case "prompt": L.t("Send AI instruction", "AI에게 지시 보내기")
         case "focus": L.t("Open on computer", "컴퓨터에서 열기")
         case "pause": L.t("Pause work", "작업 일시정지")
         case "resume": L.t("Resume work", "작업 재개")
         case "terminate": L.t("Quit CLI", "CLI 종료")
-        case "message": L.t("Send message", "메시지 보내기")
         default: action
         }
     }
@@ -201,22 +249,23 @@ final class AppModel {
     }
 
     /// Sends one control after the person confirmed it. A request whose result never arrives is
-    /// reported as unconfirmed, never retried on its own.
-    func control(_ s: Session, action: String, instruction: String? = nil) async {
-        guard let device = device(for: s), s.can(action), pending[s.key] == nil else { return }
+    /// reported as unconfirmed, never retried on its own. True when the relay took the request.
+    @discardableResult
+    func control(_ s: Session, action: String, instruction: String? = nil) async -> Bool {
+        guard let device = device(for: s), s.can(action), pending[s.key] == nil else { return false }
         if action == "prompt" {
             guard let instruction, !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, instruction.utf16.count <= 4000 else {
-                message = L.t("Enter an instruction up to 4,000 characters.", "4,000자 이내의 지시를 입력하세요."); return
+                message = L.t("Enter an instruction up to 4,000 characters.", "4,000자 이내의 지시를 입력하세요."); return false
             }
         }
         if connection == .demo {
-            note(s.key, id: "demo", L.t("Demo only. No command was sent.", "체험 화면입니다. 명령을 전송하지 않았습니다."), final: true); return
+            note(s.key, id: "demo", L.t("Demo only. No command was sent.", "체험 화면입니다. 명령을 전송하지 않았습니다."), final: true); return false
         }
         guard canControl(s), let token else {
-            note(s.key, id: "stale", L.t("Computer report is stale. Reconnect first.", "컴퓨터 정보가 오래됐습니다. 먼저 재연결하세요."), final: true); return
+            note(s.key, id: "stale", L.t("Computer report is stale. Reconnect first.", "컴퓨터 정보가 오래됐습니다. 먼저 재연결하세요."), final: true); return false
         }
         #if DEBUG
-        if qaBlocked(s) { note(s.key, id: "qa", Self.qaRefusal, final: true); return }
+        if qaBlocked(s) { note(s.key, id: "qa", Self.qaRefusal, final: true); return false }
         #endif
         let id = UUID().uuidString.lowercased(), key = s.key
         pending[key] = id
@@ -230,7 +279,7 @@ final class AppModel {
             note(key, id: id, done ? L.t("Completed", "완료") : L.t("Sent. Waiting for the computer.", "전송했습니다. 컴퓨터 응답을 기다립니다."), final: done)
         } catch {
             pending[key] = nil
-            note(key, id: id, error.localizedDescription, final: true); return
+            note(key, id: id, error.localizedDescription, final: true); return false
         }
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(25))
@@ -238,12 +287,17 @@ final class AppModel {
             self.pending[key] = nil
             self.note(key, id: id, L.t("Result unconfirmed. Check the computer before retrying.", "결과 미확인. 다시 요청하기 전에 컴퓨터를 확인하세요."), final: true)
         }
+        return true
     }
 
     // MARK: Mailbox
     /// The latest mailbox request; only its answer is applied, so a late reply for a screen that
     /// has since closed never lands in another one.
     private var mailboxAsk: (requestId: String, deviceId: String, sessionId: String)?
+    #if DEBUG
+    /// Unit tests answer a mailbox request without a socket.
+    func expectMailboxAnswer(_ requestId: String, deviceId: String, sessionId: String) { mailboxAsk = (requestId, deviceId, sessionId) }
+    #endif
 
     /// Asks the computer for this session's latest messages; the answer arrives on the socket.
     @discardableResult
@@ -258,29 +312,183 @@ final class AppModel {
         return true
     }
 
-    /// Sends a message the session answers in its mailbox. Throws when it cannot be sent.
-    func sendMessage(_ s: Session, text: String) async throws {
-        guard let device = device(for: s), s.can("message"), canControl(s) else {
-            throw Relay.Failure(status: nil, message: L.t("This session cannot receive messages right now.", "현재 이 세션에 메시지를 보낼 수 없습니다."))
+    /// The session's work right now, from its live status and how fresh the computer's report is:
+    /// working, waiting (for input), paused, idle, offline or stale. Message delivery is separate.
+    func workState(_ s: Session) -> String {
+        if connection != .live && connection != .demo { return "offline" }
+        guard let device = device(for: s), device.online || connection == .demo else { return "offline" }
+        if !isFresh(device) { return "stale" }
+        switch s.status {
+        case "working", "waiting", "paused": return s.status
+        default: return "idle"
         }
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.utf16.count <= 4000 else {
-            throw Relay.Failure(status: nil, message: L.t("Enter up to 4,000 characters.", "4,000자 이내로 입력하세요."))
+    }
+    static func workLabel(_ code: String) -> String {
+        switch code {
+        case "working": L.t("Working", "작업 중")
+        case "waiting": L.t("Waiting for input", "입력 대기")
+        case "paused": L.t("Paused", "일시정지")
+        case "offline": L.t("Offline", "오프라인")
+        case "stale": L.t("Stale report", "오래된 보고")
+        default: L.t("Idle", "대기")
         }
-        let id = UUID().uuidString.lowercased(), created = Date().timeIntervalSince1970
-        if connection == .demo {
-            mailboxes[s.key, default: Mailbox()].messages.append(MailMessage(
-                id: id, text: text, created: created, status: "replied",
-                reply: L.t("Demo reply: I have finished the first checks and am reviewing the remaining failures.", "예시 답신: 첫 검사를 마쳤고 남은 오류를 확인하고 있습니다."),
-                replyAt: created, truncated: false, local: true))
+    }
+
+    /// The text sent with photos when nothing was typed.
+    static var photoPrompt: String { L.t("Please inspect the attached image(s).", "첨부한 사진을 확인해 주세요.") }
+
+    /// Why the composer cannot send as it is, or nil when it can.
+    func sendBlock(_ s: Session) -> String? {
+        let draft = drafts[s.key] ?? Draft()
+        if isControlOff(s) { return L.t("This computer was connected without remote control.", "이 컴퓨터는 원격 제어 없이 연결되었습니다.") }
+        if !s.can("message") && !s.can("prompt") {
+            return L.t("Input is unavailable for this session right now. For a running terminal, pause the work first.",
+                       "현재 이 세션의 입력 연결을 확인할 수 없습니다. 실행 중인 터미널은 먼저 작업을 중단한 뒤 확인하세요.")
+        }
+        if !draft.photos.isEmpty && !s.can("message_images") {
+            return L.t("This session cannot receive photos. Remove them, or send them to a session that can.",
+                       "이 세션은 사진을 받을 수 없습니다. 사진을 지우거나 사진을 받을 수 있는 세션에서 보내세요.")
+        }
+        if draft.text.utf16.count > 4000 { return L.t("Enter up to 4,000 characters.", "4,000자 이내로 입력하세요.") }
+        return nil
+    }
+
+    /// Sends the session's draft after the person confirmed it: one `message` action with any
+    /// photos, or, for a session that only takes instructions, a `prompt`.
+    /// A definite refusal (4xx) keeps the draft and photos. A send whose fate is unknown (time-out,
+    /// lost connection, server error) is marked delivery unconfirmed and is never resent on its own.
+    ///
+    /// The composer empties as soon as a send starts, so the next message can be written at once.
+    /// Whatever is written meanwhile is never overwritten: a refused send goes back to the composer
+    /// only if it is still empty; otherwise it stays in the timeline with a button to bring it back.
+    /// Only this session's draft is touched.
+    func sendConversation(_ s: Session) async {
+        let key = s.key
+        var draft = drafts[key] ?? Draft()
+        guard !draft.isEmpty else { return }
+        if let block = sendBlock(s) { draft.error = block; drafts[key] = draft; return }
+        let typed = draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.error = nil
+        if !s.can("message") {
+            drafts[key] = Draft()
+            if !(await control(s, action: "prompt", instruction: draft.text)) && connection != .demo {
+                // Back into the composer: as it was if still empty, or after what was written since.
+                let now = drafts[key] ?? Draft()
+                drafts[key] = now.isEmpty ? draft : now.appending(draft)
+            }
             return
         }
-        guard let token else { throw Relay.Failure(status: 401, message: L.t("Sign in again.", "다시 로그인하세요.")) }
+        guard let device = device(for: s), canControl(s) else {
+            var kept = draft
+            kept.error = L.t("This session cannot receive messages right now.", "현재 이 세션에 메시지를 보낼 수 없습니다."); drafts[key] = kept; return
+        }
+        let text = typed.isEmpty ? Self.photoPrompt : draft.text
+        let id = UUID().uuidString.lowercased(), created = DemoData.shownNow(), photos = draft.photos
+        let listed = photos.enumerated().map { i, p in MailAttachment(id: nil, name: "photo-\(i + 1).jpg", mime: "image/jpeg", bytes: Double(p.jpeg.count)) }
+        func bubble(_ status: String, reply: String? = nil) -> MailMessage {
+            MailMessage(id: id, text: text, created: created, status: status, reply: reply, replyAt: reply == nil ? nil : created,
+                        truncated: false, local: true, attachments: listed.isEmpty ? nil : listed)
+        }
+        if connection == .demo {
+            // The conversation script (demo-world.js), as on the web and Android: taken in, delivered, the
+            // session's three phases, then the scripted reply, each at its time after sending.
+            mailboxes[key, default: Mailbox()].messages.append(bubble("sending"))
+            if !photos.isEmpty { sentPhotos[id] = photos.map(\.preview) }
+            drafts[key] = Draft()
+            Task { [weak self] in
+                var elapsed = 0.0
+                for step in DemoWorld.script.steps {
+                    try? await Task.sleep(for: .seconds(step.at - elapsed)); elapsed = step.at
+                    guard let self, var box = self.mailboxes[key], let i = box.messages.firstIndex(where: { $0.id == id }) else { return }
+                    box.messages[i] = DemoData.scriptStep(step, box.messages[i], at: DemoData.shownNow())
+                    self.mailboxes[key] = box
+                }
+            }
+            return
+        }
+        guard let token else { var kept = draft; kept.error = L.t("Sign in again.", "다시 로그인하세요."); drafts[key] = kept; return }
         #if DEBUG
-        if qaBlocked(s) { throw Relay.Failure(status: nil, message: Self.qaRefusal) }
+        if qaBlocked(s) { var kept = draft; kept.error = Self.qaRefusal; drafts[key] = kept; return }
         #endif
-        _ = try await Relay.request("/api/action", token: token, body: ["action": "message", "request_id": id, "device_id": device.id,
-                                                                         "session_id": s.id, "control_key": s.controlKey ?? "", "prompt": text], relay: relay)
-        mailboxes[s.key, default: Mailbox()].messages.append(MailMessage(id: id, text: text, created: created, status: "sending", local: true))
+        drafts[key] = Draft()
+        sending[key, default: 0] += 1
+        defer { sending[key] = max(0, (sending[key] ?? 1) - 1) }
+        mailboxes[key, default: Mailbox()].messages.append(bubble("sending"))
+        if !photos.isEmpty { sentPhotos[id] = photos.map(\.preview) }
+        let payload = MessagePayload(requestId: id, deviceId: device.id, sessionId: s.id, controlKey: s.controlKey ?? "", prompt: text,
+                                     attachments: photos.isEmpty ? nil : photos.map { .init(mime: "image/jpeg", data: $0.jpeg.base64EncodedString()) })
+        let relay = relay
+        do {
+            let data = try await inTurn(key) { [transport] in try await transport(payload, token, relay) }
+            let receipt = (try? JSONDecoder.relay().decode(ActionReceipt.self, from: data))?.status
+            setStatus(receipt == "unconfirmed" ? "delivery_unconfirmed" : "awaiting_reply", id: id, key: key)
+        } catch let failure as Relay.Failure where (400..<500).contains(failure.status ?? 0) {
+            // Refused for certain: nothing reached the session.
+            if (drafts[key] ?? Draft()).isEmpty {
+                mailboxes[key]?.messages.removeAll { $0.id == id }
+                sentPhotos[id] = nil
+                restore(draft, key: key, error: failure.message)
+            } else {
+                // A new draft is being written; keep this one in the timeline instead.
+                var kept = draft
+                kept.text = typed.isEmpty ? "" : draft.text
+                failedSends[id] = kept
+                if var box = mailboxes[key], let i = box.messages.firstIndex(where: { $0.id == id }) {
+                    box.messages[i].status = "send_failed"
+                    box.error = failure.message
+                    mailboxes[key] = box
+                }
+            }
+        } catch {
+            // It may or may not have arrived. Keep the bubble as unconfirmed; never resend by itself.
+            setStatus("delivery_unconfirmed", id: id, key: key)
+            message = Self.unconfirmed
+        }
+    }
+
+    /// What an unconfirmed send means, under its message and in the conversation, in the chosen language.
+    static var unconfirmed: String {
+        L.t("Could not confirm it was sent. Check the session before sending again.", "보냈는지 확인하지 못했습니다. 다시 보내기 전에 세션을 확인하세요.")
+    }
+
+    /// One session's sends reach the relay in the order they were made: each goes out once the one before
+    /// it has its answer (accepted, refused or lost), so a text-only message never overtakes a slower one
+    /// with photos. Nothing waits for the session's reply, the composer is already free, and other
+    /// sessions do not wait. A failure ends only its own turn; the next send still goes.
+    private func inTurn(_ key: String, _ work: @escaping @MainActor () async throws -> Data) async throws -> Data {
+        let previous = lanes[key]
+        let attempt = Task { @MainActor () -> Result<Data, Error> in
+            await previous?.value
+            do { return .success(try await work()) } catch { return .failure(error) }
+        }
+        let turn = Task { @MainActor in _ = await attempt.value }
+        lanes[key] = turn
+        let result = await attempt.value
+        if lanes[key] == turn { lanes[key] = nil }
+        return try result.get()
+    }
+
+    /// Puts a refused draft back into an empty composer.
+    private func restore(_ draft: Draft, key: String, error: String? = nil) {
+        var back = draft
+        back.error = error
+        drafts[key] = back
+    }
+
+    /// Brings a refused send back into the composer after what is already there; photos up to three.
+    func bringBack(_ id: String, key: String) {
+        guard let kept = failedSends.removeValue(forKey: id) else { return }
+        drafts[key] = (drafts[key] ?? Draft()).appending(kept)
+        mailboxes[key]?.messages.removeAll { $0.id == id }
+        sentPhotos[id] = nil
+        if mailboxes[key]?.messages.contains(where: { $0.status == "send_failed" }) == false { mailboxes[key]?.error = nil }
+    }
+
+    private func setStatus(_ status: String, id: String, key: String) {
+        guard var box = mailboxes[key], let i = box.messages.firstIndex(where: { $0.id == id }) else { return }
+        let row = box.messages[i]
+        box.messages[i].status = Conversation.advance(row.status, to: status, hasReply: !(row.reply ?? "").isEmpty)
+        mailboxes[key] = box
     }
 
     private func applyReceipt(_ live: LiveMessage) {
@@ -292,8 +500,11 @@ final class AppModel {
         notes[key] = ControlNote(id: request.requestId, text: head + (detail.isEmpty ? "" : " · " + detail), final: true)
         message = notes[key]?.text
         if var box = mailboxes[key], let i = box.messages.firstIndex(where: { $0.id == request.requestId }) {
-            box.messages[i].status = failed ? "delivery_unconfirmed" : "awaiting_reply"
-            if failed { box.error = detail.isEmpty ? nil : detail }
+            // A receipt arriving after the reply never sends the message back to waiting.
+            let row = box.messages[i]
+            box.messages[i].status = Conversation.advance(row.status, to: failed ? "delivery_unconfirmed" : "awaiting_reply",
+                                                          hasReply: !(row.reply ?? "").isEmpty)
+            if failed && box.messages[i].status != "replied" { box.error = detail.isEmpty ? nil : detail }
             mailboxes[key] = box
         }
     }
@@ -305,14 +516,9 @@ final class AppModel {
         let key = deviceId + ":" + sessionId
         var box = mailboxes[key] ?? Mailbox()
         if let error = live.error { box.error = error; mailboxes[key] = box; return }
-        let server = live.messages ?? [], now = Date().timeIntervalSince1970
-        let waiting = box.messages.filter { m in m.local == true && !server.contains { $0.id == m.id } }.map { m -> MailMessage in
-            var m = m
-            if now - m.created > 30 { m.status = "delivery_unconfirmed" }
-            return m
-        }
-        box.error = nil
-        box.messages = server + waiting
+        // Merged by ID, never replaced: the answer holds only the ten most recently changed rows.
+        box.messages = Conversation.merge(box.messages, with: live.messages ?? [])
+        if !box.messages.contains(where: { $0.status == "send_failed" }) { box.error = nil }
         mailboxes[key] = box
     }
 
@@ -348,18 +554,42 @@ final class AppModel {
 
     private func resetAccountState() {
         devices = []; account = nil; selectedDeviceID = nil; pending = [:]; notes = [:]; mailboxes = [:]; controlOff = []; mailboxAsk = nil
+        drafts = [:]; sentPhotos = [:]; sending = [:]; failedSends = [:]
     }
 
     func showDemo() {
         liveTask?.cancel(); liveTask = nil; socket = nil
         resetAccountState()
-        devices = DemoData.devices(now: Date().timeIntervalSince1970)
-        mailboxes = DemoData.mailboxes(now: Date().timeIntervalSince1970)
+        devices = DemoData.devices()
+        mailboxes = DemoData.mailboxes()
         controlOff = DemoData.controlOff
         connection = .demo
+        // A demo on the phone's clock moves on like a live one: fresh readings every ten seconds. A held
+        // demo (QA, filming) stays at its moment.
+        guard DemoData.held == nil else { return }
+        liveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard !Task.isCancelled else { return }
+                let next = await Task.detached(priority: .utility) { DemoData.devices(now: DemoData.now()) }.value
+                guard let self, self.connection == .demo else { return }
+                self.devices = next
+            }
+        }
+    }
+
+    /// Re-reads the demo in the current language; messages written here stay.
+    private func refreshDemoText() {
+        let now = DemoData.now(), seeded = DemoData.mailboxes(now: now)
+        devices = DemoData.devices(now: now)
+        for (key, box) in seeded {
+            let ids = Set(box.messages.map(\.id))
+            mailboxes[key] = .init(messages: box.messages + (mailboxes[key]?.messages ?? []).filter { !ids.contains($0.id) })
+        }
     }
 
     func leaveDemo() {
+        liveTask?.cancel(); liveTask = nil
         resetAccountState()
         connection = token == nil ? .signedOut : .connecting
         if token != nil { connect() }
@@ -407,7 +637,8 @@ final class AppModel {
         }
     }
 
-    private func apply(_ live: LiveMessage) {
+    /// Applies one live socket message (internal so unit tests can feed receipts and mailbox answers).
+    func apply(_ live: LiveMessage) {
         switch live.type {
         case "state": if let list = live.devices { devices = list }
         case "snapshot":

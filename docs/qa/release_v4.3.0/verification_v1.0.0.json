@@ -1,0 +1,80 @@
+{
+  "version": "4.3.0",
+  "frontend_commit": "1f798be",
+  "frontend_freeze": "v1.17.0",
+  "frozen_files": 106,
+  "backend_commits": [
+    "37952b9",
+    "a48e9f2",
+    "7c8f335",
+    "f0b06d9",
+    "3689619"
+  ],
+  "tests": {
+    "python": 410,
+    "relay": 70,
+    "relay_optional_load_skipped": 1,
+    "android": 37,
+    "ios_unit": 27,
+    "ios_simulator_ui": 3,
+    "dashboard_browser": 16,
+    "shared_dashboard_identical_assets": 16
+  },
+  "windows": {
+    "workflow": 40990157272,
+    "source": "f0b06d9",
+    "conclusion": "success",
+    "exe_scenarios": 4,
+    "msix_scenarios": 5,
+    "native_verified": [
+      "toolwindow/no-appwindow styles",
+      "focus-loss dismissal",
+      "KO/EN/ZH synchronization",
+      "dark/light synchronization",
+      "login registry enable/disable and quick-view command",
+      "five circular WebView2 animations per scenario"
+    ],
+    "limits": [
+      "Hosted Windows runner at 100% scale; 150%, negative monitor coordinates and taskbar orientations use geometry tests.",
+      "Normal motion path enabled with page-local media emulation; Windows reduced-motion setting retained.",
+      "MSIX uses test identity/signature; Store submission not performed."
+    ]
+  },
+  "mobile_physical": {
+    "iphone": "development-signed test build ready; device UI availability question pending",
+    "android": "no physical adb device connected"
+  },
+  "release_blockers": [
+    "iOS Release build references DEBUG-only PhotoPrep.demo",
+    "11 collector messages need frontend EN/ZH translations",
+    "Frontend remote adapter needs new parity fields/history/rename/alias contract"
+  ],
+  "publication": {
+    "site": false,
+    "relay": false,
+    "main_release_manifest": false,
+    "stores": false
+  },
+  "artifacts": [
+    {
+      "path": "release/v4.3.0/1top-4.3.0-android.apk",
+      "bytes": 101932279,
+      "sha256": "7dc20eb18ff0b3aa2c23d54a8ddd5e7c170e33b491bde856cea6d88d86540943"
+    },
+    {
+      "path": "release/v4.3.0/1top-4.3.0-android.aab",
+      "bytes": 70910550,
+      "sha256": "37ec61624de304df745fc8e074b1f7f6db17b3e17fe0771e39b9fc96f23c0035"
+    },
+    {
+      "path": "release/v4.3.0/1top-4.3.0-windows-x64-setup.exe",
+      "bytes": 22882167,
+      "sha256": "fe552ebad794750c0add7d800f63614b7bd0c6ed49e55c2d6d5f792fe2374b17"
+    },
+    {
+      "path": "release/v4.3.0-rc.1/1top-4.3.0-macos-arm64.dmg",
+      "bytes": 15457550,
+      "sha256": "7652851ac53a8379df421781e4181a579b413abb870aa3359c105ffbdaf85e8c"
+    }
+  ]
+}

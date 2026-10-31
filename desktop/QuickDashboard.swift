@@ -4,7 +4,7 @@ import SwiftUI
 // Quick view for the menu bar. The period picker governs every number below it:
 // a token card (average speed on the scope, usage by session), weekly limits with
 // their trend over the period, and the session list.
-private struct QuickTheme {
+struct QuickTheme {
     let light: Bool
     private func pick(_ dark: (Double, Double, Double), _ day: (Double, Double, Double)) -> Color {
         let c = light ? day : dark
@@ -30,7 +30,7 @@ private struct QuickTheme {
 // Sizes for the quick view. Text uses named roles like the dashboard's type tokens, and every size,
 // space and stroke follows the app zoom (보기 › 확대·축소). The panel is laid out again at the new
 // size rather than stretched, so text, digits and charts stay sharp.
-private struct QuickMetrics {
+struct QuickMetrics {
     enum Role: Double {
         case tiny = 9.5, caption = 10.5, label = 11.5, body = 12.5, title = 13, figure = 17, display = 22
     }
@@ -93,7 +93,7 @@ private func pct1(_ value: Double?) -> String {
     let tenths = (value * 10).rounded() / 10
     return (tenths == tenths.rounded() ? String(Int(tenths)) : String(format: "%.1f", tenths)) + "%"
 }
-private func rate1(_ value: Double?) -> String { value == nil ? "—" : pct1(value) + "/시간" }
+private func rate1(_ value: Double?, _ tr: QuickText = .current) -> String { value == nil ? "—" : pct1(value) + tr.perHour }
 
 private struct SegmentDigits: View {
     var value: Double?
@@ -158,6 +158,7 @@ private struct ScopeDial: View {
     var period: String
     var theme: QuickTheme
     var m: QuickMetrics
+    var tr: QuickText
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var from: Double?
     @State private var to: Double?
@@ -265,14 +266,16 @@ private struct ScopeDial: View {
                 ctx.fill(now, with: .color(theme.red.opacity(sweeping ? 0.65 + 0.35 * sin(date.timeIntervalSinceReferenceDate * 3.2) : 1)))
             }
             VStack(spacing: m(1)) {
-                Text("평균").font(m.font(.caption)).foregroundStyle(theme.dim)
+                Text(tr("평균")).font(m.font(.caption)).foregroundStyle(theme.dim)
                 SegmentDigits(value: value, height: m(29), theme: theme)
-                Text(reading.average == nil ? "확인 중" : "tokens/시간").font(m.font(.caption)).foregroundStyle(theme.muted)
+                Text(tr(reading.average == nil ? "확인 중" : "tokens/시간")).font(m.font(.caption)).foregroundStyle(theme.muted)
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(reading.average.map { "\(period) 평균 토큰 사용 속도 시간당 \(DesktopFormat.number($0)) tokens" } ?? "토큰 사용 속도 확인 중")
-        .help("가운데: \(period) 평균 토큰 사용 속도(tokens/시간)\n고리: 같은 기간의 구간별 속도를 AI 도구 색으로 쌓았습니다 · ▼(12시) 바로 오른쪽이 가장 최근 구간이고 시계 방향으로 갈수록 과거입니다 · 12시 왼쪽 빈틈 앞이 기간의 시작 · 밝을수록 최근 구간\n점선: 평균")
+        .accessibilityLabel(reading.average.map { tr.pick("\(period) 평균 토큰 사용 속도 시간당 \(DesktopFormat.number($0)) tokens", "\(period) average token rate, \(DesktopFormat.number($0)) tokens per hour", "\(period) 平均 Token 消耗速度，每小时 \(DesktopFormat.number($0)) tokens") } ?? tr("토큰 사용 속도 확인 중"))
+        .help(tr.pick("가운데: \(period) 평균 토큰 사용 속도(tokens/시간)\n고리: 같은 기간의 구간별 속도를 AI 도구 색으로 쌓았습니다 · ▼(12시) 바로 오른쪽이 가장 최근 구간이고 시계 방향으로 갈수록 과거입니다 · 12시 왼쪽 빈틈 앞이 기간의 시작 · 밝을수록 최근 구간\n점선: 평균",
+                       "Centre: \(period) average token rate (tokens/h)\nRing: the rate in each interval of the same period, stacked in AI tool colours · just right of ▼ (12 o’clock) is the latest interval, going back in time clockwise · the gap left of 12 o’clock is where the period starts · brighter is more recent\nDashed line: average",
+                       "中心：\(period) 平均 Token 消耗速度（tokens/小时）\n圆环：同一时段各区间的速度，按 AI 工具颜色叠加 · ▼（12 点）右侧是最近的区间，顺时针越往后越早 · 12 点左侧空隙之前是时段的开始 · 越亮越近\n虚线：平均"))
     }
 }
 
@@ -390,27 +393,39 @@ struct QuickDashboard: View {
     @State private var hoveredSession: String?
     @State private var selectedAccount: AccountQuota?
     @AppStorage("weeklyTokensMode") private var tokensMode = false
+    // The cluster (계기판) in place of the token card, weekly limits and resources; remembered.
+    @AppStorage("quickCluster") private var showCluster = false
     @AppStorage("dashboardTheme") private var dashboardTheme = "dark"
+    // The dashboard's language (한·EN·中); the quick view, the menus and the dashboard window share it.
+    @AppStorage("dashboardLanguage") private var language = "ko"
     var openDashboard: () -> Void; var openBrowser: () -> Void
     var remoteOptions: () -> Void; var connectRemote: () -> Void
     var toggleLogin: () -> Void; var restart: () -> Void; var quit: () -> Void
     var control: (String, DesktopSession) -> Void
+    // The dashboard's theme switch and one-tap language button; the app spreads the change from the button.
+    var switchTheme: () -> Void = {}; var switchLanguage: () -> Void = {}
     private var theme: QuickTheme { QuickTheme(light: dashboardTheme == "light") }
+    private var tr: QuickText { QuickText(language) }
     private var m: QuickMetrics { QuickMetrics(zoom: CGFloat(zoom.value)) }
     var body: some View {
         VStack(spacing: 0) {
             header
             periodPicker.padding(.horizontal, m(14)).padding(.bottom, m(10))
-            tokenSection.padding(.horizontal, m(16))
-            weeklyCard.padding(.horizontal, m(14)).padding(.top, m(14))
-            resources.padding(.horizontal, m(16)).padding(.top, m(12)).padding(.bottom, m(10))
+            if showCluster {
+                QuickCluster(model: model, theme: theme, m: m, tr: tr, caption: periodLabel)
+                    .padding(.horizontal, m(14)).padding(.bottom, m(10))
+            } else {
+                tokenSection.padding(.horizontal, m(16))
+                weeklyCard.padding(.horizontal, m(14)).padding(.top, m(14))
+                resources.padding(.horizontal, m(16)).padding(.top, m(12)).padding(.bottom, m(10))
+            }
             sessionList
             if let message = model.message {
                 HStack(alignment: .top) {
-                    Text(message).font(m.font(.body)).foregroundStyle(model.messageIsError ? theme.amber : theme.accent)
+                    Text(tr(message)).font(m.font(.body)).foregroundStyle(model.messageIsError ? theme.amber : theme.accent)
                     Spacer(minLength: m(4))
                     Button { model.message = nil } label: { Image(systemName: "xmark") }
-                        .buttonStyle(.plain).accessibilityLabel("알림 닫기")
+                        .buttonStyle(.plain).accessibilityLabel(tr("알림 닫기"))
                 }.padding(m(10)).background(theme.raised)
             }
             footer
@@ -434,46 +449,74 @@ struct QuickDashboard: View {
             Spacer()
             HStack(spacing: m(6)) {
                 Circle().fill(model.fresh ? theme.segmentOn : theme.amber).frame(width: m(6), height: m(6))
-                Text(model.connectionLabel).font(m.font(.label)).foregroundStyle(theme.muted)
+                Text(tr(model.connectionLabel)).font(m.font(.label)).foregroundStyle(theme.muted)
             }.padding(.horizontal, m(9)).frame(height: m(24)).overlay(Capsule().stroke(theme.line))
+            preferenceButtons
             Menu {
-                Button("브라우저에서 열기", action: openBrowser)
-                Button("지금 새로고침") { model.refresh() }
-                Button(tokensMode ? "세션을 주간 한도 %로 보기" : "세션을 토큰으로 보기") { tokensMode.toggle() }
+                Button(tr("브라우저에서 열기"), action: openBrowser)
+                Button(tr("지금 새로고침")) { model.refresh() }
+                Button(tr(tokensMode ? "세션을 주간 한도 %로 보기" : "세션을 토큰으로 보기")) { tokensMode.toggle() }
                 // The same zoom as 보기 › 확대·축소 (⌘+ ⌘− ⌘0); it also scales the dashboard window.
-                Menu("화면 크기 \(Int((zoom.value * 100).rounded()))%") {
-                    Button("확대") { zoom.set(zoom.value + 0.1) }.disabled(zoom.value >= AppZoom.range.upperBound)
-                    Button("축소") { zoom.set(zoom.value - 0.1) }.disabled(zoom.value <= AppZoom.range.lowerBound)
-                    Button("기본 크기") { zoom.set(1) }.disabled(zoom.value == 1)
+                Menu(tr.zoom(Int((zoom.value * 100).rounded()))) {
+                    Button(tr("확대")) { zoom.set(zoom.value + 0.1) }.disabled(zoom.value >= AppZoom.range.upperBound)
+                    Button(tr("축소")) { zoom.set(zoom.value - 0.1) }.disabled(zoom.value <= AppZoom.range.lowerBound)
+                    Button(tr("기본 크기")) { zoom.set(1) }.disabled(zoom.value == 1)
                 }
                 Divider()
-                Button(model.openAtLogin ? "✓ 로그인할 때 실행" : "로그인할 때 실행", action: toggleLogin)
-                Button("원격 대시보드 (선택)", action: remoteOptions)
-                Button("원격 기기 연결…", action: connectRemote)
+                Button(tr(model.openAtLogin ? "✓ 로그인할 때 실행" : "로그인할 때 실행"), action: toggleLogin)
+                Button(tr("원격 대시보드 (선택)"), action: remoteOptions)
+                Button(tr("원격 기기 연결…"), action: connectRemote)
                 Divider()
-                Button("로컬 수집기 다시 시작", action: restart)
-                Button("1top 종료", action: quit)
+                Button(tr("로컬 수집기 다시 시작"), action: restart)
+                Button(tr("1top 종료"), action: quit)
             } label: { Image(systemName: "ellipsis").font(m.font(.title, .semibold)) }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: m(26)).accessibilityLabel("1top 옵션")
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: m(26)).accessibilityLabel(tr("1top 옵션"))
         }.padding(.horizontal, m(16)).padding(.top, m(12)).padding(.bottom, m(10))
+    }
+    private static let languages: [(String, String, String)] = [("ko", "한", "한국어"), ("en", "EN", "English"), ("zh", "中", "中文")]
+    // ☀/☾ like the dashboard's theme switch, and one language button that moves 한 → EN → 中 on each tap.
+    private var preferenceButtons: some View {
+        let light = dashboardTheme == "light", themeLabel = tr(light ? "다크 모드" : "화이트 모드")
+        let at = Self.languages.firstIndex { $0.0 == tr.lang } ?? 0, next = Self.languages[(at + 1) % Self.languages.count]
+        let languageLabel = "\(tr("언어")): \(Self.languages[at].2) → \(next.2)"
+        let clusterLabel = tr(showCluster ? "기본 보기" : "계기판 보기")
+        return HStack(spacing: m(8)) {
+            // The cluster view, one tap each way.
+            Button { showCluster.toggle() } label: {
+                Image(systemName: "gauge.with.needle").font(.system(size: m(14), weight: .semibold))
+                    .foregroundStyle(showCluster ? theme.accent : theme.muted)
+                    .frame(width: m(24), height: m(24)).contentShape(Rectangle())
+            }.buttonStyle(.plain).help(clusterLabel).accessibilityLabel(clusterLabel)
+                .accessibilityAddTraits(showCluster ? .isSelected : [])
+            Button(action: switchTheme) {
+                Text(light ? "☾" : "☀").font(.system(size: m(15))).foregroundStyle(theme.muted)
+                    .frame(width: m(24), height: m(24)).contentShape(Rectangle())
+            }.buttonStyle(.plain).help(themeLabel).accessibilityLabel(themeLabel)
+            Button(action: switchLanguage) {
+                Text(Self.languages[at].1).font(m.font(.label, .semibold)).foregroundStyle(theme.ink)
+                    .frame(minWidth: m(18)).padding(.horizontal, m(6)).frame(height: m(24))
+                    .background(theme.card, in: RoundedRectangle(cornerRadius: m(6)))
+                    .overlay(RoundedRectangle(cornerRadius: m(6)).stroke(theme.line)).contentShape(Rectangle())
+            }.buttonStyle(.plain).help(languageLabel).accessibilityLabel(languageLabel)
+        }
     }
     private var periodPicker: some View {
         HStack(spacing: m(2)) {
             ForEach([("10m", "10분"), ("30m", "30분"), ("1h", "1시간"), ("5h", "5시간"), ("12h", "12시간"), ("24h", "24시간")], id: \.0) { key, title in
                 let selected = model.selectedPeriod == key
                 Button { model.selectedPeriod = key } label: {
-                    Text(title).font(m.font(.body, selected ? .semibold : .medium)).frame(maxWidth: .infinity).frame(height: m(24))
+                    Text(tr(title)).font(m.font(.body, selected ? .semibold : .medium)).frame(maxWidth: .infinity).frame(height: m(24))
                         .foregroundStyle(selected ? theme.ink : theme.muted)
                         .background(selected ? theme.raised : Color.clear, in: RoundedRectangle(cornerRadius: m(6)))
                         .contentShape(Rectangle())
-                }.buttonStyle(.plain).accessibilityLabel("최근 \(title)").accessibilityAddTraits(selected ? .isSelected : [])
+                }.buttonStyle(.plain).accessibilityLabel(tr.last(title)).accessibilityAddTraits(selected ? .isSelected : [])
             }
         }.padding(m(3)).background(theme.card, in: RoundedRectangle(cornerRadius: m(9))).overlay(RoundedRectangle(cornerRadius: m(9)).stroke(theme.line))
-            .accessibilityElement(children: .contain).accessibilityLabel("사용량 기간")
+            .accessibilityElement(children: .contain).accessibilityLabel(tr("사용량 기간"))
     }
 
     private var periodLabel: String {
-        "최근 " + (model.window?.label ?? ["10m": "10분", "30m": "30분", "1h": "1시간", "5h": "5시간", "12h": "12시간", "24h": "24시간"][model.selectedPeriod] ?? model.selectedPeriod)
+        tr.last(model.window?.label ?? ["10m": "10분", "30m": "30분", "1h": "1시간", "5h": "5시간", "12h": "12시간", "24h": "24시간"][model.selectedPeriod] ?? model.selectedPeriod)
     }
 
     // MARK: Tokens · average speed on the radar, split by model
@@ -481,16 +524,16 @@ struct QuickDashboard: View {
         let reading = SpeedReading(model: model), usage = modelSlices()
         return VStack(alignment: .leading, spacing: m(8)) {
             HStack(alignment: .firstTextBaseline, spacing: m(6)) {
-                Text("토큰 사용").font(m.font(.body, .semibold))
+                Text(tr("토큰 사용")).font(m.font(.body, .semibold))
                 Text(periodLabel).font(m.font(.label)).foregroundStyle(theme.muted)
                 Spacer()
             }
-            .help(usage.total > 0 ? "\(periodLabel) 동안 \(shortNumber(usage.total)) tokens" : "")
+            .help(usage.total > 0 ? tr.pick("\(periodLabel) 동안 \(shortNumber(usage.total)) tokens", "\(periodLabel): \(shortNumber(usage.total)) tokens", "\(periodLabel)：\(shortNumber(usage.total)) tokens") : "")
             HStack(alignment: .center, spacing: m(18)) {
-                ScopeDial(reading: reading, period: periodLabel, theme: theme, m: m).frame(width: m(190), height: m(190))
+                ScopeDial(reading: reading, period: periodLabel, theme: theme, m: m, tr: tr).frame(width: m(190), height: m(190))
                 Group {
                     if usage.slices.isEmpty {
-                        Text(reading.average == nil ? "사용량을 확인하고 있습니다" : "이 기간에 보고된 사용이 없습니다")
+                        Text(tr(reading.average == nil ? "사용량을 확인하고 있습니다" : "이 기간에 보고된 사용이 없습니다"))
                             .font(m.font(.label)).foregroundStyle(theme.muted)
                     } else {
                         modelLegend(usage.slices, total: usage.total)
@@ -521,8 +564,8 @@ struct QuickDashboard: View {
         }
         let rest = total - shown.reduce(0) { $0 + $1.tokens }, others = rows.count - shown.count
         if total > 0, rest > total * 0.005 {
-            slices.append(UsageSlice(id: "__rest__", name: others > 0 ? "기타 모델" : "종료된 세션",
-                                     detail: others > 0 ? "\(others)개" + (total - sessionsTotal > total * 0.005 ? " · 종료 세션 포함" : "") : "목록에 없는 세션",
+            slices.append(UsageSlice(id: "__rest__", name: tr(others > 0 ? "기타 모델" : "종료된 세션"),
+                                     detail: others > 0 ? tr.count(others) + (total - sessionsTotal > total * 0.005 ? " · " + tr("종료 세션 포함") : "") : tr("목록에 없는 세션"),
                                      kind: nil, value: rest, shade: 1))
         }
         return (slices, total)
@@ -538,7 +581,7 @@ struct QuickDashboard: View {
     // 05 · Stacked bar and legend: model, tool and share. The colours are the radar's colours.
     private func modelLegend(_ slices: [UsageSlice], total: Double) -> some View {
         VStack(alignment: .leading, spacing: m(10)) {
-            Text("모델별").font(m.font(.caption)).foregroundStyle(theme.muted)
+            Text(tr("모델별")).font(m.font(.caption)).foregroundStyle(theme.muted)
             GeometryReader { geo in
                 HStack(spacing: m(2)) {
                     ForEach(slices) { slice in
@@ -565,35 +608,41 @@ struct QuickDashboard: View {
 
     // MARK: Weekly limits · compact tiles with a small trend line
     private var weeklyCard: some View {
-        let rows = model.snapshot?.account_quotas ?? []
+        let rows = model.snapshot?.account_quotas ?? [], shown = AccountQuota.pickTiles(rows)
         return VStack(alignment: .leading, spacing: m(7)) {
             HStack(alignment: .firstTextBaseline, spacing: m(6)) {
-                Text("주간 한도").font(m.font(.body, .semibold))
-                Text("계정별 100%").font(m.font(.label)).foregroundStyle(theme.muted)
+                // A 5-hour or monthly tile among them makes the heading the providers' shared "계정 한도".
+                Text(tr(shown.allSatisfy { $0.representativeWindow?.isWeekly == true } ? "주간 한도" : "계정 한도")).font(m.font(.body, .semibold))
+                Text(tr("계정별 100%")).font(m.font(.label)).foregroundStyle(theme.muted)
                 Spacer()
                 Menu {
-                    Button("Claude Code 계정 로그인…") { model.addAccount("Claude") }
-                    Button("Codex 계정 로그인…") { model.addAccount("Codex") }
+                    Button(tr("Claude Code 계정 로그인…")) { model.addAccount("Claude") }
+                    Button(tr("Codex 계정 로그인…")) { model.addAccount("Codex") }
                 } label: { Image(systemName: "plus").font(m.font(.label, .semibold)) }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: m(18), height: m(14))
-                    .disabled(!model.fresh || model.busy).accessibilityLabel("구독 계정 추가 로그인")
+                    .disabled(!model.fresh || model.busy).accessibilityLabel(tr("구독 계정 추가 로그인"))
             }.padding(.horizontal, m(2))
             if rows.isEmpty {
-                Text("+ 버튼으로 구독 계정을 연결하세요.").font(m.font(.label)).foregroundStyle(theme.muted)
+                Text(tr("+ 버튼으로 구독 계정을 연결하세요.")).font(m.font(.label)).foregroundStyle(theme.muted)
             } else {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: m(8)), GridItem(.flexible(), spacing: m(8))], spacing: m(8)) {
-                    ForEach(rows.prefix(4)) { weeklyRow($0) }
+                    ForEach(shown) { weeklyRow($0) }
                 }
             }
         }
     }
     private func weeklyRow(_ q: AccountQuota) -> some View {
-        let w = q.windows.first { $0.label == "주간" }
+        let w = q.representativeWindow, weekly = w?.isWeekly == true
         let account = model.snapshot?.weekly_usage?.accounts.first { $0.id == q.id }
         let p = account?.periods[model.selectedPeriod]
         let color = AgentPalette.color(q.kind)
-        let rate = model.fresh && !q.stale ? p?.burnPerHour : nil
-        let handle = q.account_label.split(separator: "@").first.map(String.init) ?? q.account_label
+        // A 5-hour or monthly window, or an unverified pool, shows its value without a weekly burn rate.
+        let rate = model.fresh && !q.stale && q.burnAllowed ? p?.burnPerHour : nil
+        let name = q.account_label.split(separator: "@").first.map(String.init) ?? q.account_label
+        // An Agy pool's long name sits under the tool name instead of on a chip. Where no weekly burn rate
+        // is measured, the window's own label ("5H", "주간") takes the rate's place; an old value keeps it on the left.
+        let handle = (q.stale && !weekly && w != nil ? tr(w!.label) + " · " : "") + (q.pool ?? name)
+        let status = q.stale ? tr(q.statusLabel) : rate != nil ? rate1(rate, tr) : weekly && q.identity_verified != false ? tr("수집 중") : tr(w?.label ?? "값 없음")
         let end = model.snapshot?.updated ?? model.now.timeIntervalSince1970, start = end - (periodSeconds[model.selectedPeriod] ?? 3600)
         let points = weeklyPoints(account, start: start, end: end)
         return Button { selectedAccount = q } label: {
@@ -601,6 +650,7 @@ struct QuickDashboard: View {
                 HStack(alignment: .firstTextBaseline, spacing: m(5)) {
                     Circle().fill(color).frame(width: m(6), height: m(6)).alignmentGuide(.firstTextBaseline) { $0[.bottom] - m(1) }
                     Text(toolName(q.kind)).font(m.font(.body, .semibold)).lineLimit(1).fixedSize()
+                    if q.pool == nil { accountChip(q.id) }
                     Spacer(minLength: m(4))
                     Text(pct1(w?.pct)).font(m.font(.figure, .semibold)).monospacedDigit().fixedSize()
                         .foregroundStyle(q.stale ? theme.muted : theme.ink)
@@ -612,7 +662,7 @@ struct QuickDashboard: View {
                         .frame(width: m(78), alignment: .leading)
                     WeeklySpark(points: points, start: start, end: end, color: color, faded: q.stale, m: m)
                         .frame(maxWidth: .infinity).frame(height: m(14))
-                    Text(q.stale ? q.statusLabel : rate == nil ? "수집 중" : rate1(rate))
+                    Text(status)
                         .font(m.font(.caption, .medium)).foregroundStyle(q.stale ? theme.amber : color).lineLimit(1)
                         .frame(width: m(54), alignment: .trailing)
                 }
@@ -620,8 +670,10 @@ struct QuickDashboard: View {
             .padding(.horizontal, m(10)).padding(.vertical, m(8)).frame(maxWidth: .infinity)
             .background(color.opacity(theme.light ? 0.08 : 0.07), in: RoundedRectangle(cornerRadius: m(8)))
             .contentShape(RoundedRectangle(cornerRadius: m(8)))
-        }.buttonStyle(.plain).accessibilityLabel("\(toolName(q.kind)) \(q.account_label) 주간 한도 \(pct1(w?.pct))")
-            .help("\(q.account_label) · \(q.plan ?? "")\n선: \(periodLabel) 동안의 주간 한도 사용률\n오른쪽 아래: 같은 기간 평균 소진 속도\n클릭하면 5시간 한도와 초기화 시각을 확인합니다.")
+        }.buttonStyle(.plain).accessibilityLabel("\(toolName(q.kind)) \(q.account_label) \(weekly ? tr("주간 한도") : tr(w?.label ?? "계정 한도")) \(pct1(w?.pct))")
+            .help("\(q.account_label) · \(q.plan ?? "")\n" + tr.pick("선: \(periodLabel) 동안의 주간 한도 사용률\n오른쪽 아래: 같은 기간 평균 소진 속도\n클릭하면 5시간 한도와 초기화 시각을 확인합니다.",
+                                                                     "Line: weekly limit used, \(periodLabel)\nBottom right: average burn rate over the same period\nClick to see the 5-hour limit and reset times.",
+                                                                     "线：\(periodLabel)的每周额度使用率\n右下：同一时段的平均消耗速度\n点击查看 5 小时额度和重置时间。"))
     }
 
     // MARK: Resources
@@ -633,7 +685,7 @@ struct QuickDashboard: View {
     }
     private func resource(_ label: String, value: Double?) -> some View {
         HStack(spacing: m(7)) {
-            Text(label).foregroundStyle(theme.muted)
+            Text(tr(label)).foregroundStyle(theme.muted)
             GeometryReader { geo in
                 Capsule().fill(theme.line).overlay(alignment: .leading) {
                     Capsule().fill((value ?? 0) > 90 ? theme.amber : theme.segmentOn)
@@ -641,7 +693,7 @@ struct QuickDashboard: View {
                 }
             }.frame(height: m(3))
             Text(DesktopFormat.percent(value)).monospacedDigit().frame(width: m(34), alignment: .trailing)
-        }.font(m.font(.label)).help("\(label) · 이 Mac 전체 사용률 \(DesktopFormat.percent(value))")
+        }.font(m.font(.label)).help("\(tr(label)) · \(tr.pick("이 Mac 전체 사용률", "Total use on this Mac", "这台 Mac 的总使用率")) \(DesktopFormat.percent(value))")
     }
 
     // MARK: Sessions
@@ -663,25 +715,25 @@ struct QuickDashboard: View {
     private var sessionList: some View {
         VStack(spacing: 0) {
             HStack(spacing: m(8)) {
-                Text("세션").font(m.font(.body, .semibold))
+                Text(tr("세션")).font(m.font(.body, .semibold))
                 Text("\(model.sessions.count)").font(m.font(.label, .semibold)).monospacedDigit().foregroundStyle(theme.muted)
                     .padding(.horizontal, m(6)).frame(height: m(18)).background(theme.raised, in: RoundedRectangle(cornerRadius: m(5)))
                 HStack(spacing: m(5)) {
                     if model.fresh { WorkingWave(color: theme.segmentOn, size: m(9)) } else { Circle().fill(theme.amber).frame(width: m(6), height: m(6)) }
-                    Text(model.fresh ? "작업 중 \(model.working)" : "마지막 기록")
+                    Text(model.fresh ? tr.working(model.working) : tr("마지막 기록"))
                 }.font(m.font(.label, .medium)).foregroundStyle(model.fresh ? theme.ink : theme.amber).padding(.leading, m(4))
                 Spacer(minLength: m(4))
-                Text(tokensMode ? "토큰" : "주간 한도 사용량").font(m.font(.caption)).foregroundStyle(theme.muted)
+                Text(tr(tokensMode ? "토큰" : "주간 한도 사용량")).font(m.font(.caption)).foregroundStyle(theme.muted)
                     .fixedSize().frame(width: m(Self.valueColumn), alignment: .trailing)
                 Color.clear.frame(width: m(55), height: 1)
             }.padding(.horizontal, m(16)).padding(.vertical, m(8))
                 .overlay(alignment: .top) { Rectangle().fill(theme.line).frame(height: 1) }
-                .help("작업 중인 세션부터 표시합니다. 아래로 스크롤하면 모든 세션을 볼 수 있습니다.")
+                .help(tr("작업 중인 세션부터 표시합니다. 아래로 스크롤하면 모든 세션을 볼 수 있습니다."))
             if model.sessions.isEmpty {
                 VStack(spacing: m(6)) {
                     Image(systemName: "terminal").font(m.font(.display)).foregroundStyle(theme.muted)
-                    Text(model.snapshot?.ready == true ? "감지된 AI 세션이 없습니다" : "로컬 세션을 확인하고 있습니다").font(m.font(.title))
-                    Text("실행 중인 AI 세션이 여기에 표시됩니다.").font(m.font(.label)).foregroundStyle(theme.muted)
+                    Text(tr(model.snapshot?.ready == true ? "감지된 AI 세션이 없습니다" : "로컬 세션을 확인하고 있습니다")).font(m.font(.title))
+                    Text(tr("실행 중인 AI 세션이 여기에 표시됩니다.")).font(m.font(.label)).foregroundStyle(theme.muted)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 let rows = orderedSessions
@@ -722,19 +774,19 @@ struct QuickDashboard: View {
         let quota = model.snapshot?.account_quotas?.first { $0.id == s.usage?.weekly_account }
         let estimate = s.usage?.weekly_estimate?[model.selectedPeriod]
         let burn = sessionPace(s)
-        let pending = !model.fresh ? "마지막 기록" : quota?.stale == true ? (quota?.statusLabel ?? "한도 조회 대기") : s.usage?.weekly_account == nil ? "계정 연결 필요" : "환산 기준 수집 중"
-        let project = s.project == "0" ? "Aside 기본 작업공간" : (s.project ?? s.kind)
+        let pending = tr(!model.fresh ? "마지막 기록" : quota?.stale == true ? (quota?.statusLabel ?? "한도 조회 대기") : s.usage?.weekly_account == nil ? "계정 연결 필요" : "환산 기준 수집 중")
+        let project = s.project == "0" ? tr("Aside 기본 작업공간") : (s.project ?? s.kind)
         let tool = s.kind == "Aside" ? (s.model ?? "Aside") : toolName(s.kind)
-        var helpLines = [project, "\(s.locationLabel) · \(s.model ?? s.kind)" + (s.reportedEffort.map { " · effort \($0)" } ?? ""), s.groupStateLabel]
+        var helpLines = [project, "\(tr(s.locationLabel)) · \(s.model ?? s.kind)" + (s.reportedEffort.map { " · effort \($0)" } ?? ""), tr(s.groupStateLabel)]
         if let title = s.title { helpLines.append(title) }
         let hub = s.isWorkingGroup ? theme.segmentOn : s.state == "waiting" ? theme.amber : theme.dim
         // Small, typed pieces: older Swift compilers time out type-checking this row as one expression.
-        let paceText: String = burn.map { tokensMode ? shortNumber($0) + " tokens/시간" : rate1($0) } ?? "확인 중"
-        let gaugeText: String = burn.map { tokensMode ? shortNumber($0) + "/시간" : rate1($0) } ?? "—"
+        let paceText: String = burn.map { tokensMode ? shortNumber($0) + " tokens" + tr.perHour : rate1($0, tr) } ?? tr("확인 중")
+        let gaugeText: String = burn.map { tokensMode ? shortNumber($0) + tr.perHour : rate1($0, tr) } ?? "—"
         let gaugeInk: Color = burn == nil ? theme.dim : burn == 0 ? theme.muted : theme.ink
         let pendingLine: String = burn == nil && !tokensMode ? "\n" + pending : ""
-        let paceHelp: String = s.groupStateLabel + "\n지금 속도: " + paceText + " · 최근 60초의 토큰 속도로 계속 쓸 때" + pendingLine
-        let paceLabel: String = s.groupStateLabel + ", 지금 속도 " + paceText
+        let paceHelp: String = tr(s.groupStateLabel) + "\n" + tr("지금 속도") + ": " + paceText + " · " + tr("최근 60초의 토큰 속도로 계속 쓸 때") + pendingLine
+        let paceLabel: String = tr(s.groupStateLabel) + ", " + tr("지금 속도") + " " + paceText
         let gauge = MiniGauge(value: burn, scale: paceScale, color: AgentPalette.color(s.kind), hub: hub, theme: theme, m: m)
         return HStack(alignment: .center, spacing: m(9)) {
             paceCell(gauge: gauge, text: gaugeText, ink: gaugeInk, help: paceHelp, label: paceLabel)
@@ -742,14 +794,15 @@ struct QuickDashboard: View {
                 HStack(spacing: m(6)) {
                     Text(sessionName(s)).font(m.font(.title, .semibold)).lineLimit(1)
                     if let count = s.children_count, count > 0 {
-                        Text("하위 \(count)").font(m.font(.caption)).foregroundStyle(theme.muted).padding(.horizontal, m(5)).frame(height: m(16))
+                        Text(tr.children(count)).font(m.font(.caption)).foregroundStyle(theme.muted).padding(.horizontal, m(5)).frame(height: m(16))
                             .overlay(Capsule().stroke(theme.line)).fixedSize()
-                            .help("하위 \(count)개 세션의 사용량을 포함합니다. 제어 버튼은 상위 세션에 적용됩니다." +
-                                  (s.group_usage_partial == true ? " 일부 하위 세션의 토큰은 미보고 상태입니다." : ""))
+                            .help(tr.pick("하위 \(count)개 세션의 사용량을 포함합니다. 제어 버튼은 상위 세션에 적용됩니다.", "Includes the usage of \(count) subsessions. Controls apply to the root session.", "包含 \(count) 个子会话的用量。控制按钮作用于上级会话。") +
+                                  (s.group_usage_partial == true ? " " + tr("일부 하위 세션의 토큰은 미보고 상태입니다.") : ""))
                     }
                 }
                 HStack(spacing: m(4)) {
                     Text(tool).foregroundStyle(AgentPalette.color(s.kind))
+                    accountChip(s.usage?.weekly_estimate?[model.selectedPeriod]?.account_id ?? s.usage?.weekly_account)
                     Text("· " + project).foregroundStyle(theme.muted)
                 }.font(m.font(.label)).lineLimit(1)
             }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
@@ -758,21 +811,21 @@ struct QuickDashboard: View {
             Text(value).font(m.font(.title, .semibold)).monospacedDigit().lineLimit(1)
                 .foregroundStyle(value == "—" ? theme.dim : theme.ink)
                 .frame(width: m(Self.valueColumn), alignment: .trailing)
-                .help(tokensMode ? "\(periodLabel) 동안 이 세션이 쓴 토큰" :
-                      "≈ \(periodLabel) 동안 이 세션이 쓴 토큰을 계정의 주간 한도로 환산한 추정치" +
-                      (estimate == nil ? "\n" + pending : "\n" + (estimate?.calculationLabel ?? "")))
+                .help(tokensMode ? tr.pick("\(periodLabel) 동안 이 세션이 쓴 토큰", "Tokens this session used, \(periodLabel)", "此会话在\(periodLabel)使用的 token") :
+                      tr.pick("≈ \(periodLabel) 동안 이 세션이 쓴 토큰을 계정의 주간 한도로 환산한 추정치", "≈ This session’s tokens, \(periodLabel), converted to the account’s weekly limit", "≈ 将此会话在\(periodLabel)使用的 token 换算为账户每周额度的估算值") +
+                      (estimate == nil ? "\n" + pending : "\n" + tr(estimate?.calculationLabel ?? "")))
             Button { control("focus", s) } label: { Image(systemName: "arrow.up.right").font(m.font(.body, .medium)).frame(width: m(24), height: m(24)) }
                 .buttonStyle(.plain).foregroundStyle(theme.muted).disabled(!model.fresh || model.busy || !s.allows("focus"))
-                .accessibilityLabel("\(sessionName(s)) 바로가기")
+                .accessibilityLabel("\(sessionName(s)) \(tr("바로가기"))")
             Menu {
-                Button("터미널 바로가기") { control("focus", s) }.disabled(!s.allows("focus"))
-                Button("작업 일시정지…") { control("pause", s) }.disabled(!s.allows("pause"))
-                Button("새 요청으로 재개…") { control("resume", s) }.disabled(!s.allows("resume"))
+                Button(tr("터미널 바로가기")) { control("focus", s) }.disabled(!s.allows("focus"))
+                Button(tr("작업 일시정지…")) { control("pause", s) }.disabled(!s.allows("pause"))
+                Button(tr("새 요청으로 재개…")) { control("resume", s) }.disabled(!s.allows("resume"))
                 Divider()
-                Button("CLI 종료…", role: .destructive) { control("terminate", s) }.disabled(!s.allows("terminate"))
+                Button(tr("CLI 종료…"), role: .destructive) { control("terminate", s) }.disabled(!s.allows("terminate"))
             } label: { Image(systemName: "ellipsis").font(m.font(.body, .semibold)) }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: m(22))
-                .disabled(!model.fresh || model.busy).accessibilityLabel("\(sessionName(s)) 세션 제어")
+                .disabled(!model.fresh || model.busy).accessibilityLabel("\(sessionName(s)) \(tr("세션 제어"))")
         }.padding(.horizontal, m(16)).frame(height: m(46))
             .background(hoveredSession == s.id ? theme.raised.opacity(0.6) : .clear)
             .onHover { hoveredSession = $0 ? s.id : nil }
@@ -784,19 +837,45 @@ struct QuickDashboard: View {
             Button(action: openDashboard) {
                 HStack(spacing: m(8)) {
                     Image(systemName: "rectangle.inset.filled").font(m.font(.body))
-                    Text("전체 대시보드").font(m.font(.body, .semibold))
+                    Text(tr("전체 대시보드")).font(m.font(.body, .semibold))
                     Spacer()
                     Text("⌘O").font(m.font(.label)).foregroundStyle(theme.muted)
                 }.padding(.horizontal, m(12)).frame(height: m(32))
                     .background(theme.card, in: RoundedRectangle(cornerRadius: m(8))).overlay(RoundedRectangle(cornerRadius: m(8)).stroke(theme.line))
                     .contentShape(RoundedRectangle(cornerRadius: m(8)))
-            }.buttonStyle(.plain).accessibilityLabel("전체 대시보드 열기")
+            }.buttonStyle(.plain).accessibilityLabel(tr("전체 대시보드 열기"))
             Button(action: openBrowser) {
                 Image(systemName: "safari").font(m.font(.title)).frame(width: m(32), height: m(32))
                     .background(theme.card, in: RoundedRectangle(cornerRadius: m(8))).overlay(RoundedRectangle(cornerRadius: m(8)).stroke(theme.line))
-            }.buttonStyle(.plain).help("브라우저에서 열기").accessibilityLabel("브라우저에서 열기")
+            }.buttonStyle(.plain).help(tr("브라우저에서 열기")).accessibilityLabel(tr("브라우저에서 열기"))
         }.padding(.horizontal, m(14)).padding(.vertical, m(10))
             .overlay(alignment: .top) { Rectangle().fill(theme.line).frame(height: 1) }
+    }
+    /// Several accounts of one tool are numbered by account name (Claude Code 1, 2), so a session and
+    /// its account's limit tile match at a glance. A tool with one account shows no number.
+    private var accountNumbers: [String: Int] {
+        let quotas = model.snapshot?.account_quotas ?? []
+        var out: [String: Int] = [:]
+        // Pools of one Agy installation carry their own names, so they are not numbered.
+        for kind in Set(quotas.filter { $0.pool == nil }.map(\.kind)) {
+            let list = quotas.filter { $0.kind == kind && $0.pool == nil }.sorted { $0.account_label.lowercased() < $1.account_label.lowercased() }
+            if list.count > 1 { for (i, q) in list.enumerated() { out[q.id] = i + 1 } }
+        }
+        return out
+    }
+    @ViewBuilder private func accountChip(_ id: String?) -> some View {
+        let quota = model.snapshot?.account_quotas?.first { $0.id == id }
+        if let alias = quota?.displayName {
+            Text(alias).font(m.font(.caption, .semibold)).foregroundStyle(theme.ink).lineLimit(1)
+                .padding(.horizontal, m(5)).frame(minHeight: m(15))
+                .background(theme.raised, in: RoundedRectangle(cornerRadius: m(4))).fixedSize()
+                .help(quota?.account_label ?? "")
+        } else if let id, let n = accountNumbers[id] {
+            Text("\(n)").font(m.font(.caption, .semibold)).monospacedDigit().foregroundStyle(theme.ink)
+                .padding(.horizontal, m(4)).frame(minWidth: m(15), minHeight: m(15))
+                .background(theme.raised, in: RoundedRectangle(cornerRadius: m(4))).fixedSize()
+                .help(model.snapshot?.account_quotas?.first { $0.id == id }?.account_label ?? "")
+        }
     }
     private func compactQuota(_ quota: AccountQuota) -> some View {
         let tint = AgentPalette.color(quota.kind)
@@ -804,10 +883,11 @@ struct QuickDashboard: View {
             HStack(spacing: m(7)) {
                 RoundedRectangle(cornerRadius: m(2)).fill(tint).frame(width: m(5), height: m(13))
                 Text(toolName(quota.kind)).font(m.font(.title, .semibold))
+                accountChip(quota.id)
                 Text(quota.plan ?? "").font(m.font(.caption, .medium)).foregroundStyle(tint)
                 Spacer()
                 Circle().fill(quota.stale ? theme.amber : theme.segmentOn).frame(width: m(5), height: m(5))
-                Text(quota.statusLabel).font(m.font(.caption)).foregroundStyle(quota.stale ? theme.amber : theme.muted)
+                Text(tr(quota.statusLabel)).font(m.font(.caption)).foregroundStyle(quota.stale ? theme.amber : theme.muted)
             }
             Text(quota.account_label).font(m.font(.label)).foregroundStyle(theme.muted).lineLimit(1)
                 .help(quota.account_label + " · " + quota.id.suffix(6))
@@ -815,8 +895,8 @@ struct QuickDashboard: View {
                 ForEach(quota.windows) { window in
                     VStack(alignment: .leading, spacing: m(4)) {
                         HStack {
-                            Text(window.label).foregroundStyle(theme.muted); Spacer()
-                            Text(window.pct.map { DesktopFormat.percent($0) } ?? "미확인").monospacedDigit()
+                            Text(tr(window.label)).foregroundStyle(theme.muted); Spacer()
+                            Text(window.pct.map { DesktopFormat.percent($0) } ?? tr("미확인")).monospacedDigit()
                         }.font(m.font(.body, .medium))
                         GeometryReader { geo in
                             Capsule().fill(theme.line).overlay(alignment: .leading) {
@@ -824,39 +904,40 @@ struct QuickDashboard: View {
                                     Capsule().fill(pct >= 90 ? theme.amber : tint).frame(width: geo.size.width * min(100, max(0, pct)) / 100)
                                 }
                             }
-                        }.frame(height: m(3)).accessibilityLabel(window.pct == nil ? "사용률 미확인" : "사용률 \(Int(window.pct ?? 0))퍼센트")
+                        }.frame(height: m(3)).accessibilityLabel(window.pct == nil ? tr("사용률 미확인") : tr.pick("사용률 \(Int(window.pct ?? 0))퍼센트", "\(Int(window.pct ?? 0)) percent used", "已用 \(Int(window.pct ?? 0))%"))
                         Text(resetLabel(window.reset)).font(m.font(.caption)).foregroundStyle(theme.muted).lineLimit(1)
                     }.frame(maxWidth: .infinity)
                 }
             }.padding(.top, m(2))
             if quota.stale, quota.status != nil {
-                Text(quota.note).font(m.font(.caption)).foregroundStyle(theme.amber).fixedSize(horizontal: false, vertical: true)
+                Text(tr(quota.note)).font(m.font(.caption)).foregroundStyle(theme.amber).fixedSize(horizontal: false, vertical: true)
             }
             if quota.needsReconnect { reconnectButton(quota) }
+            AccountNameField(quota: quota, model: model, m: m, theme: theme, tr: tr)
         }.padding(.horizontal, m(12)).padding(.vertical, m(10))
             .background(theme.card, in: RoundedRectangle(cornerRadius: m(8)))
             .overlay(RoundedRectangle(cornerRadius: m(8)).stroke(theme.line))
-            .help(quota.note + (quota.updated > 0 ? " · " + Date(timeIntervalSince1970: quota.updated).formatted(date: .omitted, time: .shortened) : ""))
+            .help(tr(quota.note) + (quota.updated > 0 ? " · " + Date(timeIntervalSince1970: quota.updated).formatted(date: .omitted, time: .shortened) : ""))
     }
     /// macOS asks once for the saved sign-in; the button stays off while that question is open.
     private func reconnectButton(_ quota: AccountQuota) -> some View {
         let waiting = model.authorizing == quota.id
         return VStack(alignment: .leading, spacing: m(4)) {
             Button { model.authorizeAccount(quota.id) } label: {
-                Text(waiting ? "macOS 승인 기다리는 중…" : "다시 연결").font(m.font(.label, .semibold))
+                Text(tr(waiting ? "macOS 승인 기다리는 중…" : "다시 연결")).font(m.font(.label, .semibold))
                     .padding(.horizontal, m(10)).frame(height: m(26))
                     .background(theme.raised, in: RoundedRectangle(cornerRadius: m(6)))
             }.buttonStyle(.plain).disabled(model.authorizing != nil || !model.fresh)
-            Text("macOS가 저장된 로그인 사용을 한 번 묻습니다. 다시 묻지 않습니다.").font(m.font(.caption)).foregroundStyle(theme.muted)
+            Text(tr("macOS가 저장된 로그인 사용을 한 번 묻습니다. 다시 묻지 않습니다.")).font(m.font(.caption)).foregroundStyle(theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }.padding(.top, m(2))
     }
     private func resetLabel(_ reset: Double) -> String {
-        guard reset > 0 else { return "초기화 시각 미보고" }
+        guard reset > 0 else { return tr("초기화 시각 미보고") }
         let minutes = Int(ceil((reset - model.now.timeIntervalSince1970) / 60))
-        if minutes <= 0 { return "초기화 보고 대기" }
-        if minutes >= 1440 { return "\(minutes / 1440)일 \((minutes % 1440) / 60)시간 후 초기화" }
-        return minutes >= 60 ? "\(minutes / 60)시간 \(minutes % 60)분 후 초기화" : "\(minutes)분 후 초기화"
+        if minutes <= 0 { return tr("초기화 보고 대기") }
+        if minutes >= 1440 { return tr.resetsIn(days: minutes / 1440, hours: (minutes % 1440) / 60, minutes: 0) }
+        return tr.resetsIn(days: 0, hours: minutes / 60, minutes: minutes % 60)
     }
 }
 
@@ -876,4 +957,27 @@ private struct WorkingWave: View {
             }.frame(width: size, height: size, alignment: .bottom)
         }.accessibilityHidden(true)
     }
+}
+
+/// Renames an account from its detail: up to 24 characters, saved empty to go back to the number.
+private struct AccountNameField: View {
+    let quota: AccountQuota
+    @ObservedObject var model: DashboardModel
+    let m: QuickMetrics
+    let theme: QuickTheme
+    let tr: QuickText
+    @State private var name = ""
+    var body: some View {
+        HStack(spacing: m(6)) {
+            TextField(tr("계정 이름(24자, 비우면 번호)"), text: $name)
+                .textFieldStyle(.roundedBorder).font(m.font(.label))
+                .onChange(of: name) { value in if value.count > 24 { name = String(value.prefix(24)) } }
+                .onSubmit(save)
+            Button(tr("저장"), action: save).controlSize(.small)
+                .disabled(model.busy || !model.fresh || name.trimmingCharacters(in: .whitespaces) == (quota.alias ?? ""))
+        }
+        .padding(.top, m(2))
+        .onAppear { name = quota.alias ?? "" }
+    }
+    private func save() { model.renameAccount(quota.id, to: name) }
 }

@@ -42,7 +42,7 @@ class CustomTimeRanges(unittest.TestCase):
                              {'tokens': 100, 'used_pp': 1, 'seconds': 300, 'pp_per_token': .01}}]}}
 
     def event(self, age, n, sid, account='a'):
-        self.db.execute('INSERT INTO events VALUES(?,?,?,?,?,?,?,?)',
+        self.db.execute('INSERT INTO events(t,sid,kind,fresh,cached,written,output,account) VALUES(?,?,?,?,?,?,?,?)',
                         (self.now-age, sid, 'Codex', n, 0, 0, 0, account))
         self.db.commit()
 
@@ -74,6 +74,19 @@ class CustomTimeRanges(unittest.TestCase):
         self.assertEqual(long['period_usage']['windows'][-1]['tokens'][0], 125)
         self.assertLessEqual(len(long['events']), 241)
         self.assertLessEqual((long['chart_range']['end']-long['chart_range']['start'])/long['chart_range']['step'], 240)
+
+    def test_custom_and_all_model_breakdown_include_absent_sessions(self):
+        self.db.execute('ALTER TABLE events ADD COLUMN model TEXT')
+        self.db.execute("UPDATE events SET model='gpt-6-astra'")
+        self.event(100,7,'closed')
+        self.db.execute("UPDATE events SET model='gpt-6.1-sol' WHERE sid='closed'")
+        for key in ('custom:129600','all'):
+            result=extend_snapshot(self.db,self.snapshot,key)
+            window=result['period_usage']['windows'][-1]
+            rows=window['by_model']
+            self.assertEqual(next(r for r in rows if r['model']=='gpt-6.1-sol')['tokens'],[7,0,0,0])
+            self.assertEqual([sum(r['tokens'][i] for r in rows) for i in range(4)],window['tokens'])
+            self.assertNotIn('closed',[s['id'] for s in result['sessions']])
 
     def test_earlier_account_is_never_assigned_to_current_account(self):
         self.event(27*3600, 5, 'root', 'different-account')

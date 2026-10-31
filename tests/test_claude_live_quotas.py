@@ -78,6 +78,23 @@ class ClaudeLiveQuotaTests(unittest.TestCase):
         self.assertEqual(row['status'],'invalid_response');self.assertTrue(row['stale'])
         self.assertTrue(all(w['pct'] is None for w in row['windows']))
 
+    def test_rejected_unexpired_managed_login_refreshes_once_then_verifies_owner(self):
+        rejected=urllib.error.HTTPError('https://api.anthropic.com/api/oauth/usage',401,'rejected',{},None)
+        self.claude_usage.side_effect=[rejected,self.usage]
+        renewed={**self.credentials,'accessToken':'renewed'}
+        with patch('onetop.accounts.managed',return_value=True),patch('onetop.accounts.refresh_managed',return_value=renewed) as refresh:
+            row=self.sampler.claude_live(self.root,1000)
+        self.assertFalse(row['stale']);refresh.assert_called_once_with(self.root,1000,force=True)
+        self.assertEqual(self.claude_identity.call_args.args,('renewed',))
+
+    def test_repeated_401_keeps_last_quota_and_backs_off_without_refresh_loop(self):
+        self.sampler.cached[self.key]={'updated':100,'windows':[{'label':'주간','pct':22,'reset':9000}]}
+        self.claude_usage.side_effect=lambda _: (_ for _ in ()).throw(urllib.error.HTTPError('https://api.anthropic.com/api/oauth/usage',401,'rejected',{},None))
+        with patch('onetop.accounts.managed',return_value=True),patch('onetop.accounts.refresh_managed',return_value=self.credentials) as refresh:
+            row=self.sampler.claude_live(self.root,1000);self.sampler.claude_live(self.root,1001)
+        refresh.assert_called_once();self.assertEqual(self.claude_usage.call_count,2)
+        self.assertEqual(row['windows'][0]['pct'],22);self.assertEqual(row['status'],'login_required')
+
     def test_failed_old_profile_does_not_skip_enrolled_profile_with_recent_cache(self):
         other=self.root/'enrolled';other.mkdir()
         (other/'.claude.json').write_text((self.root/'.claude.json').read_text())

@@ -7,8 +7,10 @@
   const w=state?.period_usage?.windows?.find(p=>p.key===key);
   const local=sum(w?.tokens),rows=[],seen=new Set();
   const known=local!==null&&(local>0||state?.period_usage?.known_kinds?.length>0);
-  let expected=1;
-  if(known&&now-state.updated<=20&&!state.error)rows.push({tokens:local,seconds:key==='all'?Math.max(1,now-(state.history_started??state.started)):w.seconds,partial:w.partial});
+  // The 1top.si remote workspace's totals already add up several computers: period_usage.computers out of .expected.
+  const covers=state?.period_usage?.computers??1;
+  let expected=state?.period_usage?.expected??1;
+  if(known&&now-state.updated<=20&&!state.error)rows.push({tokens:local,seconds:key==='all'?Math.max(1,now-(state.history_started??state.started)):w.seconds,partial:w.partial,computers:covers});
   for(const device of state?.workspace_usage?.devices||[]){
    if(!device.id||seen.has(device.id))continue;seen.add(device.id);
    if(!device.online||now-device.received/1000>90)continue;
@@ -19,9 +21,14 @@
   const seconds=key==='all'?Math.max(0,...rows.map(r=>r.seconds)):w?.seconds;
   const tokens=rows.reduce((n,r)=>n+r.tokens,0);
   return {tokens:rows.length?tokens:null,rate:rows.length&&seconds>0?tokens/seconds:null,
-   seconds,computers:rows.length,expected,partial:rows.length<expected||rows.some(r=>r.partial)};
+   seconds,computers:rows.reduce((n,r)=>n+(r.computers??1),0),expected,partial:rows.reduce((n,r)=>n+(r.computers??1),0)<expected||rows.some(r=>r.partial)};
  }
  function niceMax(value){if(!valid(value)||value===0)return 1;const power=10**Math.floor(Math.log10(value));return [1,2,5,10].map(n=>n*power).find(n=>n>=value)||10*power;}
+ // The dial's resting full scale by period: longer periods hold more idle time, so their hourly
+ // average runs lower. Up to an hour 200M, up to a week 100M, beyond that 50M tokens per hour.
+ function baseMax(seconds){return !valid(seconds)||seconds<=3600?2e8:seconds<=604800?1e8:5e7;}
+ // The full scale for a reading: the period's resting scale, raised to a 1-2-5 step when exceeded.
+ function scaleMax(rate,seconds){return Math.max(baseMax(seconds),valid(rate)?niceMax(rate):0);}
 
  /* Instrument face for the speed panel: a 252×196 SVG drawn from the same rate and
     scale as before. 'sweep' is the segment tachometer, 'scope' adds the selected
@@ -107,11 +114,15 @@
  // Only shown while tokens flow.
  function motion(style){
   if(style==='scope')return `<g class="fs-radar" data-radar>${Array.from({length:12},(_,j)=>`<path d="${sector(126,98,50,88,-90-(j+1)*4,-90-j*4)}" opacity="${n2(.26*(1-j/12)**1.6)}"/>`).join('')}<line x1="126" y1="48" x2="126" y2="8" class="fs-beam fs-glow"/></g>`;
-  return `<g class="fs-scanner">${Array.from({length:6},(_,j)=>`<path d="${arc(126,108,63,266,274)}" class="fs-scan${j?'':' fs-glow'}" style="animation-delay:${n2(-.72+j*.12)}s" opacity="${n2((1-j/6)**1.5)}"/>`).join('')}</g>`;
+  // 18 copies 0.04 s apart: at the sweep's fastest (about 120°/s) they sit about 5° apart, under the
+  // 8° arc, so the trail reads as one continuous fade with no gaps. The tail is a little fainter so
+  // the overlaps don't add up to a brighter band.
+  return `<g class="fs-scanner">${Array.from({length:18},(_,j)=>`<path d="${arc(126,108,63,266,274)}" class="fs-scan${j?'':' fs-glow'}" style="animation-delay:${n2(-.72+j*.04)}s" opacity="${n2(j?.72*(1-j/18)**1.6:1)}"/>`).join('')}</g>`;
  }
  // Bloom in each element's own colour, as in the cockpit candidates.
  const glowFilter='<filter id="fsGlow" filterUnits="userSpaceOnUse" x="-12" y="-12" width="276" height="220" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="2.3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
  function instrument(o){return (o.style==='scope'?'':face(o))+(o.rate>0?motion(o.style):'')+(o.style==='scope'?face(o):'');}
- const api={measure,niceMax,instrument,face,motion,glowFilter,digits};
+ // seg7 also draws the reading in the Windows tray's quick view.
+ const api={measure,niceMax,baseMax,scaleMax,instrument,face,motion,glowFilter,digits,seg7};
  if(typeof module!=='undefined')module.exports=api;else root.OneTopSpeed=api;
 })(typeof window==='undefined'?globalThis:window);

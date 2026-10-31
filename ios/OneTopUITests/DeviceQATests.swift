@@ -90,12 +90,14 @@ final class DeviceQATests: XCTestCase {
         XCTAssertEqual(toggle.value as? String, look, "Theme did not become \(look)")
     }
 
-    /// The header's one-tap language choice.
+    /// The header's one-tap language button: each tap moves on 한 → EN → 中, so tap until it shows `code`.
     private func showLanguage(_ app: XCUIApplication, _ code: String) {
-        let segment = app.buttons["header-language-" + code]
-        tapWhenReady(segment, "Language \(code)")
-        XCTAssertTrue(wait(segment, "isSelected == true", timeout: 5), "Language \(code) not selected")
-        sleep(1)
+        let button = app.buttons["header-language"]
+        for _ in 0..<3 where (button.value as? String) != code {
+            tapWhenReady(button, "Language button")
+            sleep(1)  // the reveal takes half a second
+        }
+        XCTAssertEqual(button.value as? String, code, "Language \(code) not shown")
     }
 
     /// The System theme is only in Workspace settings; choose it there and come back.
@@ -164,12 +166,9 @@ final class DeviceQATests: XCTestCase {
         let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'session-'")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         row.tap()
-        XCTAssertTrue(app.buttons["작업 제어"].waitForExistence(timeout: 10), "Session detail did not open")
+        XCTAssertTrue(element(app, "work-status").waitForExistence(timeout: 10), "Session conversation did not open")
         sleep(3)
-        shot(app, "05f-detail-messages")
-        app.buttons["작업 제어"].tap()
-        sleep(1)
-        shot(app, "05g-detail-controls")
+        shot(app, "05f-conversation")
         // Open one confirmation and close it. The QA guard refuses this session even if tapped.
         let control = ["control-pause", "control-focus", "control-resume", "control-terminate"]
             .map { element(app, $0) }.first { $0.exists && $0.isEnabled }
@@ -198,8 +197,7 @@ final class DeviceQATests: XCTestCase {
     func test07_ComputerWithoutRemoteControl() {
         let app = launch(["--demo", "-screenDetail", "m1"])
         XCTAssertTrue(element(app, "control-off").waitForExistence(timeout: 10), "No notice for a computer without remote control")
-        XCTAssertFalse(app.buttons["작업 제어"].exists, "Pane picker shown")
-        XCTAssertFalse(element(app, "control-pause").exists || element(app, "instruction").exists || element(app, "mail-draft").exists, "A control is offered")
+        XCTAssertFalse(element(app, "control-pause").exists || element(app, "mail-draft").exists || element(app, "photo-pick").exists, "A control is offered")
         shot(app, "07-control-off")
     }
 
@@ -221,7 +219,7 @@ final class DeviceQATests: XCTestCase {
         // Choose a computer and a period, and scroll a little; the changes below must keep them.
         tapWhenReady(element(app, "period-5h"), "5h")
         tapWhenReady(connection, "Computer menu")
-        tapWhenReady(app.buttons["scope-demo-mini"], "Mac mini")
+        tapWhenReady(app.buttons["scope-demo-1"], "Mac mini")
         app.swipeUp(velocity: .slow)
         sleep(1)
         let row = app.buttons["session-m1"]
@@ -245,7 +243,7 @@ final class DeviceQATests: XCTestCase {
         app.launch()
         XCTAssertTrue(toggle.waitForExistence(timeout: 10))
         XCTAssertEqual(toggle.value as? String, "light", "Theme not kept after relaunch")
-        XCTAssertTrue(app.buttons["header-language-zh"].isSelected, "Language not kept after relaunch")
+        XCTAssertEqual(app.buttons["header-language"].value as? String, "zh", "Language not kept after relaunch")
         XCTAssertTrue(app.tabBars.buttons["会话"].exists, "Tabs not in Chinese after relaunch")
         shot(app, "08c-relaunched")
         // Leave the simulator as it was: Korean and the iPhone's own theme.
@@ -266,15 +264,14 @@ final class DeviceQATests: XCTestCase {
             if key == "10m" { shot(app, "09b-after-morph-10m") }
         }
         element(app, "period-1h").tap()
-        let row = element(app, "session-d2")
+        let row = element(app, "session-s2")
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()
-        XCTAssertTrue(element(app, "mail-draft").waitForExistence(timeout: 5), "Messages did not open")
-        shot(app, "09c-detail-messages")
-        app.buttons["작업 제어"].tap()
+        XCTAssertTrue(element(app, "mail-draft").waitForExistence(timeout: 5), "Conversation did not open")
+        XCTAssertTrue(element(app, "work-status").exists, "No work state in the conversation")
         let pause = element(app, "control-pause")
-        XCTAssertTrue(pause.waitForExistence(timeout: 5))
-        shot(app, "09d-detail-controls")
+        XCTAssertTrue(pause.waitForExistence(timeout: 5), "Controls not reachable from the conversation")
+        shot(app, "09c-conversation")
         pause.tap()
         XCTAssertTrue(element(app, "confirm-action").waitForExistence(timeout: 5), "No confirmation")
         shot(app, "09e-confirmation")
@@ -306,13 +303,205 @@ final class DeviceQATests: XCTestCase {
                     shot(app, "20-\(look)-\(language)-\(name)")
                 }
                 app.terminate()
-                app.launchArguments += ["-screenDetail", "d2", "-screenPane", "controls"]
+                app.launchArguments += ["-screenDetail", "s1", "-qaDemoImages", "2"]
                 app.launch()
                 XCTAssertTrue(element(app, "control-pause").waitForExistence(timeout: 15))
                 sleep(1)
                 shot(app, "20-\(look)-\(language)-detail-controls")
             }
         }
+    }
+
+    /// Demo: send, then type the next message at once, in English and in Korean. The composer holds only
+    /// the new words: nothing of the sent message comes back (Android's keyboard can restore a word it
+    /// was composing; the iPhone must not).
+    func test25_TypingRightAfterSending() {
+        let app = launch(["--demo", "-screenDetail", "s1"])
+        let draft = element(app, "mail-draft")
+        XCTAssertTrue(draft.waitForExistence(timeout: 15), "Conversation did not open")
+        for (sent, next) in [("hello", "next"), ("안녕", "다음")] {
+            tapWhenReady(draft, "Composer")
+            draft.typeText(sent)
+            tapWhenReady(element(app, "mail-send"), "Send")
+            // It goes at once and the keyboard stays: the next message is written straight away.
+            XCTAssertFalse(element(app, "confirm-action").waitForExistence(timeout: 1), "A confirmation opened before sending")
+            draft.typeText(next)
+            XCTAssertEqual(draft.value as? String, next, "The sent words came back into the composer")
+            XCTAssertTrue(app.staticTexts[sent].waitForExistence(timeout: 5), "\(sent) not in the conversation")
+            draft.typeText(XCUIKeyboardKey.delete.rawValue.repeated(next.count))
+        }
+        shot(app, "25-typing-after-sending")
+    }
+
+    /// Demo, held at one moment: send, then three moving dots with no words while the session answers
+    /// (the phase is only read out), then the reply. Korean, English and Chinese.
+    func test26_SendShowsDotsThenReply() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Filmed in the simulator.")
+        #endif
+        let words: [String: [String: String]] = ["ko": ["responding": "생각하는 중…", "working": "작업 중…", "writing": "작성 중…"],
+                                                 "en": ["responding": "Thinking…", "working": "Working…", "writing": "Writing…"],
+                                                 "zh": ["responding": "正在思考…", "working": "工作中…", "writing": "正在撰写…"]]
+        for (lang, text) in [("ko", "지금 어디까지 했어?"), ("en", "How far along are you?"), ("zh", "现在进展到哪里了？")] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--demo", "-qaGuard", "YES", "-appearance", "dark", "-language", lang, "-qaDemoNow", "1800000000", "-screenDetail", "s1"]
+            app.launch()
+            let draft = element(app, "mail-draft")
+            XCTAssertTrue(draft.waitForExistence(timeout: 15), "Conversation did not open")
+            let replies = app.staticTexts.matching(identifier: "mail-reply").count
+            tapWhenReady(draft, "Composer")
+            draft.typeText(text)
+            tapWhenReady(element(app, "mail-send"), "Send")
+            shot(app, "26-\(lang)-1-sent")
+            let dots = element(app, "typing-indicator")
+            XCTAssertTrue(dots.waitForExistence(timeout: 10), "No dots while the session answers")
+            sleep(1)
+            // The script moves to the next phase every 2.2 seconds: read the phase and its words in one step.
+            var phase = "", label = ""
+            for _ in 0..<3 {
+                phase = dots.value as? String ?? ""; label = dots.label
+                if phase == dots.value as? String { break }
+            }
+            XCTAssertEqual(label, words[lang]?[phase], "The phase is not read out")
+            XCTAssertFalse(app.staticTexts[label].exists, "The phase is written beside the dots")
+            shot(app, "26-\(lang)-2-dots")
+            let reply = app.staticTexts.matching(identifier: "mail-reply")
+            XCTAssertTrue(wait(reply.element(boundBy: replies), "exists == true", timeout: 20), "No reply")
+            sleep(1)
+            shot(app, "26-\(lang)-3-reply")
+            app.terminate()
+        }
+    }
+
+    /// Simulator only, held at one moment: the conversation script (demo-world.js) as filmed for the landing
+    /// page. The conversation opens on its earlier messages with no dots; the script's message and photo are
+    /// in the composer (-qaDemoScript); sent, it is taken in, the dots show while the session answers, and the
+    /// scripted reply ends them. Korean, English and Chinese.
+    func test27_ScriptForFilming() throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Filmed in the simulator.")
+        #endif
+        for lang in ["ko", "en", "zh"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["--demo", "-qaGuard", "YES", "-appearance", "dark", "-language", lang, "-qaDemoNow", "1800000000",
+                                   "-screenDetail", "s1", "-qaDemoScript", "YES"]
+            app.launch()
+            let draft = element(app, "mail-draft")
+            XCTAssertTrue(draft.waitForExistence(timeout: 15), "Conversation did not open")
+            XCTAssertTrue(element(app, "photo-preview-0").waitForExistence(timeout: 10), "The script's photo is not in the composer")
+            XCTAssertFalse(element(app, "typing-indicator").waitForExistence(timeout: 2), "Dots before anything was sent")
+            shot(app, "27-\(lang)-0-open")
+            let replies = app.staticTexts.matching(identifier: "mail-reply").count
+            tapWhenReady(element(app, "mail-send"), "Send")
+            XCTAssertFalse(element(app, "confirm-action").exists, "A confirmation opened before sending")
+            sleep(1)
+            shot(app, "27-\(lang)-1-sent")
+            XCTAssertTrue(element(app, "typing-indicator").waitForExistence(timeout: 10), "No dots while the session answers")
+            sleep(2)
+            shot(app, "27-\(lang)-2-dots")
+            XCTAssertTrue(wait(app.staticTexts.matching(identifier: "mail-reply").element(boundBy: replies), "exists == true", timeout: 15), "No reply")
+            sleep(1)
+            // As in a chat app: the AI's message under its name, no state under an answered message, and no
+            // "reply" anywhere on the screen but in the name of the demo project support-replies, behind the sheet.
+            XCTAssertEqual(element(app, "mail-from").label, "Claude Code")
+            XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier == 'mail-status' AND value == 'replied'")).count, 0)
+            let old = NSPredicate(format: "(label CONTAINS[c] 'repl' OR label CONTAINS '답신' OR label CONTAINS '回复') AND NOT label CONTAINS 'support-replies'")
+            XCTAssertEqual(app.descendants(matching: .any).matching(old).count, 0, "A \"reply\" word is on the screen")
+            shot(app, "27-\(lang)-3-reply")
+            app.terminate()
+        }
+    }
+
+    /// Demo: the one conversation screen. It opens on the conversation demo's earlier messages (demo-world.js)
+    /// with nothing being answered; two sample photos in the composer (debug -qaDemoImages), one removed;
+    /// answers, a photo listed by name and an unconfirmed delivery in the timeline; a message sent at once
+    /// with no confirmation, its photo with it; work state and controls reachable; a sent message following
+    /// the script to its answer; a prompt-only session's notice and an instruction sent at once.
+    func test24_ConversationAndPhotos() {
+        let app = launch(["--demo", "-screenDetail", "s1", "-qaDemoImages", "2"])
+        let state = element(app, "work-status")
+        XCTAssertTrue(state.waitForExistence(timeout: 15), "Conversation did not open")
+        XCTAssertEqual(state.value as? String, "working")
+        // Nothing is being answered when the conversation opens: no dots before anything is sent.
+        XCTAssertFalse(element(app, "typing-indicator").waitForExistence(timeout: 3), "Dots before anything was sent")
+        XCTAssertTrue(element(app, "photo-preview-0").waitForExistence(timeout: 10) && element(app, "photo-preview-1").exists, "Sample photos not in the composer")
+        XCTAssertTrue(element(app, "photo-pick").exists, "No photo button for a session that takes photos")
+        shot(app, "24a-two-photos")
+        tapWhenReady(element(app, "photo-remove-1"), "Remove photo 2")
+        XCTAssertFalse(element(app, "photo-preview-1").waitForExistence(timeout: 2), "Photo 2 still shown")
+        XCTAssertTrue(element(app, "photo-preview-0").exists, "Photo 1 lost")
+        // The earlier messages: two answered, with nothing under them, and one not confirmed, with its state.
+        let states = app.descendants(matching: .any).matching(identifier: "mail-status")
+        XCTAssertEqual(states.count, 1, "Earlier messages missing")
+        XCTAssertEqual(states.matching(NSPredicate(format: "value == 'delivery_unconfirmed'")).count, 1)
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "mail-from").count, 2, "The AI's messages carry no name")
+        // A working session says where the message is written that it waits for the current work.
+        let draft = element(app, "mail-draft")
+        XCTAssertEqual(draft.placeholderValue, "지금 작업이 끝나면 차례로 보냅니다…")
+        draft.tap()
+        draft.typeText("QA demo question with a photo")
+        tapWhenReady(element(app, "mail-send"), "Send")
+        // It goes at once, as in a chat app: no confirmation, the composer empties and the message carries its photo.
+        let confirm = element(app, "confirm-action")
+        XCTAssertFalse(confirm.waitForExistence(timeout: 2), "A confirmation opened before sending")
+        XCTAssertFalse(element(app, "photo-preview-0").exists, "The photo stayed in the composer")
+        XCTAssertFalse((draft.value as? String ?? "").contains("QA demo question"), "The text stayed in the composer")
+        let sent = app.descendants(matching: .any).matching(NSPredicate(format: "identifier == 'mail-attachments' AND label == '사진 1장'")).firstMatch
+        XCTAssertTrue(sent.waitForExistence(timeout: 5), "The sent message shows no photo")
+        shot(app, "24b-sent")
+        // Controls stay reachable while composing.
+        XCTAssertTrue(element(app, "control-pause").isHittable && element(app, "control-terminate").isHittable, "Controls not reachable")
+        tapWhenReady(element(app, "control-terminate"), "Quit CLI")
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "No confirmation for Quit CLI")
+        shot(app, "24c-terminate-confirmation")
+        dismissConfirmation(app)
+        XCTAssertFalse(element(app, "control-note").exists, "Something was sent")
+        // Earlier in the timeline: the replies, one with photos listed by name.
+        let reply = app.staticTexts.matching(identifier: "mail-reply").firstMatch
+        for _ in 0..<6 where !(reply.exists && reply.isHittable) { app.scrollViews.firstMatch.swipeDown() }
+        XCTAssertTrue(reply.exists, "No session reply")
+        XCTAssertTrue(element(app, "mail-attachments").exists, "Photos not listed")
+        shot(app, "24d-replies")
+        app.terminate()
+        // A stale report shows as stale, with no dots.
+        let stale = launch(["--demo", "-screenDetail", "s1", "-qaStaleDevice", "demo-0"])
+        XCTAssertTrue(element(stale, "work-status").waitForExistence(timeout: 15))
+        XCTAssertEqual(element(stale, "work-status").value as? String, "stale")
+        XCTAssertFalse(element(stale, "typing-indicator").waitForExistence(timeout: 2), "Typing shown on a stale report")
+        shot(stale, "24g-stale")
+        stale.terminate()
+        // A send to a working session follows the script: delivered, the phases come and go, and the dots end
+        // with the reply.
+        let fresh = launch(["--demo", "-screenDetail", "s2"])
+        XCTAssertTrue(element(fresh, "work-status").waitForExistence(timeout: 15))
+        XCTAssertFalse(element(fresh, "typing-indicator").exists, "Typing before anything was sent")
+        let box = element(fresh, "mail-draft")
+        box.tap()
+        box.typeText("QA demo question")
+        tapWhenReady(element(fresh, "mail-send"), "Send")
+        let live = element(fresh, "typing-indicator")
+        XCTAssertTrue(live.waitForExistence(timeout: 10), "No typing once the session responds")
+        let first = live.value as? String ?? ""
+        XCTAssertTrue(["responding", "working", "writing"].contains(first), "Unknown phase \(first)")
+        shot(fresh, "24h-typing-\(first)")
+        XCTAssertTrue(fresh.staticTexts.matching(identifier: "mail-reply").firstMatch.waitForExistence(timeout: 15), "Demo reply did not arrive")
+        XCTAssertFalse(live.waitForExistence(timeout: 1), "Typing still shown after the reply")
+        shot(fresh, "24i-replied")
+        // An older computer's session takes instructions only, with no reply reader.
+        fresh.terminate()
+        let old = launch(["--demo", "-screenDetail", "s6"])
+        XCTAssertTrue(element(old, "prompt-only").waitForExistence(timeout: 15), "No prompt-only notice")
+        XCTAssertFalse(element(old, "photo-pick").exists, "Photo button for a session without photos")
+        // An instruction goes at once too; the composer says the session takes instructions only.
+        let instruction = element(old, "mail-draft")
+        XCTAssertEqual(instruction.placeholderValue, "지시만 받는 세션입니다. 지시를 입력하세요…")
+        shot(old, "24j-prompt-only")
+        instruction.tap()
+        instruction.typeText("QA demo instruction")
+        tapWhenReady(element(old, "mail-send"), "Send instruction")
+        XCTAssertFalse(element(old, "confirm-action").waitForExistence(timeout: 2), "A confirmation opened before the instruction")
+        XCTAssertTrue(element(old, "control-note").waitForExistence(timeout: 5), "No demo note for the instruction")
+        shot(old, "24k-instruction-sent")
     }
 
     /// Simulator only: two period changes, slow enough to film. A screen recording around this test
@@ -341,17 +530,16 @@ final class DeviceQATests: XCTestCase {
         sleep(2)
         toggle.tap()
         sleep(2)
-        app.buttons["header-language-zh"].tap()
-        sleep(2)
+        showLanguage(app, "zh")
+        sleep(1)
         toggle.tap()
         sleep(2)
         // Back to Korean, as the simulator was; the two toggles cancel out.
-        app.buttons["header-language-ko"].tap()
-        sleep(1)
+        showLanguage(app, "ko")
     }
 
-    /// Simulator only: rapid taps on the theme and language controls never leave a snapshot behind;
-    /// taps during a reveal are ignored, and the controls keep working afterwards.
+    /// Simulator only: rapid taps on the theme and language buttons never leave a snapshot behind;
+    /// taps during a reveal still count, so the language moves on in order, and the controls keep working.
     func test23_RapidTapsDuringReveal() throws {
         #if !targetEnvironment(simulator)
         throw XCTSkip("Simulator only.")
@@ -361,8 +549,12 @@ final class DeviceQATests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 10))
         let start = toggle.value as? String ?? ""
         for _ in 0..<4 { toggle.tap() }
-        for code in ["en", "zh", "ko", "en"] { app.buttons["header-language-" + code].tap() }
+        let language = app.buttons["header-language"], first = language.value as? String ?? "ko"
+        for _ in 0..<4 { language.tap() }
         sleep(2)
+        // Four taps from any language land one step on: 한 → EN → 中 → 한 → EN.
+        let order = ["ko", "en", "zh"], expected = order[((order.firstIndex(of: first) ?? 0) + 4) % 3]
+        XCTAssertEqual(language.value as? String, expected, "Rapid language taps skipped a step")
         shot(app, "23a-after-rapid-taps")
         // Still responsive: one more tap flips the theme, and Korean can be chosen.
         let now = toggle.value as? String ?? ""
@@ -390,7 +582,7 @@ final class DeviceQATests: XCTestCase {
         if app.state != .runningForeground { app.launch() }
         if app.buttons["Sheet Grabber"].exists { app.swipeDown(velocity: .fast) }
         openTab(app, 0)
-        if app.buttons["header-language-ko"].waitForExistence(timeout: 15) { showLanguage(app, "ko") }
+        if app.buttons["header-language"].waitForExistence(timeout: 15) { showLanguage(app, "ko") }
         chooseSystemTheme(app)
     }
 
@@ -439,7 +631,7 @@ final class DeviceQATests: XCTestCase {
         app.launch()
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
         XCTAssertEqual(toggle.value as? String, "light", "Theme not restored after relaunch")
-        XCTAssertTrue(app.buttons["header-language-zh"].isSelected, "Language not restored after relaunch")
+        XCTAssertEqual(app.buttons["header-language"].value as? String, "zh", "Language not restored after relaunch")
         XCTAssertTrue(wait(connection, Self.liveLabel, timeout: 45), "Not live after relaunch")
         shot(app, "16-06-relaunched")
         // The period and computer start over after a relaunch; choose them again for the last checks.
@@ -450,16 +642,30 @@ final class DeviceQATests: XCTestCase {
 
     // MARK: With the test session (QA_SESSION)
 
-    private func openTestSession(_ pane: String) throws -> XCUIApplication {
+    private func openTestSession() throws -> XCUIApplication {
         try XCTSkipIf(session.isEmpty, "No QA_SESSION; controls are not sent to real sessions.")
-        let app = launch(["-screenDetail", session, "-screenPane", pane])
-        XCTAssertTrue(app.buttons["작업 제어"].waitForExistence(timeout: 40), "Test session \(session) did not open")
+        let app = launch(["-screenDetail", session])
+        XCTAssertTrue(element(app, "work-status").waitForExistence(timeout: 40), "Test session \(session) did not open")
         return app
+    }
+
+    /// Writes in the conversation composer and sends it, which goes at once with no confirmation.
+    private func sendFromComposer(_ app: XCUIApplication, _ text: String, step: String) {
+        let draft = element(app, "mail-draft")
+        XCTAssertTrue(draft.waitForExistence(timeout: 10))
+        draft.tap()
+        draft.typeText(text)
+        shot(app, step + "a-typed")
+        let send = element(app, "mail-send")
+        XCTAssertTrue(wait(send, "isEnabled == true", timeout: 20), "Send not available")
+        send.tap()
+        XCTAssertFalse(element(app, "confirm-action").waitForExistence(timeout: 2), "A confirmation opened before sending")
+        shot(app, step + "b-sent")
     }
 
     /// Confirms one control on the test session and waits for the computer's receipt.
     private func control(_ action: String, step: String) throws {
-        let app = try openTestSession("controls")
+        let app = try openTestSession()
         let button = element(app, "control-" + action)
         XCTAssertTrue(button.waitForExistence(timeout: 60) && wait(button, "isEnabled == true", timeout: 60), "\(action) not available")
         shot(app, step + "a-before")
@@ -476,45 +682,31 @@ final class DeviceQATests: XCTestCase {
         XCTAssertTrue(note.label.contains("완료"), "Receipt: \(note.label)")
     }
 
+    /// An instruction is a message from the one composer; its receipt comes back in the result line.
     func test10_Instruction() throws {
-        let app = try openTestSession("controls")
-        let field = element(app, "instruction")
-        XCTAssertTrue(field.waitForExistence(timeout: 10))
-        field.tap()
-        field.typeText("1top QA instruction test. Run sleep 150 in the shell, then reply OK only. Do not change any files.")
-        shot(app, "10a-typed")
-        let send = element(app, "instruction-send")
-        XCTAssertTrue(wait(send, "isEnabled == true", timeout: 20))
-        send.tap()
-        let confirm = element(app, "confirm-action")
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        shot(app, "10b-confirmation")
-        confirm.tap()
+        let app = try openTestSession()
+        sendFromComposer(app, "1top QA instruction test. Run sleep 150 in the shell, then reply OK only. Do not change any files.", step: "10")
         let note = element(app, "control-note")
-        XCTAssertTrue(note.waitForExistence(timeout: 15))
+        XCTAssertTrue(note.waitForExistence(timeout: 20), "No result line")
         shot(app, "10c-sent")
         XCTAssertTrue(wait(note, "label CONTAINS '완료' OR label CONTAINS '실패' OR label CONTAINS '미확인'", timeout: 40), "No receipt: \(note.label)")
         shot(app, "10d-receipt")
         XCTAssertTrue(note.label.contains("완료"), "Receipt: \(note.label)")
     }
 
+    /// A question from the same composer, answered in the timeline.
     func test11_QuestionAndReply() throws {
-        let app = try openTestSession("messages")
-        let draft = element(app, "mail-draft")
-        XCTAssertTrue(draft.waitForExistence(timeout: 10))
-        draft.tap()
-        draft.typeText("1top QA question: reply with one short line about your state.")
-        shot(app, "11a-typed")
-        let send = element(app, "mail-send")
-        XCTAssertTrue(wait(send, "isEnabled == true", timeout: 20))
-        send.tap()
+        let app = try openTestSession()
+        sendFromComposer(app, "1top QA question: reply with one short line about your state.", step: "11")
         XCTAssertTrue(element(app, "mail-status").waitForExistence(timeout: 15), "Message did not appear")
-        shot(app, "11b-sent")
+        shot(app, "11c-sent")
         XCTAssertTrue(element(app, "mail-reply").waitForExistence(timeout: 240), "No reply in 4 minutes")
-        shot(app, "11c-reply")
+        shot(app, "11d-reply")
     }
 
     func test12_Pause() throws { try control("pause", step: "12") }
     func test13_Resume() throws { try control("resume", step: "13") }
     func test14_Terminate() throws { try control("terminate", step: "14") }
 }
+
+private extension String { func repeated(_ n: Int) -> String { String(repeating: self, count: n) } }

@@ -1,0 +1,82 @@
+{
+  "version": "4.2.2",
+  "package": "1top.MsixValidation_4.2.3.0_x64__qrbeyv7bkepzw",
+  "scenarios": [
+    {
+      "title": "1top \u00b7 Local workspace",
+      "ready": true,
+      "maps": true,
+      "dataReady": true,
+      "renderedVersion": "4.2.2",
+      "connection": "\uc2e4\uc2dc\uac04 \uc5f0\uacb0",
+      "rendered_sessions": 1,
+      "render_error": null,
+      "collector_version": "4.2.2",
+      "collector_owned": true,
+      "collector_pid": 3248,
+      "fixture_tokens": [
+        100,
+        200,
+        10,
+        20
+      ],
+      "session_count": 1,
+      "fixture_period_tokens": [
+        100,
+        200,
+        10,
+        20
+      ],
+      "host_resources": true,
+      "package_identity": "1top.MsixValidation_4.2.3.0_x64__qrbeyv7bkepzw",
+      "webview_storage": "D:\\a\\1top\\1top\\build\\windows\\msix-test\\\ud55c\uae00 \uc0ac\uc6a9\uc790\\state\\webview",
+      "persisted_storage": "preserved-through-msix-update",
+      "storage_expectation_met": true,
+      "existing_data_preserved": null,
+      "update_channel": "microsoft-store",
+      "map_total": "330 tokens \u00b7 \ucd5c\uadfc 1\uc2dc\uac04",
+      "scenario": "after-update",
+      "installed_msix": true,
+      "activation": "IApplicationActivationManager"
+    },
+    {
+      "title": "1top \u00b7 Local workspace",
+      "ready": true,
+      "maps": true,
+      "dataReady": true,
+      "renderedVersion": "4.2.2",
+      "connection": "\uc2e4\uc2dc\uac04 \uc5f0\uacb0",
+      "rendered_sessions": 1,
+      "render_error": null,
+      "collector_version": "4.2.2",
+      "collector_owned": true,
+      "collector_pid": 8240,
+      "fixture_tokens": [
+        100,
+        200,
+        10,
+        20
+      ],
+      "session_count": 1,
+      "fixture_period_tokens": [
+        100,
+        200,
+        10,
+        20
+      ],
+      "host_resources": true,
+      "package_identity": "1top.MsixValidation_4.2.3.0_x64__qrbeyv7bkepzw",
+      "webview_storage": "C:\\Users\\runneradmin\\AppData\\Local\\1top\\webview",
+      "persisted_storage": "preserved-through-msix-update",
+      "storage_expectation_met": true,
+      "existing_data_preserved": true,
+      "update_channel": "microsoft-store",
+      "map_total": "330 tokens \u00b7 \ucd5c\uadfc 1\uc2dc\uac04",
+      "scenario": "default-data-after-update",
+      "installed_msix": true,
+      "activation": "IApplicationActivationManager"
+    }
+  ],
+  "unicode_data_path": true,
+  "store_certified": false
+}

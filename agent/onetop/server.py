@@ -20,6 +20,7 @@ from urllib.parse import urlsplit, parse_qs
 from .controls import Controller, ActionError, target_key, process_start
 from .resources import ResourceSampler
 from .usage import session_usage, window_usage, WINDOWS
+from . import session_archive
 from .time_ranges import parse_period, extend_snapshot
 from .session_order import ordered_snapshot
 from .history import HistoryStore, initialize_capture
@@ -32,6 +33,7 @@ from .hierarchy import codex_metadata, annotate as annotate_hierarchy, group_ses
 from .effort import codex_level, backfill_codex, apply_statusline
 from .telemetry import TelemetryStore, session_index, bind_account, enrich
 from . import claude_continuation
+from . import account_aliases
 
 BASE = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -87,22 +89,10 @@ def claude_windows(entries, now):
 
 
 def glm_windows(payload, now):
-    if payload.get('success') is not True or payload.get('code',0) not in (0,200):return []
-    windows=[]
-    for w in (payload.get('data') or {}).get('limits',[]):
-        if w.get('type') not in ('TOKENS_LIMIT','CREDIT_LIMIT'):continue
-        pct=w.get('percentage')
-        cap=w.get('usage')
-        if isinstance(cap,(int,float)) and cap>0:
-            current=w.get('currentValue')
-            if current is None and isinstance(w.get('remaining'),(int,float)):current=cap-w['remaining']
-            if isinstance(current,(int,float)):pct=current/cap*100
-        if not isinstance(pct,(int,float)):continue
-        mins={1:1440,3:60,5:1,6:10080}.get(w.get('unit'),0)*(w.get('number') or 0)
-        reset=epoch(w.get('nextResetTime'))
-        label='5시간' if mins==300 else '주간' if mins==10080 else f'{mins//60}시간' if mins else '플랜 한도'
-        windows.append({'label':label,'pct':min(100,max(0,pct)) if not reset or reset>now else None,'reset':reset,'t':now})
-    return windows
+    # Compatibility parser for older integrations. Collection uses account pools.
+    from .provider_quotas import glm_windows as parse, ProviderError
+    try:return parse(payload, now)
+    except ProviderError:return []
 
 
 def terminal_for(meta, terminals):
@@ -267,8 +257,6 @@ class Collector:
         self.range_lock = threading.Lock()
         self.range_cache = {}
         self.snapshot = {'ready': False, 'version': __version__, 'updated': 0, 'sessions': [], 'error': None}
-        self.agy_quota = {'kind': 'Antigravity', 'windows': [], 'note': '한도 확인 중', 'updated': 0}
-        self.glm_quota = {'kind': 'GLM', 'windows': [], 'note': '연결된 GLM 계정 한도 확인 중', 'updated': 0}
         self.trackers = {}
         self.index = {}
         self.index_at = 0
@@ -283,6 +271,7 @@ class Collector:
         self.session_metadata = {}
         self.telemetry = None
         self.history = None
+        self.controller = None
 
     def initialize(self):
         DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -297,6 +286,8 @@ class Collector:
             CREATE INDEX IF NOT EXISTS event_time ON events(t);''')
         weekly_usage.initialize(self.db)
         initialize_capture(self.db)
+        from .accounts import profile_roots
+        session_archive.recover(self.db, roots=profile_roots())
         row = self.db.execute("SELECT value FROM meta WHERE key='started'").fetchone()
         self.started = float(row[0]) if row else time.time()
         self.db.execute("INSERT OR IGNORE INTO meta VALUES ('started',?)", (str(self.started),))
@@ -305,6 +296,15 @@ class Collector:
         self.history_started = float(self.db.execute("SELECT value FROM meta WHERE key='history_started'").fetchone()[0])
         self.db.commit()
         self.history = HistoryStore(DATA)
+
+    def usage_sessions(self, period='1h', offset=0, limit=100):
+        with self.lock:
+            state = self.snapshot
+        if not state.get('ready'):
+            raise ValueError('Collector is starting')
+        with closing(sqlite3.connect((DATA/'monitor.sqlite').as_uri()+'?mode=ro', uri=True, timeout=5)) as db:
+            db.execute('BEGIN')
+            return session_archive.response(db, state, period, offset, limit)
 
     def state_for_period(self, key):
         duration = parse_period(key)
@@ -322,6 +322,19 @@ class Collector:
             if len(self.range_cache) >= 8:
                 self.range_cache.clear()
             self.range_cache[key] = result
+            return result
+
+    def state_for_cloud(self):
+        from .relay_data import all_periods
+        with self.lock:snapshot=self.snapshot
+        if not snapshot.get('ready'):return snapshot
+        with self.range_lock:
+            cached=getattr(self,'cloud_cache',None)
+            if cached and snapshot['updated']==cached['updated']:return cached
+            with closing(sqlite3.connect((DATA/'monitor.sqlite').as_uri()+'?mode=ro',uri=True,timeout=5)) as db:
+                db.execute('BEGIN')
+                result=all_periods(db,snapshot)
+            self.cloud_cache=result
             return result
 
     def speed_for_cloud(self, snapshot):
@@ -563,6 +576,9 @@ class Collector:
         self.discovery_at = time.time()
 
     def read_tracker(self, spec):
+        from .routing_attribution import attach
+        if not hasattr(self,'routing_reconciled'):self.routing_reconciled={}
+        attach(spec,getattr(self,'routing_bindings',{}),self.db,self.routing_reconciled)
         path = spec['path']
         ledger_path = spec.get('_ledger_path') or path
         if ledger_path not in self.trackers:
@@ -703,9 +719,8 @@ class Collector:
             windows.append({'label':'주간' if mins==10080 else '5시간' if mins==300 else f'{mins}분',
                             'pct':w.get('used_percent') if reset>now else None,'reset':reset,'t':q['t']})
         out.append({'kind':'Codex','windows':windows,'updated':q['t'],'note':'가장 최근 세션이 보고한 계정 한도'})
-        with self.lock:
-            out.append(dict(self.glm_quota))
-            out.append(dict(self.agy_quota))
+        # Legacy and account readers share one owner of provider polling.
+        out.extend(self.accounts.providers.snapshot(now))
         return out
 
     def collect(self):
@@ -715,6 +730,8 @@ class Collector:
         now=time.time()
         sessions=[]
         roots=self.accounts.roots()
+        from .routing_attribution import load as routing_bindings
+        self.routing_bindings=routing_bindings(DATA,now)
         try:telemetry = self.telemetry.snapshot(now) if self.telemetry else {'available':False}
         except sqlite3.Error:telemetry = {'available':False}
         telemetry_sessions = session_index(telemetry)
@@ -752,6 +769,8 @@ class Collector:
                 try:self.read_tracker(s)
                 except OSError:s['note']='Aside 사용량 기록을 읽을 수 없습니다.'
             sessions.append(s)
+        # Keep display identity after its process/terminal leaves discovery.
+        session_archive.remember(self.db, sessions, now)
         # Retain local reports for user-selected ranges beyond 24 hours.
         self.db.commit()
         # The browser needs a chart, not a growing raw event log. Bound payloads by minute/provider.
@@ -767,6 +786,7 @@ class Collector:
         account_quotas=self.accounts.snapshot(now)
         weekly_usage.restore_bound_claude_accounts(self.db,account_quotas,sessions,now)
         weekly_usage.restore_claude_last_report(self.db,account_quotas,now)
+        account_aliases.apply(account_quotas,DATA)
         weekly_usage.record(self.db,account_quotas,now)
         weekly,estimates=weekly_usage.snapshot(self.db,account_quotas,now,
             bindings={s['id']:s['account_binding'][0] for s in sessions if s.get('account_binding')},
@@ -774,6 +794,8 @@ class Collector:
         self.db.commit()
         for s in sessions:
             binding=s.pop('account_binding',None)
+            s.pop('_routing_intervals',None)
+            s.pop('_routing_original_binding',None)
             known=s['tokens'] is not None
             v=minute.get(s['id'],ZERO[:]) if known else None
             s['usage']={'last_minute':v,'last_five_minutes':five.get(s['id'],ZERO[:]) if known else None,
@@ -798,6 +820,17 @@ class Collector:
                 'collection_ms':round((time.monotonic()-collect_started)*1000,1)}
         with self.lock:self.snapshot=result
 
+    def tick_mailbox(self):
+        # Terminal admission can take seconds. Keep collection fresh while a
+        # single dispatcher drains the durable queue; never spawn overlapping sends.
+        worker=getattr(self,'mailbox_worker',None)
+        if self.controller is None or worker and worker.is_alive():return
+        def dispatch():
+            try:self.controller.flush_mailbox()
+            except Exception as e:print('mailbox:',type(e).__name__,flush=True)
+        self.mailbox_worker=threading.Thread(target=dispatch,daemon=True,name='1top-mailbox')
+        self.mailbox_worker.start()
+
     def loop(self):
         self.accounts.start()
         self.initialize()
@@ -810,70 +843,11 @@ class Collector:
                 with self.lock:self.snapshot={**self.snapshot,'error':type(e).__name__}
                 command = os.path.basename(e.cmd[0]) if isinstance(e,subprocess.TimeoutExpired) and isinstance(e.cmd,list) else ''
                 print('collector:',type(e).__name__,command,flush=True)
+            # Local conversations must work without pairing or a relay socket.
+            # One collector tick owns dispatch; the relay only admits requests.
+            self.tick_mailbox()
             time.sleep(max(.2,3-(time.monotonic()-before)))
 
-    def agy_loop(self):
-        exe=HOME/'.local/bin/agy'
-        if not exe.exists():return
-        try:
-            version=run([str(exe),'--version'],5).strip()
-            if tuple(map(int,version.split('.')[:3]))<(1,1,11):return
-        except Exception:return
-        while True:
-            q={'kind':'Antigravity','windows':[],'updated':time.time(),'note':'공식 한도를 확인하지 못했습니다.'}
-            try:
-                env={**os.environ,'AGY_CLI_DISABLE_AUTO_UPDATE':'true'}
-                p=subprocess.run([str(exe),'-p','/usage','--output-format','json','--print-timeout','20s'],
-                                 env=env,cwd=str(HOME),capture_output=True,text=True,timeout=28)
-                for line in p.stdout.splitlines():
-                    try:e=json.loads(line)
-                    except ValueError:continue
-                    if e.get('num_turns',0)>0 or e.get('conversation_id'):
-                        q['note']='이 CLI에서는 안전한 한도 조회를 확인하지 못해 자동 조회를 중단했습니다.'
-                        with self.lock:self.agy_quota=q
-                        return
-                    cmd=e.get('command') or {}
-                    if e.get('status')!='SUCCESS' or cmd.get('name')!='usage':continue
-                    for group in (cmd.get('data') or {}).get('groups',[]):
-                        for b in group.get('buckets',[]):
-                            if b.get('disabled') or not isinstance(b.get('remaining_fraction'),(int,float)):continue
-                            reset=epoch(b.get('reset_time'))
-                            q['windows'].append({'label':group.get('name','')+' · '+('주간' if b.get('window')=='weekly' else b.get('window','')),
-                                                 'pct':max(0,min(100,(1-b['remaining_fraction'])*100)) if reset>time.time() else None,
-                                                 'reset':reset,'t':q['updated']})
-                    if q['windows']:q['note']='agy /usage 공식 한도 · 10분마다 확인'
-            except (OSError,subprocess.SubprocessError):pass
-            with self.lock:self.agy_quota=q
-            time.sleep(600)
-
-    def glm_loop(self):
-        while True:
-            specs=[s for s in self.specs if s['kind']=='GLM']
-            if not specs:
-                time.sleep(5);continue
-            q={'kind':'GLM','windows':[],'updated':0,'note':'공식 한도를 확인하지 못했습니다. 세션 토큰은 계속 수집합니다.'}
-            try:
-                # Use the active session's existing credential only with its allowlisted provider.
-                raw=run(['ps','eww','-p',str(specs[0]['pid']),'-o','command='])
-                host=specs[0].get('provider')
-                match=re.search(r'(?:^|\s)ANTHROPIC_AUTH_TOKEN=([^\s]+)',raw)
-                if not match:match=re.search(r'(?:^|\s)ANTHROPIC_API_KEY=([^\s]+)',raw)
-                if match and host in ('api.z.ai','open.bigmodel.cn'):
-                    key=match.group(1)
-                    if '\n' in key or '\r' in key:raise ValueError('Invalid credential')
-                    header=key.replace('\\','\\\\').replace('"','\\"')
-                    config=f'url = "https://{host}/api/monitor/usage/quota/limit"\nheader = "Authorization: {header}"\nheader = "Accept-Language: en-US,en"\n'
-                    result=subprocess.run(['/usr/bin/curl','--silent','--show-error','--fail','--max-time','15','--config','-'],
-                                          input=config,capture_output=True,text=True,timeout=18)
-                    del key,header,config,raw
-                    if result.returncode==0:
-                        payload=json.loads(result.stdout)
-                        q['windows']=glm_windows(payload,time.time())
-                        if q['windows']:
-                            q['updated']=time.time();q['note']='실행 중인 GLM 세션의 계정 · 공식 API · 2분마다 확인'
-            except (OSError,ValueError,subprocess.SubprocessError):pass
-            with self.lock:self.glm_quota=q
-            time.sleep(120)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -888,17 +862,28 @@ class Handler(BaseHTTPRequestHandler):
             not secrets.compare_digest(self.headers.get('X-Monitor-Token',''),self.server.action_token)):
             self.send_error(403);return
         route=urlsplit(self.path).path
-        if route not in ('/api/action','/api/accounts/login','/api/accounts/authorize'):self.send_error(404);return
+        if route not in ('/api/action','/api/mailbox','/api/accounts/login','/api/accounts/authorize','/api/accounts/alias','/api/routing'):self.send_error(404);return
         try:
             length=int(self.headers.get('Content-Length','0'))
-            if length<1 or length>4096 or self.headers.get('Content-Type')!='application/json':
+            if length<1 or length>(2200000 if route=='/api/action' else 4096) or self.headers.get('Content-Type')!='application/json':
                 self.send_error(400);return
             payload=json.loads(self.rfile.read(length))
             if not isinstance(payload,dict):raise ValueError()
-            if route=='/api/accounts/login':
+            if route=='/api/mailbox':
+                result={'messages':self.server.controller.read_mailbox(payload.get('session_id'),payload.get('control_key'))}
+            elif route=='/api/routing':
+                result=self.server.routing.configure(payload)
+            elif route=='/api/accounts/login':
                 result=self.server.account_login.start(payload.get('kind'))
             elif route=='/api/accounts/authorize':
                 result=self.server.account_login.authorize_claude(payload.get('account_id'))
+            elif route=='/api/accounts/alias':
+                collector=self.server.collector
+                with collector.lock:
+                    rows=collector.snapshot.get('account_quotas',[])
+                    alias=account_aliases.set_alias(DATA,payload.get('account_id'),payload.get('alias'),{r['id'] for r in rows})
+                    account_aliases.apply(rows,DATA)
+                result={'alias':alias}
             else:result=self.server.controller.execute(payload)
             self.json_response(200,{'ok':True,**result})
         except (ValueError,TypeError):self.json_response(400,{'ok':False,'message':'잘못된 요청입니다.'})
@@ -916,6 +901,19 @@ class Handler(BaseHTTPRequestHandler):
         if host not in ('127.0.0.1','localhost'):
             self.send_error(403);return
         route=urlsplit(self.path).path
+        if route=='/api/routing':
+            routing=getattr(self.server,'routing',None)
+            self.json_response(200,routing.status() if routing else {'enabled':False,'running':False});return
+        if route=='/api/usage-sessions':
+            query=parse_qs(urlsplit(self.path).query)
+            try:
+                result=self.server.collector.usage_sessions(query.get('period',['1h'])[0],
+                    query.get('offset',['0'])[0],query.get('limit',['100'])[0])
+            except (ValueError,OverflowError,TypeError):
+                self.json_response(400,{'ok':False,'message':'Invalid period or page'});return
+            except sqlite3.Error:
+                self.json_response(503,{'ok':False,'message':'Session archive is starting'});return
+            self.json_response(200,result);return
         if route=='/api/history':
             history=getattr(self.server.collector,'history',None)
             if history is None:
@@ -950,7 +948,7 @@ class Handler(BaseHTTPRequestHandler):
             self.json_response(200,telemetry.snapshot() if telemetry else {'ready':False});return
         elif route=='/api/updates':
             self.json_response(200,getattr(self.server,'updates',None).value if getattr(self.server,'updates',None) else {});return
-        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/ranges.js','/speed.js','/weekly.js','/history.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js'):
+        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/ranges.js','/speed.js','/weekly.js','/history.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js','/conversation.js','/quick.html','/quick.js','/quick.css','/cluster.js','/cluster.css'):
             name='index.html' if route=='/' else route[1:]
             data=(BASE/'dist'/name).read_bytes()
             mime={'html':'text/html','js':'application/javascript','css':'text/css','json':'application/json'}[name.rsplit('.',1)[1]]+'; charset=utf-8'
@@ -987,9 +985,8 @@ def main():
     from .account_login import AccountLogin
     server.account_login=AccountLogin()
     server.controller=Controller(collector,Collector,state_file=DATA/'controls-v5.json')
+    collector.controller=server.controller
     threading.Thread(target=collector.loop,daemon=True).start()
-    threading.Thread(target=collector.agy_loop,daemon=True).start()
-    threading.Thread(target=collector.glm_loop,daemon=True).start()
     print(f'1top v1.0.0 http://127.0.0.1:{args.port}',flush=True)
     server.serve_forever()
 

@@ -14,6 +14,9 @@ struct DesktopSnapshot: Decodable {
     var account_quotas: [AccountQuota]?
     var events: [UsageEvent]?
     var weekly_usage: WeeklyUsage?
+    // The first minute the token events cover; before it the cluster's trip is outside the record.
+    var chart_range: ChartRange?
+    struct ChartRange: Decodable { var start: Double? }
     struct UsageEvent: Decodable {
         var t: Double; var n: Double?
         var kind: String?
@@ -26,11 +29,15 @@ struct DesktopSnapshot: Decodable {
         struct Window: Decodable, Identifiable {
             var key: String; var label: String; var tokens: [Double]
             var partial: Bool; var observed_seconds: Double
+            var seconds: Double?
             var id: String { key }
         }
     }
     struct SystemUsage: Decodable {
         var host: Host?
+        // Each computer's own load (a remote workspace); a local collector reports only its host.
+        var computers: [Computer]?
+        struct Computer: Decodable { var name: String?; var cpu: Double?; var memory: Double? }
         struct Host: Decodable {
             var cpu: Double?; var memory: Memory?
             struct Memory: Decodable { var percent: Double?; var used: Double? }
@@ -49,9 +56,14 @@ struct DesktopSession: Decodable, Identifiable {
     var location: Location?; var control_key: String?; var input_verified: Bool?
     var children_count: Int?; var children_working: Int?; var children_ids: [String]?
     var group_usage_partial: Bool?
+    // For the cluster's warning lights: how full the context is and when usage was last reported.
+    var context_usage: ContextUsage?; var last_usage: Double?
+    struct ContextUsage: Decodable { var input_tokens: Double?; var capacity: Double? }
     struct Usage: Decodable {
         var rate: Double?; var windows: [String: [Double]?]?
         var weekly_estimate: [String: WeeklyEstimate]?; var weekly_account: String?
+        // The sliding last minute's token vector (a lead's includes its subagents).
+        var last_minute: [Double]?; var window_seconds: Double?
         func weeklyBurnPerHour(period: String) -> Double? {
             guard let estimate = weekly_estimate?[period],
                   let weekly_account, !weekly_account.isEmpty,
@@ -141,6 +153,16 @@ struct WeeklyUsage: Decodable {
         var flow: [[Double]]?
         // [time, weekly %, reset]: reconciled report points; preferred over history like the dashboard.
         var usage_points: [[Double]]?
+        // [start, end, weekly % added, timing uncertain]: every reported increase, for the cluster's trip.
+        var increase_intervals: [[Cell]]?
+        enum Cell: Decodable {
+            case number(Double), flag(Bool), none
+            init(from decoder: Decoder) throws {
+                let c = try decoder.singleValueContainer()
+                if let n = try? c.decode(Double.self) { self = .number(n) } else if let f = try? c.decode(Bool.self) { self = .flag(f) } else { self = .none }
+            }
+            var number: Double? { if case .number(let n) = self { n } else { nil } }
+        }
     }
     struct Period: Decodable {
         var used_pp: Double?; var partial: Bool; var observed_seconds: Double
@@ -444,6 +466,29 @@ final class DashboardModel: ObservableObject {
         }.resume()
     }
     func stop() { task?.cancel(); session.invalidateAndCancel() }
+    /// Saves a name for an account; an empty name goes back to the account's number.
+    func renameAccount(_ id: String, to name: String) {
+        guard fresh, !busy, let token = snapshot?.action_token else { return }
+        busy = true
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/accounts/alias"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")), forHTTPHeaderField: "Origin")
+        request.setValue(token, forHTTPHeaderField: "X-Monitor-Token")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["account_id": id, "alias": String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))])
+        request.timeoutInterval = 10
+        session.dataTask(with: request) { [weak self] data, response, _ in
+            let value = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.busy = false
+                let ok = (response as? HTTPURLResponse)?.statusCode == 200 && value?["ok"] as? Bool != false
+                self.messageIsError = !ok
+                self.message = ok ? "계정 이름을 저장했습니다." : (value?["message"] as? String ?? "계정 이름을 저장하지 못했습니다.")
+                self.refresh()
+            }
+        }.resume()
+    }
     /// One explicit click asks macOS once for this account's saved sign-in. Never retried on its own.
     func authorizeAccount(_ id: String) {
         guard fresh, !busy, authorizing == nil, let token = snapshot?.action_token else { return }
@@ -491,6 +536,38 @@ struct AccountQuota: Decodable, Identifiable {
     var id: String; var kind: String; var account_label: String; var plan: String?
     var windows: [Window]; var updated: Double; var stale: Bool; var note: String
     var status: String?
+    /// A name the user gave this account ("개인"), shown in place of its number.
+    var alias: String?
+    /// An Agy limit pool ("Gemini Models"); pools of one installation are told apart by this name.
+    var pool: String?
+    /// false for an Agy pool: the provider does not say which Google account it belongs to.
+    var identity_verified: Bool?
+    /// The pool's own name, else the user's alias; a pooled row takes no account number.
+    var displayName: String? { [alias, pool].compactMap { $0 }.first { !$0.isEmpty } }
+    /// The one window a tile shows: model weekly, then 5 hours, then daily, then any other model
+    /// window. An MCP or other budget stands in only when the account reports no model window.
+    var representativeWindow: Window? {
+        let model = windows.filter { $0.scope != "mcp" }, pool = model.isEmpty ? windows : model
+        for period in ["weekly", "5h", "daily"] { if let w = pool.first(where: { $0.periodKey == period }) { return w } }
+        return pool.first
+    }
+    /// A verified account's weekly window is the only one a burn rate is measured against.
+    var burnAllowed: Bool { identity_verified != false && representativeWindow?.isWeekly == true }
+    /// Error states leave a value unknown or old; never 0% and never unlimited.
+    var unavailable: Bool { ["provider_unavailable", "invalid_response", "no_quota", "unsafe_cli_response", "unsupported_cli"].contains(status ?? "") }
+    /// Four compact tiles: every provider gets one before any gets a second, in the collector's order.
+    static func pickTiles(_ rows: [AccountQuota], count: Int = 4) -> [AccountQuota] {
+        var kinds: [String] = []; for q in rows where !kinds.contains(q.kind) { kinds.append(q.kind) }
+        var taken = Set<String>(), round = 0
+        while taken.count < min(count, rows.count), round < rows.count {
+            for kind in kinds where taken.count < count {
+                let list = rows.filter { $0.kind == kind }
+                if round < list.count { taken.insert(list[round].id) }
+            }
+            round += 1
+        }
+        return rows.filter { taken.contains($0.id) }
+    }
     /// The limit cannot refresh until this account is connected again.
     var needsReconnect: Bool { stale && ["login_required", "login_expired", "credential_store_unavailable", "access_denied"].contains(status ?? "") }
     var statusLabel: String {
@@ -501,7 +578,8 @@ struct AccountQuota: Decodable, Identifiable {
         case "login_required", "login_expired", "credential_store_unavailable", "access_denied": return "재연결 필요"
         case "refresh_pending": return "갱신 중"
         case "rate_limited": return "조회 제한"
-        default: return updated > 0 ? Self.reportAge(updated) : "조회 지연"
+        case "unsafe_cli_response", "unsupported_cli": return "조회 중단"
+        default: return updated > 0 ? Self.reportAge(updated) : unavailable ? "값 없음" : "조회 지연"
         }
     }
     /// How old a value that could not be refreshed is, so an old % never reads as current: "38분 전 보고".
@@ -511,6 +589,27 @@ struct AccountQuota: Decodable, Identifiable {
     }
     struct Window: Decodable, Identifiable {
         var label: String; var pct: Double?; var reset: Double
-        var id: String { label }
+        /// Newer providers name the period; older Claude and Codex windows carry only a label.
+        var key: String?; var period: String?; var scope: String?
+        var id: String { key ?? label }
+        var periodKey: String {
+            if let period, period != "unknown" { return period }
+            if key == "7d" || key == "weekly" { return "weekly" }
+            if key == "5h" { return "5h" }
+            return ["주간": "weekly", "Weekly": "weekly", "5H": "5h", "5시간": "5h", "24H": "daily"][label] ?? "unknown"
+        }
+        var isWeekly: Bool { scope != "mcp" && periodKey == "weekly" }
+        enum CodingKeys: String, CodingKey { case label, pct, reset, key, period, scope }
+        init(label: String, pct: Double?, reset: Double, key: String? = nil, period: String? = nil, scope: String? = nil) {
+            self.label = label; self.pct = pct; self.reset = reset; self.key = key; self.period = period; self.scope = scope
+        }
+        // A window without a reported reset time decodes with 0 ("초기화 시각 미보고"), not as a failed snapshot.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            label = try c.decode(String.self, forKey: .label); pct = try c.decodeIfPresent(Double.self, forKey: .pct)
+            reset = (try? c.decodeIfPresent(Double.self, forKey: .reset)) ?? 0
+            key = try c.decodeIfPresent(String.self, forKey: .key); period = try c.decodeIfPresent(String.self, forKey: .period)
+            scope = try c.decodeIfPresent(String.self, forKey: .scope)
+        }
     }
 }
