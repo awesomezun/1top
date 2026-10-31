@@ -1,0 +1,85 @@
+/* 1top showreel v1.0.0: one 1920x1080 stage. reel.js sets every style from the time, so nothing here animates. */
+:root{--bg:#0b0e10;--panel:#11161a;--line:#222b31;--ink:#e8edef;--muted:#9aa7b0;--dim:#6f7c85;--accent:#69bda1;--mint:#82edc6;--sky:#7fb2d9;--screen:#06080a;
+ --sans:-apple-system,BlinkMacSystemFont,"SF Pro Display","Apple SD Gothic Neo","PingFang SC",sans-serif;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+html:lang(ko){--sans:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif}
+html:lang(zh-CN){--sans:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);overflow:hidden}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+
+/* Each scene is a full frame with its own backdrop, so a scene that wipes in covers the one before it. */
+.scene{position:absolute;inset:0;overflow:hidden;visibility:hidden}
+.backdrop{position:absolute;inset:-40px;background:
+ radial-gradient(900px 520px at 50% -8%,#69bda129,transparent 70%),
+ radial-gradient(760px 520px at 96% 104%,#7fb2d91c,transparent 70%),
+ linear-gradient(#ffffff08 1px,transparent 1px) 0 0/72px 72px,
+ linear-gradient(90deg,#ffffff08 1px,transparent 1px) 0 0/72px 72px,var(--bg)}
+.scrim{position:absolute;left:0;right:0;bottom:0;height:500px;background:linear-gradient(to top,#0b0e10 0,#0b0e10f7 250px,#0b0e10c0 340px,#0b0e1000 100%);pointer-events:none}
+.scrim.side{top:0;height:auto;width:1040px;right:auto;background:linear-gradient(to right,#0b0e10fa 0,#0b0e10f2 560px,#0b0e1000 100%)}
+
+/* Footage: the recorded window at its point size; the camera transform scales it. */
+.win{position:absolute;left:0;top:0;width:1640px;height:1068px;transform-origin:0 0;border-radius:11px;overflow:hidden;background:var(--screen);box-shadow:0 0 0 1px #ffffff1f,0 40px 120px #000c}
+.win img{display:block;width:1640px;height:1068px}
+
+/* Captions: kicker, title lines that rise out of a mask, and a sub line or chips. */
+.cap{position:absolute;left:96px;bottom:92px;width:1100px;z-index:5}
+.cap.narrow{width:520px}
+.kicker{font:650 21px/1 var(--mono);letter-spacing:.09em;color:var(--mint);white-space:pre;margin-bottom:22px}
+.title{font-size:66px;line-height:1.1;font-weight:700;letter-spacing:-.025em}
+.cap.narrow .title{font-size:56px}
+html:lang(zh-CN) .title,html:lang(ko) .title{letter-spacing:-.01em}
+.l{display:block;overflow:hidden;padding-bottom:.08em;margin-bottom:-.08em}
+.t{display:block}
+.sub{margin-top:22px;font-size:29px;line-height:1.45;color:var(--muted);font-weight:500}
+.sub .t{display:block}
+.chips{display:flex;align-items:center;gap:14px;margin-top:26px;font-size:30px;font-weight:650}
+.chip{display:inline-flex;align-items:center;flex-shrink:0;white-space:nowrap;height:56px;padding:0 22px;border-radius:14px;border:1.5px solid var(--line);background:#11161ae6;color:var(--muted)}
+.chip.on{border-color:var(--mint);color:var(--ink);background:#173129;box-shadow:0 0 0 6px #82edc61a}
+.arrow{color:var(--dim);font-weight:500}
+
+/* Logo, as on the site and the share card: the waveform mark beside the wordmark. */
+.logo{position:absolute;left:50%;top:0;display:flex;align-items:center;gap:40px;white-space:nowrap}
+.logo img{width:166px;height:auto}
+.wordmark{font-family:"1top Wordmark",var(--sans);font-weight:650;font-size:196px;line-height:1;letter-spacing:-.03em;color:var(--ink)}
+.center{position:absolute;left:0;right:0;text-align:center}
+.tagline{font-size:84px;line-height:1.12;font-weight:750;letter-spacing:-.025em}
+.grad{background:linear-gradient(100deg,var(--mint),var(--accent) 60%,var(--sky));-webkit-background-clip:text;background-clip:text;color:transparent}
+.platforms{font-size:30px;color:var(--muted);font-weight:500;letter-spacing:.01em}
+.url{font:650 76px/1 var(--mono);letter-spacing:-.01em}
+.download{display:inline-flex;align-items:center;gap:22px;height:78px;padding:0 34px;border-radius:18px;background:var(--mint);color:#05140e;font-size:32px;font-weight:700}
+.download span{font-weight:550;opacity:.78}
+
+/* Desktop and device stages. */
+.desk{position:absolute;top:60px;width:610px;height:960px;border-radius:22px;overflow:hidden;box-shadow:0 0 0 1px #ffffff1f,0 40px 110px #000b}
+.mac{left:660px;background:radial-gradient(520px 420px at 20% 18%,#5b6fb0,transparent 70%),radial-gradient(560px 520px at 90% 80%,#7a4f8f,transparent 70%),linear-gradient(160deg,#20294a,#2b2142 55%,#173847)}
+.windows{left:1290px;background:radial-gradient(420px 360px at 50% 46%,#4f9bff,transparent 72%),radial-gradient(640px 520px at 50% 60%,#0d4fc0,transparent 75%),linear-gradient(180deg,#071c4d,#0a2f7a)}
+.menubar{position:absolute;left:0;right:0;top:0;height:32px;display:flex;align-items:center;gap:16px;padding:0 16px;background:#14161cb8;color:#fff;font-size:14px;font-weight:500}
+.menubar b{font-weight:700}
+.apple{width:13px;height:16px;background:#fff;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 20'%3E%3Cpath d='M14.1 10.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9s-2-.9-3.4-.9C3.6 4.8 2 5.8 1.1 7.3c-1.8 3.2-.5 7.9 1.3 10.5.9 1.3 1.9 2.7 3.2 2.6 1.3 0 1.8-.8 3.3-.8s2 .8 3.4.8 2.2-1.3 3.1-2.6c1-1.5 1.4-2.9 1.4-3-.1 0-2.7-1-2.7-4.2zM11.5 3c.7-.8 1.2-2 1-3.1-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4z'/%3E%3C/svg%3E") center/contain no-repeat}
+.status{position:absolute;top:4px;display:grid;place-items:center;width:34px;height:24px;border-radius:6px;background:#ffffff3d}
+.status img{width:20px;height:20px}
+.menubar time,.taskbar time{position:absolute;right:16px;font-variant-numeric:tabular-nums}
+.panel{position:absolute;transform-origin:50% 0}
+.panel img{display:block}
+.windows .panel img{border-radius:12px;box-shadow:0 0 0 1px #ffffff26,0 24px 60px #0009}
+.taskbar{position:absolute;left:0;right:0;bottom:0;height:50px;display:flex;align-items:center;justify-content:center;gap:12px;background:#1b1f25e0;color:#fff;font-size:14px}
+.start{width:20px;height:20px;border-radius:3px;background:conic-gradient(#4cc2ff 0 25%,#3aa0ff 0 50%,#2f8be6 0 75%,#56b8ff 0)}
+.app{width:22px;height:22px;border-radius:6px;background:#ffffff2e}
+.tray{position:absolute;right:76px;display:flex;align-items:center;gap:9px;padding:5px 8px;border-radius:6px;background:#ffffff24}
+.tray img{width:19px;height:19px}
+.tray b{font-weight:500;opacity:.8}
+.tag{position:absolute;left:22px;bottom:70px;font:650 15px/1 var(--mono);letter-spacing:.1em;color:#ffffffd0;padding:8px 11px;border-radius:8px;background:#0b0e1099}
+.mac .tag{bottom:22px}
+.browser{position:absolute;border-radius:16px;overflow:hidden;background:#15191d;box-shadow:0 0 0 1px #ffffff1f,0 40px 110px #000b}
+.chrome{display:flex;align-items:center;gap:8px;height:38px;padding:0 16px;background:#1b2025;border-bottom:1px solid #ffffff12}
+.chrome i{width:12px;height:12px;border-radius:50%;background:#3a4148}
+.chrome span{margin-left:16px;flex:1;max-width:420px;height:24px;border-radius:7px;background:#0f1316;color:var(--muted);font-size:14px;line-height:24px;padding-left:12px}
+.browser img{display:block;width:100%}
+.phone{position:absolute;background:#0d0f12;box-shadow:0 0 0 2px #2c3238,0 40px 110px #000c}
+.phone img{position:absolute;display:block;width:100%;height:100%;object-fit:cover}
+.phone .screen{position:absolute;overflow:hidden}
+.island{position:absolute;left:50%;transform:translateX(-50%);background:#000;border-radius:99px}
+.hole{position:absolute;left:50%;transform:translateX(-50%);background:#000;border-radius:50%;box-shadow:0 0 0 2px #15181c}
+
+/* Tap mark on the language button. */
+.tap{position:absolute;border-radius:50%;border:3px solid var(--mint);pointer-events:none}
