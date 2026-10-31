@@ -43,7 +43,7 @@ struct QuickCluster: View {
         .background(theme.card, in: RoundedRectangle(cornerRadius: m(28)))
         .overlay(RoundedRectangle(cornerRadius: m(28)).stroke(theme.line))
         .onAppear { if tripStart <= 0 { tripStart = floor(now) } }
-        .onChange(of: model.snapshot?.updated) { readAt = Date() }
+        .onChange(of: model.snapshot?.updated) { _ in readAt = Date() }
         .accessibilityElement(children: .contain).accessibilityLabel(tr("계기판"))
     }
 
@@ -290,7 +290,7 @@ struct ClusterDial<Chip: View>: View {
                         let on = f <= fraction + 1e-4 && fraction > 0
                         ctx.stroke(line, with: .color(on ? color : theme.muted.opacity(0.55)), style: StrokeStyle(lineWidth: (major ? 3.2 : 1.6) * k, lineCap: .round))
                         if major {
-                            ctx.draw(Text(ClusterReadings.scaleNumber(v)).font(.system(size: max(8, 17 * k), weight: .semibold)).foregroundStyle(theme.muted),
+                            ctx.draw(Text(ClusterReadings.scaleNumber(v)).font(.system(size: max(8, 17 * k), weight: .semibold)).foregroundColor(theme.muted),
                                      at: CGPoint(x: c.x + cos(a) * 103 * k, y: c.y + sin(a) * 103 * k))
                         }
                     }
