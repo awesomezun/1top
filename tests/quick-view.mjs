@@ -76,4 +76,17 @@ assert.equal(q.trend(null, '5h', 0).reported, false);
 
 // Several accounts of one tool are numbered by account name; a tool with one account is not.
 assert.deepEqual(q.accountNumbers([{ id: 'b', kind: 'Claude', account_label: 'Zed@x' }, { id: 'a', kind: 'Claude', account_label: 'amy@x' }, { id: 'c', kind: 'Codex', account_label: 'c@x' }]), { a: 1, b: 2 });
+// Agy pools and GLM (provider-quotas-contract v1.0.2): the Windows quick view picks like the Mac panel.
+{
+ const { readFileSync } = await import('node:fs');
+ const rows = JSON.parse(readFileSync(new URL('./fixtures/provider-quotas_v1.0.2.json', import.meta.url), 'utf8')).account_quotas;
+ const by = Object.fromEntries(rows.map(r => [r.id, r]));
+ assert.equal(q.representative(by['glm:fixture-key']).label, '5H');
+ assert.equal(q.representative(by['antigravity:pool-claude-gpt']).key, 'cg-weekly');
+ assert.equal(q.burnAllowed(by['antigravity:pool-gemini']), false);
+ assert.ok(q.burnAllowed(by['claude:fixture-a']));
+ assert.deepEqual(q.pickTiles(rows).map(r => r.id), ['claude:fixture-a', 'codex:fixture-c', 'antigravity:pool-gemini', 'glm:fixture-key']);
+ // Pools are named on their chip, so only the two Claude and two GLM rows are numbered.
+ assert.deepEqual(q.accountNumbers(rows), { 'claude:fixture-a': 1, 'claude:fixture-b': 2, 'glm:fixture-down': 1, 'glm:fixture-key': 2 });
+}
 console.log('quick view ok');

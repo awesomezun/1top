@@ -467,10 +467,12 @@ struct QuickView: View {
 
     // MARK: Weekly limits · compact tiles
     private var weeklyCard: some View {
-        let rows = model.quotas
+        let rows = model.quotas, shown = Quota.pickTiles(rows)
         return VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(L.t("Weekly limits", "주간 한도")).font(.system(size: 12.5, weight: .semibold))
+                // A 5-hour or monthly tile among them makes the heading the providers' shared "계정 한도".
+                Text(shown.allSatisfy { $0.representativeWindow?.isWeekly == true } ? L.t("Weekly limits", "주간 한도") : L.t("Account limits", "계정 한도"))
+                    .font(.system(size: 12.5, weight: .semibold))
                 Text(L.t("100% per account", "계정별 100%")).font(.system(size: 11.5)).foregroundStyle(theme.muted)
                 Spacer()
             }.padding(.horizontal, 2)
@@ -478,31 +480,36 @@ struct QuickView: View {
                 Text(L.t("Connect subscription accounts in 1top on your computer.", "컴퓨터의 1top에서 구독 계정을 연결하면 표시됩니다.")).font(.system(size: 11.5)).foregroundStyle(theme.muted)
             } else {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                    ForEach(rows.prefix(4)) { weeklyTile($0) }
+                    ForEach(shown) { weeklyTile($0) }
                 }
             }
         }
     }
 
     private func weeklyTile(_ q: Quota) -> some View {
-        let w = q.weeklyWindow, color = Tool.color(q.kind), rate = fresh && !q.stale ? q.weekly?[model.period.rawValue]?.burnPerHour : nil
+        // A 5-hour or monthly window, or an unverified pool, shows its value without a weekly burn rate.
+        let w = q.representativeWindow, weekly = w?.isWeekly == true, color = Tool.color(q.kind)
+        let rate = fresh && !q.stale && q.burnAllowed ? q.weekly?[model.period.rawValue]?.burnPerHour : nil
+        // An Agy pool's long name sits under the tool name instead of on a chip. Where no weekly burn rate
+        // is measured, the window's own name takes the rate's place; an old value keeps it on the left.
+        let handle = (q.stale && !weekly && w != nil ? w!.name + " · " : "") + (q.pool ?? q.handle)
         let end = model.reportEnd, start = end - model.period.seconds
         let points = sparkPoints(q.usagePoints, start: start, end: end)
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Circle().fill(color).frame(width: 6, height: 6).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
                 Text(Tool.name(q.kind)).font(.system(size: 12.5, weight: .semibold)).lineLimit(1).fixedSize()
-                if let tag = model.accountTag(q.id) { AccountChip(text: tag) }
+                if q.pool == nil, let tag = model.accountTag(q.id) { AccountChip(text: tag) }
                 Spacer(minLength: 4)
                 Text(Format.percent(w?.pct)).font(.system(size: 17, weight: .semibold)).monospacedDigit().fixedSize()
                     .foregroundStyle(q.stale ? theme.muted : theme.ink)
             }
             // Fixed slots keep the small trend line in the same place in every tile.
             HStack(spacing: 6) {
-                Text(q.handle).font(.system(size: 10.5)).foregroundStyle(theme.muted).lineLimit(1).truncationMode(.middle)
+                Text(handle).font(.system(size: 10.5)).foregroundStyle(theme.muted).lineLimit(1).truncationMode(.middle)
                     .frame(width: 78, alignment: .leading)
                 WeeklySpark(points: points, start: start, end: end, color: color, faded: q.stale).frame(maxWidth: .infinity).frame(height: 14)
-                Text(q.stale ? q.staleLabel : rate.map { Format.percent($0) + L.t("/h", "/시간") } ?? L.t("Collecting", "수집 중"))
+                Text(q.stale ? q.staleLabel : rate.map { Format.percent($0) + L.t("/h", "/시간") } ?? (weekly && q.identityVerified != false ? L.t("Collecting", "수집 중") : w?.name ?? L.t("No value", "값 없음")))
                     .font(.system(size: 10.5, weight: .medium)).foregroundStyle(q.stale ? theme.amber : color).lineLimit(1).minimumScaleFactor(0.8)
                     .frame(width: 62, alignment: .trailing)
             }

@@ -5,10 +5,10 @@ import Svg,{Circle,G,Line,Path,Polygon} from 'react-native-svg';
 import {Text} from './typography';
 import {useWorkspace} from './workspace';
 import {fresh,projectName,total,valid} from './metrics';
-import {accountTags,fleetFlow,fleetQuotas,hasEstimate,periodTokens,reporting,sessionAccount,short} from './fleet';
+import {accountTags,burnAllowed,fleetFlow,fleetQuotas,hasEstimate,isWeekly,periodTokens,pickTiles,reporting,representative,sessionAccount,short} from './fleet';
 import {AccountChip,Button,ComputerList,LanguageButton,PeriodPicker,SessionDetails,Sheet,periodLabel} from './ui';
 import {Icon} from './icons';
-import {staleLabel} from './i18n';
+import {staleLabel,windowName} from './i18n';
 import {onTheme,quick,toolColor,toolName} from './theme';
 import {StateMark} from './state-mark';
 import type {Device,Flow,Quota,SessionRow,WindowKey} from './types';
@@ -148,7 +148,7 @@ export function Dashboard(){
   const list=[...by.values()].sort((a,b)=>b.tokens-a.tokens),sum=list.reduce((n,x)=>n+x.tokens,0),shown=list.length<=4?list:list.slice(0,3),seen:Record<string,number>={};
   const out=shown.map(x=>{const i=seen[x.kind]||0;seen[x.kind]=i+1;return {id:x.kind+x.model,name:x.model,detail:toolName(x.kind),color:toolColor(x.kind),opacity:[1,.68,.46][Math.min(i,2)],value:x.tokens};});
   const rest=sum-shown.reduce((n,x)=>n+x.tokens,0);if(rest>sum*.005)out.push({id:'rest',name:t('Other models','기타 모델'),detail:t(`${list.length-shown.length} more`,`${list.length-shown.length}개`),color:quick.dim,opacity:1,value:rest});return {out,sum};})();
- const quotas:Quota[]=fleetQuotas(basis).slice(0,4),now:number=w.clock/1000;
+ const quotas:Quota[]=pickTiles(fleetQuotas(basis)),now:number=w.clock/1000;
  const hosts=basis.map(d=>{const h=d.snapshot.host;return {id:d.id,name:d.name,fresh:fresh(d),received:d.received,cpu:h?.cpu??null,memory:h&&valid(h.used_memory)&&valid(h.total_memory)&&h.total_memory>0?h.used_memory/h.total_memory*100:null};});
  const paces=ordered.map(g=>tokensMode?(()=>{const r=gRate(g);return r===null?null:r*3600;})():gPace(g,period)),scale=nice(Math.max(1,...paces.filter(valid)));
  const end=Math.max(0,...basis.map(d=>d.snapshot.updated||0))||now,start=end-SECONDS[period];
@@ -180,12 +180,18 @@ export function Dashboard(){
     </View>
    </View>
    <View style={{paddingHorizontal:14,paddingTop:14,gap:7}}>
-    <View style={[st.titleRow,{paddingHorizontal:2,marginBottom:0}]}><Text style={st.title}>{t('Weekly limits','주간 한도')}</Text><Text style={st.sub}>{t('100% per account','계정별 100%')}</Text></View>
-    {quotas.length?<View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>{quotas.map(q=>{const wk=q.windows.find(x=>x.key==='7d'||x.key==='weekly'||['주간','Weekly','7d'].includes(x.label)),color=toolColor(q.kind),mins=wk?.reset?Math.ceil((wk.reset-now)/60):0;
-      return <View key={q.id} style={[st.tile,{backgroundColor:color+'12'}]}><View style={{flexDirection:'row',alignItems:'center',gap:5}}><View style={[st.dot,{backgroundColor:color}]}/><Text style={{color:quick.ink,fontSize:12.5,fontWeight:'600'}}>{toolName(q.kind)}</Text><AccountChip text={tags[q.id]}/><View style={{flex:1}}/><Text style={{color:q.stale?quick.muted:quick.ink,fontSize:17,fontWeight:'600'}}>{pct(wk?.pct)}</Text></View>
-       <View style={{flexDirection:'row',alignItems:'center',gap:6}}><Text numberOfLines={1} style={{width:62,color:quick.muted,fontSize:10.5}}>{q.account_label.includes(' · ')?q.account_label.split(' · ').pop():q.account_label.split('@')[0]}</Text>
+    <View style={[st.titleRow,{paddingHorizontal:2,marginBottom:0}]}><Text style={st.title}>{quotas.every(q=>isWeekly(representative(q)))?t('Weekly limits','주간 한도'):t('Account limits','계정 한도')}</Text><Text style={st.sub}>{t('100% per account','계정별 100%')}</Text></View>
+    {quotas.length?<View style={{flexDirection:'row',flexWrap:'wrap',gap:8}}>{quotas.map(q=>{
+      // A 5-hour or monthly window, or an unverified pool, shows its value without a weekly burn rate.
+      const wk=representative(q),weekly=isWeekly(wk),color=toolColor(q.kind),mins=wk?.reset?Math.ceil((wk.reset-now)/60):0;
+      const name=q.account_label.includes(' · ')?q.account_label.split(' · ').pop():q.account_label.split('@')[0];
+      // An Agy pool's long name sits under the tool name instead of on a chip. Where no weekly burn rate
+      // is measured, the window's own name takes the rate's place; an old value keeps it on the left.
+      const handle=(q.stale&&!weekly&&wk?windowName(wk,t)+' · ':'')+(q.pool||name),label=wk?windowName(wk,t):t('No value','값 없음');
+      return <View key={q.id} style={[st.tile,{backgroundColor:color+'12'}]}><View style={{flexDirection:'row',alignItems:'center',gap:5}}><View style={[st.dot,{backgroundColor:color}]}/><Text style={{color:quick.ink,fontSize:12.5,fontWeight:'600'}}>{toolName(q.kind)}</Text>{!q.pool&&<AccountChip text={tags[q.id]}/>}<View style={{flex:1}}/><Text style={{color:q.stale?quick.muted:quick.ink,fontSize:17,fontWeight:'600'}}>{pct(wk?.pct)}</Text></View>
+       <View style={{flexDirection:'row',alignItems:'center',gap:6}}><Text numberOfLines={1} style={{width:62,color:quick.muted,fontSize:10.5}}>{handle}</Text>
         <Spark points={q.usage_points||[]} start={start} end={end} color={color} faded={q.stale}/>
-        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.75} style={{width:q.stale?78:62,textAlign:'right',color:q.stale?quick.amber:color,fontSize:10.5,fontWeight:'500'}}>{q.stale?staleLabel(q,t):(()=>{const p=q.weekly?.[period];return valid(p?.used_pp)&&valid(p?.observed_seconds)&&p.observed_seconds>=120?pct(p.used_pp/p.observed_seconds*3600)+t('/h','/시간'):mins>0?(mins>=1440?t(`in ${Math.floor(mins/1440)}d`,`${Math.floor(mins/1440)}일 후`):t(`in ${Math.floor(mins/60)}h`,`${Math.floor(mins/60)}시간 후`)):t('Collecting','수집 중');})()}</Text></View></View>;})}</View>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={.75} style={{width:q.stale?78:62,textAlign:'right',color:q.stale?quick.amber:color,fontSize:10.5,fontWeight:'500'}}>{q.stale?staleLabel(q,t):!burnAllowed(q)?label:(()=>{const p=q.weekly?.[period];return valid(p?.used_pp)&&valid(p?.observed_seconds)&&p.observed_seconds>=120?pct(p.used_pp/p.observed_seconds*3600)+t('/h','/시간'):mins>0?(mins>=1440?t(`in ${Math.floor(mins/1440)}d`,`${Math.floor(mins/1440)}일 후`):t(`in ${Math.floor(mins/60)}h`,`${Math.floor(mins/60)}시간 후`)):t('Collecting','수집 중');})()}</Text></View></View>;})}</View>
      :<Text style={{color:quick.muted,fontSize:11.5}}>{t('Connect subscription accounts in 1top on your computer.','컴퓨터의 1top에서 구독 계정을 연결하면 표시됩니다.')}</Text>}
    </View>
    <View style={{paddingHorizontal:16,paddingTop:12,paddingBottom:10,gap:8}}>
