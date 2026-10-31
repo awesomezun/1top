@@ -10,6 +10,9 @@ const PERIODS=[['24h',86400],['12h',43200],['5h',18000],['1h',3600],['30m',1800]
 const LONGER=[900,7200,10800,21600,172800,259200,604800,1209600,2592000,7776000,15552000,31536000];
 const total=v=>Array.isArray(v)?v.reduce((a,b)=>a+b,0):0;
 const calibration=a=>({seconds:3600,used_pp:10,tokens:Math.round(10/a.per)});
+// The last request's share of the context window; a world session may say it nearly filled it.
+const context=(kind,share,input,rest)=>{const capacity=kind==='Codex'?400000:kind==='Claude'?1000000:null;
+ return {basis:'last_request_input',input_tokens:capacity&&share?Math.round(capacity*share):input,capacity,...rest};};
 // What a computer answers to each control (agent/onetop/controls.py).
 const ANSWERS={
  focus:'Sent a request to bring the host application forward on that computer.',
@@ -35,7 +38,7 @@ function report(now,started,controls){
    const out={id:s.id,control_key:s.child?'':'demo-'+i,kind,app,terminal:s.child?'':terminal,project,title:project+' · '+kind,model,effort:effort||null,status,
     tokens:n?.tokens||null,rate:n?status==='working'?n.rate:0:null,windows:n?.windows||{},
     cpu:s.child?null:status==='working'?Math.round((1.5+Math.min(30,u.minutes[j].at(-2)/4e4)+i%5*.7)*10)/10:status==='unknown'?.6:.3,rss:s.child?null:(160+i*24)*2**20,
-    context_usage:tracked?{basis:'last_request_input',input_tokens:64000+i*6000,capacity:kind==='Codex'?400000:kind==='Claude'?1000000:null,parts:[12000+i*2000,48000+i*4000,4000],observed_at:now,model}:null,
+    context_usage:tracked?context(kind,WORLD.context?.[s.child?'':s.id],64000+i*6000,{parts:[12000+i*2000,48000+i*4000,4000],observed_at:now,model}):null,
     root_session_id:s.child?s.child.lead:s.id,parent_session_id:s.child?s.child.lead:null};
    out.capabilities=s.child?[]:capabilities(out);
    const a=s.account&&limitOf(s.account);

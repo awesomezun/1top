@@ -12,6 +12,7 @@ export type DemoWorld={
  // [computer, id, kind, project, model, status, account, weight, app, title, effort]
  sessions:[number,string,string,string,string|null,string,string|null,number,string,string,string|null][];
  children:[string,string,number,string][];
+ context?:Record<string,number>;
  earlier:[number,string,string|null,string|null,string,number][];
  noReplies:string[];
  conversation:Conversation;
@@ -47,8 +48,13 @@ export function machine(world:DemoWorld,c:number,now:number,anchor:number,span=W
  const computer=world.computers[c],list=streams(world,c,anchor);
  const u=usage(computer.seed,computer.scale,list,now,anchor,world.rest,computer.duty,true,span),n=u.minutes[0].length;
  const cum=u.minutes.map(row=>{const s=new Float64Array(n+1);for(let i=0;i<n;i++)s[i+1]=s[i]+row[i];return s;});
- const at=(t:number)=>Math.min(n,Math.max(0,Math.ceil(t/60)-u.first));
- const sum=(j:number,from:number,to=Infinity)=>{const a=at(from),b=to===Infinity?n:at(to);return b>a?cum[j][b]-cum[j][a]:0;};
+ // Stretches start on whole minutes, except within the last minute: there the minute before the current one
+ // counts by its share inside the stretch, so a sliding last minute moves every few seconds as the
+ // collector's does (site/src/demo-model.js). On whole minutes every sum is the minute sum it was.
+ const current=now/60-u.first;
+ const at=(t:number)=>{const x=t/60-u.first;return x>=current||x>=n?n:x>=current-1?Math.max(0,x):Math.min(n,Math.max(0,Math.ceil(x)));};
+ const cut=(j:number,x:number)=>{const i=Math.floor(x);return i>=n?cum[j][n]:cum[j][i]+(x-i)*(cum[j][i+1]-cum[j][i]);};
+ const sum=(j:number,from:number,to=Infinity)=>{const a=at(from),b=to===Infinity?n:at(to);return b>a?cut(j,b)-cut(j,a):0;};
  return {c,list,u,n,sum};
 }
 

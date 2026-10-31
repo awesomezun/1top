@@ -131,12 +131,19 @@ enum DemoData {
                                                     accountId: a.account.id, calibration: .init(ppPerToken: a.account.per, confidence: "limited")))
                     })
                 } }
+                // The cluster's readings: a session the world says nearly filled its context, its last minute
+                // with tokens, and its sliding last minute, as the web demo (remote-demo.js) reports them.
+                let capacity: Double? = row.kind == "Codex" ? 400_000 : row.kind == "Claude" ? 1_000_000 : nil
+                let context = (s.child == nil ? DemoWorld.context[s.id] : nil).flatMap { share in
+                    capacity.map { Session.ContextUsage(inputTokens: (share * $0).rounded(), capacity: $0) } }
+                let lastUsage = numbers.map { _ in minutes.lastIndex { $0 > 0 }.map { min(now, Double(m.u.first + $0) * 60) } ?? now - 1800 }
                 return Session(id: s.id, controlKey: s.child == nil ? "demo-\(i)" : "", kind: row.kind, app: row.app, terminal: s.child == nil ? row.title : "",
                                project: row.project, title: row.project + " · " + row.kind, model: row.model ?? "", status: status,
                                tokens: numbers?.tokens, rate: numbers.map { status == "working" ? $0.rate : 0 }, windows: numbers?.windows ?? [:],
                                cpu: s.child == nil ? cpu : nil, rss: s.child == nil ? Double(160 + i * 24) * 1_048_576 : nil,
                                capabilities: s.child == nil ? row.caps : [], weeklyAccount: estimates == nil ? nil : a?.account.id, weeklyEstimate: estimates,
-                               rootSessionId: s.child?.lead ?? s.id, parentSessionId: s.child?.lead)
+                               rootSessionId: s.child?.lead ?? s.id, parentSessionId: s.child?.lead, contextUsage: context, lastUsage: lastUsage,
+                               usage: numbers.map { _ in Session.SessionUsage(lastMinute: DemoUsage.vector(m.sum(j, now - 60))) })
             }
             let used = Set(rows.compactMap(\.account))
             // The relay names an account by its tool and the end of its id; providers report limits in whole percent.

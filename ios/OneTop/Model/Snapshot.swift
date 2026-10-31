@@ -50,6 +50,13 @@ struct Session: Codable, Identifiable, Hashable, Sendable {
     var parentSessionId: String?
     /// The computer that reported this session; set by the app, not sent by the relay.
     var deviceId: String?
+    /// For the cluster's warning lights and last minute: how full the context is, when usage was last
+    /// reported, and the sliding last minute's token vector.
+    var contextUsage: ContextUsage? = nil
+    var lastUsage: Double? = nil
+    var usage: SessionUsage? = nil
+    struct ContextUsage: Codable, Hashable, Sendable { var inputTokens: Double?; var capacity: Double? }
+    struct SessionUsage: Codable, Hashable, Sendable { var lastMinute: [Double]? }
 
     /// Session IDs are unique per computer only.
     var key: String { (deviceId ?? "") + ":" + id }
@@ -116,12 +123,26 @@ struct QuotaWindow: Codable, Hashable, Sendable {
     var label: String
     var pct: Double?
     var reset: Double?
-    /// "5 hours" or "Weekly" in the chosen language, from the window's key; other labels as reported.
+    /// Newer providers (Agy, GLM) name the period and scope; older Claude and Codex windows carry only a label.
+    var period: String? = nil
+    var scope: String? = nil
+    /// "5 hours" or "Weekly" in the chosen language, from the window's period; other labels as reported.
     var name: String {
-        if key == "5h" || label == "5H" { return L.t("5 hours", "5시간") }
-        if key == "7d" || key == "weekly" || label == "주간" || label == "Weekly" { return L.t("Weekly", "주간") }
-        return label
+        if label == "MCP · 월간" { return L.t("MCP · Monthly", "MCP · 월간") }
+        switch periodKey {
+        case "5h": return L.t("5 hours", "5시간")
+        case "weekly": return L.t("Weekly", "주간")
+        case "monthly" where label == "월간": return L.t("Monthly", "월간")
+        default: return label
+        }
     }
+    var periodKey: String {
+        if let period, period != "unknown" { return period }
+        if key == "7d" || key == "weekly" { return "weekly" }
+        if key == "5h" { return "5h" }
+        return ["주간": "weekly", "Weekly": "weekly", "5H": "5h", "5시간": "5h", "24H": "daily"][label] ?? "unknown"
+    }
+    var isWeekly: Bool { scope != "mcp" && periodKey == "weekly" }
 }
 
 struct Quota: Codable, Identifiable, Hashable, Sendable {
@@ -140,10 +161,43 @@ struct Quota: Codable, Identifiable, Hashable, Sendable {
     var usagePoints: [[Double]]?
     /// The name given to the account in the desktop app; it replaces the account's number.
     var alias: String? = nil
+    /// An Agy limit pool ("Gemini Models"); pools of one installation are told apart by this name.
+    var pool: String? = nil
+    /// false for an Agy pool: the provider does not say which Google account it belongs to.
+    var identityVerified: Bool? = nil
+    /// The one window a tile shows: model weekly, then 5 hours, then daily, then any other model
+    /// window. An MCP or other budget stands in only when the account reports no model window.
+    var representativeWindow: QuotaWindow? {
+        let model = windows.filter { $0.scope != "mcp" }, list = model.isEmpty ? windows : model
+        for period in ["weekly", "5h", "daily"] { if let w = list.first(where: { $0.periodKey == period }) { return w } }
+        return list.first
+    }
+    /// A verified account's weekly window is the only one a burn rate is measured against.
+    var burnAllowed: Bool { identityVerified != false && representativeWindow?.isWeekly == true }
+    /// Error states leave a value unknown or old; never 0% and never unlimited.
+    var unavailable: Bool { ["provider_unavailable", "invalid_response", "no_quota", "unsafe_cli_response", "unsupported_cli"].contains(status ?? "") }
+    /// Four compact tiles: every provider gets one before any gets a second, in the computers' order.
+    static func pickTiles(_ rows: [Quota], count: Int = 4) -> [Quota] {
+        var kinds: [String] = []; for q in rows where !kinds.contains(q.kind) { kinds.append(q.kind) }
+        var taken = Set<String>(), round = 0
+        while taken.count < min(count, rows.count), round < rows.count {
+            for kind in kinds where taken.count < count {
+                let list = rows.filter { $0.kind == kind }
+                if round < list.count { taken.insert(list[round].id) }
+            }
+            round += 1
+        }
+        return rows.filter { taken.contains($0.id) }
+    }
     /// The account's sign-in on the computer has to be renewed before the limit can update.
     var needsReconnect: Bool { ["login_required", "login_expired", "credential_store_unavailable", "access_denied"].contains(status ?? "") }
     /// What a stale value says instead of a rate: reconnect needed, or how old it is.
-    var staleLabel: String { needsReconnect ? L.t("Reconnect needed", "재연결 필요") : Format.reportAge(updated) }
+    var staleLabel: String {
+        if needsReconnect { return L.t("Reconnect needed", "재연결 필요") }
+        if ["unsafe_cli_response", "unsupported_cli"].contains(status ?? "") { return L.t("Checks stopped", "조회 중단") }
+        if unavailable && (updated ?? 0) <= 0 { return L.t("No value", "값 없음") }
+        return Format.reportAge(updated)
+    }
     var weeklyWindow: QuotaWindow? { windows.first { $0.label == "주간" || $0.key == "7d" || $0.key == "weekly" } }
     var fiveHour: QuotaWindow? { windows.first { $0.label == "5H" || $0.key == "5h" } }
     /// The relay masks accounts as "Claude · 4f21a8"; the tool is already the tile title, so keep the tag.

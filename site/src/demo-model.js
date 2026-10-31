@@ -35,8 +35,14 @@ export function machine(c,now,anchor,{span=WEEK_SPAN,controls}={}){
  const computer=WORLD.computers[c],list=streams(c,anchor,controls);
  const u=usage(computer.seed,computer.scale,list,now,anchor,WORLD.rest,computer.duty,true,span),n=u.minutes[0].length;
  const cum=u.minutes.map(row=>{const s=new Float64Array(n+1);for(let i=0;i<n;i++)s[i+1]=s[i]+row[i];return s;});
- const at=t=>Math.min(n,Math.max(0,Math.ceil(t/60)-u.first));
- const sum=(j,from,to=Infinity)=>{const a=at(from),b=to===Infinity?n:at(to);return b>a?cum[j][b]-cum[j][a]:0;};
+ // Stretches start on whole minutes, except within the last minute: there the minute before the current one
+ // counts by its share inside the stretch, so a sliding last minute moves every few seconds as the
+ // collector's does. A stretch reaching now takes all of the current minute, which is still being written.
+ // On whole minutes every sum is the minute sum it was, so the phones' copies agree at their check moment.
+ const current=now/60-u.first;
+ const at=t=>{const x=t/60-u.first;return x>=current||x>=n?n:x>=current-1?Math.max(0,x):Math.min(n,Math.max(0,Math.ceil(x)));};
+ const cut=(j,x)=>{const i=Math.floor(x);return i>=n?cum[j][n]:cum[j][i]+(x-i)*(cum[j][i+1]-cum[j][i]);};
+ const sum=(j,from,to=Infinity)=>{const a=at(from),b=to===Infinity?n:at(to);return b>a?cut(j,b)-cut(j,a):0;};
  return {c,computer,list,u,n,sum};
 }
 

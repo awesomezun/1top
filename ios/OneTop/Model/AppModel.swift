@@ -107,7 +107,9 @@ final class AppModel {
         for d in devices { for q in d.snapshot?.accountQuotas ?? [] where all[q.id] == nil || (q.updated ?? 0) > (all[q.id]?.updated ?? 0) { all[q.id] = q } }
         guard let quota = all[id] else { return nil }
         if let alias = quota.alias?.trimmingCharacters(in: .whitespaces), !alias.isEmpty { return alias }
-        let same = all.values.filter { $0.kind == quota.kind }.sorted { $0.accountLabel.lowercased() < $1.accountLabel.lowercased() }
+        // Pools of one Agy installation carry their own names and are not numbered.
+        if let pool = quota.pool, !pool.isEmpty { return pool }
+        let same = all.values.filter { $0.kind == quota.kind && $0.pool == nil }.sorted { $0.accountLabel.lowercased() < $1.accountLabel.lowercased() }
         guard same.count >= 2, let index = same.firstIndex(where: { $0.id == id }) else { return nil }
         return String(index + 1)
     }
@@ -562,6 +564,18 @@ final class AppModel {
         mailboxes = DemoData.mailboxes()
         controlOff = DemoData.controlOff
         connection = .demo
+        // A demo on the phone's clock moves on like a live one: fresh readings every ten seconds. A held
+        // demo (QA, filming) stays at its moment.
+        guard DemoData.held == nil else { return }
+        liveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(10))
+                guard !Task.isCancelled else { return }
+                let next = await Task.detached(priority: .utility) { DemoData.devices(now: DemoData.now()) }.value
+                guard let self, self.connection == .demo else { return }
+                self.devices = next
+            }
+        }
     }
 
     /// Re-reads the demo in the current language; messages written here stay.
@@ -575,6 +589,7 @@ final class AppModel {
     }
 
     func leaveDemo() {
+        liveTask?.cancel(); liveTask = nil
         resetAccountState()
         connection = token == nil ? .signedOut : .connecting
         if token != nil { connect() }

@@ -44,3 +44,22 @@ test('session speed is the period average per hour',()=>{
  assert.equal(short(hourly({windows:{'10m':[1000,0,0,0]}},'10m')),'6k');
  assert.equal(hourly({windows:{}},'1h'),null);
 });
+
+// Agy pools and GLM (provider-quotas-contract v1.0.2): one representative window per tile, a burn
+// rate only for a verified weekly window, four tiles spread over the providers, pools named.
+test('provider quota windows, tiles and pool names follow the shared fixture',async()=>{
+ const {readFile}=await import('node:fs/promises');
+ const {representative,isWeekly,burnAllowed,pickTiles,accountTags}=await import('../src/fleet.ts');
+ const {staleLabel,windowName}=await import('../src/i18n.ts');
+ const rows=JSON.parse(await readFile(new URL('../../tests/fixtures/provider-quotas_v1.0.2.json',import.meta.url),'utf8')).account_quotas;
+ const by=Object.fromEntries(rows.map(q=>[q.id,q])),ko=(en,k)=>k;
+ assert.equal(representative(by['claude:fixture-a']).label,'주간');assert.ok(burnAllowed(by['claude:fixture-a']));
+ assert.equal(representative(by['antigravity:pool-claude-gpt']).key,'cg-weekly');assert.ok(!burnAllowed(by['antigravity:pool-gemini']));
+ assert.equal(representative(by['glm:fixture-key']).label,'5H');assert.ok(!isWeekly(representative(by['glm:fixture-key'])));
+ assert.equal(representative({...by['glm:fixture-key'],windows:by['glm:fixture-key'].windows.filter(w=>w.scope==='mcp')}).key,'mcp');
+ assert.equal(representative(by['glm:fixture-down']),null);assert.equal(staleLabel(by['glm:fixture-down'],ko),'값 없음');
+ assert.equal(windowName(by['glm:fixture-key'].windows[0],ko),'MCP · 월간');assert.equal(windowName(by['glm:fixture-key'].windows[1],(en)=>en),'5 hours');
+ assert.deepEqual(pickTiles(rows).map(q=>q.id),['claude:fixture-a','codex:fixture-c','antigravity:pool-gemini','glm:fixture-key']);
+ const tags=accountTags([dev('p',{account_quotas:rows})]);
+ assert.equal(tags['antigravity:pool-gemini'],'Gemini Models');assert.equal(tags['claude:fixture-a'],'1');assert.equal(tags['claude:fixture-b'],'2');assert.equal(tags['glm:fixture-key'],'2');assert.equal(tags['glm:fixture-down'],'1');
+});

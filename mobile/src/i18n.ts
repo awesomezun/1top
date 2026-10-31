@@ -21,9 +21,11 @@ export function resetIn(at:number|null|undefined,t:(en:string,ko:string)=>string
  return minutes>=60?t(`Resets in ${Math.floor(minutes/60)}h ${minutes%60}m`,`${Math.floor(minutes/60)}시간 ${minutes%60}분 후 초기화`):t(`Resets in ${minutes}m`,`${minutes}분 후 초기화`);
 }
 /** A limit window's name from its key: "5 hours" and "Weekly" in the chosen language. */
-export function windowName(w:{key?:string;label:string},t:(en:string,ko:string)=>string){
- if(w.key==='5h'||w.label==='5H')return t('5 hours','5시간');
- if(w.key==='7d'||w.key==='weekly'||w.label==='주간'||w.label==='Weekly')return t('Weekly','주간');
+export function windowName(w:{key?:string;label:string;period?:string|null},t:(en:string,ko:string)=>string){
+ if(w.label==='MCP · 월간')return t('MCP · Monthly','MCP · 월간');
+ if(w.label==='월간')return t('Monthly','월간');
+ if(w.period==='5h'||(!w.period||w.period==='unknown')&&(w.key==='5h'||w.label==='5H'))return t('5 hours','5시간');
+ if(w.period==='weekly'||(!w.period||w.period==='unknown')&&(w.key==='7d'||w.key==='weekly'||w.label==='주간'||w.label==='Weekly'))return t('Weekly','주간');
  return w.label;
 }
 /** The state a session is in, in the iPhone's words. */
@@ -37,6 +39,9 @@ export function reportAge(updated:number|null|undefined,t:(en:string,ko:string)=
 }
 const RECONNECT=new Set(['login_required','login_expired','credential_store_unavailable','access_denied']);
 /** What a stale limit says instead of a rate: reconnect needed, or how old it is. */
-export const staleLabel=(q:{status?:string|null;updated?:number|null},t:(en:string,ko:string)=>string)=>RECONNECT.has(q.status||'')?t('Reconnect needed','재연결 필요'):reportAge(q.updated,t);
+// Error states leave a value unknown or old; never 0% and never unlimited.
+const UNAVAILABLE=new Set(['provider_unavailable','invalid_response','no_quota','unsafe_cli_response','unsupported_cli']);
+export const staleLabel=(q:{status?:string|null;updated?:number|null},t:(en:string,ko:string)=>string)=>RECONNECT.has(q.status||'')?t('Reconnect needed','재연결 필요')
+ :['unsafe_cli_response','unsupported_cli'].includes(q.status||'')?t('Checks stopped','조회 중단'):UNAVAILABLE.has(q.status||'')&&!(q.updated&&q.updated>0)?t('No value','값 없음'):reportAge(q.updated,t);
 /** Period names on every picker, shortest first, as on the iPhone. */
 export const PERIOD_NAMES:[import('./types').WindowKey,string,string][]=[['10m','10m','10분'],['30m','30m','30분'],['1h','1h','1시간'],['5h','5h','5시간'],['12h','12h','12시간'],['24h','24h','24시간']];

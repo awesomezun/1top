@@ -29,9 +29,10 @@ const effortBadge=s=>reportedEffort(s)?` <span class="count" title="보고된 �
 const kindName=k=>k==='Claude'?'Claude Code':k==='Antigravity'?'Agy CLI':k;
 // Several signed-in accounts of one tool are numbered by account name (Claude Code 1, 2), so a session
 // and its account's limit tile can be matched at a glance. A tool with one account shows no number.
-function accountNumbers(){const by={},out={};for(const q of data?.account_quotas||[])(by[q.kind]||=[]).push(q);
+// Pools of one Agy installation carry their own names and are not numbered.
+function accountNumbers(){const by={},out={};for(const q of data?.account_quotas||[])if(!q.pool)(by[q.kind]||=[]).push(q);
  for(const list of Object.values(by)){if(list.length<2)continue;const name=q=>String(q.account_label||q.id).toLowerCase();list.sort((a,b)=>name(a)<name(b)?-1:name(a)>name(b)?1:0).forEach((q,i)=>out[q.id]=i+1);}return out;}
-const accountChip=(id,label)=>{const alias=id&&data?.account_quotas?.find(q=>q.id===id)?.alias,n=id&&accountNumbers()[id];
+const accountChip=(id,label)=>{const alias=id&&OneTopWeekly.poolName(data?.account_quotas?.find(q=>q.id===id)),n=id&&accountNumbers()[id];
  return alias?` <span class="account-no is-alias" title="${esc(label||'')}" data-user-content>${esc(alias)}</span>`:n?` <span class="account-no" title="${esc(label||'')}">${n}</span>`:'';};
 const sessionAccount=s=>s.usage?.weekly_estimate?.[selectedPeriod]?.account_id||s.usage?.weekly_account;
 const hostApp=s=>s.orca_terminal?'Orca':s.location?.app||'실행 앱 미확인';
@@ -54,7 +55,7 @@ function actions(s){
  const list=[['focus','↗',identified&&!!(s.orca_terminal||s.location?.app_path),'실행 앱·터미널 바로가기'],paused?['resume','재개',identified&&!!s.orca_terminal&&s.input_verified!==false&&stopped,'이어서 작업하는 새 요청 보내기']:['pause','일시정지',canPause&&!resuming,'현재 작업 중단 후 세션 보존'],['terminate','정지',s.kind!=='Aside'&&identified&&(stopped||canPause)&&!resuming,'해당 CLI 프로세스 종료']];
  return `<div class="session-actions">${list.map(([a,label,enabled,hint])=>`<button class="action-button ${a}" data-action="${a}" data-target="${esc(s.id)}" ${!enabled||!fresh||actionBusy?'disabled':''} title="${esc(label+' · '+(enabled?hint:'세션 연결 또는 작업 상태 확인 필요'))}" aria-label="${esc((s.orca_terminal?.title||s.project)+' · '+label)}">${ICONS[a]}</button>`).join('')}</div>`;
 }
-function selectView(next){view=next;$('pageTitle').textContent=({sessions:'대시보드',maps:'사용량 맵',accounts:'계정 한도',operations:'활동',system:'컴퓨터 리소스',benchmark:'측정 정보'})[next];for(const v of ['sessions','accounts','maps','operations','system','benchmark'])$(v+'View').hidden=v!==view;document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));requestAnimationFrame(()=>{drawCharts();renderMaps();drawWeeklyCharts();drawHistory();});if(next!=='maps')hideTip();}
+function selectView(next){view=next;$('pageTitle').textContent=({sessions:'대시보드',cluster:'계기판',maps:'사용량 맵',accounts:'계정 한도',operations:'활동',system:'컴퓨터 리소스',benchmark:'측정 정보'})[next];for(const v of ['sessions','cluster','accounts','maps','operations','system','benchmark'])$(v+'View').hidden=v!==view;if(next==='cluster'){renderCluster();OneTopCluster.ignite($('clusterView'));}document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));requestAnimationFrame(()=>{drawCharts();renderMaps();drawWeeklyCharts();drawHistory();});if(next!=='maps')hideTip();}
 function periodMeta(){return data?.period_usage?.windows.find(w=>w.key===selectedPeriod);}
 function periodCaption(w=periodMeta()){return w?.key==='all'?'전체 기록':'최근 '+(w&&customPeriod(w.key)?OneTopRanges.label(w.key,OneTopI18n.language||'ko'):w?.label||selectedPeriod);}
 const customPeriod=key=>key==='all'||key.startsWith('custom:');
@@ -115,20 +116,30 @@ function render(){
  $('notice').hidden=!data.error;
  $('notice').textContent=data.error?'일부 데이터 수집이 지연되고 있습니다. 마지막으로 확인한 수치를 표시합니다.':'';
  renderPeriods();renderFleetSpeed();renderWeekly();renderSessionSummary();renderHost();renderTable();renderMaps();renderQuotas();renderSystem();renderBenchmark();renderOperations();
+ if(view==='cluster')renderCluster();
  if(selectedId&&$('detailDialog').open)renderDetail(selectedId);
  drawCharts();
+}
+// The cluster view (cluster.js): the same readings as the dashboard, laid out as an instrument cluster.
+function renderCluster(){
+ if(!data?.ready||!window.OneTopCluster)return;
+ OneTopCluster.render($('clusterView'),{state:data,period:selectedPeriod,caption:periodCaption(),sessions:visibleSessions().filter(s=>provider==='all'||s.kind===provider),display,colors,kindName,fmt,
+  speed:OneTopSpeed,tachMax:speedScale.key===selectedPeriod?speedScale.max:null,weekly:OneTopWeekly,reconnect:RECONNECT,accountChip:id=>accountChip(id,data.account_quotas?.find(q=>q.id===id)?.account_label),
+  name:s=>s.orca_terminal?.title||(s.kind!=='Aside'&&s.location?.terminal)||cleanTitle(s.title)||s.project,selectPeriod:key=>{selectPeriod(key);updateRangeControls();},open:openSession,rangeControls:updateRangeControls,drawFlow:drawClusterFlow});
 }
 function renderSessionSummary(){
  const h=data.system?.host;
  const track=value=>OneTopWeekly.valid(value)?`<i class="summary-mini-track" aria-hidden="true"><i style="width:${Math.min(100,value)}%"></i></i>`:'';
  const resource=(name,value,hint,percent)=>`<button class="session-resource" data-summary-view="system" title="${esc(hint)}"><span>${name}</span><b>${value}</b>${track(percent)}</button>`;
  $('sessionResourceStrip').innerHTML=resource('CPU',pct(h?.cpu),'전체 컴퓨터 CPU 사용률',h?.cpu)+resource('메모리',pct(h?.memory?.percent),`${bytes(h?.memory?.used)} / ${bytes(h?.memory?.total)}`,h?.memory?.percent)+resource('네트워크',`${bytes(h?.network?.rx)}/s ↓`,`업로드 ${bytes(h?.network?.tx)}/s ↑`)+resource('디스크',bytes(h?.disk?.free),'남은 저장 공간');
- $('sessionAccountStrip').innerHTML=(data.account_quotas||[]).map(q=>{
-  const n=OneTopWeekly.weekly(q)?.pct,known=OneTopWeekly.valid(n),current=known&&!q.stale;
-  const label=q.account_label||q.plan||'계정 확인 중',shortLabel=label.includes('@')?label.split('@')[0]:label;
-  const note=current?`${OneTopWeekly.percent(n)} 사용 · 주간 한도 100% 기준`:OneTopWeekly.valid(n)?`${reportAge(q.updated)} ${OneTopWeekly.percent(n)} · ${RECONNECT.has(q.status)?'재연결 필요':'최신 보고 대기'}`:'주간 사용량 보고 대기';
-  return `<button class="session-account ${known?(current?'':'is-last-report'):'is-pending'}" data-summary-view="accounts" style="--account-color:${colors[q.kind]||'#8d9ba8'}" title="${esc(kindName(q.kind)+' · '+label+'\n'+note)}"><i></i><span class="session-account-identity"><b>${esc(kindName(q.kind))}${accountChip(q.id,q.account_label)}</b><small>${esc(shortLabel)}</small></span><strong>${known?OneTopWeekly.percent(n)+(current?'':`<small>${esc(staleLabel(q))}</small>`):'보고 대기'}</strong>${track(n)}</button>`;
- }).join('')||'<button class="session-accounts-empty" data-summary-view="accounts">계정 연결 · 사용량 보고 대기 ↗</button>';
+ // Four accounts fit the strip: every provider gets one before any gets a second; the rest open the account limits.
+ const quotas=data.account_quotas||[],strip=quotas.length>4?OneTopWeekly.pick(quotas,4):quotas,more=quotas.length-strip.length;
+ $('sessionAccountStrip').innerHTML=(strip.map(q=>{
+  const w=OneTopWeekly.representative(q),weekly=OneTopWeekly.isWeekly(w),n=w?.pct,known=OneTopWeekly.valid(n),current=known&&!q.stale;
+  const label=q.pool?OneTopWeekly.poolName(q)+(weekly||!w?'':' · '+w.label):(q.account_label||q.plan||'계정 확인 중'),shortLabel=q.pool?label:(label.includes('@')?label.split('@')[0]:label)+(weekly||!w?'':' · '+w.label);
+  const note=current?`${OneTopWeekly.percent(n)} 사용 · ${weekly?'주간 한도':w.label} 100% 기준`:OneTopWeekly.valid(n)?`${reportAge(q.updated)} ${OneTopWeekly.percent(n)} · ${RECONNECT.has(q.status)?'재연결 필요':'최신 보고 대기'}`:OneTopWeekly.unavailable(q)?'값 없음':weekly||!w&&['Claude','Codex'].includes(q.kind)?'주간 사용량 보고 대기':'보고 대기';
+  return `<button class="session-account ${known?(current?'':'is-last-report'):'is-pending'}" data-summary-view="accounts" style="--account-color:${colors[q.kind]||'#8d9ba8'}" title="${esc(kindName(q.kind)+' · '+label+'\n'+note)}"><i></i><span class="session-account-identity"><b>${esc(kindName(q.kind))}${q.pool?'':accountChip(q.id,q.account_label)}</b><small>${esc(shortLabel)}</small></span><strong>${known?OneTopWeekly.percent(n)+(current?'':`<small>${esc(staleLabel(q))}</small>`):OneTopWeekly.unavailable(q)?'값 없음':'보고 대기'}</strong>${track(n)}</button>`;
+ }).join('')+(more?`<button class="session-account-more" data-summary-view="accounts" title="계정 한도" aria-label="계정 한도">+${more}</button>`:''))||'<button class="session-accounts-empty" data-summary-view="accounts">계정 연결 · 사용량 보고 대기 ↗</button>';
 }
 let speedScale={key:null,max:1,lower:0,since:0};
 function renderFleetSpeed(){
@@ -289,7 +300,7 @@ function renderQuotas(){
  const accountRows=data.account_quotas||[],verifiedKinds=new Set(accountRows.map(q=>q.kind));
  const rows=[...accountRows,...data.quotas.filter(q=>!verifiedKinds.has(q.kind)).map(q=>({...q,account_label:'계정 연결 미확인',stale:true}))];
  const window=(w,k)=>`<div class="quota-window"><div class="quota-label"><span>${esc(w.label)}</span><b>${w.pct==null?'미확인':Number(w.pct.toFixed(1))+'% 사용'}</b></div><div class="track"><i style="background:${colors[k]||'#8d9ba8'};width:${Math.min(100,Math.max(0,w.pct||0))}%"></i></div><div class="quota-note">${w.reset?new Date(w.reset*1000).toLocaleString(OneTopI18n.locale(),{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화':'초기화 시각 미보고'}</div></div>`;
- $('quotas').innerHTML=rows.map(q=>`<article class="quota"><h3>${dot(q.kind)}${kindName(q.kind)}${accountChip(q.id,q.account_label)} <small>${esc(q.plan||'')}</small></h3><p class="quota-account">${esc(q.account_label)}${q.id?' · '+esc(q.id.slice(-6)):''}</p><div class="quota-window-pair">${(q.windows.length?q.windows:[{label:'5H',pct:null},{label:'주간',pct:null}]).map(w=>window(w,q.kind)).join('')}</div><div class="quota-note ${q.stale?'quota-stale':''}">${esc(q.note)} · ${q.updated?'마지막 확인 '+ago(q.updated):'확인 불가 · 0%를 뜻하지 않음'}</div></article>`).join('');
+ $('quotas').innerHTML=rows.map(q=>`<article class="quota"><h3>${dot(q.kind)}${kindName(q.kind)}${accountChip(q.id,q.account_label)} <small>${esc(q.plan||'')}</small></h3><p class="quota-account">${esc(q.account_label)}${q.id?' · '+esc(q.id.slice(-6)):''}</p><div class="quota-window-pair">${(q.windows?.length?q.windows:['Claude','Codex'].includes(q.kind)?[{label:'5H',pct:null},{label:'주간',pct:null}]:[{label:'플랜 한도',pct:null}]).map(w=>window(w,q.kind)).join('')}</div><div class="quota-note ${q.stale?'quota-stale':''}">${esc(q.note)} · ${q.updated?'마지막 확인 '+ago(q.updated):'확인 불가 · 0%를 뜻하지 않음'}</div></article>`).join('');
 }
 function renderSystem(){
  const sys=data.system;if(!sys)return;const h=sys.host;
@@ -348,12 +359,16 @@ function tokenChart(id,events,minutes,range=data.chart_range){
   ctx.font=`600 ${style.tiny} ${style.font}`;const tw=ctx.measureText(label).width+10;ctx.fillStyle=withAlpha(style.panel,.9);ctx.beginPath();if(ctx.roundRect)ctx.roundRect(w-r-tw,y-8,tw,16,8);else ctx.rect(w-r-tw,y-8,tw,16);ctx.fill();ctx.fillStyle=style.accent;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,w-r-tw/2,y+.5);ctx.textBaseline='alphabetic';}
  timeLabels(c,start,end,4);
 }
+// extra: tokens the cluster counts on at the last minute's rate between readings, so the current bar fills.
+function drawClusterFlow(extra=[]){if(view!=='cluster'||!data?.ready)return;const scoped=e=>provider==='all'||e.kind===provider;tokenChart('clusterTokenChart',data.events.filter(scoped).concat(extra.filter(scoped)),(periodMeta()?.seconds||3600)/60);}
 function drawCharts(){
  if(!data?.ready)return;
  const tokenEvents=data.events.filter(e=>provider==='all'||e.kind===provider),minutes=(periodMeta()?.seconds||3600)/60;
  tokenChart('tokenChart',tokenEvents,minutes);tokenChart('accountTokenChart',tokenEvents,minutes);
  const legend=tokenFlowData(tokenEvents,minutes,data.updated,data.chart_range).series.map(k=>`<span>${dot(k)}${k==='Aside'?'앱 내부 세션':esc(kindName(k))}</span>`).join('');
- $('chartLegend').innerHTML=legend;$('accountChartLegend').innerHTML=legend;$('accountTokenPeriod').textContent=periodCaption();
+ $('chartLegend').innerHTML=legend;$('accountChartLegend').innerHTML=legend;
+ // The cluster's token flow page shows the same chart while it is open.
+ if(view==='cluster'&&$('clusterTokenChart')){drawClusterFlow();$('clusterChartLegend').innerHTML=legend;}$('accountTokenPeriod').textContent=periodCaption();
  const c=canvasBase('systemChart'),hist=data.system?.history||[];
  if(c){axes(c,100,'%',3);const {ctx,w,h,l,t,b,r,style}=c,start=hist[0]?.t||0,end=hist.at(-1)?.t||start+1,x=v=>l+(v.t-start)/Math.max(1,end-start)*(w-l-r),y=n=>h-b-n/100*(h-t-b);
   for(const [key,color] of [['cpu',style.accent],['memory','#8f98e0']]){
@@ -407,7 +422,8 @@ $('clearFilter').onclick=()=>{provider='all';render();};$('search').oninput=rend
 
 $('usageMode').onclick=e=>{const b=e.target.closest('[data-unit]');if(b){usageUnit=b.dataset.unit;render();}};
 $('periodCards').onclick=e=>{const b=e.target.closest('[data-period]');if(b)selectPeriod(b.dataset.period);};
-function openDetail(e){if(e.target.closest('button'))return;const r=e.target.closest('[data-session]');if(!r)return;selectedId=r.dataset.session;renderDetail(selectedId);if(!$('detailDialog').open)$('detailDialog').show();document.body.classList.add('inspecting');drawCharts();}
+function openDetail(e){if(e.target.closest('button'))return;const r=e.target.closest('[data-session]');if(r)openSession(r.dataset.session);}
+function openSession(id){selectedId=id;renderDetail(selectedId);if(!$('detailDialog').open)$('detailDialog').show();document.body.classList.add('inspecting');drawCharts();}
 $('sessionStats').onclick=e=>{const b=e.target.closest('[data-state-chip]');if(!b)return;$('stateFilter').value=$('stateFilter').value===b.dataset.stateChip?'all':b.dataset.stateChip;renderTable();};
 $('sessionsBody').onclick=e=>{const g=e.target.closest('[data-group-toggle]');if(g?.dataset.groupToggle){e.preventDefault();OneTopDashboard.toggleGroup(g.dataset.groupToggle,g.getAttribute('aria-expanded')==='true');renderTable();return;}const b=e.target.closest('[data-children]');if(b){e.preventDefault();e.stopPropagation();const id=b.dataset.children;expandedSessions.has(id)?expandedSessions.delete(id):expandedSessions.add(id);renderTable();return;}openDetail(e);};$('sessionsBody').onkeydown=e=>{if(!e.target.closest('button')&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openDetail(e);}};
 document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(b&&!b.disabled){e.preventDefault();prepareAction(b.dataset.action,b.dataset.target);}});
@@ -718,11 +734,12 @@ function renderWeekly(){
  const rows=(data.account_quotas||[]).filter(q=>provider==='all'||q.kind===provider);
  const periodLabel=periodMeta()?.label||selectedPeriod;
  $('weeklyOverview').innerHTML=rows.map(q=>{
-  const w=OneTopWeekly.weekly(q),n=w?.pct,valid=OneTopWeekly.valid(n),a=data.weekly_usage?.accounts.find(a=>a.id===q.id),p=a?.periods[selectedPeriod];
-  const current=valid&&!q.stale,delta=OneTopWeekly.valid(p?.used_pp),status=current?'제공자 보고':RECONNECT.has(q.status)?'재연결 필요':q.updated?reportAge(q.updated):'확인 필요';
+  // The card shows the representative window; only a verified weekly window gets a burn rate.
+  const w=OneTopWeekly.representative(q),weekly=OneTopWeekly.isWeekly(w),burns=OneTopWeekly.burnAllowed(q,w),n=w?.pct,valid=OneTopWeekly.valid(n),a=burns?data.weekly_usage?.accounts.find(a=>a.id===q.id):null,p=a?.periods[selectedPeriod];
+  const current=valid&&!q.stale,delta=OneTopWeekly.valid(p?.used_pp),status=current?'제공자 보고':RECONNECT.has(q.status)?'재연결 필요':q.updated?reportAge(q.updated):OneTopWeekly.unavailable(q)?'값 없음':'확인 필요';
   const rate=OneTopWeekly.accountBurn(p,q),rateKnown=OneTopWeekly.valid(rate);
   const rateNote=rateKnown?`최근 ${periodLabel}${p.partial?' 중 관측된 구간만 계산':''} · ${OneTopWeekly.duration(p.observed_seconds)} 관측에서 +${OneTopWeekly.number(p.used_pp)}%\n한도 증가량 ÷ 실제 관측 시간으로 계산한 평균입니다. 주간 한도 100%를 기준으로 한 시간당 소진 비율이며, 미래 소진량 예측이 아닙니다.`:'최소 2분의 유효한 한도 관측과 최신 계정 보고가 필요합니다.';
-  return `<article class="weekly-card ${current?'':'is-stale'}" style="--quota-color:${colors[q.kind]||'#8d9ba8'}"><div class="weekly-card-heading"><b>${dot(q.kind)}${esc(kindName(q.kind))}${accountChip(q.id,q.account_label)}<button type="button" class="alias-edit" data-alias-edit="${esc(q.id)}" title="계정 이름 바꾸기" aria-label="계정 이름 바꾸기">✎</button></b><span>${esc(q.plan||'')} · ${status}</span></div><p class="weekly-account" title="${esc(q.account_label)}">${esc(q.account_label)}</p><div class="weekly-value"><strong>${valid?OneTopWeekly.percent(n):'—'}</strong><span>/ 100% 사용</span><b>${current?OneTopWeekly.percent(Math.max(0,100-n))+' 남음':''}</b></div><div class="track"><i style="width:${valid?Math.min(100,n):0}%;background:var(--quota-color)"></i></div><div class="weekly-period"><span>${periodCaption()}</span><strong>${delta?'+'+OneTopWeekly.number(p.used_pp)+'%':q.stale?'조회 필요':'다음 보고 대기'}</strong><span title="${esc(rateNote)}">${rateKnown?'평균 '+OneTopWeekly.burn(rate):delta?'소진 속도 확인 중':'한도 변화 기록 중'}</span></div><div class="weekly-chart" data-weekly-chart="${esc(q.id)}"></div><p class="weekly-note">${q.stale?esc(q.note):w?.reset?new Date(w.reset*1000).toLocaleString(OneTopI18n.locale(),{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화 · '+ago(q.updated)+' 확인':'주간 한도 확인 중'}</p>${q.stale&&RECONNECT.has(q.status)?reconnectMarkup(q):''}${aliasEditing===q.id?aliasMarkup(q):''}</article>`;
+  return `<article class="weekly-card ${current?'':'is-stale'}" style="--quota-color:${colors[q.kind]||'#8d9ba8'}"><div class="weekly-card-heading"><b>${dot(q.kind)}${esc(kindName(q.kind))}${accountChip(q.id,q.account_label)}<button type="button" class="alias-edit" data-alias-edit="${esc(q.id)}" title="계정 이름 바꾸기" aria-label="계정 이름 바꾸기">✎</button></b><span>${[esc(q.plan||''),status].filter(Boolean).join(' · ')}</span></div><p class="weekly-account" title="${esc(q.account_label)}">${esc(q.account_label)}</p><div class="weekly-value"><strong>${valid?OneTopWeekly.percent(n):'—'}</strong><span>/ 100% 사용${weekly?'':' · '+esc(w?.label||'플랜 한도')}</span><b>${current?OneTopWeekly.percent(Math.max(0,100-n))+' 남음':''}</b></div><div class="track"><i style="width:${valid?Math.min(100,n):0}%;background:var(--quota-color)"></i></div><div class="weekly-period"><span>${periodCaption()}</span><strong>${!burns?'—':delta?'+'+OneTopWeekly.number(p.used_pp)+'%':q.stale?'조회 필요':'다음 보고 대기'}</strong><span title="${esc(burns?rateNote:'주간 한도가 아닌 창이나 계정이 확인되지 않은 한도는 소진 속도를 계산하지 않습니다.')}">${!burns?'소진 속도 미계산':rateKnown?'평균 '+OneTopWeekly.burn(rate):delta?'소진 속도 확인 중':'한도 변화 기록 중'}</span></div><div class="weekly-chart" data-weekly-chart="${esc(q.id)}"></div><p class="weekly-note">${q.stale?esc(q.note):w?.reset?new Date(w.reset*1000).toLocaleString(OneTopI18n.locale(),{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화 · '+ago(q.updated)+' 확인':weekly?'주간 한도 확인 중':'한도 확인 중'}</p>${q.stale&&RECONNECT.has(q.status)?reconnectMarkup(q):''}${aliasEditing===q.id?aliasMarkup(q):''}</article>`;
  }).join('')||'<div class="empty">계정을 연결하면 제공자가 보고한 주간 사용률이 표시됩니다. 아래 계정 한도에서 계정을 추가하세요.</div>';
  drawWeeklyCharts();
 }

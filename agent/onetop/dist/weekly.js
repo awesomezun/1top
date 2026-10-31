@@ -5,7 +5,33 @@
  const number=n=>!valid(n)?'—':n>0&&n<.1?'<0.1':Number(n.toFixed(1)).toLocaleString('ko-KR');
  const percent=n=>number(n)+(valid(n)?'%':'');
  const estimate=e=>valid(e?.used_pp)?'≈'+percent(e.used_pp):'측정 중';
- const weekly=q=>q?.windows?.find(w=>w.label==='주간');
+ // Older Claude and Codex windows carry only a label; newer providers also report a period.
+ const PERIOD_LABELS={'주간':'weekly',Weekly:'weekly','5H':'5h','5시간':'5h','24H':'daily'};
+ const periodOf=w=>w?.period&&w.period!=='unknown'?w.period:w?.key==='7d'||w?.key==='weekly'?'weekly':w?.key==='5h'?'5h':PERIOD_LABELS[w?.label]||'unknown';
+ const weekly=q=>q?.windows?.find(w=>w&&w.scope!=='mcp'&&periodOf(w)==='weekly');
+ // The one window a tile shows: model weekly, then 5 hours, then daily, then any other model
+ // window. An MCP or other budget stands in only when the account reports no model window.
+ const representative=q=>{
+  const all=(Array.isArray(q?.windows)?q.windows:[]).filter(w=>w&&typeof w==='object'),model=all.filter(w=>w.scope!=='mcp'),pool=model.length?model:all;
+  for(const period of ['weekly','5h','daily']){const w=pool.find(w=>periodOf(w)===period);if(w)return w;}
+  return pool[0]||null;
+ };
+ const isWeekly=w=>!!w&&w.scope!=='mcp'&&periodOf(w)==='weekly';
+ // A pool whose account is not verified, or a window that is not weekly, gets no burn rate.
+ const burnAllowed=(q,w=representative(q))=>!!q&&q.identity_verified!==false&&isWeekly(w);
+ // Error states leave a value unknown or old; never 0% and never unlimited.
+ const UNAVAILABLE=new Set(['provider_unavailable','invalid_response','no_quota','unsafe_cli_response','unsupported_cli']);
+ const unavailable=q=>UNAVAILABLE.has(q?.status);
+ // Pools of one installation are told apart by their own name, not by an account number.
+ const poolName=q=>q?.alias||q?.pool||'';
+ // The compact views show four tiles; every provider gets one before any gets a second.
+ const pick=(rows,n=4)=>{
+  const list=Array.isArray(rows)?rows:[],kinds=[...new Set(list.map(q=>q.kind))],taken=new Set();
+  for(let round=0;round<list.length&&taken.size<Math.min(n,list.length);round++)for(const kind of kinds){
+   const q=list.filter(r=>r.kind===kind)[round];if(q&&taken.size<n)taken.add(q);
+  }
+  return list.filter(q=>taken.has(q));
+ };
  const explanation='선택 기간의 보고 토큰 × (기준 구간에서 소진한 주간 한도 % ÷ 같은 구간의 관측 토큰)입니다. 현재 계정 기준의 참고용 환산이며 실제 차감량이 아닙니다. 모델·캐시 구성과 다른 기기의 사용에 따라 달라집니다. 과거 미귀속 토큰의 실제 결제 계정을 복원하지 않습니다.';
  const pending=(account,quota,tokens)=>!account?'계정 연결 필요':quota?.stale?'한도 조회 대기':tokens===0?'이 기간의 보고 토큰 없음':'환산 기준 수집 중';
  const duration=s=>s<60?'1분 미만':s<3600?Math.floor(s/60)+'분':Math.floor(s/3600)+'시간 '+Math.floor(s%3600/60)+'분';
@@ -13,7 +39,7 @@
  const basis=e=>e?.calibration?`${duration(e.calibration.seconds)} 기준 · ${number(e.calibration.used_pp)}% / ${Math.round(e.calibration.tokens).toLocaleString('ko-KR')} tokens${e.calibration.source==='historical_provider_calibration'&&valid(e.calibration.to)?' · 저장된 제공자 보고 · '+new Date(e.calibration.to*1000).toLocaleString('ko-KR'):''}`:'';
  // Partial periods must use the observed duration, never the selected window length.
  const accountBurn=(period,quota)=>{
-  if(!quota||quota.stale!==false||!valid(period?.used_pp)||!valid(period?.observed_seconds)||period.observed_seconds<120)return null;
+  if(!quota||quota.stale!==false||quota.identity_verified===false||!valid(period?.used_pp)||!valid(period?.observed_seconds)||period.observed_seconds<120)return null;
   const rate=period.used_pp/period.observed_seconds*3600;
   return valid(rate)?rate:null;
  };
@@ -93,6 +119,6 @@
   result.partial=!result.hasData||uncertainTiming||result.observedSeconds<end-start-1e-6;
   return result;
  };
- const api={valid,number,percent,estimate,weekly,pending,explanation,duration,scope,basis,accountBurn,historicalCalibration,sessionBurn,burn,increaseTrend,quotaTrend};
+ const api={valid,number,percent,estimate,weekly,periodOf,representative,isWeekly,burnAllowed,unavailable,poolName,pick,pending,explanation,duration,scope,basis,accountBurn,historicalCalibration,sessionBurn,burn,increaseTrend,quotaTrend};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.OneTopWeekly=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

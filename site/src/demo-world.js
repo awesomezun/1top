@@ -58,6 +58,8 @@ export const WORLD={
  ],
  // Subagents under a lead: [lead, name, share of the lead's weight, status].
  children:[['s1','reviewer',.25,'working'],['s1','tester',.1,'idle'],['s2','migrator',.3,'working']],
+ // Sessions whose context window is nearly full: the share of it their last request used.
+ context:{s3:.93,w1:.91},
  // Earlier sessions, closed before the shown ones began: they fill the weekly windows and the history.
  // [computer, kind, account, model, project, weight].
  earlier:[

@@ -4,7 +4,7 @@ import SwiftUI
 // Quick view for the menu bar. The period picker governs every number below it:
 // a token card (average speed on the scope, usage by session), weekly limits with
 // their trend over the period, and the session list.
-private struct QuickTheme {
+struct QuickTheme {
     let light: Bool
     private func pick(_ dark: (Double, Double, Double), _ day: (Double, Double, Double)) -> Color {
         let c = light ? day : dark
@@ -30,7 +30,7 @@ private struct QuickTheme {
 // Sizes for the quick view. Text uses named roles like the dashboard's type tokens, and every size,
 // space and stroke follows the app zoom (보기 › 확대·축소). The panel is laid out again at the new
 // size rather than stretched, so text, digits and charts stay sharp.
-private struct QuickMetrics {
+struct QuickMetrics {
     enum Role: Double {
         case tiny = 9.5, caption = 10.5, label = 11.5, body = 12.5, title = 13, figure = 17, display = 22
     }
@@ -393,6 +393,8 @@ struct QuickDashboard: View {
     @State private var hoveredSession: String?
     @State private var selectedAccount: AccountQuota?
     @AppStorage("weeklyTokensMode") private var tokensMode = false
+    // The cluster (계기판) in place of the token card, weekly limits and resources; remembered.
+    @AppStorage("quickCluster") private var showCluster = false
     @AppStorage("dashboardTheme") private var dashboardTheme = "dark"
     // The dashboard's language (한·EN·中); the quick view, the menus and the dashboard window share it.
     @AppStorage("dashboardLanguage") private var language = "ko"
@@ -409,9 +411,14 @@ struct QuickDashboard: View {
         VStack(spacing: 0) {
             header
             periodPicker.padding(.horizontal, m(14)).padding(.bottom, m(10))
-            tokenSection.padding(.horizontal, m(16))
-            weeklyCard.padding(.horizontal, m(14)).padding(.top, m(14))
-            resources.padding(.horizontal, m(16)).padding(.top, m(12)).padding(.bottom, m(10))
+            if showCluster {
+                QuickCluster(model: model, theme: theme, m: m, tr: tr, caption: periodLabel)
+                    .padding(.horizontal, m(14)).padding(.bottom, m(10))
+            } else {
+                tokenSection.padding(.horizontal, m(16))
+                weeklyCard.padding(.horizontal, m(14)).padding(.top, m(14))
+                resources.padding(.horizontal, m(16)).padding(.top, m(12)).padding(.bottom, m(10))
+            }
             sessionList
             if let message = model.message {
                 HStack(alignment: .top) {
@@ -472,7 +479,15 @@ struct QuickDashboard: View {
         let light = dashboardTheme == "light", themeLabel = tr(light ? "다크 모드" : "화이트 모드")
         let at = Self.languages.firstIndex { $0.0 == tr.lang } ?? 0, next = Self.languages[(at + 1) % Self.languages.count]
         let languageLabel = "\(tr("언어")): \(Self.languages[at].2) → \(next.2)"
+        let clusterLabel = tr(showCluster ? "기본 보기" : "계기판 보기")
         return HStack(spacing: m(8)) {
+            // The cluster view, one tap each way.
+            Button { showCluster.toggle() } label: {
+                Image(systemName: "gauge.with.needle").font(.system(size: m(14), weight: .semibold))
+                    .foregroundStyle(showCluster ? theme.accent : theme.muted)
+                    .frame(width: m(24), height: m(24)).contentShape(Rectangle())
+            }.buttonStyle(.plain).help(clusterLabel).accessibilityLabel(clusterLabel)
+                .accessibilityAddTraits(showCluster ? .isSelected : [])
             Button(action: switchTheme) {
                 Text(light ? "☾" : "☀").font(.system(size: m(15))).foregroundStyle(theme.muted)
                     .frame(width: m(24), height: m(24)).contentShape(Rectangle())
@@ -593,10 +608,11 @@ struct QuickDashboard: View {
 
     // MARK: Weekly limits · compact tiles with a small trend line
     private var weeklyCard: some View {
-        let rows = model.snapshot?.account_quotas ?? []
+        let rows = model.snapshot?.account_quotas ?? [], shown = AccountQuota.pickTiles(rows)
         return VStack(alignment: .leading, spacing: m(7)) {
             HStack(alignment: .firstTextBaseline, spacing: m(6)) {
-                Text(tr("주간 한도")).font(m.font(.body, .semibold))
+                // A 5-hour or monthly tile among them makes the heading the providers' shared "계정 한도".
+                Text(tr(shown.allSatisfy { $0.representativeWindow?.isWeekly == true } ? "주간 한도" : "계정 한도")).font(m.font(.body, .semibold))
                 Text(tr("계정별 100%")).font(m.font(.label)).foregroundStyle(theme.muted)
                 Spacer()
                 Menu {
@@ -610,18 +626,23 @@ struct QuickDashboard: View {
                 Text(tr("+ 버튼으로 구독 계정을 연결하세요.")).font(m.font(.label)).foregroundStyle(theme.muted)
             } else {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: m(8)), GridItem(.flexible(), spacing: m(8))], spacing: m(8)) {
-                    ForEach(rows.prefix(4)) { weeklyRow($0) }
+                    ForEach(shown) { weeklyRow($0) }
                 }
             }
         }
     }
     private func weeklyRow(_ q: AccountQuota) -> some View {
-        let w = q.windows.first { $0.label == "주간" }
+        let w = q.representativeWindow, weekly = w?.isWeekly == true
         let account = model.snapshot?.weekly_usage?.accounts.first { $0.id == q.id }
         let p = account?.periods[model.selectedPeriod]
         let color = AgentPalette.color(q.kind)
-        let rate = model.fresh && !q.stale ? p?.burnPerHour : nil
-        let handle = q.account_label.split(separator: "@").first.map(String.init) ?? q.account_label
+        // A 5-hour or monthly window, or an unverified pool, shows its value without a weekly burn rate.
+        let rate = model.fresh && !q.stale && q.burnAllowed ? p?.burnPerHour : nil
+        let name = q.account_label.split(separator: "@").first.map(String.init) ?? q.account_label
+        // An Agy pool's long name sits under the tool name instead of on a chip. Where no weekly burn rate
+        // is measured, the window's own label ("5H", "주간") takes the rate's place; an old value keeps it on the left.
+        let handle = (q.stale && !weekly && w != nil ? tr(w!.label) + " · " : "") + (q.pool ?? name)
+        let status = q.stale ? tr(q.statusLabel) : rate != nil ? rate1(rate, tr) : weekly && q.identity_verified != false ? tr("수집 중") : tr(w?.label ?? "값 없음")
         let end = model.snapshot?.updated ?? model.now.timeIntervalSince1970, start = end - (periodSeconds[model.selectedPeriod] ?? 3600)
         let points = weeklyPoints(account, start: start, end: end)
         return Button { selectedAccount = q } label: {
@@ -629,7 +650,7 @@ struct QuickDashboard: View {
                 HStack(alignment: .firstTextBaseline, spacing: m(5)) {
                     Circle().fill(color).frame(width: m(6), height: m(6)).alignmentGuide(.firstTextBaseline) { $0[.bottom] - m(1) }
                     Text(toolName(q.kind)).font(m.font(.body, .semibold)).lineLimit(1).fixedSize()
-                    accountChip(q.id)
+                    if q.pool == nil { accountChip(q.id) }
                     Spacer(minLength: m(4))
                     Text(pct1(w?.pct)).font(m.font(.figure, .semibold)).monospacedDigit().fixedSize()
                         .foregroundStyle(q.stale ? theme.muted : theme.ink)
@@ -641,7 +662,7 @@ struct QuickDashboard: View {
                         .frame(width: m(78), alignment: .leading)
                     WeeklySpark(points: points, start: start, end: end, color: color, faded: q.stale, m: m)
                         .frame(maxWidth: .infinity).frame(height: m(14))
-                    Text(q.stale ? tr(q.statusLabel) : rate == nil ? tr("수집 중") : rate1(rate, tr))
+                    Text(status)
                         .font(m.font(.caption, .medium)).foregroundStyle(q.stale ? theme.amber : color).lineLimit(1)
                         .frame(width: m(54), alignment: .trailing)
                 }
@@ -649,7 +670,7 @@ struct QuickDashboard: View {
             .padding(.horizontal, m(10)).padding(.vertical, m(8)).frame(maxWidth: .infinity)
             .background(color.opacity(theme.light ? 0.08 : 0.07), in: RoundedRectangle(cornerRadius: m(8)))
             .contentShape(RoundedRectangle(cornerRadius: m(8)))
-        }.buttonStyle(.plain).accessibilityLabel("\(toolName(q.kind)) \(q.account_label) \(tr("주간 한도")) \(pct1(w?.pct))")
+        }.buttonStyle(.plain).accessibilityLabel("\(toolName(q.kind)) \(q.account_label) \(weekly ? tr("주간 한도") : tr(w?.label ?? "계정 한도")) \(pct1(w?.pct))")
             .help("\(q.account_label) · \(q.plan ?? "")\n" + tr.pick("선: \(periodLabel) 동안의 주간 한도 사용률\n오른쪽 아래: 같은 기간 평균 소진 속도\n클릭하면 5시간 한도와 초기화 시각을 확인합니다.",
                                                                      "Line: weekly limit used, \(periodLabel)\nBottom right: average burn rate over the same period\nClick to see the 5-hour limit and reset times.",
                                                                      "线：\(periodLabel)的每周额度使用率\n右下：同一时段的平均消耗速度\n点击查看 5 小时额度和重置时间。"))
@@ -835,15 +856,16 @@ struct QuickDashboard: View {
     private var accountNumbers: [String: Int] {
         let quotas = model.snapshot?.account_quotas ?? []
         var out: [String: Int] = [:]
-        for kind in Set(quotas.map(\.kind)) {
-            let list = quotas.filter { $0.kind == kind }.sorted { $0.account_label.lowercased() < $1.account_label.lowercased() }
+        // Pools of one Agy installation carry their own names, so they are not numbered.
+        for kind in Set(quotas.filter { $0.pool == nil }.map(\.kind)) {
+            let list = quotas.filter { $0.kind == kind && $0.pool == nil }.sorted { $0.account_label.lowercased() < $1.account_label.lowercased() }
             if list.count > 1 { for (i, q) in list.enumerated() { out[q.id] = i + 1 } }
         }
         return out
     }
     @ViewBuilder private func accountChip(_ id: String?) -> some View {
         let quota = model.snapshot?.account_quotas?.first { $0.id == id }
-        if let alias = quota?.alias, !alias.isEmpty {
+        if let alias = quota?.displayName {
             Text(alias).font(m.font(.caption, .semibold)).foregroundStyle(theme.ink).lineLimit(1)
                 .padding(.horizontal, m(5)).frame(minHeight: m(15))
                 .background(theme.raised, in: RoundedRectangle(cornerRadius: m(4))).fixedSize()

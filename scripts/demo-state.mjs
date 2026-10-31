@@ -27,6 +27,9 @@ const round=(n,d=4)=>Math.round(n*10**d)/10**d;
 // Aside sessions work in Aside's default workspace (project '0'); the others in a project folder.
 const cwd=(project,kind)=>kind==='Aside'?`${HOME}/.aside/u/demo-user`:`${HOME}/projects/${project}`;
 const pidOf=i=>40100+i*37;
+// The last request's share of the context window; a world session may say it nearly filled it.
+const context=(kind,share,input,rest)=>{const capacity=kind==='Codex'?400000:kind==='Claude'?1000000:null;
+ return {basis:'last_request_input',capacity,input_tokens:capacity&&share?Math.round(capacity*share):input,...rest};};
 
 export function periodSeconds(key,now,anchor=now){
  const fixed=PERIODS.find(p=>p[0]===key);if(fixed)return fixed[2];
@@ -77,7 +80,7 @@ export function demoState(now=Date.now()/1000,{period='1h',anchor=now,lang='ko'}
   const id=s.id,root=s.child?s.child.lead:id,orca=app==='Orca',pid=pidOf(i),since=anchor-STARTED+i*600;
   const out={account_binding_source:a?(kind==='Claude'?'claude_statusline_session':'otel_session_identity'):null,active_session_id:id+'-active',child_session_ids:s.child?[]:WORLD.children.filter(c=>c[0]===id).map(c=>id+'-'+c[1]),
    config_dir:kind==='Claude'||kind==='GLM'?HOME+'/.claude':kind==='Codex'?HOME+'/.codex':null,configured_model:model,connected:status!=='unknown',context_size:null,
-   context_usage:tracked?{basis:'last_request_input',capacity:kind==='Codex'?400000:kind==='Claude'?1000000:null,input_tokens:64000+i*6100,model,observed_at:now-30,parts:[12000+i*2000,48000+i*4000,4000]}:null,
+   context_usage:tracked?context(kind,WORLD.context?.[id],64000+i*6100,{model,observed_at:now-30,parts:[12000+i*2000,48000+i*4000,4000]}):null,
    continuation_keys:[],continuation_processes:[],continuation_sources:[],control_key:'demo-'+id,counter_reset:false,cpu:raw==='working'?cpuOf(j):status==='unknown'?.6:.3,
    cwd:cwd(project,kind),display_status:display,effort:effort,effort_source:effort?(kind==='Codex'?'codex_turn_context':kind==='Aside'?'aside_session_configuration':'claude_statusline'):null,effort_updated:effort?now-900:null,
    id,input_verified:orca,is_subagent:!!s.child,kind,last_usage:tracked?Math.max(anchor-STARTED,...history.map(h=>h[0]),now-1800):null,loading:false,

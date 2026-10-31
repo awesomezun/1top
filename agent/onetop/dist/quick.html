@@ -1,10 +1,11 @@
 <!doctype html>
 <html lang="ko">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><title>1top · 간략 대시보드</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/typography.css"><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/quick.css"><script defer src="/i18n.js"></script><script defer src="/effects.js"></script><script defer src="/speed.js"></script><script defer src="/quick.js"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><title>1top · 간략 대시보드</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/typography.css"><link rel="stylesheet" href="/dashboard.css"><link rel="stylesheet" href="/cluster.css"><link rel="stylesheet" href="/quick.css"><script defer src="/i18n.js"></script><script defer src="/effects.js"></script><script defer src="/speed.js"></script><script defer src="/weekly.js"></script><script defer src="/cluster.js"></script><script defer src="/quick.js"></script></head>
 <body class="quick-body">
 <div id="quick" class="q" data-user-content>
 <div id="qHead" class="q-head"></div>
 <div id="qPeriods" class="q-periods" role="group" aria-label="사용량 기간"></div>
+<section id="qCluster" class="q-cluster" hidden></section>
 <section class="q-tokens" aria-labelledby="qTokensTitle"><div id="qTokensHead" class="q-heading"></div><div class="q-tokens-body"><div class="q-dial fs-inst"><canvas id="qDial" aria-hidden="true"></canvas><div id="qDialCenter" class="q-dial-center"></div></div><div id="qLegend" class="q-legend"></div></div></section>
 <section id="qWeekly" class="q-weekly"></section>
 <div id="qResources" class="q-resources"></div>
