@@ -241,6 +241,8 @@ struct QuickView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.colorScheme) private var scheme
     @AppStorage("weeklyTokensMode") private var tokensChosen = false
+    /// The cluster (계기판) in place of the token card, weekly limits and resources; remembered.
+    @AppStorage("quickCluster") private var showCluster = false
     /// Weekly % needs the collector's estimates; a collector that does not send them shows tokens.
     private var tokensMode: Bool { tokensChosen || !model.sessions.contains(where: \.hasEstimate) }
     @State private var detail: Session?
@@ -255,9 +257,13 @@ struct QuickView: View {
             VStack(spacing: 0) {
                 ConnectionNotice().padding(.horizontal, 14).padding(.bottom, 10)
                 periodPicker.padding(.horizontal, 14).padding(.bottom, 10)
-                tokenSection.padding(.horizontal, 16)
-                weeklyCard.padding(.horizontal, 14).padding(.top, 14)
-                resources.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 10)
+                if showCluster {
+                    ClusterCard(theme: theme).padding(.horizontal, 14).padding(.bottom, 12)
+                } else {
+                    tokenSection.padding(.horizontal, 16)
+                    weeklyCard.padding(.horizontal, 14).padding(.top, 14)
+                    resources.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 10)
+                }
                 sessionList
             }
             .padding(.bottom, 24)
@@ -341,6 +347,16 @@ struct QuickView: View {
                     .accessibilityIdentifier("connection")
                     .accessibilityValue(lastReport)
                     .layoutPriority(-1)
+                    // The cluster view, one tap each way.
+                    Button { showCluster.toggle() } label: {
+                        Image(systemName: "gauge.with.needle").font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(showCluster ? theme.accent : theme.ink).accessibilityHidden(true)
+                    }
+                    .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.small)
+                    .accessibilityLabel(showCluster ? L.t("Standard view", "기본 보기") : L.t("Cluster view", "계기판 보기"))
+                    .accessibilityIdentifier("cluster-toggle")
+                    .accessibilityAddTraits(showCluster ? .isSelected : [])
+                    .fixedSize()
                     Button { toggleTheme() } label: {
                         Image(systemName: scheme == .dark ? "moon.fill" : "sun.max.fill").font(.system(size: 13, weight: .semibold))
                             .accessibilityHidden(true)

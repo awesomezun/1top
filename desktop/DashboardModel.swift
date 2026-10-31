@@ -14,6 +14,9 @@ struct DesktopSnapshot: Decodable {
     var account_quotas: [AccountQuota]?
     var events: [UsageEvent]?
     var weekly_usage: WeeklyUsage?
+    // The first minute the token events cover; before it the cluster's trip is outside the record.
+    var chart_range: ChartRange?
+    struct ChartRange: Decodable { var start: Double? }
     struct UsageEvent: Decodable {
         var t: Double; var n: Double?
         var kind: String?
@@ -26,11 +29,15 @@ struct DesktopSnapshot: Decodable {
         struct Window: Decodable, Identifiable {
             var key: String; var label: String; var tokens: [Double]
             var partial: Bool; var observed_seconds: Double
+            var seconds: Double?
             var id: String { key }
         }
     }
     struct SystemUsage: Decodable {
         var host: Host?
+        // Each computer's own load (a remote workspace); a local collector reports only its host.
+        var computers: [Computer]?
+        struct Computer: Decodable { var name: String?; var cpu: Double?; var memory: Double? }
         struct Host: Decodable {
             var cpu: Double?; var memory: Memory?
             struct Memory: Decodable { var percent: Double?; var used: Double? }
@@ -49,9 +56,14 @@ struct DesktopSession: Decodable, Identifiable {
     var location: Location?; var control_key: String?; var input_verified: Bool?
     var children_count: Int?; var children_working: Int?; var children_ids: [String]?
     var group_usage_partial: Bool?
+    // For the cluster's warning lights: how full the context is and when usage was last reported.
+    var context_usage: ContextUsage?; var last_usage: Double?
+    struct ContextUsage: Decodable { var input_tokens: Double?; var capacity: Double? }
     struct Usage: Decodable {
         var rate: Double?; var windows: [String: [Double]?]?
         var weekly_estimate: [String: WeeklyEstimate]?; var weekly_account: String?
+        // The sliding last minute's token vector (a lead's includes its subagents).
+        var last_minute: [Double]?; var window_seconds: Double?
         func weeklyBurnPerHour(period: String) -> Double? {
             guard let estimate = weekly_estimate?[period],
                   let weekly_account, !weekly_account.isEmpty,
@@ -141,6 +153,16 @@ struct WeeklyUsage: Decodable {
         var flow: [[Double]]?
         // [time, weekly %, reset]: reconciled report points; preferred over history like the dashboard.
         var usage_points: [[Double]]?
+        // [start, end, weekly % added, timing uncertain]: every reported increase, for the cluster's trip.
+        var increase_intervals: [[Cell]]?
+        enum Cell: Decodable {
+            case number(Double), flag(Bool), none
+            init(from decoder: Decoder) throws {
+                let c = try decoder.singleValueContainer()
+                if let n = try? c.decode(Double.self) { self = .number(n) } else if let f = try? c.decode(Bool.self) { self = .flag(f) } else { self = .none }
+            }
+            var number: Double? { if case .number(let n) = self { n } else { nil } }
+        }
     }
     struct Period: Decodable {
         var used_pp: Double?; var partial: Bool; var observed_seconds: Double

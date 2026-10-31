@@ -50,6 +50,13 @@ struct Session: Codable, Identifiable, Hashable, Sendable {
     var parentSessionId: String?
     /// The computer that reported this session; set by the app, not sent by the relay.
     var deviceId: String?
+    /// For the cluster's warning lights and last minute: how full the context is, when usage was last
+    /// reported, and the sliding last minute's token vector.
+    var contextUsage: ContextUsage? = nil
+    var lastUsage: Double? = nil
+    var usage: SessionUsage? = nil
+    struct ContextUsage: Codable, Hashable, Sendable { var inputTokens: Double?; var capacity: Double? }
+    struct SessionUsage: Codable, Hashable, Sendable { var lastMinute: [Double]? }
 
     /// Session IDs are unique per computer only.
     var key: String { (deviceId ?? "") + ":" + id }

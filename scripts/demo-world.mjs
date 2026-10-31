@@ -37,6 +37,8 @@ enum DemoWorld {
     struct Step { let at: Double, status: String, activity: String? }
     struct Script { let text: Words, photo: String, steps: [Step], reply: Words }
     static let rest: UInt32 = ${WORLD.rest}
+    /// Sessions whose context window is nearly full: the share of it their last request used.
+    static let context: [String: Double] = [${Object.entries(WORLD.context||{}).map(([k,v])=>`${str(k)}: ${num(v)}`).join(', ')||':'}]
     static let computers: [Computer] = [
 ${WORLD.computers.map(c=>`        Computer(id: ${str(c.id)}, name: ${str(c.name)}, platform: ${str(c.platform)}, seed: ${c.seed}, scale: ${num(c.scale)}, duty: ${num(c.duty)}, control: ${c.control}, cores: ${c.cores}, memory: ${num(c.memory)}, used: ${num(c.used)}, cpu: (${num(c.cpu[0])}, ${num(c.cpu[1])})),`).join('\n')}
     ]

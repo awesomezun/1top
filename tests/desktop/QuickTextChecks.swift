@@ -23,6 +23,9 @@ import Foundation
         precondition(en.resetsIn(days: 3, hours: 2, minutes: 0) == "Resets in 3d 2h" && ko.resetsIn(days: 0, hours: 0, minutes: 12) == "12분 후 초기화")
         precondition(zh.resetsIn(days: 0, hours: 4, minutes: 5) == "4小时5分钟后重置")
         precondition(en.working(4) == "Working 4" && zh.children(2) == "子会话 2" && en.count(3) == "3 more" && ko.perHour == "/시간")
+        // The cluster view reads the dashboard's cluster words.
+        precondition(en("계기판 보기") == "Cluster view" && zh("기본 보기") == "标准视图" && en("소진 속도") == "Burn rate")
+        precondition(en("%/시간 · 주간 한도 기준") == "%/h of the weekly limit" && en("최근 10분") == "Last 10m" && zh("남은 주간 한도") == "剩余每周额度")
         // Names never pass through a translation.
         precondition(en("checkout-web") == "checkout-web" && en("Orca · Gateway") == "Orca · Gateway")
         print("Quick text checks passed: three languages, model labels, formatted values, names left as they are.")
