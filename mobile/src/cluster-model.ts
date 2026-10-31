@@ -147,7 +147,7 @@ export function marks(max:number){
  return {max,major,minor:major/5};
 }
 const local=(label:string)=>{const s=String(label||'');return s.includes('@')?s.split('@')[0]:s;};
-type Account={id:string;kind:string;label:string;plan:string|null;alias:string|null;who:string;window:string|null;weekly:boolean;pct:number|null;left:number|null;reset:number|null;current:boolean;reconnect:boolean;burn:number|null;added:number|null;range?:{state:'idle'|'enough'|'empty';at:number|null;early:boolean}|null};
+type Account={id:string;kind:string;label:string;plan:string|null;alias:string|null;who:string;window:string|null;weekly:boolean;pct:number|null;left:number|null;reset:number|null;current:boolean;reconnect:boolean;burn:number|null;added:number|null;live?:number|null;range?:{state:'idle'|'enough'|'empty';at:number|null;early:boolean}|null};
 // When an account's weekly limit runs out at its current burn, and whether that comes before the reset.
 function range(a:Account,now:number){
  if(a.left===null||!valid(a.burn))return null;
@@ -172,6 +172,8 @@ function heat(state:ClusterState){
  const hottest=computers.slice().sort((a,b)=>b.load-a.load)[0]||null;
  return {value:hottest?hottest.load:null,hottest,computers};
 }
+// A session's last minute per hour; null without a report.
+const lastMinute=(s:ClusterSession)=>{const v=s.usage.last_minute;return v?v.reduce((a,b)=>a+(valid(b)?b:0),0)*HOUR/60:null;};
 // The last minute's tokens per hour, in all and by tool, from each top-level session's sliding last minute.
 function instant(state:ClusterState){
  const rows=state.root_sessions.length?state.root_sessions:state.sessions.filter(s=>!s.is_subagent),by:Record<string,number>={};let all:number|null=null;
@@ -182,11 +184,16 @@ export type Pick={type:'session'|'account';id:string}|null;
 export type Readings=ReturnType<typeof readings>;
 const KINDS=['Claude','Codex','GLM','Antigravity','Aside'],rank=(k:string)=>KINDS.includes(k)?KINDS.indexOf(k):KINDS.length;
 /** The cluster's readings (cluster.js readings): period, now in seconds, the subject picked, the trip's start. */
-export function readings(state:ClusterState,o:{period:WindowKey;now:number;pick?:Pick;trip?:number|null;tachMax?:number|null;sessions?:ClusterSession[]}){
+export function readings(state:ClusterState,o:{period:WindowKey;now:number;pick?:Pick;trip?:number|null;tachMax?:number|null;sessions?:ClusterSession[];hold?:{period?:string;tpm?:number}|null}){
  const now=o.now,w=state.period_usage.windows.find(x=>x.key===o.period),m=measure(state,o.period,now),rate=m.rate===null?null:m.rate*3600;
  // Between readings the window's total runs on at the last minute's rate; the next reading sets it true.
  const live=instant(state),climb=valid(live.rate)?live.rate/HOUR:0;
- const tach={rate,max:o.tachMax||scaleMax(rate,w?.seconds),tokens:m.tokens,computers:m.computers,expected:m.expected,instant:live.rate,byKind:live.by,climb};
+ // The tachometer reads tokens per minute, like rpm: the needle and the big figure the last minute, the line
+ // under them the period's average. Its scale is a round number held while the period stays.
+ const now1=valid(live.rate)?live.rate:rate,max=Math.max(o.tachMax||0,scaleMax(rate,w?.seconds));
+ let tpmMax=niceMax(Math.max(max/60,(rate||0)/60*2.5,(now1||0)/60));
+ if(o.hold){if(o.hold.period===o.period&&(o.hold.tpm||0)>tpmMax)tpmMax=o.hold.tpm!;o.hold.period=o.period;o.hold.tpm=tpmMax;}
+ const tach={rate,now:now1,live:valid(live.rate),max,tpmMax,tokens:m.tokens,computers:m.computers,expected:m.expected,instant:live.rate,byKind:live.by,climb};
  const accounts:Account[]=state.account_quotas.map(q=>{
   const p=state.weekly_usage.accounts.find(a=>a.id===q.id)?.periods?.[o.period],week=accountWindow(q),pct=valid(week?.pct)?week.pct:null,burns=burnAllowed(q,week);
   return {id:q.id,kind:q.kind,label:q.account_label,plan:q.plan||null,alias:q.alias||null,who:local(q.account_label),window:isWeekly(week)?null:week?.label??null,weekly:isWeekly(week),pct,left:pct===null?null:Math.max(0,100-pct),
@@ -208,17 +215,24 @@ export function readings(state:ClusterState,o:{period:WindowKey;now:number;pick?
  const held=o.pick?.type==='session'?list.find(x=>x.s.id===o.pick!.id):null,shown=order.slice(0,6);
  if(held&&!shown.includes(held))shown.splice(Math.min(5,shown.length),1,held);
  const rows=shown.map(row);
+ // Live: a burn at the last minute's token speed, holding the period's percent per token, so the needles move
+ // as tokens flow; without a last-minute report it is the period's burn.
+ const accountOf=(s:ClusterSession)=>(s.usage.weekly_estimate?.[o.period]?.account_id||s.usage.weekly_account||null) as string|null;
+ const livePace=(value:number|null|undefined,rows:typeof list)=>{if(value===null||value===undefined)return null;let n:number|null=null,t=0;for(const x of rows){const l=lastMinute(x.s);if(l!==null)n=(n||0)+l;t+=x.tokens;}
+  const per=valid(w?.seconds)&&w!.seconds>0?t*HOUR/w!.seconds:null;return n===null||!per?value:value*n/per;};
+ for(const a of accounts)a.live=valid(a.burn)?livePace(a.burn,list.filter(x=>accountOf(x.s)===a.id)):null;
  // The speedometer reads one subject and never adds rates across accounts: the session or account picked,
- // else the account burning fastest. Its second needle reads the same subject over the last ten minutes.
+ // else the account burning fastest now.
  type Subject={type:'session'|'account';id:string;kind:string;value:number|null;account:string|null;session?:ClusterSession;recent:number|null};
  let subject:Subject|null=null;const pick=o.pick,RECENT='10m';
  const recentOf=(a:Account)=>{const q=state.account_quotas.find(q=>q.id===a.id),p=state.weekly_usage.accounts.find(x=>x.id===a.id)?.periods?.[RECENT];return p&&burnAllowed(q,accountWindow(q))?accountBurn(p,q):null;};
  if(pick?.type==='session'){const l=list.find(x=>x.s.id===pick.id);if(l){const r=row(l);subject={type:'session',id:r.id,kind:r.kind,value:r.burn,account:r.account,session:r.session,recent:burn(l.s,RECENT)};}}
  else if(pick?.type==='account'){const a=accounts.find(x=>x.id===pick.id);if(a)subject={type:'account',id:a.id,kind:a.kind,value:a.burn,account:a.id,recent:recentOf(a)};}
  const picked=!!subject;
- if(!subject){const a=accounts.filter(a=>valid(a.burn)).sort((a,b)=>b.burn!-a.burn!)[0];if(a)subject={type:'account',id:a.id,kind:a.kind,value:a.burn,account:a.id,recent:recentOf(a)};}
+ if(!subject){const a=accounts.filter(a=>valid(a.burn)).sort((a,b)=>(b.live||0)-(a.live||0)||b.burn!-a.burn!)[0];if(a)subject={type:'account',id:a.id,kind:a.kind,value:a.burn,account:a.id,recent:recentOf(a)};}
  const value=valid(subject?.value)?subject!.value:null,target=cruise(accounts.find(a=>a.id===subject?.account),now),recent=o.period!==RECENT&&valid(subject?.recent)?subject!.recent:null;
- const speed={value,recent,cruise:target,max:Math.max(2,niceMax(Math.max(value||0,(target||0)*1.6,recent||0))),subject,picked,account:subject?.type==='account'?subject.id:null,session:subject?.type==='session'?subject.id:null};
+ const liveBurn=!subject?null:subject.type==='session'?livePace(value,list.filter(x=>x.s.id===subject!.id)):accounts.find(a=>a.id===subject!.account)?.live??value;
+ const speed={value,live:liveBurn,recent,cruise:target,max:Math.max(2,niceMax(Math.max(value||0,liveBurn||0,(target||0)*1.6))),subject,picked,account:subject?.type==='account'?subject.id:null,session:subject?.type==='session'?subject.id:null};
  // Tell-tales light only for what is there.
  const working:Record<string,number>={};for(const r of list)if(r.state==='working')working[r.s.kind]=(working[r.s.kind]||0)+1;
  const tells={kinds:Object.keys(working).sort((a,b)=>rank(a)-rank(b)||(a<b?-1:1)).map(k=>({kind:k,working:working[k]})),waiting:list.filter(r=>r.state==='waiting').map(r=>r.s.id),

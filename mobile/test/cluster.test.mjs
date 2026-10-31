@@ -10,9 +10,9 @@ const require=createRequire(import.meta.url),desktop=require('../../agent/onetop
 const display=s=>(s.children_working||0)>0?'working':s.display_status||s.status;
 
 // What the cluster shows: every figure the dials, the window, the lights, the fuel, the gauge and the trip read.
-const view=r=>({tach:[r.tach.rate,r.tach.max,r.tach.tokens,r.tach.instant,r.tach.climb,r.tach.computers,r.tach.expected,JSON.stringify(r.tach.byKind)],
- speed:[r.speed.value,r.speed.recent,r.speed.cruise,r.speed.max,r.speed.account,r.speed.session,r.speed.picked,r.speed.subject?.id??null],
- accounts:r.accounts.map(a=>[a.id,a.kind,a.plan,a.who,a.pct,a.left,a.reset,a.current,a.reconnect,a.burn,a.added,a.range?.state??null,a.range?.at??null]),
+const view=r=>({tach:[r.tach.rate,r.tach.now,r.tach.live,r.tach.max,r.tach.tpmMax,r.tach.tokens,r.tach.instant,r.tach.climb,r.tach.computers,r.tach.expected,JSON.stringify(r.tach.byKind)],
+ speed:[r.speed.value,r.speed.live,r.speed.recent,r.speed.cruise,r.speed.max,r.speed.account,r.speed.session,r.speed.picked,r.speed.subject?.id??null],
+ accounts:r.accounts.map(a=>[a.id,a.kind,a.plan,a.who,a.pct,a.left,a.reset,a.current,a.reconnect,a.burn,a.added,a.live??null,a.range?.state??null,a.range?.at??null]),
  sessions:r.sessions.map(s=>[s.id,s.kind,s.state,s.tokens,s.estimate,s.burn,s.account]),working:r.working,
  tells:r.tells,heat:r.heat.value,trip:r.trip&&[r.trip.start,r.trip.tokens,r.trip.rate,r.trip.inRange,JSON.stringify(r.trip.accounts)]});
 const phone=(devices,period,now,o={})=>{const state=clusterState(devices,now*1000);return readings(state,{period,now,...o});};
