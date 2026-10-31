@@ -28,7 +28,11 @@ def account_for(spec, roots):
 
 
 def event_account(spec, timestamp):
-    binding=spec.get('account_binding')
+    intervals=spec.get('_routing_intervals')
+    if intervals and timestamp>=min(row[2] for row in intervals):
+        from .routing_attribution import account_at
+        return account_at(intervals,timestamp)
+    binding=spec.get('_routing_original_binding',spec.get('account_binding'))
     return binding[0] if binding and timestamp>=binding[1] else None
 
 

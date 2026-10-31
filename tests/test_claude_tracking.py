@@ -66,6 +66,14 @@ class ClaudeRefreshTests(unittest.TestCase):
             with self.assertRaises(CredentialError):refresh_managed(Path.home()/'.claude')
             request.assert_not_called()
 
+    def test_provider_rejection_can_refresh_unexpired_managed_login_once(self):
+        self.creds['expiresAt']=(time.time()+3600)*1000
+        (self.root/'.credentials.json').write_text(json.dumps({'claudeAiOauth':self.creds}))
+        with patch('onetop.claude_profiles.refresh_request',return_value=self.response) as request:
+            refresh_managed(self.root);request.assert_not_called()
+            renewed=refresh_managed(self.root,force=True)
+            self.assertEqual(renewed['accessToken'],'renewed-access');request.assert_called_once()
+
     def test_account_switch_during_refresh_does_not_write(self):
         def reply(_):
             (self.root/'.claude.json').write_text(json.dumps({'oauthAccount':{'accountUuid':'b'}}))

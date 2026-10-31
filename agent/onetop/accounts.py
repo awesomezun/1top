@@ -162,10 +162,10 @@ def codex_executable():
     return next((str(p) for p in candidates if p.is_file() and os.access(p,os.X_OK)),None)
 
 
-def codex_rpc(root,executable=None):
+def codex_rpc(root,executable=None,refresh=False):
     executable=executable or codex_executable()
     if not executable:raise OSError('Codex unavailable')
-    # The owned subprocess handles its own auth. These are read-only RPCs, not turns.
+    # The owned subprocess handles auth/refresh; these RPCs never start a model turn.
     env={**os.environ,'CODEX_HOME':str(root)}
     env['PATH']=str(Path(executable).parent)+os.pathsep+env.get('PATH','')
     p=subprocess.Popen(cli_command(executable,'app-server'),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,env=env)
@@ -205,7 +205,7 @@ def codex_rpc(root,executable=None):
                 if rid==1:
                     if 'error' in message:raise ValueError('Initialization failed')
                     send(None,'initialized',{})
-                    send(2,'account/read',{'refreshToken':False})
+                    send(2,'account/read',{'refreshToken':refresh})
                     send(3,'account/rateLimits/read',None)
                 elif rid in (2,3):
                     if 'error' in message:raise ValueError('Usage unavailable')
@@ -372,14 +372,20 @@ class AccountQuotaSampler:
             if not credentials.get('accessToken'):raise CredentialError('login_required')
             if timestamp(credentials.get('expiresAt'))<=now+30:
                 credentials=refresh_managed(root,now)
-            token=credentials['accessToken'];fingerprint=hashlib.sha256(token.encode()).hexdigest()
-            # A profile's name/config does not prove who owns its stored token.
-            # Confirm with the provider before accepting any usage measurement.
-            if self.claude_verified.get(fingerprint)!=key:
-                if claude_identity(token)!=key:raise CredentialError('account_changed')
-                if len(self.claude_verified)>128:self.claude_verified.clear()
-                self.claude_verified[fingerprint]=key
-            usage=claude_usage(token)
+            for attempt in range(2):
+                token=credentials['accessToken'];fingerprint=hashlib.sha256(token.encode()).hexdigest()
+                try:
+                    # Config labels do not establish the actual token owner.
+                    if self.claude_verified.get(fingerprint)!=key:
+                        if claude_identity(token)!=key:raise CredentialError('account_changed')
+                        if len(self.claude_verified)>128:self.claude_verified.clear()
+                        self.claude_verified[fingerprint]=key
+                    usage=claude_usage(token)
+                    break
+                except urllib.error.HTTPError as error:
+                    if error.code!=401 or attempt or not managed(root):raise
+                    error.close()
+                    credentials=refresh_managed(root,now,force=True)
             after=self.claude(root,now)
             if after is None or after['id']!=key:return None
             windows=claude_windows(usage,now)

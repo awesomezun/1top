@@ -13,4 +13,4 @@ license = "MIT"
 [tool.setuptools]
 package-dir = {"" = "agent"}
 [tool.setuptools.package-data]
-onetop = ["dist/*", "dist/fonts/ibm-plex/v1.0.0/*"]
+onetop = ["dist/*", "dist/fonts/ibm-plex/v1.0.0/*", "licenses/*"]

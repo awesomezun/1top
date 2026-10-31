@@ -576,6 +576,9 @@ class Collector:
         self.discovery_at = time.time()
 
     def read_tracker(self, spec):
+        from .routing_attribution import attach
+        if not hasattr(self,'routing_reconciled'):self.routing_reconciled={}
+        attach(spec,getattr(self,'routing_bindings',{}),self.db,self.routing_reconciled)
         path = spec['path']
         ledger_path = spec.get('_ledger_path') or path
         if ledger_path not in self.trackers:
@@ -727,6 +730,8 @@ class Collector:
         now=time.time()
         sessions=[]
         roots=self.accounts.roots()
+        from .routing_attribution import load as routing_bindings
+        self.routing_bindings=routing_bindings(DATA,now)
         try:telemetry = self.telemetry.snapshot(now) if self.telemetry else {'available':False}
         except sqlite3.Error:telemetry = {'available':False}
         telemetry_sessions = session_index(telemetry)
@@ -789,6 +794,8 @@ class Collector:
         self.db.commit()
         for s in sessions:
             binding=s.pop('account_binding',None)
+            s.pop('_routing_intervals',None)
+            s.pop('_routing_original_binding',None)
             known=s['tokens'] is not None
             v=minute.get(s['id'],ZERO[:]) if known else None
             s['usage']={'last_minute':v,'last_five_minutes':five.get(s['id'],ZERO[:]) if known else None,
@@ -855,7 +862,7 @@ class Handler(BaseHTTPRequestHandler):
             not secrets.compare_digest(self.headers.get('X-Monitor-Token',''),self.server.action_token)):
             self.send_error(403);return
         route=urlsplit(self.path).path
-        if route not in ('/api/action','/api/mailbox','/api/accounts/login','/api/accounts/authorize','/api/accounts/alias'):self.send_error(404);return
+        if route not in ('/api/action','/api/mailbox','/api/accounts/login','/api/accounts/authorize','/api/accounts/alias','/api/routing'):self.send_error(404);return
         try:
             length=int(self.headers.get('Content-Length','0'))
             if length<1 or length>(2200000 if route=='/api/action' else 4096) or self.headers.get('Content-Type')!='application/json':
@@ -864,6 +871,8 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(payload,dict):raise ValueError()
             if route=='/api/mailbox':
                 result={'messages':self.server.controller.read_mailbox(payload.get('session_id'),payload.get('control_key'))}
+            elif route=='/api/routing':
+                result=self.server.routing.configure(payload)
             elif route=='/api/accounts/login':
                 result=self.server.account_login.start(payload.get('kind'))
             elif route=='/api/accounts/authorize':
@@ -892,6 +901,9 @@ class Handler(BaseHTTPRequestHandler):
         if host not in ('127.0.0.1','localhost'):
             self.send_error(403);return
         route=urlsplit(self.path).path
+        if route=='/api/routing':
+            routing=getattr(self.server,'routing',None)
+            self.json_response(200,routing.status() if routing else {'enabled':False,'running':False});return
         if route=='/api/usage-sessions':
             query=parse_qs(urlsplit(self.path).query)
             try:
