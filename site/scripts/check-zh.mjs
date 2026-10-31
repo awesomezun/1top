@@ -65,7 +65,7 @@ function strings(source,emit){
  code(null);
 }
 // ranges.js holds per-language unit tables and the words a typed range may use, not page texts.
-const SCRIPTS=['app.js','dashboard.js','conversation.js','history.js','weekly.js','speed.js','effects.js'];
+const SCRIPTS=['app.js','dashboard.js','conversation.js','history.js','weekly.js','speed.js','effects.js','cluster.js'];
 for(const file of SCRIPTS)strings(dist(file),(text,markup)=>markup||/[<>]/.test(text)?addHtml(text,file):add(text,file));
 
 // A part a script builds around a number or a name counts as translated when it reads in such a place.

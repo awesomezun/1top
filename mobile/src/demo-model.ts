@@ -12,6 +12,7 @@ export type DemoWorld={
  // [computer, id, kind, project, model, status, account, weight, app, title, effort]
  sessions:[number,string,string,string,string|null,string,string|null,number,string,string,string|null][];
  children:[string,string,number,string][];
+ context?:Record<string,number>;
  earlier:[number,string,string|null,string|null,string,number][];
  noReplies:string[];
  conversation:Conversation;

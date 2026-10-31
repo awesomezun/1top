@@ -104,7 +104,7 @@ try:
         assert size['table']<=size['parent']+1,size
         assert page.locator('#pageTitle').inner_text()=='대시보드'
         assert page.locator('.workspace').count()==0
-        assert page.locator('#views button').evaluate_all('(xs)=>xs.map(x=>x.dataset.view)')==['sessions','accounts','maps','system','operations','benchmark']
+        assert page.locator('#views button').evaluate_all('(xs)=>xs.map(x=>x.dataset.view)')==['sessions','cluster','accounts','maps','system','operations','benchmark']
         assert page.locator('#views [data-view=accounts] span').inner_text()=='계정 한도'
         assert page.locator('#views [data-view=maps] span').inner_text()=='사용량 맵'
         menu_x=page.locator('#views button>span').evaluate_all('(xs)=>xs.map(x=>x.getBoundingClientRect().x)')
@@ -221,7 +221,28 @@ try:
             assert page.locator(f'#{view}View [data-range-label]').inner_text()=='최근 1주'
             assert page.locator(f'#{view}View .duration-slider').is_visible()
             assert_range_geometry(view)
+        # The cluster reads the same period, and its gear picks one for the whole dashboard.
+        page.locator('#views [data-view="cluster"]').click()
+        assert page.locator('#pageTitle').inner_text()=='계기판'
+        page.locator('#clusterView .cl-tach .cl-ticks line').first.wait_for()
+        assert page.locator('#clusterView [data-cluster-period="custom"]').get_attribute('aria-pressed')=='true'
+        assert page.locator('#clusterView [data-cluster-period="custom"]').inner_text()=='1주'
+        assert page.locator('#clusterView').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1')
+        assert page.locator('#clusterView [data-cluster-mode]').count()==3
+        # Nothing of the cluster crosses its housing's curved edge, and no two texts overlap, on any page.
+        for mode in ['flow','weekly','sessions']:
+            page.locator(f'#clusterView [data-cluster-mode="{mode}"]').click();page.wait_for_timeout(300)
+            fit=page.evaluate((ROOT/'tests/cluster-housing.js').read_text())
+            assert not fit['out'] and not fit['overlap'] and fit['page']<=0,(mode,fit)
+        page.locator('#clusterView [data-cluster-period="custom"]').click()
+        page.locator('#clusterView .cl-range .duration-slider').wait_for()
+        page.keyboard.press('Escape')
+        assert page.locator('#clusterView .cl-range').is_hidden()
+        page.locator('#clusterView [data-cluster-period="5h"]').click()
+        page.wait_for_function("document.querySelector('#clusterView [data-cluster-period=\"5h\"]')?.getAttribute('aria-pressed')==='true'")
+        checks.append('cluster view reads and sets the shared period, with its custom gear on the dashboard slider, and keeps every text inside its housing without overlaps')
         page.locator('#views [data-view="sessions"]').click()
+        page.wait_for_function("document.getElementById('sessionPeriodTitle').textContent==='최근 5시간'")
         select_stop(17)
         page.wait_for_function("document.getElementById('periodColumn').textContent.includes('1년')")
         assert range_requests[-1]=='custom:31536000'

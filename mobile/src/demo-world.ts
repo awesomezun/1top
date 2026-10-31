@@ -456,6 +456,10 @@ export const WORLD:DemoWorld={
    "working"
   ]
  ],
+ "context": {
+  "s3": 0.93,
+  "w1": 0.91
+ },
  "earlier": [
   [
    0,

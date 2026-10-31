@@ -82,6 +82,7 @@ assert.deepEqual([one.collection_ms,one.resume_prompt,one.orca_terminals,one.pro
 assert.equal(one.weekly_usage.accounts[0].calibration.tokens,50);
 // Several computers: load and uptime belong to one; processes name their computer; samples line up by time.
 const both=remoteState([full,{...full,id:'d5',name:'Laptop'}],{now});
+assert.equal(both.system.computers.length,2);assert(both.system.computers.every(c=>'cpu' in c&&'memory' in c&&c.name));
 assert.equal(both.system.host.load,null);assert.equal(both.system.host.process_count,600);assert.equal(both.system.top[0].name,'node · Workstation');assert.equal(both.system.history.length,2);
 assert.equal(both.system.monitor.cpu,3);assert.equal(both.orca_terminals,2);
 // Histories of several computers add up by bins; a computer with other bins is left out.

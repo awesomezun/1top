@@ -329,12 +329,12 @@ footer{margin-top:8px;padding:12px 0 0;border-top:1px solid var(--line);color:va
 .sessions-table .status{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:var(--type-caption);white-space:nowrap}
 /* States read by shape and motion, never by a tool's hue (Codex is green, GLM indigo):
    working is a moving wave in the LCD green, waiting an amber diamond, paused two bars, the rest a hollow ring. */
-:is(.sessions-table .status,.session-stat,.group-row) .dot{flex:none;width:8px;height:8px;margin:0;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 1.5px var(--dim)}
-:is(.sessions-table .status,.session-stat,.group-row).working .dot{width:10px;height:9px;border-radius:0;box-shadow:none;--w:linear-gradient(var(--lcd),var(--lcd));background:var(--w) 0 100%/2px 40% no-repeat,var(--w) 4px 100%/2px 100% no-repeat,var(--w) 8px 100%/2px 65% no-repeat;animation:state-wave 1.2s ease-in-out infinite}
-:is(.sessions-table .status,.session-stat,.group-row).waiting .dot{width:7px;height:7px;border-radius:1.5px;background:var(--amber);box-shadow:none;transform:rotate(45deg)}
-:is(.sessions-table .status,.session-stat,.group-row):is(.paused,.resuming) .dot{width:8px;height:9px;border-radius:0;box-shadow:none;--w:linear-gradient(var(--muted),var(--muted));background:var(--w) 0 0/3px 100% no-repeat,var(--w) 5px 0/3px 100% no-repeat}
+:is(.sessions-table .status,.session-stat,.group-row,.cl-state) .dot{flex:none;width:8px;height:8px;margin:0;border-radius:50%;background:transparent;box-shadow:inset 0 0 0 1.5px var(--dim)}
+:is(.sessions-table .status,.session-stat,.group-row,.cl-state).working .dot{width:10px;height:9px;border-radius:0;box-shadow:none;--w:linear-gradient(var(--lcd),var(--lcd));background:var(--w) 0 100%/2px 40% no-repeat,var(--w) 4px 100%/2px 100% no-repeat,var(--w) 8px 100%/2px 65% no-repeat;animation:state-wave 1.2s ease-in-out infinite}
+:is(.sessions-table .status,.session-stat,.group-row,.cl-state).waiting .dot{width:7px;height:7px;border-radius:1.5px;background:var(--amber);box-shadow:none;transform:rotate(45deg)}
+:is(.sessions-table .status,.session-stat,.group-row,.cl-state):is(.paused,.resuming) .dot{width:8px;height:9px;border-radius:0;box-shadow:none;--w:linear-gradient(var(--muted),var(--muted));background:var(--w) 0 0/3px 100% no-repeat,var(--w) 5px 0/3px 100% no-repeat}
 @keyframes state-wave{0%,100%{background-size:2px 40%,2px 100%,2px 65%}33%{background-size:2px 100%,2px 50%,2px 85%}66%{background-size:2px 60%,2px 75%,2px 35%}}
-@media(prefers-reduced-motion:reduce){:is(.sessions-table .status,.session-stat,.group-row).working .dot{animation:none}}
+@media(prefers-reduced-motion:reduce){:is(.sessions-table .status,.session-stat,.group-row,.cl-state).working .dot{animation:none}}
 .sessions-table .status.working,:root[data-theme=light] .sessions-table .status.working{border-color:var(--line-strong);background:var(--hover);color:var(--ink);font-weight:600}
 .sessions-table .status.waiting{border-color:color-mix(in srgb,var(--amber) 40%,transparent);background:var(--amber-soft);color:var(--amber)}
 /* Status bands. */

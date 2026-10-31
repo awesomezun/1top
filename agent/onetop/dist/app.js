@@ -54,7 +54,7 @@ function actions(s){
  const list=[['focus','↗',identified&&!!(s.orca_terminal||s.location?.app_path),'실행 앱·터미널 바로가기'],paused?['resume','재개',identified&&!!s.orca_terminal&&s.input_verified!==false&&stopped,'이어서 작업하는 새 요청 보내기']:['pause','일시정지',canPause&&!resuming,'현재 작업 중단 후 세션 보존'],['terminate','정지',s.kind!=='Aside'&&identified&&(stopped||canPause)&&!resuming,'해당 CLI 프로세스 종료']];
  return `<div class="session-actions">${list.map(([a,label,enabled,hint])=>`<button class="action-button ${a}" data-action="${a}" data-target="${esc(s.id)}" ${!enabled||!fresh||actionBusy?'disabled':''} title="${esc(label+' · '+(enabled?hint:'세션 연결 또는 작업 상태 확인 필요'))}" aria-label="${esc((s.orca_terminal?.title||s.project)+' · '+label)}">${ICONS[a]}</button>`).join('')}</div>`;
 }
-function selectView(next){view=next;$('pageTitle').textContent=({sessions:'대시보드',maps:'사용량 맵',accounts:'계정 한도',operations:'활동',system:'컴퓨터 리소스',benchmark:'측정 정보'})[next];for(const v of ['sessions','accounts','maps','operations','system','benchmark'])$(v+'View').hidden=v!==view;document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));requestAnimationFrame(()=>{drawCharts();renderMaps();drawWeeklyCharts();drawHistory();});if(next!=='maps')hideTip();}
+function selectView(next){view=next;$('pageTitle').textContent=({sessions:'대시보드',cluster:'계기판',maps:'사용량 맵',accounts:'계정 한도',operations:'활동',system:'컴퓨터 리소스',benchmark:'측정 정보'})[next];for(const v of ['sessions','cluster','accounts','maps','operations','system','benchmark'])$(v+'View').hidden=v!==view;if(next==='cluster'){renderCluster();OneTopCluster.ignite($('clusterView'));}document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));requestAnimationFrame(()=>{drawCharts();renderMaps();drawWeeklyCharts();drawHistory();});if(next!=='maps')hideTip();}
 function periodMeta(){return data?.period_usage?.windows.find(w=>w.key===selectedPeriod);}
 function periodCaption(w=periodMeta()){return w?.key==='all'?'전체 기록':'최근 '+(w&&customPeriod(w.key)?OneTopRanges.label(w.key,OneTopI18n.language||'ko'):w?.label||selectedPeriod);}
 const customPeriod=key=>key==='all'||key.startsWith('custom:');
@@ -115,8 +115,16 @@ function render(){
  $('notice').hidden=!data.error;
  $('notice').textContent=data.error?'일부 데이터 수집이 지연되고 있습니다. 마지막으로 확인한 수치를 표시합니다.':'';
  renderPeriods();renderFleetSpeed();renderWeekly();renderSessionSummary();renderHost();renderTable();renderMaps();renderQuotas();renderSystem();renderBenchmark();renderOperations();
+ if(view==='cluster')renderCluster();
  if(selectedId&&$('detailDialog').open)renderDetail(selectedId);
  drawCharts();
+}
+// The cluster view (cluster.js): the same readings as the dashboard, laid out as an instrument cluster.
+function renderCluster(){
+ if(!data?.ready||!window.OneTopCluster)return;
+ OneTopCluster.render($('clusterView'),{state:data,period:selectedPeriod,caption:periodCaption(),sessions:visibleSessions().filter(s=>provider==='all'||s.kind===provider),display,colors,kindName,fmt,
+  speed:OneTopSpeed,tachMax:speedScale.key===selectedPeriod?speedScale.max:null,weekly:OneTopWeekly,reconnect:RECONNECT,accountChip:id=>accountChip(id,data.account_quotas?.find(q=>q.id===id)?.account_label),
+  name:s=>s.orca_terminal?.title||(s.kind!=='Aside'&&s.location?.terminal)||cleanTitle(s.title)||s.project,selectPeriod:key=>{selectPeriod(key);updateRangeControls();},open:openSession,rangeControls:updateRangeControls,drawFlow:drawClusterFlow});
 }
 function renderSessionSummary(){
  const h=data.system?.host;
@@ -348,12 +356,16 @@ function tokenChart(id,events,minutes,range=data.chart_range){
   ctx.font=`600 ${style.tiny} ${style.font}`;const tw=ctx.measureText(label).width+10;ctx.fillStyle=withAlpha(style.panel,.9);ctx.beginPath();if(ctx.roundRect)ctx.roundRect(w-r-tw,y-8,tw,16,8);else ctx.rect(w-r-tw,y-8,tw,16);ctx.fill();ctx.fillStyle=style.accent;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,w-r-tw/2,y+.5);ctx.textBaseline='alphabetic';}
  timeLabels(c,start,end,4);
 }
+// extra: tokens the cluster counts on at the last minute's rate between readings, so the current bar fills.
+function drawClusterFlow(extra=[]){if(view!=='cluster'||!data?.ready)return;const scoped=e=>provider==='all'||e.kind===provider;tokenChart('clusterTokenChart',data.events.filter(scoped).concat(extra.filter(scoped)),(periodMeta()?.seconds||3600)/60);}
 function drawCharts(){
  if(!data?.ready)return;
  const tokenEvents=data.events.filter(e=>provider==='all'||e.kind===provider),minutes=(periodMeta()?.seconds||3600)/60;
  tokenChart('tokenChart',tokenEvents,minutes);tokenChart('accountTokenChart',tokenEvents,minutes);
  const legend=tokenFlowData(tokenEvents,minutes,data.updated,data.chart_range).series.map(k=>`<span>${dot(k)}${k==='Aside'?'앱 내부 세션':esc(kindName(k))}</span>`).join('');
- $('chartLegend').innerHTML=legend;$('accountChartLegend').innerHTML=legend;$('accountTokenPeriod').textContent=periodCaption();
+ $('chartLegend').innerHTML=legend;$('accountChartLegend').innerHTML=legend;
+ // The cluster's token flow page shows the same chart while it is open.
+ if(view==='cluster'&&$('clusterTokenChart')){drawClusterFlow();$('clusterChartLegend').innerHTML=legend;}$('accountTokenPeriod').textContent=periodCaption();
  const c=canvasBase('systemChart'),hist=data.system?.history||[];
  if(c){axes(c,100,'%',3);const {ctx,w,h,l,t,b,r,style}=c,start=hist[0]?.t||0,end=hist.at(-1)?.t||start+1,x=v=>l+(v.t-start)/Math.max(1,end-start)*(w-l-r),y=n=>h-b-n/100*(h-t-b);
   for(const [key,color] of [['cpu',style.accent],['memory','#8f98e0']]){
@@ -407,7 +419,8 @@ $('clearFilter').onclick=()=>{provider='all';render();};$('search').oninput=rend
 
 $('usageMode').onclick=e=>{const b=e.target.closest('[data-unit]');if(b){usageUnit=b.dataset.unit;render();}};
 $('periodCards').onclick=e=>{const b=e.target.closest('[data-period]');if(b)selectPeriod(b.dataset.period);};
-function openDetail(e){if(e.target.closest('button'))return;const r=e.target.closest('[data-session]');if(!r)return;selectedId=r.dataset.session;renderDetail(selectedId);if(!$('detailDialog').open)$('detailDialog').show();document.body.classList.add('inspecting');drawCharts();}
+function openDetail(e){if(e.target.closest('button'))return;const r=e.target.closest('[data-session]');if(r)openSession(r.dataset.session);}
+function openSession(id){selectedId=id;renderDetail(selectedId);if(!$('detailDialog').open)$('detailDialog').show();document.body.classList.add('inspecting');drawCharts();}
 $('sessionStats').onclick=e=>{const b=e.target.closest('[data-state-chip]');if(!b)return;$('stateFilter').value=$('stateFilter').value===b.dataset.stateChip?'all':b.dataset.stateChip;renderTable();};
 $('sessionsBody').onclick=e=>{const g=e.target.closest('[data-group-toggle]');if(g?.dataset.groupToggle){e.preventDefault();OneTopDashboard.toggleGroup(g.dataset.groupToggle,g.getAttribute('aria-expanded')==='true');renderTable();return;}const b=e.target.closest('[data-children]');if(b){e.preventDefault();e.stopPropagation();const id=b.dataset.children;expandedSessions.has(id)?expandedSessions.delete(id):expandedSessions.add(id);renderTable();return;}openDetail(e);};$('sessionsBody').onkeydown=e=>{if(!e.target.closest('button')&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openDetail(e);}};
 document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(b&&!b.disabled){e.preventDefault();prepareAction(b.dataset.action,b.dataset.target);}});

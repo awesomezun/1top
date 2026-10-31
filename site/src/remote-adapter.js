@@ -128,7 +128,10 @@ function system(devices){
  const shared=systems.flatMap(({d,s})=>(s.shared||[]).map(p=>named(d,p)));
  const monitors=systems.map(({s})=>s.monitor).filter(m=>valid(m?.cpu));
  const sampler=systems.map(({s})=>s.sampler_ms).filter(valid);
- return {host:host(devices),history,top,shared,sampler_ms:sampler.length?Math.max(...sampler):null,
+ // Each computer's own load, for the cluster's temperature gauge (the hottest one, every one on hover).
+ const computers=devices.map(d=>{const h=d.snapshot.host||{};return {id:d.id,name:d.name,cpu:valid(h.cpu)?h.cpu:null,
+  memory:valid(h.used_memory)&&valid(h.total_memory)&&h.total_memory>0?Math.round(h.used_memory/h.total_memory*1000)/10:null};});
+ return {host:host(devices),computers,history,top,shared,sampler_ms:sampler.length?Math.max(...sampler):null,
   monitor:monitors.length?{pid:several?null:monitors[0].pid??null,cpu:monitors.reduce((n,m)=>n+m.cpu,0),rss:monitors.every(m=>valid(m.rss))?monitors.reduce((n,m)=>n+m.rss,0):null}:{pid:null,cpu:null,rss:null}};
 }
 
