@@ -3,7 +3,7 @@ import Svg,{Circle,Defs,G,Line,Mask,Path,Polygon,Polyline,Rect} from 'react-nati
 
 // Vector icons in the shapes of the iPhone's SF Symbols, so both phones point at the same things:
 // gauge.with.needle, terminal, square.grid.2x2, chart.bar.xaxis, gearshape and the controls.
-export type IconName='dashboard'|'sessions'|'usage'|'limits'|'workspace'|'computer'|'moon'|'sun'|'more'|'focus'|'pause'|'resume'|'terminate'|'send'|'photo'|'close'|'check'|'clock'|'sending'|'warning'|'branch'|'failed'|'sparkle';
+export type IconName='dashboard'|'cluster'|'sessions'|'usage'|'limits'|'workspace'|'computer'|'moon'|'sun'|'more'|'focus'|'pause'|'resume'|'terminate'|'send'|'photo'|'close'|'check'|'clock'|'sending'|'warning'|'branch'|'failed'|'sparkle';
 
 const gear=(()=>{const teeth=8,out=10.2,inn=7.8,pts:string[]=[];for(let i=0;i<teeth*4;i++){const a=(i/(teeth*4))*Math.PI*2-Math.PI/2,r=i%4<2?out:inn;pts.push(`${12+r*Math.cos(a)},${12+r*Math.sin(a)}`);}return pts.join(' ');})();
 
@@ -11,6 +11,8 @@ export function Icon({name,size=24,color,cut='#000'}:{name:IconName;size?:number
  const id='m'+name;
  const body=(()=>{switch(name){
   case 'dashboard':return <><Defs><Mask id={id}><Rect width={24} height={24} fill="white"/><Line x1={12} y1={13} x2={6.8} y2={7.8} stroke="black" strokeWidth={2.4} strokeLinecap="round"/><Circle cx={12} cy={13} r={2.6} fill="black"/></Mask></Defs><Circle cx={12} cy={12.5} r={10} fill={color} mask={`url(#${id})`}/></>;
+  // The cluster's dial, as in the desktop sidebar.
+  case 'cluster':return <G fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Path d="M3 18a9 9 0 0 1 18 0"/><Path d="M12 18l4.4-5.5"/><Path d="M6 14.2l1.2.7M12 8.6v1.4M18 14.2l-1.2.7"/><Circle cx={12} cy={18} r={1.5} fill={color}/></G>;
   case 'sessions':return <><Defs><Mask id={id}><Rect width={24} height={24} fill="white"/><Polyline points="6.5,9 9.8,12 6.5,15" fill="none" stroke="black" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/><Line x1={11.5} y1={15.5} x2={17} y2={15.5} stroke="black" strokeWidth={2} strokeLinecap="round"/></Mask></Defs><Rect x={1.5} y={3.5} width={21} height={17} rx={4} fill={color} mask={`url(#${id})`}/></>;
   case 'usage':return <G fill={color}><Rect x={2.5} y={2.5} width={8.4} height={8.4} rx={2.2}/><Rect x={13.1} y={2.5} width={8.4} height={8.4} rx={2.2}/><Rect x={2.5} y={13.1} width={8.4} height={8.4} rx={2.2}/><Rect x={13.1} y={13.1} width={8.4} height={8.4} rx={2.2}/></G>;
   case 'limits':return <G fill={color}><Rect x={3.5} y={11} width={4} height={8.5} rx={1.2}/><Rect x={10} y={6} width={4} height={13.5} rx={1.2}/><Rect x={16.5} y={2.5} width={4} height={17} rx={1.2}/><Rect x={1.5} y={20.8} width={21} height={1.7} rx={.85}/></G>;

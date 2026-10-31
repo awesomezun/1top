@@ -35,5 +35,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm ci && npm run check && npm run lint && node --experimental-strip-types --test test/metrics.test.mjs test/fleet.test.mjs test/conversation.test.mjs test/parity.test.mjs
+      - run: npm ci && npm run check && npm run lint && node --experimental-strip-types --test test/metrics.test.mjs test/fleet.test.mjs test/conversation.test.mjs test/parity.test.mjs test/cluster.test.mjs
         working-directory: mobile
