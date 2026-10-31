@@ -14,25 +14,39 @@ def window_usage(db, now, started, known_kinds=(), windows=None):
     periods = []
     sessions = {}
     known = set(known_kinds)
+    # Older retained databases have no event-time model. Keep their tokens as
+    # unknown instead of assigning the session's current (possibly changed) model.
+    model_column = 'model' if any(r[1] == 'model' for r in db.execute('PRAGMA table_info(events)')) else 'NULL'
     for key, label, seconds in WINDOWS if windows is None else windows:
         beginning = max(started, now - seconds)
-        grouped = db.execute('''SELECT sid,kind,SUM(fresh),SUM(cached),SUM(written),SUM(output)
-            FROM events WHERE t>? AND t<=? AND t>=? GROUP BY sid,kind''',
+        grouped = db.execute(f'''SELECT sid,kind,{model_column},SUM(fresh),SUM(cached),SUM(written),SUM(output)
+            FROM events WHERE t>? AND t<=? AND t>=? GROUP BY 1,2,3''',
             (now - seconds, now, started)).fetchall()
-        by_kind, ids = {}, set()
-        for sid, kind, *values in grouped:
+        by_kind, by_model, model_sessions, ids = {}, {}, {}, set()
+        for sid, kind, model, *values in grouped:
             known.add(kind)
             ids.add(sid)
+            model = model.strip() if isinstance(model, str) else None
+            if not model or model.lower() in ('unknown', '<synthetic>'):
+                model = None
+            identity = (kind, model)
+            model_total = by_model.setdefault(identity, [0, 0, 0, 0])
+            model_sessions.setdefault(identity, set()).add(sid)
             aggregate = by_kind.setdefault(kind, [0, 0, 0, 0])
             per_session = sessions.setdefault(sid, {}).setdefault(key, [0, 0, 0, 0])
             for i, value in enumerate(values):
                 aggregate[i] += value
                 per_session[i] += value
+                model_total[i] += value
+        models = [{'kind': kind, 'model': model, 'tokens': values,
+                   'session_count': len(model_sessions[(kind, model)])}
+                  for (kind, model), values in by_model.items()]
+        models.sort(key=lambda row: (-sum(row['tokens']), row['kind'], row['model'] or ''))
         periods.append({'key': key, 'label': label, 'seconds': seconds,
                         'from': beginning, 'observed_seconds': max(0, now - beginning),
                         'partial': started > now - seconds,
                         'tokens': [sum(v[i] for v in by_kind.values()) for i in range(4)],
-                        'by_kind': by_kind, 'session_count': len(ids)})
+                        'by_kind': by_kind, 'by_model': models, 'session_count': len(ids)})
     return {'as_of': now, 'recording_started': started,
             'known_kinds': sorted(known), 'windows': periods}, sessions
 
