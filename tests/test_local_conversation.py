@@ -107,6 +107,22 @@ class LocalConversationTests(unittest.TestCase):
             finally:
                 release.set();self.collector.mailbox_worker.join(5)
 
+    def test_cluster_assets_use_the_static_allowlist_and_correct_mime(self):
+        base = Path(self.tmp.name) / 'static'
+        (base / 'dist').mkdir(parents=True)
+        for name in ('cluster.js', 'cluster.css', 'private.json'):
+            (base / 'dist' / name).write_text('fixture asset')
+        with patch('onetop.server.BASE', base):
+            for name, mime in [('cluster.js', 'application/javascript'), ('cluster.css', 'text/css')]:
+                with urllib.request.urlopen(self.origin + '/' + name) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertTrue(response.headers['Content-Type'].startswith(mime))
+                    self.assertEqual(response.read(), b'fixture asset')
+            with self.assertRaises(urllib.error.HTTPError) as rejected:
+                urllib.request.urlopen(self.origin + '/private.json')
+            self.assertEqual(rejected.exception.code, 404)
+            rejected.exception.close()
+
     def test_all_shared_dashboard_assets_are_served(self):
         for path, mime in [('conversation.js', 'application/javascript'), ('quick.html', 'text/html'),
                            ('quick.js', 'application/javascript'), ('quick.css', 'text/css'),
