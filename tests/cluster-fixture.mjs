@@ -17,9 +17,9 @@ for(const period of ['1h','10m','24h']){
  const accounts=state.account_quotas.map(q=>q.id);
  for(const pick of [null,accounts[1]??null]){
   const r=readings(state,{period,now,speed,weekly,reconnect:RECONNECT,display,sessions,pick:pick?{type:'account',id:pick}:null,trip:now-10800});
-  cases.push({period,pick,state:`state-${period}.json`,expected:{tach:{rate:r.tach.rate,max:r.tach.max,tokens:r.tach.tokens,instant:r.tach.instant},
-   speed:{value:r.speed.value,recent:r.speed.recent,cruise:r.speed.cruise,max:r.speed.max,account:r.speed.subject?.account??null,picked:r.speed.picked},
-   accounts:r.accounts.map(a=>({id:a.id,pct:a.pct,left:a.left,burn:a.burn,reconnect:a.reconnect,range:a.range?.state??null})),
+  cases.push({period,pick,state:`state-${period}.json`,expected:{tach:{rate:r.tach.rate,max:r.tach.max,tokens:r.tach.tokens,instant:r.tach.instant,now:r.tach.now,live:r.tach.live,tpmMax:r.tach.tpmMax},
+   speed:{value:r.speed.value,live:r.speed.live,recent:r.speed.recent,cruise:r.speed.cruise,max:r.speed.max,account:r.speed.subject?.account??null,picked:r.speed.picked},
+   accounts:r.accounts.map(a=>({id:a.id,pct:a.pct,left:a.left,burn:a.burn,live:a.live??null,reconnect:a.reconnect,range:a.range?.state??null})),
    tells:{kinds:r.tells.kinds.map(k=>[k.kind,k.working]),waiting:r.tells.waiting,reconnect:r.tells.reconnect,empty:r.tells.empty,context:r.tells.context,stalled:r.tells.stalled,fresh:r.tells.fresh},
    heat:r.heat.value,trip:r.trip?{tokens:r.trip.tokens,rate:r.trip.rate,inRange:r.trip.inRange,accounts:r.trip.accounts.map(a=>[a.id,a.used])}:null}});
   writeFileSync(join(dir,`state-${period}.json`),JSON.stringify(state));
