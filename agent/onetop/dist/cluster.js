@@ -24,7 +24,7 @@
   return a.reset&&at>=a.reset?{state:'enough',at,early:false}:{state:'empty',at,early:!!a.reset};
  }
  // Cruise: the steady %/h that spends what is left of the weekly limit exactly by its reset.
- const cruise=(a,now)=>a&&a.left!==null&&a.reset&&a.reset>now?a.left/((a.reset-now)/HOUR):null;
+ const cruise=(a,now)=>a&&a.weekly!==false&&a.left!==null&&a.reset&&a.reset>now?a.left/((a.reset-now)/HOUR):null;
  // A session's context is nearly full at 90% of its capacity; a working session is suspected stalled
  // when it has reported no usage for 15 minutes (an unreported last use, 0, never counts).
  const contextFull=s=>{const c=s?.context_usage;return valid(c?.input_tokens)&&valid(c?.capacity)&&c.capacity>0&&c.input_tokens/c.capacity>=CONTEXT;};
@@ -65,11 +65,13 @@
   // Between readings the window's total runs on at the last minute's rate; the next reading sets it true.
   const live=instant(state),climb=valid(live.rate)?live.rate/HOUR:0;
   const tach={rate,max:o.tachMax||o.speed.scaleMax(rate,w?.seconds),tokens:m.tokens,computers:m.computers,expected:m.expected,instant:live.rate,byKind:live.by,climb};
+  // Each account reads its representative window (weekly, else 5 hours, else daily); only a verified
+  // account's weekly window gets a burn, a range and a cruise, which are all in %/h of the weekly limit.
   const accounts=(state?.account_quotas||[]).map(q=>{
-   const p=state.weekly_usage?.accounts?.find(a=>a.id===q.id)?.periods?.[o.period],week=W.weekly(q),pct=valid(week?.pct)?week.pct:null;
+   const p=state.weekly_usage?.accounts?.find(a=>a.id===q.id)?.periods?.[o.period],week=W.representative(q),weekly=W.isWeekly(week),burns=W.burnAllowed(q,week),pct=valid(week?.pct)?week.pct:null;
    return {id:q.id,kind:q.kind,label:q.account_label,plan:q.plan||null,alias:q.alias||null,who:local(q.account_label),pct,left:pct===null?null:Math.max(0,100-pct),
-    reset:valid(week?.reset)?week.reset:null,current:pct!==null&&q.stale===false,reconnect:!!o.reconnect?.has(q.status),burn:W.accountBurn(p,q),
-    added:valid(p?.used_pp)?p.used_pp:null};
+    reset:valid(week?.reset)?week.reset:null,current:pct!==null&&q.stale===false,reconnect:!!o.reconnect?.has(q.status),burn:burns?W.accountBurn(p,q):null,
+    added:burns&&valid(p?.used_pp)?p.used_pp:null,weekly,window:weekly?null:week?.label||null};
   });
   for(const a of accounts)a.range=range(a,now);
   const tokens=s=>{const v=s.usage?.windows?.[o.period];return Array.isArray(v)?v.reduce((a,b)=>a+(valid(b)?b:0),0):0};
@@ -314,7 +316,8 @@
   const {q,W,color,chip,locale,eta}=kit(rootEl,ctx);
   // Fuel: a gauge per account filled with what is left of its weekly limit, named by plan; the details
   // show on hover or focus, and pressing one picks it for the speedometer.
-  const fuel=q('.cl-fuel>div');
+  const fuel=q('.cl-fuel>div'),title=q('.cl-fuel>small'),heading=r.accounts.some(a=>a.weekly===false)?'남은 한도':'남은 주간 한도';
+  if(title.dataset.key!==heading){title.dataset.key=heading;title.textContent=heading;}
   if(!r.accounts.length){fuel.dataset.keys='';fuel.innerHTML='<div class="cl-empty">연결된 구독 계정이 없습니다.</div>';}
   else keyed(fuel,r.accounts,a=>a.id,a=>`<button type="button" class="cl-can" data-cluster-account="${esc(a.id)}" style="--c:${color(a.kind)}"><i><s></s></i><b></b><span class="cl-tip" role="tooltip"></span></button>`,
    (el,a)=>{const on=r.speed.account===a.id&&r.speed.picked,low=a.left!==null&&a.left<15;
@@ -323,7 +326,7 @@
     const name=a.plan?esc(a.plan):chip(a.id)||esc(ctx.kindName(a.kind)),nb=el.querySelector('b');if(nb.dataset.html!==name){nb.dataset.html=name;nb.innerHTML=name;}
     const reset=a.reset?new Date(a.reset*1000).toLocaleString(locale,{month:'numeric',day:'numeric',weekday:'short',hour:'numeric',minute:'2-digit'}):'';
     const tip=`<span class="cl-tip-h"><i></i><span>${esc(ctx.kindName(a.kind))}</span>${chip(a.id)}${a.plan?`<em>${esc(a.plan)}</em>`:''}</span>
-     ${a.reconnect?'<span class="warn">재연결 필요</span>':a.left===null?'<span>보고 대기</span>':`<span><b>${W.percent(a.left)}</b> <span>남음</span></span>`}
+     ${a.reconnect?'<span class="warn">재연결 필요</span>':a.left===null?'<span>보고 대기</span>':`<span>${a.window?`<span>${esc(a.window)}</span> `:''}<b>${W.percent(a.left)}</b> <span>남음</span></span>`}
      ${reset?`<span class="cl-reset"><span>초기화</span> <span>${esc(reset)}</span></span>`:''}<span><span>평균</span> <span>${W.burn(a.burn)}</span></span>${eta(a)}`;
     const tp=el.querySelector('.cl-tip');if(tp.dataset.html!==tip){tp.dataset.html=tip;tp.innerHTML=tip;}});
  }
@@ -378,7 +381,7 @@
     <span class="cl-card-w"><strong></strong> <small>/ 100% 사용</small></span><span class="cl-card-bar"><s></s></span><span class="cl-card-f"></span></button>`,
    (el,a)=>{const on=r.speed.account===a.id&&r.speed.picked;el.classList.toggle('on',on);el.classList.toggle('stale',!a.current);el.setAttribute('aria-pressed',String(on));
     const who=a.who&&a.who.toLowerCase()!==String(a.alias||'').toLowerCase()?`<small data-user-content>${esc(a.who)}</small>`:'';
-    const h=`<i></i><span>${esc(ctx.kindName(a.kind))}</span>${chip(a.id)}${a.plan?`<em>${esc(a.plan)}</em>`:''}${who}`,hd=el.querySelector('.cl-card-h');if(hd.dataset.html!==h){hd.dataset.html=h;hd.innerHTML=h;}
+    const h=`<i></i><span>${esc(ctx.kindName(a.kind))}</span>${chip(a.id)}${a.plan?`<em>${esc(a.plan)}</em>`:''}${a.window?`<em>${esc(a.window)}</em>`:''}${who}`,hd=el.querySelector('.cl-card-h');if(hd.dataset.html!==h){hd.dataset.html=h;hd.innerHTML=h;}
     count(el.querySelector('.cl-card-w strong'),a.pct,n=>W.percent(n));el.querySelector('.cl-card-bar s').style.width=(a.pct===null?0:Math.min(100,a.pct))+'%';
     const first=a.reconnect?'<b class="warn">재연결 필요</b>':`<span><span>${esc(ctx.caption)}</span> <b>${a.added===null?'—':'+'+W.percent(a.added)}</b></span>`;
     const foot=`${first}<span><span>평균</span> <b>${W.burn(a.burn)}</b></span>${eta(a)}`,ft=el.querySelector('.cl-card-f');if(ft.dataset.html!==foot){ft.dataset.html=foot;ft.innerHTML=foot;}});

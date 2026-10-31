@@ -127,4 +127,15 @@ assert.equal(read({period:'10m'}).speed.recent,null);
 const acctTen=state.weekly_usage.accounts.find(a=>a.id===r.speed.account).periods['10m'];
 assert.equal(r.speed.recent,weekly.accountBurn(acctTen,state.account_quotas.find(q=>q.id===r.speed.account)));
 assert(r.speed.max>=r.speed.recent);
-console.log('Cluster: scale marks, token speed, picked subject, fuel and weekly cards, session window, tell-tales, range, cruise, context and stall warnings, trip, engine temperature and live motion passed.');
+// Agy pools and GLM read their representative window; a non-weekly or unverified one gets no burn, range or cruise.
+const providers=JSON.parse(require('node:fs').readFileSync(new URL('./fixtures/provider-quotas_v1.0.2.json',import.meta.url),'utf8')).account_quotas;
+const mixed=readings({...state,account_quotas:[...state.account_quotas,...providers]},{period:'1h',now,speed,weekly,reconnect:RECONNECT,display,sessions:state.sessions});
+for(const q of providers){
+ const a=mixed.accounts.find(x=>x.id===q.id),w=weekly.representative(q);
+ assert(a,q.id);assert.equal(a.weekly,weekly.isWeekly(w));assert.equal(a.pct,Number.isFinite(w?.pct)?w.pct:null);
+ if(!weekly.burnAllowed(q,w)){assert.equal(a.burn,null);assert.equal(a.added,null);assert.equal(a.range,null);}
+ if(!a.weekly){assert.equal(a.window,w?.label??null);assert.equal(cruise(a,now),null);}
+}
+assert(mixed.accounts.some(a=>a.weekly===false),'the fixture has a non-weekly window');
+assert(!providers.some(q=>q.id===mixed.speed.account),'the speedometer never falls back to a pool with no weekly burn');
+console.log('Cluster: scale marks, token speed, picked subject, fuel and weekly cards, session window, tell-tales, range, cruise, context and stall warnings, trip, engine temperature and live motion, and provider windows passed.');

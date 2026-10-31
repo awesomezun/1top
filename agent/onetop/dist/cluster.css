@@ -165,7 +165,7 @@
 .cl-can.low>i>s{background:var(--amber)}
 .cl-can.stale>i>s{opacity:.45}
 .cl-can.warn>i{box-shadow:0 0 0 1px var(--amber)}
-.cl-can>b{font-size:var(--type-tiny);font-weight:650;white-space:nowrap}
+.cl-can>b{display:block;max-width:6.5em;overflow:hidden;text-overflow:ellipsis;font-size:var(--type-tiny);font-weight:650;white-space:nowrap}
 .cl-can>b .account-no{margin:0}
 .cl-can:hover>b,.cl-can.on>b{color:var(--ink)}
 .cl-can.on>i{box-shadow:0 0 0 1.5px var(--c),0 0 12px -2px var(--c)}
