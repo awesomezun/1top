@@ -14,7 +14,7 @@ import {clusterState,fmt,marks,pctNumber,reading,readings,scaleNumber,valid,type
 import type {Device,Flow,SessionRow,WindowKey} from './types';
 
 // The cluster, as on the desktop dashboard and the web (agent/onetop/dist/cluster.js) at a phone's width:
-// the speedometer (weekly-limit burn in %/h) first and largest, the tachometer (token speed) below it,
+// the speedometer (weekly-limit burn in %/h) first, the tachometer (tokens per minute) below it at the same size,
 // the window with its three pages, then the gear (time window), the load and fuel gauges, the odometer
 // and the trip. The numbers are the desktop's (cluster-model.ts). Needles spring to each reading; between
 // readings the odometer and the trip run on at the last minute's rate, unless the phone asks for less motion.
@@ -47,11 +47,21 @@ function useNeedle(target:number|null,calm:boolean){
  return turn.interpolate({inputRange:[0,1],outputRange:['135deg','405deg']});
 }
 
-/** One dial: scale, lit arc, cruise bands (speedometer), a main needle and a thin second needle, the readout. */
-function Dial({size,value,second,max,color,name,read,unit,aux,sub,band,calm,label}:{size:number;value:number|null;second:number|null;max:number;color:string;name:string;read:string;unit:string;
- aux:React.ReactNode;sub?:React.ReactNode;band?:number|null;calm:boolean;label:string}){
+/** While sessions work, a needle shimmers a few degrees about its reading, like a running engine's; the figure stays exact. */
+const SHIMMER:[number,number][]=[[2.6,.17],[-1.1,.14],[3.4,.17],[.4,.15],[-2,.16],[1.2,.12],[0,.09]];
+function useShimmer(on:boolean,period:number,delay:number){
+ const [a]=useState(()=>new Animated.Value(0));
+ useEffect(()=>{if(!on){a.stopAnimation();a.setValue(0);return;}
+  const loop=Animated.loop(Animated.sequence(SHIMMER.map(([to,share])=>Animated.timing(a,{toValue:to,duration:period*share,easing:Easing.inOut(Easing.sin),useNativeDriver:true}))));
+  const id=setTimeout(()=>loop.start(),delay);return()=>{clearTimeout(id);loop.stop();};},[on,period,delay,a]);
+ return a.interpolate({inputRange:[-10,10],outputRange:['-10deg','10deg']});
+}
+
+/** One dial: scale, lit arc, cruise bands (speedometer), the needle and the readout. */
+function Dial({size,value,max,color,name,read,unit,aux,sub,band,calm,label,shake}:{size:number;value:number|null;max:number;color:string;name:string;read:string;unit:string;
+ aux:React.ReactNode;sub?:React.ReactNode;band?:number|null;calm:boolean;label:string;shake:{on:boolean;period:number;delay:number}}){
  const g=marks(max),f=value===null?0:clamp(value/max),n=Math.round(g.max/g.minor);
- const rotate=useNeedle(value===null?0:value/max,calm),rotate2=useNeedle(second===null?null:second/max,calm);
+ const rotate=useNeedle(value===null?0:value/max,calm),wobble=useShimmer(shake.on&&!calm,shake.period,shake.delay);
  const ticks:React.ReactNode[]=[],nums:React.ReactNode[]=[];
  for(let i=0;i<=n;i++){const v=i*g.minor,tf=v/g.max,major=Math.abs(v/g.major-Math.round(v/g.major))<1e-6,[x1,y1]=pt(tf,major?122:131),[x2,y2]=pt(tf,141);
   ticks.push(<Line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={tf<=f+1e-4&&value!==null&&value>0?color:quick.dim} strokeOpacity={tf<=f+1e-4&&value!==null&&value>0?1:.55} strokeWidth={major?3.2:1.6} strokeLinecap="round"/>);
@@ -67,10 +77,8 @@ function Dial({size,value,second,max,color,name,read,unit,aux,sub,band,calm,labe
    {f>0&&<Path d={arc(0,f,147)} fill="none" stroke={color} strokeWidth={5} strokeLinecap="round"/>}
    <G>{ticks}</G><G>{nums}</G>
   </Svg>
-  {second!==null&&<Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill,{transform:[{rotate:rotate2}]}]}><Svg width={size} height={size} viewBox="0 0 340 340">
-   <Path d="M170 168.9 L292 169.6 L292 170.4 L170 171.1 Z" fill={quick.ink} fillOpacity={.78}/><Circle cx={292} cy={170} r={3} fill={quick.ink} fillOpacity={.78}/></Svg></Animated.View>}
-  <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill,{transform:[{rotate}]}]}><Svg width={size} height={size} viewBox="0 0 340 340">
-   <Path d="M158 166.4 L301 169.3 L301 170.7 L158 173.6 Z" fill={color}/></Svg></Animated.View>
+  <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill,{transform:[{rotate}]}]}><Animated.View style={[StyleSheet.absoluteFill,{transform:[{rotate:wobble}]}]}><Svg width={size} height={size} viewBox="0 0 340 340">
+   <Path d="M158 166.4 L301 169.3 L301 170.7 L158 173.6 Z" fill={color}/></Svg></Animated.View></Animated.View>
   <Svg pointerEvents="none" style={StyleSheet.absoluteFill} width={size} height={size} viewBox="0 0 340 340"><Circle cx={C} cy={C} r={13} fill={quick.raised} stroke={quick.line} strokeWidth={1.5}/><Circle cx={C} cy={C} r={5} fill={quick.background}/></Svg>
   <View pointerEvents="none" style={{position:'absolute',left:0,right:0,top:size*.315,alignItems:'center'}}><Text style={{fontSize:Math.max(10,size*.036),fontWeight:'600',letterSpacing:.6,color:quick.muted}}>{name}</Text></View>
   <View pointerEvents="none" style={{position:'absolute',left:0,right:0,top:size*.52,alignItems:'center',gap:1}}>
@@ -129,14 +137,14 @@ function FlowBars({flow,width}:{flow?:Flow;width:number}){
 
 export function Cluster(){
  const w=useWorkspace(),t:T=w.t,period:WindowKey=w.period,calm=useCalm(),{width}=useWindowDimensions();
- const [pick,setPick]=useState<Pick>(null),[mode,setModeState]=useState<Mode>('sessions'),[trip,setTrip]=useState<number|null>(null),[detail,setDetail]=useState<SessionRow|null>(null),[lamp,setLamp]=useState<LampKind|null>(null);
+ const [hold]=useState<{period?:string;tpm?:number}>(()=>({})),[pick,setPick]=useState<Pick>(null),[mode,setModeState]=useState<Mode>('sessions'),[trip,setTrip]=useState<number|null>(null),[detail,setDetail]=useState<SessionRow|null>(null),[lamp,setLamp]=useState<LampKind|null>(null);
  const visible:Device[]=w.visible||[],tags=accountTags(w.devices||[]),at=w.clock/1000;
  // The trip runs from the last reset, kept on this phone; the first visit starts it.
  useEffect(()=>{Promise.all([SecureStore.getItemAsync(SAVED.mode),SecureStore.getItemAsync(SAVED.trip)]).then(([m,tr])=>{if(MODES.some(([k])=>k===m))setModeState(m as Mode);const n=Number(tr);
   if(n>0&&n<=shownNow()/1000)setTrip(n);else{const start=Math.floor(shownNow()/1000);setTrip(start);SecureStore.setItemAsync(SAVED.trip,String(start)).catch(()=>{});}}).catch(()=>setTrip(Math.floor(shownNow()/1000)));},[]);
  const setMode=(m:Mode)=>{setModeState(m);SecureStore.setItemAsync(SAVED.mode,m).catch(()=>{});};
  const resetTrip=()=>{const start=Math.floor(shownNow()/1000);setTrip(start);SecureStore.setItemAsync(SAVED.trip,String(start)).catch(()=>{});};
- const state=clusterState(visible,at*1000),r:Readings=readings(state,{period,now:at,pick,trip:trip!==null&&trip<=at?trip:null,sessions:state.root_sessions});
+ const state=clusterState(visible,at*1000),r:Readings=readings(state,{period,now:at,pick,trip:trip!==null&&trip<=at?trip:null,sessions:state.root_sessions,hold});
  // Between readings the odometer and the trip run on at the last minute's rate from the report's time, for
  // up to 30 seconds, as on the desktop; with less motion asked for, or a demo held for filming, they wait.
  const [real,setReal]=useState(0),running=!calm&&!(w.demo&&heldDemo()!==null);
@@ -151,10 +159,12 @@ export function Cluster(){
  const eta=(a:Readings['accounts'][number])=>!a.range?null:a.range.state==='idle'?<Text style={[st.tiny,{color:quick.dim}]}>{t('Not in use now','지금은 쓰지 않음')}</Text>
   :a.range.state==='enough'?<Text style={[st.tiny,{color:quick.mint}]}>{t('Lasts until the reset','초기화 전까지 충분')}</Text>
   :<Text style={[st.tiny,{color:a.range.early?quick.red:quick.muted}]}>{t('At this rate','이 속도면')} <Text style={[st.tiny,{fontWeight:'700',color:a.range.early?quick.red:quick.ink}]}>{when(a.range.at!)}</Text> {t('runs out','바닥')}</Text>;
- const inner=Math.min(width,820)-32-28,big=Math.min(inner,320),small=Math.min(inner,250);
- // Speedometer: the subject's %/h of its account's weekly limit, in that tool's colour; the thin needle is its last ten minutes.
- const sub=r.speed.subject,acct=sub&&r.accounts.find(a=>a.id===sub.account),subject=sub?toolColor(sub.kind):quick.dim,over=r.speed.cruise!==null&&r.speed.value!==null&&r.speed.value>r.speed.cruise;
- const tachShown=fmt(r.tach.rate,loc),unit=tachShown.match(/^(.+?)([kMBT])$/);
+ // The two dials are the same size, like a car's pair; the speedometer comes first at a phone's width.
+ const inner=Math.min(width,820)-32-28,dial=Math.min(inner,300),working=r.working>0;
+ // Speedometer: the subject's %/h of its account's weekly limit at its last minute's tokens, in that tool's colour.
+ const sub=r.speed.subject,acct=sub&&r.accounts.find(a=>a.id===sub.account),subject=sub?toolColor(sub.kind):quick.dim,over=r.speed.cruise!==null&&r.speed.live!==null&&r.speed.live>r.speed.cruise;
+ // Tachometer: tokens per minute; the scale and the figure share one unit, k or M.
+ const div=r.tach.tpmMax>=1e6?1e6:1e3,tpm=r.tach.now===null?null:r.tach.now/60/div,tachShown=tpm===null?'—':tpm.toFixed(tpm<10?2:tpm<100?1:0),tpmUnit=(div===1e6?'M':'k')+' tpm';
  const kinds=r.tells.kinds,flow=fleetFlow(reporting(visible),period);
  return <Screen title={t('Cluster','계기판')}>
   <View style={st.housing}>
@@ -166,18 +176,18 @@ export function Cluster(){
      return <Pressable key={k} accessibilityRole="button" accessibilityLabel={label+(n?' '+n:'')} accessibilityState={{disabled:!n&&k!=='live'}} onPress={()=>alert(k)} hitSlop={4} style={st.lamp}><Lamp kind={k} color={color}/></Pressable>;})}</View>
     {lamp&&<Text style={[st.tiny,{color:quick.muted}]}>{lamp==='live'?(r.tells.fresh?t('Live','실시간'):t('Collection delayed','수집 지연')):t(LAMPS.find(x=>x[0]===lamp)![1],LAMPS.find(x=>x[0]===lamp)![2])} <Text style={[st.tiny,{color:quick.ink,fontWeight:'700'}]}>{lamp==='live'?'':r.tells[lamp].length}</Text></Text>}
    </View>
-   <Dial size={big} value={r.speed.value} second={r.speed.recent} max={r.speed.max} color={subject} name={t('Burn rate','소진 속도')} read={reading(r.speed.value)} unit={t('%/h of the weekly limit','%/시간 · 주간 한도 기준')} band={r.speed.cruise} calm={calm}
-    label={t('Burn rate','소진 속도')+' '+reading(r.speed.value)+'%/h'}
+   <Dial size={dial} value={r.speed.live} max={r.speed.max} color={subject} name={t('Burn rate','소진 속도')} read={reading(r.speed.live)} unit={t('%/h of the weekly limit','%/시간 · 주간 한도 기준')} band={r.speed.cruise} calm={calm}
+    shake={{on:working,period:3100,delay:400}} label={t('Burn rate','소진 속도')+' '+reading(r.speed.live)+'%/h'}
     aux={<View style={{alignItems:'center'}}>{r.speed.cruise!==null&&<Text style={[st.aux,{color:over?quick.amber:quick.mint}]}>{t('Cruise','적정')} <Text style={[st.aux,{fontWeight:'700',color:over?quick.amber:quick.mint}]}>{burn(r.speed.cruise)}</Text></Text>}
-     {r.speed.recent!==null&&<Text style={st.aux}>{t('Last 10m','최근 10분')} <Text style={[st.aux,{fontWeight:'700',color:quick.ink}]}>{burn(r.speed.recent)}</Text></Text>}</View>}
+     {r.speed.value!==null&&r.speed.live!==r.speed.value&&<Text style={st.aux}>{caption} {t('Average','평균')} <Text style={[st.aux,{fontWeight:'700',color:quick.ink}]}>{burn(r.speed.value)}</Text></Text>}</View>}
     sub={<View style={st.subChip}>{!sub?<Text style={st.tiny}>{t('Measuring account burn','계정 소진 속도 측정 중')}</Text>:<>
      <View style={[st.dot,{backgroundColor:subject}]}/>{sub.type==='session'&&sub.session?<><Text numberOfLines={1} style={[st.tiny,{color:quick.ink,fontWeight:'600',flexShrink:1}]}>{name(sub.session)}</Text><Text style={st.tiny}>· {toolName(sub.kind)}</Text></>
       :<><Text style={[st.tiny,{color:quick.ink,fontWeight:'600'}]}>{toolName(sub.kind)}</Text><AccountChip text={tags[sub.id]}/>{!!acct?.plan&&<Text style={st.tiny}>· {acct.plan}</Text>}{!r.speed.picked&&<Text style={[st.tiny,{color:quick.dim}]}>{t('Fastest','가장 빠름')}</Text>}</>}</>}</View>}/>
-   {/* Tachometer: tokens per hour on the dashboard's scale; the thin needle is the last minute. */}
-   <Dial size={small} value={r.tach.rate===null?null:r.tach.rate/1e6} second={valid(r.tach.instant)?r.tach.instant/1e6:null} max={r.tach.max/1e6} color={quick.accent} name={t('Token speed','토큰 속도')} read={unit?unit[1]:tachShown}
-    unit={(unit?unit[2]+' ':'')+t('tokens/h','tokens/시간')} calm={calm} label={t('Token speed','토큰 속도')+' '+tachShown+' '+t('tokens/h','tokens/시간')}
-    aux={valid(r.tach.instant)?<Text style={st.aux}>{t('Last 1m','최근 1분')} <Text style={[st.aux,{fontWeight:'700',color:quick.ink}]}>{fmt(r.tach.instant,loc)}</Text></Text>:null}
-    sub={<View style={st.subChip}><Text style={st.tiny}>{caption} {t('Average','평균')}</Text></View>}/>
+   {/* Tachometer: tokens per minute, like rpm; the needle and the figure the last minute, the period's average under them. */}
+   <Dial size={dial} value={tpm} max={r.tach.tpmMax/div} color={quick.accent} name={t('Token speed','토큰 속도')} read={tachShown}
+    unit={tpmUnit} calm={calm} shake={{on:working,period:2300,delay:0}} label={t('Token speed','토큰 속도')+' '+tachShown+tpmUnit}
+    aux={r.tach.live&&r.tach.rate!==null?<Text style={st.aux}>{caption} {t('Average','평균')} <Text style={[st.aux,{fontWeight:'700',color:quick.ink}]}>{fmt(r.tach.rate/60,loc)}</Text> tpm</Text>:null}
+    sub={<View style={st.subChip}><Text style={st.tiny}>{r.tach.live?t('Last 1m','최근 1분'):caption+' '+t('Average','평균')}</Text></View>}/>
    {/* The window: three pages behind tabs. */}
    <View style={st.window}>
     <View style={st.modes} accessibilityRole="tablist">{MODES.map(([k,en,ko])=><Pressable key={k} accessibilityRole="tab" accessibilityState={{selected:mode===k}} onPress={()=>setMode(k)} style={[st.mode,mode===k&&{backgroundColor:quick.raised}]}><Text numberOfLines={1} style={[st.modeText,mode===k&&{color:quick.ink}]}>{t(en,ko)}</Text></Pressable>)}</View>
