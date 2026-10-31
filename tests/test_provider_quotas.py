@@ -96,6 +96,16 @@ class ProviderConnectionTests(unittest.TestCase):
             self.assertIsNone(p.glm_source({'ANTHROPIC_BASE_URL':url,'ANTHROPIC_AUTH_TOKEN':'TEST-KEY'}))
         self.assertIsNone(self.source('TEST\nKEY'))
 
+    def test_installation_scope_is_stable_but_never_shared_between_computers(self):
+        with tempfile.TemporaryDirectory() as a,tempfile.TemporaryDirectory() as b:
+            with patch.object(p,'data_directory',side_effect=lambda home:home/'state'):
+                one=p.installation_scope(Path(a));two=p.installation_scope(Path(b))
+                self.assertEqual(one,p.installation_scope(Path(a)))
+                self.assertNotEqual(one,two)
+                saved=Path(a)/'state/provider-profile-v1.json'
+                self.assertEqual(json.loads(saved.read_text()),{'id':one})
+                self.assertEqual(saved.stat().st_mode & 0o777,0o600)
+
     def test_read_only_request_no_redirect_and_bounded_response(self):
         response=Mock();response.__enter__=Mock(return_value=response);response.__exit__=Mock(return_value=False)
         response.read.return_value=b'{"success":true,"data":{"limits":[]}}'

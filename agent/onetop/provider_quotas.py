@@ -9,6 +9,7 @@ import json
 import math
 import os
 import re
+import secrets
 import ssl
 import subprocess
 import threading
@@ -25,7 +26,7 @@ import certifi
 import psutil
 
 from .account_login import executable, managed_profiles_dir
-from .platform_support import cli_command
+from .platform_support import cli_command, data_directory
 
 HOSTS = ('api.z.ai', 'open.bigmodel.cn')
 MAX_BYTES = 1024 * 1024
@@ -70,6 +71,27 @@ def read_json(path):
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
+
+
+def installation_scope(home):
+    """Non-secret local UUID: identical home paths on two Macs are not accounts."""
+    root = data_directory(home)
+    path = root / 'provider-profile-v1.json'
+    scope = read_json(path).get('id')
+    if isinstance(scope, str) and re.fullmatch(r'[0-9a-f]{32}', scope):
+        return scope
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    scope = secrets.token_hex(16)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        value = read_json(path).get('id')
+        if isinstance(value, str) and re.fullmatch(r'[0-9a-f]{32}', value):
+            return value
+        raise ProviderError('invalid_profile') from None
+    with os.fdopen(fd, 'w') as stream:
+        json.dump({'id': scope}, stream)
+    return scope
 
 
 def quota_window(key, period, percentage, reset, now, **extra):
@@ -198,8 +220,11 @@ def discover(home=None):
     if cli:
         # /usage identifies allowance pools but does not report account identity.
         # Keep this explicit and never calibrate historical account rates from it.
-        key = account_id('Antigravity', str(home.resolve()) + '|default-cli-profile')
-        found[key] = Source('Antigravity', key, cli=cli)
+        try:
+            key = account_id('Antigravity', installation_scope(home) + '|default-cli-profile')
+            found[key] = Source('Antigravity', key, cli=cli)
+        except (OSError, ProviderError):
+            pass
     return list(found.values())
 
 
