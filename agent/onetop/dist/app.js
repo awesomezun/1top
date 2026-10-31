@@ -313,7 +313,7 @@ function renderSystem(){
 }
 function renderBenchmark(){
  const s=data.system;if(!s)return;
- $('overhead').innerHTML=[['모니터 CPU',pct(s.monitor.cpu),'수집기 프로세스 · 코어 1개 기준'],['모니터 메모리',bytes(s.monitor.rss),'수집기 RSS · 브라우저 제외'],['이번 수집 시간',fmt(data.collection_ms)+' ms','전체 세션·토큰·시스템 수집'],['리소스 수집 시간',fmt(s.sampler_ms)+' ms','시스템과 프로세스 자원 관측']].map(([a,b,c])=>`<article class="fact"><span>${a}</span><b>${b}</b><small>${c}</small></article>`).join('');
+ $('overhead').innerHTML=[['모니터 CPU',pct(s.monitor.cpu),'수집기 프로세스 · 전체 코어 기준'],['모니터 메모리',bytes(s.monitor.rss),'수집기 RSS · 브라우저 제외'],['이번 수집 시간',fmt(data.collection_ms)+' ms','전체 세션·토큰·시스템 수집'],['리소스 수집 시간',fmt(s.sampler_ms)+' ms','시스템과 프로세스 자원 관측']].map(([a,b,c])=>`<article class="fact"><span>${a}</span><b>${b}</b><small>${c}</small></article>`).join('');
  $('audit').innerHTML=data.actions?.length?[...data.actions].reverse().map(a=>`<div class="audit-entry">${esc(a.terminal||a.project||'터미널 미확인')} · ${esc(a.message)}<small>${new Date(a.t*1000).toLocaleString(OneTopI18n.locale())}</small></div>`).join(''):'<div class="empty">이 버전에서 실행한 제어 기록이 없습니다.</div>';
  if(benchmark)$('benchmarkNumbers').innerHTML=`<table><thead><tr><th>버전</th><th>평균 CPU</th><th>평균 RSS</th><th>API 평균 응답</th><th>응답 크기</th></tr></thead><tbody>${benchmark.map(b=>`<tr><td>v${esc(b.version)}</td><td>${pct(b.cpu_one_core_mean)}</td><td>${bytes(b.rss_mean_bytes)}</td><td>${b.api_ms_mean.toFixed(1)} ms</td><td>${bytes(b.api_bytes_mean)}</td></tr>`).join('')}</tbody></table>`;
 }

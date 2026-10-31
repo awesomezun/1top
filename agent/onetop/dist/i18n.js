@@ -2,6 +2,10 @@
 window.OneTopI18n=(()=>{
  'use strict';let language='ko',scheduled=false;const texts=new WeakMap(),attributes=new WeakMap();
  const entries=[
+ ["CPU 100%는 이 컴퓨터 전체 코어 합계입니다. CLI와 전용 자식 프로세스 합계입니다.", "CPU 100% means all cores of this computer combined. Includes the CLI and its dedicated child processes.", "CPU 100% 表示这台电脑所有核心的总量。包括 CLI 及其专用子进程。"],
+ ["CPU 100% = 전체 코어 · 공유 백엔드는 별도 집계", "CPU 100% = all cores · Shared backends are counted separately", "CPU 100% = 所有核心 · 共享后端单独统计"],
+ ["CPU는 컴퓨터의 모든 코어를 합쳐 0–100%입니다. 세션과 프로세스 CPU도 전체 코어 합계 대비 비율입니다. 세션 메모리는 CLI와 전용 자식 프로세스의 RSS 합계이며, 공유 메모리 페이지가 중복될 수 있습니다. 공유 백엔드는 어느 세션의 몫인지 추정하지 않습니다.", "CPU is 0–100% across all cores of the computer. Session and process CPU use the same whole-computer basis. Session memory is the RSS sum of the CLI and dedicated child processes; shared memory pages may be counted more than once. Shared backends are not assigned to individual sessions.", "CPU 按电脑所有核心的总量显示为 0–100%。会话和进程 CPU 也按所有核心总量的比例显示。会话内存是 CLI 及其专用子进程的 RSS 总和，共享内存页可能被重复计算。共享后端不会被归入单个会话。"],
+ ["수집기 프로세스 · 전체 코어 기준", "Collector process · All cores combined", "采集器进程 · 所有核心总量"],
  ['요일·시간대와 날짜별 토큰 사용','Token use by weekday, hour and date','按星期、时段和日期的 token 用量'],['시간대별','By hour','按时段'],['날짜별','By date','按日期'],['최근 30일 하루 평균','Daily average · last 30 days','最近 30 天日均'],['최근 1년 날짜별 합계','Daily totals · last year','最近一年每日合计'],['부터 기록','onward','起有记录'],['사용한 날','Days used','使用天数'],
  ['작업 중 아님','Not working','未在工作'],
  ['사용량 살펴보기','Usage overview','用量概览'],['선택 기간의 사용 비중과 모델·프로젝트별 추이, 요일·시간대별 사용 패턴을 확인합니다.','Usage share for the selected period, trends by model and project, and patterns by weekday and hour.','查看所选时段的用量占比、按模型和项目的趋势，以及按星期和时段的使用规律。'],
