@@ -516,6 +516,36 @@ struct AccountQuota: Decodable, Identifiable {
     var status: String?
     /// A name the user gave this account ("개인"), shown in place of its number.
     var alias: String?
+    /// An Agy limit pool ("Gemini Models"); pools of one installation are told apart by this name.
+    var pool: String?
+    /// false for an Agy pool: the provider does not say which Google account it belongs to.
+    var identity_verified: Bool?
+    /// The pool's own name, else the user's alias; a pooled row takes no account number.
+    var displayName: String? { [alias, pool].compactMap { $0 }.first { !$0.isEmpty } }
+    /// The one window a tile shows: model weekly, then 5 hours, then daily, then any other model
+    /// window. An MCP or other budget stands in only when the account reports no model window.
+    var representativeWindow: Window? {
+        let model = windows.filter { $0.scope != "mcp" }, pool = model.isEmpty ? windows : model
+        for period in ["weekly", "5h", "daily"] { if let w = pool.first(where: { $0.periodKey == period }) { return w } }
+        return pool.first
+    }
+    /// A verified account's weekly window is the only one a burn rate is measured against.
+    var burnAllowed: Bool { identity_verified != false && representativeWindow?.isWeekly == true }
+    /// Error states leave a value unknown or old; never 0% and never unlimited.
+    var unavailable: Bool { ["provider_unavailable", "invalid_response", "no_quota", "unsafe_cli_response", "unsupported_cli"].contains(status ?? "") }
+    /// Four compact tiles: every provider gets one before any gets a second, in the collector's order.
+    static func pickTiles(_ rows: [AccountQuota], count: Int = 4) -> [AccountQuota] {
+        var kinds: [String] = []; for q in rows where !kinds.contains(q.kind) { kinds.append(q.kind) }
+        var taken = Set<String>(), round = 0
+        while taken.count < min(count, rows.count), round < rows.count {
+            for kind in kinds where taken.count < count {
+                let list = rows.filter { $0.kind == kind }
+                if round < list.count { taken.insert(list[round].id) }
+            }
+            round += 1
+        }
+        return rows.filter { taken.contains($0.id) }
+    }
     /// The limit cannot refresh until this account is connected again.
     var needsReconnect: Bool { stale && ["login_required", "login_expired", "credential_store_unavailable", "access_denied"].contains(status ?? "") }
     var statusLabel: String {
@@ -526,7 +556,8 @@ struct AccountQuota: Decodable, Identifiable {
         case "login_required", "login_expired", "credential_store_unavailable", "access_denied": return "재연결 필요"
         case "refresh_pending": return "갱신 중"
         case "rate_limited": return "조회 제한"
-        default: return updated > 0 ? Self.reportAge(updated) : "조회 지연"
+        case "unsafe_cli_response", "unsupported_cli": return "조회 중단"
+        default: return updated > 0 ? Self.reportAge(updated) : unavailable ? "값 없음" : "조회 지연"
         }
     }
     /// How old a value that could not be refreshed is, so an old % never reads as current: "38분 전 보고".
@@ -536,6 +567,27 @@ struct AccountQuota: Decodable, Identifiable {
     }
     struct Window: Decodable, Identifiable {
         var label: String; var pct: Double?; var reset: Double
-        var id: String { label }
+        /// Newer providers name the period; older Claude and Codex windows carry only a label.
+        var key: String?; var period: String?; var scope: String?
+        var id: String { key ?? label }
+        var periodKey: String {
+            if let period, period != "unknown" { return period }
+            if key == "7d" || key == "weekly" { return "weekly" }
+            if key == "5h" { return "5h" }
+            return ["주간": "weekly", "Weekly": "weekly", "5H": "5h", "5시간": "5h", "24H": "daily"][label] ?? "unknown"
+        }
+        var isWeekly: Bool { scope != "mcp" && periodKey == "weekly" }
+        enum CodingKeys: String, CodingKey { case label, pct, reset, key, period, scope }
+        init(label: String, pct: Double?, reset: Double, key: String? = nil, period: String? = nil, scope: String? = nil) {
+            self.label = label; self.pct = pct; self.reset = reset; self.key = key; self.period = period; self.scope = scope
+        }
+        // A window without a reported reset time decodes with 0 ("초기화 시각 미보고"), not as a failed snapshot.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            label = try c.decode(String.self, forKey: .label); pct = try c.decodeIfPresent(Double.self, forKey: .pct)
+            reset = (try? c.decodeIfPresent(Double.self, forKey: .reset)) ?? 0
+            key = try c.decodeIfPresent(String.self, forKey: .key); period = try c.decodeIfPresent(String.self, forKey: .period)
+            scope = try c.decodeIfPresent(String.self, forKey: .scope)
+        }
     }
 }

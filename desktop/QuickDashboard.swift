@@ -593,10 +593,11 @@ struct QuickDashboard: View {
 
     // MARK: Weekly limits · compact tiles with a small trend line
     private var weeklyCard: some View {
-        let rows = model.snapshot?.account_quotas ?? []
+        let rows = model.snapshot?.account_quotas ?? [], shown = AccountQuota.pickTiles(rows)
         return VStack(alignment: .leading, spacing: m(7)) {
             HStack(alignment: .firstTextBaseline, spacing: m(6)) {
-                Text(tr("주간 한도")).font(m.font(.body, .semibold))
+                // A 5-hour or monthly tile among them makes the heading the providers' shared "계정 한도".
+                Text(tr(shown.allSatisfy { $0.representativeWindow?.isWeekly == true } ? "주간 한도" : "계정 한도")).font(m.font(.body, .semibold))
                 Text(tr("계정별 100%")).font(m.font(.label)).foregroundStyle(theme.muted)
                 Spacer()
                 Menu {
@@ -610,18 +611,23 @@ struct QuickDashboard: View {
                 Text(tr("+ 버튼으로 구독 계정을 연결하세요.")).font(m.font(.label)).foregroundStyle(theme.muted)
             } else {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: m(8)), GridItem(.flexible(), spacing: m(8))], spacing: m(8)) {
-                    ForEach(rows.prefix(4)) { weeklyRow($0) }
+                    ForEach(shown) { weeklyRow($0) }
                 }
             }
         }
     }
     private func weeklyRow(_ q: AccountQuota) -> some View {
-        let w = q.windows.first { $0.label == "주간" }
+        let w = q.representativeWindow, weekly = w?.isWeekly == true
         let account = model.snapshot?.weekly_usage?.accounts.first { $0.id == q.id }
         let p = account?.periods[model.selectedPeriod]
         let color = AgentPalette.color(q.kind)
-        let rate = model.fresh && !q.stale ? p?.burnPerHour : nil
-        let handle = q.account_label.split(separator: "@").first.map(String.init) ?? q.account_label
+        // A 5-hour or monthly window, or an unverified pool, shows its value without a weekly burn rate.
+        let rate = model.fresh && !q.stale && q.burnAllowed ? p?.burnPerHour : nil
+        let name = q.account_label.split(separator: "@").first.map(String.init) ?? q.account_label
+        // An Agy pool's long name sits under the tool name instead of on a chip. Where no weekly burn rate
+        // is measured, the window's own label ("5H", "주간") takes the rate's place; an old value keeps it on the left.
+        let handle = (q.stale && !weekly && w != nil ? tr(w!.label) + " · " : "") + (q.pool ?? name)
+        let status = q.stale ? tr(q.statusLabel) : rate != nil ? rate1(rate, tr) : weekly && q.identity_verified != false ? tr("수집 중") : tr(w?.label ?? "값 없음")
         let end = model.snapshot?.updated ?? model.now.timeIntervalSince1970, start = end - (periodSeconds[model.selectedPeriod] ?? 3600)
         let points = weeklyPoints(account, start: start, end: end)
         return Button { selectedAccount = q } label: {
@@ -629,7 +635,7 @@ struct QuickDashboard: View {
                 HStack(alignment: .firstTextBaseline, spacing: m(5)) {
                     Circle().fill(color).frame(width: m(6), height: m(6)).alignmentGuide(.firstTextBaseline) { $0[.bottom] - m(1) }
                     Text(toolName(q.kind)).font(m.font(.body, .semibold)).lineLimit(1).fixedSize()
-                    accountChip(q.id)
+                    if q.pool == nil { accountChip(q.id) }
                     Spacer(minLength: m(4))
                     Text(pct1(w?.pct)).font(m.font(.figure, .semibold)).monospacedDigit().fixedSize()
                         .foregroundStyle(q.stale ? theme.muted : theme.ink)
@@ -641,7 +647,7 @@ struct QuickDashboard: View {
                         .frame(width: m(78), alignment: .leading)
                     WeeklySpark(points: points, start: start, end: end, color: color, faded: q.stale, m: m)
                         .frame(maxWidth: .infinity).frame(height: m(14))
-                    Text(q.stale ? tr(q.statusLabel) : rate == nil ? tr("수집 중") : rate1(rate, tr))
+                    Text(status)
                         .font(m.font(.caption, .medium)).foregroundStyle(q.stale ? theme.amber : color).lineLimit(1)
                         .frame(width: m(54), alignment: .trailing)
                 }
@@ -649,7 +655,7 @@ struct QuickDashboard: View {
             .padding(.horizontal, m(10)).padding(.vertical, m(8)).frame(maxWidth: .infinity)
             .background(color.opacity(theme.light ? 0.08 : 0.07), in: RoundedRectangle(cornerRadius: m(8)))
             .contentShape(RoundedRectangle(cornerRadius: m(8)))
-        }.buttonStyle(.plain).accessibilityLabel("\(toolName(q.kind)) \(q.account_label) \(tr("주간 한도")) \(pct1(w?.pct))")
+        }.buttonStyle(.plain).accessibilityLabel("\(toolName(q.kind)) \(q.account_label) \(weekly ? tr("주간 한도") : tr(w?.label ?? "계정 한도")) \(pct1(w?.pct))")
             .help("\(q.account_label) · \(q.plan ?? "")\n" + tr.pick("선: \(periodLabel) 동안의 주간 한도 사용률\n오른쪽 아래: 같은 기간 평균 소진 속도\n클릭하면 5시간 한도와 초기화 시각을 확인합니다.",
                                                                      "Line: weekly limit used, \(periodLabel)\nBottom right: average burn rate over the same period\nClick to see the 5-hour limit and reset times.",
                                                                      "线：\(periodLabel)的每周额度使用率\n右下：同一时段的平均消耗速度\n点击查看 5 小时额度和重置时间。"))
@@ -835,15 +841,16 @@ struct QuickDashboard: View {
     private var accountNumbers: [String: Int] {
         let quotas = model.snapshot?.account_quotas ?? []
         var out: [String: Int] = [:]
-        for kind in Set(quotas.map(\.kind)) {
-            let list = quotas.filter { $0.kind == kind }.sorted { $0.account_label.lowercased() < $1.account_label.lowercased() }
+        // Pools of one Agy installation carry their own names, so they are not numbered.
+        for kind in Set(quotas.filter { $0.pool == nil }.map(\.kind)) {
+            let list = quotas.filter { $0.kind == kind && $0.pool == nil }.sorted { $0.account_label.lowercased() < $1.account_label.lowercased() }
             if list.count > 1 { for (i, q) in list.enumerated() { out[q.id] = i + 1 } }
         }
         return out
     }
     @ViewBuilder private func accountChip(_ id: String?) -> some View {
         let quota = model.snapshot?.account_quotas?.first { $0.id == id }
-        if let alias = quota?.alias, !alias.isEmpty {
+        if let alias = quota?.displayName {
             Text(alias).font(m.font(.caption, .semibold)).foregroundStyle(theme.ink).lineLimit(1)
                 .padding(.horizontal, m(5)).frame(minHeight: m(15))
                 .background(theme.raised, in: RoundedRectangle(cornerRadius: m(4))).fixedSize()

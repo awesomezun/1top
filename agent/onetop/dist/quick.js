@@ -99,12 +99,30 @@
   const series=[...CANONICAL.filter(k=>kinds.has(k)),...[...kinds].filter(k=>!CANONICAL.includes(k)).sort()];
   return {step,series,reported:Array.isArray(events),bins:bins.map(b=>({total:b.tokens/step*3600,byKind:series.map(k=>[k,(b.byKind[k]||0)/step*3600])}))};
  }
+ // Representative window and tile choice, as in weekly.js and DashboardModel.swift.
+ const PERIOD_LABELS={'주간':'weekly',Weekly:'weekly','5H':'5h','5시간':'5h','24H':'daily'};
+ const periodOf=w=>w?.period&&w.period!=='unknown'?w.period:w?.key==='7d'||w?.key==='weekly'?'weekly':w?.key==='5h'?'5h':PERIOD_LABELS[w?.label]||'unknown';
+ function representative(q){
+  const all=(Array.isArray(q?.windows)?q.windows:[]).filter(w=>w&&typeof w==='object'),model=all.filter(w=>w.scope!=='mcp'),pool=model.length?model:all;
+  for(const period of ['weekly','5h','daily']){const w=pool.find(w=>periodOf(w)===period);if(w)return w;}
+  return pool[0]||null;
+ }
+ const isWeekly=w=>!!w&&w.scope!=='mcp'&&periodOf(w)==='weekly';
+ const burnAllowed=(q,w=representative(q))=>!!q&&q.identity_verified!==false&&isWeekly(w);
+ const UNAVAILABLE=new Set(['provider_unavailable','invalid_response','no_quota','unsafe_cli_response','unsupported_cli']);
+ // Four tiles: every provider gets one before any gets a second, in the collector's order.
+ function pickTiles(rows,n=4){
+  const list=Array.isArray(rows)?rows:[],kinds=[...new Set(list.map(q=>q.kind))],taken=new Set();
+  for(let round=0;round<list.length&&taken.size<Math.min(n,list.length);round++)for(const kind of kinds){const q=list.filter(r=>r.kind===kind)[round];if(q&&taken.size<n)taken.add(q);}
+  return list.filter(q=>taken.has(q));
+ }
+ // Pools of one Agy installation carry their own names, so they are not numbered.
  function accountNumbers(quotas){
-  const out={},kinds=new Set((quotas||[]).map(q=>q.kind));
-  for(const kind of kinds){const list=quotas.filter(q=>q.kind===kind).sort((a,b)=>String(a.account_label).toLowerCase()<String(b.account_label).toLowerCase()?-1:1);if(list.length>1)list.forEach((q,i)=>out[q.id]=i+1);}
+  const out={},kinds=new Set((quotas||[]).filter(q=>!q.pool).map(q=>q.kind));
+  for(const kind of kinds){const list=quotas.filter(q=>q.kind===kind&&!q.pool).sort((a,b)=>String(a.account_label).toLowerCase()<String(b.account_label).toLowerCase()?-1:1);if(list.length>1)list.forEach((q,i)=>out[q.id]=i+1);}
   return out;
  }
- const api={shortNumber,pct1,niceMaximum,orderSessions,allows,shortModel,modelSlices,burnPerHour,permitsBurnRate,weeklyBurnPerHour,periodBurn,weeklyPoints,trend,accountNumbers,toolName};
+ const api={shortNumber,pct1,niceMaximum,orderSessions,allows,shortModel,modelSlices,burnPerHour,permitsBurnRate,weeklyBurnPerHour,periodBurn,weeklyPoints,trend,accountNumbers,toolName,periodOf,representative,isWeekly,burnAllowed,pickTiles};
  if(typeof module!=='undefined'){module.exports=api;return;}
  root.OneTopQuick=api;
  if(typeof document==='undefined')return;
@@ -159,7 +177,9 @@
   if(!q.stale)return T('확인됨');
   switch(q.status){case 'last_report':return reportAge(q.updated);case 'report_pending':return T('보고 대기');
    case 'login_required':case 'login_expired':case 'credential_store_unavailable':case 'access_denied':return T('재연결 필요');
-   case 'refresh_pending':return T('갱신 중');case 'rate_limited':return T('조회 제한');default:return q.updated>0?reportAge(q.updated):T('조회 지연');}
+   case 'refresh_pending':return T('갱신 중');case 'rate_limited':return T('조회 제한');
+   case 'unsafe_cli_response':case 'unsupported_cli':return T('조회 중단');
+   default:return q.updated>0?reportAge(q.updated):T(UNAVAILABLE.has(q.status)?'값 없음':'조회 지연');}
  }
  const RECONNECT=new Set(['login_required','login_expired','credential_store_unavailable','access_denied']);
 
@@ -194,7 +214,7 @@
  const wave=size=>`<span class="q-wave" style="--w:${size}px" aria-hidden="true"><i></i><i></i><i></i></span>`;
  function chip(id){
   const q=quotas().find(x=>x.id===id);if(!id||!q&&!accountNumbers(quotas())[id])return '';
-  if(q?.alias)return `<span class="q-chip alias" title="${esc(q.account_label)}">${esc(q.alias)}</span>`;
+  if(q?.alias||q?.pool)return `<span class="q-chip alias" title="${esc(q.account_label)}">${esc(q.alias||q.pool)}</span>`;
   const n=accountNumbers(quotas())[id];return n?`<span class="q-chip" title="${esc(q?.account_label||'')}">${n}</span>`:'';
  }
  function update(id,html){if(S.html[id]===html)return false;S.html[id]=html;$(id).innerHTML=html;return true;}
@@ -222,15 +242,19 @@
   update('qLegend',legend);
  }
  function weeklyTile(q){
-  const w=q.windows?.find(x=>x.label==='주간'),account=S.data?.weekly_usage?.accounts?.find(a=>a.id===q.id),p=account?.periods?.[S.period];
-  const rate=fresh()&&!q.stale?periodBurn(p):null,handle=String(q.account_label||'').split('@')[0];
-  const status=q.stale?statusLabel(q):rate==null?T('수집 중'):rate1(rate);
-  const label=`${toolName(q.kind)} ${q.account_label} ${T('주간 한도')} ${pct1(w?.pct)}`;
-  return `<button type="button" class="q-tile" style="--tint:${color(q.kind)}" data-act="account" data-account="${esc(q.id)}" aria-label="${esc(label)}" title="${esc(q.account_label+' · '+(q.plan||'')+'\n'+T('클릭하면 5시간 한도와 초기화 시각을 확인합니다.'))}"><span class="q-tile-top"><i></i><b>${esc(toolName(q.kind))}</b>${chip(q.id)}<strong class="${q.stale?'stale':''}">${pct1(w?.pct)}</strong></span><span class="q-tile-bottom"><span>${esc(handle)}</span><svg class="q-spark" data-spark="${esc(q.id)}" aria-hidden="true"></svg><span class="${q.stale?'stale':''}">${esc(status)}</span></span></button>`;
+  const w=representative(q),weekly=isWeekly(w),account=S.data?.weekly_usage?.accounts?.find(a=>a.id===q.id),p=account?.periods?.[S.period];
+  // A 5-hour or monthly window, or an unverified pool, shows its value without a weekly burn rate.
+  const rate=fresh()&&!q.stale&&burnAllowed(q,w)?periodBurn(p):null,name=String(q.account_label||'').split('@')[0];
+  // An Agy pool's long name sits under the tool name instead of on a chip. Where no weekly burn rate
+  // is measured, the window's own label ("5H", "주간") takes the rate's place; an old value keeps it on the left.
+  const handle=(q.stale&&!weekly&&w?T(w.label)+' · ':'')+(q.pool||name);
+  const status=q.stale?statusLabel(q):rate!=null?rate1(rate):weekly&&q.identity_verified!==false?T('수집 중'):T(w?.label||'값 없음');
+  const label=`${toolName(q.kind)} ${q.account_label} ${T(weekly?'주간 한도':w?.label||'계정 한도')} ${pct1(w?.pct)}`;
+  return `<button type="button" class="q-tile" style="--tint:${color(q.kind)}" data-act="account" data-account="${esc(q.id)}" aria-label="${esc(label)}" title="${esc(q.account_label+' · '+(q.plan||'')+'\n'+T('클릭하면 5시간 한도와 초기화 시각을 확인합니다.'))}"><span class="q-tile-top"><i></i><b>${esc(toolName(q.kind))}</b>${q.pool?'':chip(q.id)}<strong class="${q.stale?'stale':''}">${pct1(w?.pct)}</strong></span><span class="q-tile-bottom"><span>${esc(handle)}</span><svg class="q-spark" data-spark="${esc(q.id)}" aria-hidden="true"></svg><span class="${q.stale?'stale':''}">${esc(status)}</span></span></button>`;
  }
  function renderWeekly(){
-  const rows=quotas(),disabled=!fresh()||S.busy;
-  const changed=update('qWeekly',`<div class="q-heading"><b>${esc(T('주간 한도'))}</b><span>${esc(T('계정별 100%'))}</span><span class="q-spacer"></span><button class="q-plus" data-act="menu" data-menu="accounts" aria-label="${esc(T('구독 계정 추가 로그인'))}" ${disabled?'disabled':''}>${icon.plus}</button></div>${rows.length?`<div class="q-weekly-grid">${rows.slice(0,4).map(weeklyTile).join('')}</div>`:`<p class="q-empty-note">${esc(T('+ 버튼으로 구독 계정을 연결하세요.'))}</p>`}`);
+  const rows=quotas(),shown=pickTiles(rows),disabled=!fresh()||S.busy;
+  const changed=update('qWeekly',`<div class="q-heading"><b>${esc(T(shown.every(q=>isWeekly(representative(q)))?'주간 한도':'계정 한도'))}</b><span>${esc(T('계정별 100%'))}</span><span class="q-spacer"></span><button class="q-plus" data-act="menu" data-menu="accounts" aria-label="${esc(T('구독 계정 추가 로그인'))}" ${disabled?'disabled':''}>${icon.plus}</button></div>${rows.length?`<div class="q-weekly-grid">${shown.map(weeklyTile).join('')}</div>`:`<p class="q-empty-note">${esc(T('+ 버튼으로 구독 계정을 연결하세요.'))}</p>`}`);
   if(changed)drawSparks();
  }
  function drawSparks(){

@@ -107,7 +107,9 @@ final class AppModel {
         for d in devices { for q in d.snapshot?.accountQuotas ?? [] where all[q.id] == nil || (q.updated ?? 0) > (all[q.id]?.updated ?? 0) { all[q.id] = q } }
         guard let quota = all[id] else { return nil }
         if let alias = quota.alias?.trimmingCharacters(in: .whitespaces), !alias.isEmpty { return alias }
-        let same = all.values.filter { $0.kind == quota.kind }.sorted { $0.accountLabel.lowercased() < $1.accountLabel.lowercased() }
+        // Pools of one Agy installation carry their own names and are not numbered.
+        if let pool = quota.pool, !pool.isEmpty { return pool }
+        let same = all.values.filter { $0.kind == quota.kind && $0.pool == nil }.sorted { $0.accountLabel.lowercased() < $1.accountLabel.lowercased() }
         guard same.count >= 2, let index = same.firstIndex(where: { $0.id == id }) else { return nil }
         return String(index + 1)
     }

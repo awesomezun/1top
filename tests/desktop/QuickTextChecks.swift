@@ -23,6 +23,8 @@ import Foundation
         precondition(en.resetsIn(days: 3, hours: 2, minutes: 0) == "Resets in 3d 2h" && ko.resetsIn(days: 0, hours: 0, minutes: 12) == "12분 후 초기화")
         precondition(zh.resetsIn(days: 0, hours: 4, minutes: 5) == "4小时5分钟后重置")
         precondition(en.working(4) == "Working 4" && zh.children(2) == "子会话 2" && en.count(3) == "3 more" && ko.perHour == "/시간")
+        // Limits from providers with 5-hour or monthly windows (Agy, GLM).
+        precondition(en("계정 한도") == "Account limits" && zh("MCP · 월간") == "MCP · 月度" && en("값 없음") == "No value" && zh("조회 중단") == "已停止查询")
         // Names never pass through a translation.
         precondition(en("checkout-web") == "checkout-web" && en("Orca · Gateway") == "Orca · Gateway")
         print("Quick text checks passed: three languages, model labels, formatted values, names left as they are.")

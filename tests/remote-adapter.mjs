@@ -121,5 +121,17 @@ await demo.alias({request_id:'r3',device_id:'demo-0',account_id:'demo-claude-4f1
 assert.equal(demo.devices()[0].snapshot.account_quotas.find(q=>q.id==='demo-claude-4f1c2a').alias,'Main');
 // Disconnecting a demo computer takes it off this page only.
 await demo.revoke('demo-1');assert.deepEqual(demo.devices().map(d=>d.id),['demo-0','demo-2']);
+// Agy pools and GLM (provider-quotas-contract v1.0.2) reach the unchanged dashboard with what picks
+// their representative window: period, scope, meter, pool, identity and error status.
+{
+ const {readFileSync}=await import('node:fs');
+ const rows=JSON.parse(readFileSync(new URL('./fixtures/provider-quotas_v1.0.2.json',import.meta.url),'utf8')).account_quotas;
+ const relayed=remoteState([device('p1','Studio',[],{account_quotas:rows})],{now,tag:'REMOTE'}).account_quotas,by=Object.fromEntries(relayed.map(q=>[q.id,q]));
+ assert.deepEqual(by['glm:fixture-key'].windows.map(w=>[w.period,w.scope,w.meter,w.label]),[['monthly','mcp','TIME_LIMIT','MCP · 월간'],['5h','models','TOKENS_LIMIT','5H']]);
+ assert.equal(by['antigravity:pool-argon'].pool,'Gemini 4 Argon');assert.equal(by['antigravity:pool-argon'].identity_verified,false);
+ assert.equal(by['glm:fixture-down'].status,'provider_unavailable');assert.equal(by['glm:fixture-down'].stale,true);
+ assert.equal(weekly.representative(by['glm:fixture-key']).label,'5H');assert.equal(weekly.burnAllowed(by['antigravity:pool-gemini']),false);
+ assert.deepEqual(weekly.pick(relayed).map(q=>q.id),['claude:fixture-a','codex:fixture-c','antigravity:pool-gemini','glm:fixture-key']);
+}
 console.log('Remote workspace: relay snapshots as the collector state, trees, scope, periods, flow, speed, accounts, markup, contract v1.0.1 fields, history merge, demo relay requests and disconnecting passed.');
 process.exit(0);
