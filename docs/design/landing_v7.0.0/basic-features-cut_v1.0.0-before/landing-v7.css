@@ -1,0 +1,72 @@
+/* Landing v7.0.0 on top of landing-v6.css: six tour stops, the Mac and Windows panels side by side,
+   the web and phone apps together, and Chinese line breaking. */
+
+/* The 35-second tour between the hero motion and the tour index: silent, plays while in view, one button to pause. */
+.g-reel{max-width:1180px;margin:72px auto 0;text-align:center}
+.g-reel .g-kicker{margin:0 0 18px}
+.g-reel-frame{position:relative;margin:0;border-radius:18px;overflow:hidden;border:1px solid var(--g-line);box-shadow:0 30px 90px var(--g-shadow);aspect-ratio:16/9;background:#0b0e10}
+.g-reel-frame video{display:block;width:100%;height:100%;object-fit:cover;cursor:pointer}
+.gauge-landing .g-reel-toggle{position:absolute;right:16px;bottom:16px;display:grid;place-items:center;width:44px;height:44px;padding:0;border-radius:12px;background:#0b0e10cc;border:1px solid #ffffff33;color:#fff;font-size:15px;line-height:1;cursor:pointer}
+.gauge-landing .g-reel-toggle:hover{background:#0b0e10ee}
+.g-reel-toggle:focus-visible{outline:2px solid var(--g-mint);outline-offset:3px}
+.g-reel-note{margin:14px 0 0;font-size:13px;color:var(--g-dim)}
+.gauge-landing .g-index{grid-template-columns:repeat(6,1fr)}
+.gauge-landing .g-index a{padding:18px 16px}
+
+/* 03: the copy above, then the Mac panel film and the Windows tray still on their own desktops. */
+.gauge-landing .g-menu{display:block}
+.g-panels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px;margin:0}
+.g-panels figure{margin:0}
+.g-panels .g-desk{display:flex;flex-direction:column;align-items:center}
+.gauge-landing .g-panels .g-desk .g-video{margin:0 auto}
+.g-desk figcaption{position:relative;margin-top:14px;font:600 12px ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.06em;color:#ffffffcc}
+.g-win-desk{padding:22px 18px 0;background:radial-gradient(120% 90% at 30% 10%,#2c5d8f 0,#173253 45%,#0d1726 100%)}
+.g-win-desk:before{background:linear-gradient(#0a0c0f22,#0a0c0f44)}
+.g-win-desk img{position:relative;display:block;width:100%;max-width:404px;height:auto;border-radius:10px;box-shadow:0 0 0 1px #ffffff1f,0 26px 40px -6px #000a}
+.g-win-desk figcaption{order:3;margin:12px 0 14px}
+.g-taskbar{position:relative;order:2;display:flex;align-items:center;justify-content:center;gap:10px;width:calc(100% + 36px);height:40px;margin:16px -18px 0;padding:0 14px;background:#1b1f25d9;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:#fff;font-size:12px}
+.g-win-start{width:16px;height:16px;background:conic-gradient(from 0deg,#4cc2ff 0 25%,#3aa0ff 0 50%,#2f8be6 0 75%,#56b8ff 0);border-radius:2px}
+.g-tray-icons{position:absolute;right:62px;display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:5px;background:#ffffff1a}
+.g-tray-icons img{width:16px;height:16px}
+.g-tray-icons b{font-weight:500;opacity:.8}
+.g-taskbar time{position:absolute;right:14px;font-variant-numeric:tabular-nums}
+.gauge-landing .g-menu .g-points{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:28px;margin-top:32px}
+
+/* 04: 1top.si/app in a browser window next to the two phones. */
+.g-everywhere{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.52fr);gap:32px;align-items:center}
+.g-browser{margin:0;border:1px solid var(--g-line);border-radius:14px;overflow:hidden;background:var(--g-panel);box-shadow:0 40px 90px -50px var(--g-shadow)}
+.g-chrome{display:flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-bottom:1px solid var(--g-line);background:var(--g-panel)}
+.g-chrome i{width:10px;height:10px;border-radius:50%;background:var(--g-line)}
+.g-chrome span{flex:1;max-width:280px;margin:0 auto;padding:4px 12px;border-radius:7px;background:var(--g-bg);font:500 12px ui-monospace,"SF Mono",Menlo,monospace;color:var(--g-muted);text-align:center}
+.g-browser img,.g-phones img{display:block;width:100%;height:auto}
+.g-phones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
+.g-phones figure{margin:0;text-align:center}
+.g-phones img{border:1px solid var(--g-line);border-radius:24px;box-shadow:0 30px 60px -36px var(--g-shadow)}
+.g-phones figcaption{margin-top:10px;font:600 12px ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.06em;color:var(--g-dim)}
+
+/* Chinese wraps between characters; keep the headline and lede from leaving one character alone. */
+html[lang=zh-CN] .gauge-landing :is(h1,h2,.g-lede){text-wrap:balance;word-break:normal;line-break:strict}
+
+@media (max-width:1100px){
+ .gauge-landing .g-index{grid-template-columns:repeat(3,1fr)}
+ .gauge-landing .g-index a:nth-child(3){border-right:0}
+ .gauge-landing .g-index a:nth-child(-n+3){border-bottom:1px solid var(--g-line)}
+ .g-everywhere{grid-template-columns:1fr}
+ .g-phones{max-width:460px;margin:0 auto;width:100%}
+}
+@media (max-width:640px){
+ .gauge-landing .g-index{grid-template-columns:repeat(2,1fr)}
+ .gauge-landing .g-index a{border-right:1px solid var(--g-line);border-bottom:1px solid var(--g-line)}
+ .gauge-landing .g-index a:nth-child(2n+1){border-right:1px solid var(--g-line)}
+ .gauge-landing .g-index a:nth-child(2n){border-right:0}
+ .gauge-landing .g-index a:nth-last-child(-n+2){border-bottom:0}
+ .g-panels{grid-template-columns:1fr;gap:20px}
+ .gauge-landing .g-menu .g-points{grid-template-columns:1fr}
+ .g-phones{gap:12px}
+ .g-phones img{border-radius:18px}
+}
+@media (max-width:640px){
+ .g-reel{margin-top:48px}
+ .g-reel-frame{border-radius:12px}
+ .gauge-landing .g-reel-toggle{right:10px;bottom:10px;width:40px;height:40px}
+}

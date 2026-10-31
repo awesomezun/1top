@@ -1,0 +1,64 @@
+/* Landing motion v1.0.0. States for landing-effects.js: an element waits hidden only while .m-ready is set and
+   motion is allowed, and .is-in plays its entrance. Transitions live on .is-in only, so hiding is instant.
+   Curves are the standard easing families named in comments. */
+.gauge-landing{--m-out-cubic:cubic-bezier(.33,1,.68,1);--m-out-quart:cubic-bezier(.25,1,.5,1);--m-out-back:cubic-bezier(.34,1.56,.64,1);--m-in-out-cubic:cubic-bezier(.65,0,.35,1);--m-r:18px;
+ --m-hero-grad:linear-gradient(100deg,var(--g-mint),var(--g-accent) 60%,#7fb2d9)}
+html[data-theme=light] .gauge-landing{--m-hero-grad:linear-gradient(100deg,#1f7a60,#2f9a7c 55%,#2c6f9e)}
+
+/* Scroll progress: a 2px line along the top of the window. */
+.m-progress{position:fixed;inset:0 0 auto;height:2px;z-index:60;pointer-events:none}
+.m-progress i{display:block;height:100%;background:linear-gradient(90deg,var(--g-accent),var(--g-mint));transform-origin:0 50%;transform:scaleX(var(--p,0))}
+body.in-app .m-progress{display:none}
+
+/* Masked lines. The hero's gradient rule targets every span in h1, so the wrappers reset it. */
+.m-l{display:block;overflow:clip;padding-bottom:.12em;margin-bottom:-.12em}
+.m-t{display:block}
+body .gauge-landing .g-hero h1 span:is(.m-l,.m-t){background:none;-webkit-background-clip:border-box;background-clip:border-box;color:inherit}
+
+@media (prefers-reduced-motion:no-preference){
+ /* Fade + Slide (easeOutCubic, 700ms). */
+ .m-ready [data-m=rise].is-in{transition:opacity .7s var(--m-out-cubic) calc(var(--d,0ms) - var(--m-shift,0ms)),transform .7s var(--m-out-cubic) calc(var(--d,0ms) - var(--m-shift,0ms))}
+ .m-ready [data-m=rise]:not(.is-in){opacity:0;transform:translateY(22px)}
+ /* Line Mask Up (easeOutQuart, 780ms, 95ms per line). */
+ .m-ready [data-m=lines].is-in .m-t{transition:transform .78s var(--m-out-quart) calc(var(--d,0ms) + var(--i,0) * 95ms - var(--m-shift,0ms))}
+ .m-ready [data-m=lines]:not(.is-in) .m-t{transform:translateY(110%)}
+ /* Staggered list and grid wave (easeOutCubic, 640ms, 70ms per step). */
+ .m-ready [data-m=list].is-in>:not([data-m]){transition:opacity .64s var(--m-out-cubic) calc(var(--i,0) * 70ms),transform .64s var(--m-out-cubic) calc(var(--i,0) * 70ms)}
+ .m-ready [data-m=list]:not(.is-in)>:not([data-m]){opacity:0;transform:translateY(18px)}
+ .m-ready [data-m=list].is-done>:not([data-m]){transition-delay:0s}
+ /* Clip reveal for product screens (easeOutQuart, 1s). The clip is dropped afterwards so shadows return. */
+ .m-ready [data-m=screen].is-in{transition:clip-path 1s var(--m-out-quart),transform 1s var(--m-out-quart),opacity .5s linear}
+ .m-ready [data-m=screen].is-in:not(.is-done){clip-path:inset(0 round var(--m-r))}
+ .m-ready [data-m=screen]:not(.is-in){clip-path:inset(8% 6% 0 6% round var(--m-r));transform:translateY(46px) scale(.97);opacity:.3}
+ /* Gauge: the arc draws and the needle overshoots onto its value (easeOutBack, 1s). */
+ .m-ready [data-m=gauge].is-in .vl{transition:stroke-dasharray 1s var(--m-out-cubic) .15s}
+ .m-ready [data-m=gauge] line{transform-box:view-box;transform-origin:60px 62px}
+ .m-ready [data-m=gauge].is-in line{transition:transform 1s var(--m-out-back) .15s}
+ .m-ready [data-m=gauge]:not(.is-in) .vl{stroke-dasharray:0 100}
+ .m-ready [data-m=gauge]:not(.is-in) line{transform:rotate(calc(var(--f,0) * -180deg))}
+ .g-eq{font-variant-numeric:tabular-nums}
+ /* Light Sweep across the gradient headline, once (easeInOutCubic, 1.3s). */
+ .m-ready .g-hero h1.m-sheen .m-t>span:not(.m-l){background-image:linear-gradient(100deg,transparent 42%,#ffffffa8 50%,transparent 58%),var(--m-hero-grad);background-size:300% 100%,100% 100%;background-repeat:no-repeat;animation:m-sheen 1.3s var(--m-in-out-cubic) both}
+ html[data-theme=light] .m-ready .g-hero h1.m-sheen .m-t>span:not(.m-l){background-image:linear-gradient(100deg,transparent 42%,#ffffffd0 50%,transparent 58%),var(--m-hero-grad)}
+ @keyframes m-sheen{from{background-position:85% 0,0 0}to{background-position:15% 0,0 0}}
+ /* Magnetic Button: follows the pointer quickly and springs back on leave (easeOutBack). */
+ .m-mag{transition:transform .55s var(--m-out-back),filter .2s,background .2s}
+ .m-mag:hover{transition-duration:.18s,.2s,.2s}
+ /* Hover Lift on download cards. */
+ .m-ready .g-options[data-m].is-in>article{transition:opacity .64s var(--m-out-cubic) calc(var(--i,0) * 70ms),transform .64s var(--m-out-cubic) calc(var(--i,0) * 70ms),border-color .25s,box-shadow .35s var(--m-out-cubic)}
+ .m-ready .g-options.is-done>article{transition-delay:0s}
+ .m-ready .g-options.is-in>article:hover{transform:translateY(-4px);border-color:color-mix(in srgb,var(--g-accent) 45%,var(--g-line));box-shadow:0 24px 50px -30px var(--g-shadow)}
+ /* Intrinsic Height Expand for FAQ answers where the browser supports it. */
+ .g-faq{interpolate-size:allow-keywords}
+ .g-faq details::details-content{block-size:0;overflow:clip;transition:block-size .5s var(--m-out-cubic),content-visibility .5s allow-discrete}
+ .g-faq details[open]::details-content{block-size:auto}
+ /* A remount shows everything in place at once. */
+ .m-now,.m-now *,.m-now *::before,.m-now *::after{transition:none!important;animation-delay:0s!important}
+}
+
+/* Card Spotlight: a soft light follows the pointer inside the card. */
+.m-spot{position:relative;isolation:isolate}
+.m-spot:after{content:'';position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .4s var(--m-out-cubic);
+ background:radial-gradient(340px circle at var(--mx,50%) var(--my,50%),color-mix(in srgb,var(--g-mint) 10%,transparent),transparent 70%)}
+.m-spot:hover:after{opacity:1}
+@media (max-width:640px){.gauge-landing{--m-r:12px}}
