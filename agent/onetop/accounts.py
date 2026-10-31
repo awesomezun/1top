@@ -25,6 +25,7 @@ import certifi
 import psutil
 from .account_login import managed_profiles_dir
 from .claude_profiles import CredentialError, keychain_document, refresh_managed, managed
+from .discovery import cli_kind
 
 
 def read_json(path):
@@ -226,9 +227,9 @@ def profile_roots(home=Path.home()):
             if path.is_dir() and not path.is_symlink():roots.add((kind,str(path)))
     for kind,key in [('Claude','CLAUDE_CONFIG_DIR'),('Codex','CODEX_HOME')]:
         if os.environ.get(key):roots.add((kind,os.environ[key]))
-    for process in psutil.process_iter(['name']):
-        name=(process.info.get('name') or '').lower().removesuffix('.exe')
-        if name not in ('claude','codex'):continue
+    for process in psutil.process_iter(['name','exe','cmdline']):
+        info=process.info
+        if cli_kind(info.get('name') or '',info.get('cmdline') or [],info.get('exe')) not in ('Claude','Codex'):continue
         try:
             env=process.environ()
             for kind,key in [('Claude','CLAUDE_CONFIG_DIR'),('Codex','CODEX_HOME')]:

@@ -18,9 +18,15 @@ APP_NAMES={'Cursor','Visual Studio Code','Code','Code - Insiders','Windsurf','Ze
            'WindowsTerminal','Windows Terminal','powershell','pwsh','cmd','conhost','OpenConsole','Antigravity','Terminal','iTerm','iTerm2','Warp','Ghostty','Alacritty',
            'WezTerm','IntelliJ IDEA','PyCharm','WebStorm','Orca','ChatGPT','Claude'}
 
-def cli_kind(name,args):
+def cli_kind(name,args,exe=''):
     executable=Path(name).name.lower().removesuffix('.exe')
     if executable in CLI_NAMES:return CLI_NAMES[executable]
+    # Native Claude installations expose a version number as their process name.
+    # Require the executable's installation path; a version or prompt alone is
+    # not evidence that the process belongs to Claude.
+    if re.search(r'(?:^|/)claude/versions/\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\.exe)?$',
+                 str(exe or '').replace('\\','/')):
+        return 'Claude'
     if executable in ('node','nodejs','python','python3','python3.11','python3.12','python3.13'):
         # The entrypoint only; never classify based on a prompt in later arguments.
         entry=str(args[1]).replace('\\','/') if len(args)>1 else ''
@@ -58,7 +64,7 @@ def inventory():
             d=p.info
             if not owned_process(p):continue
             rows[p.pid]={'pid':p.pid,'ppid':d['ppid'],'name':d['name'] or '',
-                'app':app_from(d['exe'],d['name']),'kind':cli_kind(d['name'] or '',d['cmdline'] or []),
+                'app':app_from(d['exe'],d['name']),'kind':cli_kind(d['name'] or '',d['cmdline'] or [],d['exe']),
                 'cwd':d['cwd'] or '', 'birth':d['create_time'], 'tty':process_terminal(p)}
         except (psutil.Error,AttributeError):continue
     return rows

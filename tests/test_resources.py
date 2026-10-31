@@ -8,6 +8,22 @@ from onetop.usage import session_usage
 
 
 class ResourceTests(unittest.TestCase):
+    def test_linux_cpu_excludes_io_wait_and_duplicate_guest_counters(self):
+        from onetop.resources import host_cpu_percent
+        # 100 CPU-seconds: 40 busy, 40 idle and 20 waiting for I/O.
+        # guest/guest_nice are already included in user/nice.
+        before=dict(user=100,nice=0,system=50,idle=200,iowait=10,guest=20,guest_nice=0)
+        after=dict(user=130,nice=0,system=60,idle=240,iowait=30,guest=40,guest_nice=0)
+        self.assertEqual(host_cpu_percent(after,before),40)
+
+    def test_host_cpu_initial_no_elapsed_and_counter_regression(self):
+        from onetop.resources import host_cpu_percent
+        before=dict(user=100,system=50,idle=200)
+        self.assertIsNone(host_cpu_percent(before,None))
+        self.assertIsNone(host_cpu_percent(before,before))
+        self.assertEqual(host_cpu_percent(dict(user=99,system=50,idle=220),before),0)
+        self.assertEqual(host_cpu_percent(dict(user=120,system=50,idle=220),before),50)
+
     def test_process_session_and_monitor_cpu_use_all_cores_while_host_chart_is_unchanged(self):
         # In two seconds, the parent uses one CPU and its child uses two CPUs.
         # On a 16-core host these are 6.25% and 12.5%, not 100% and 200%.

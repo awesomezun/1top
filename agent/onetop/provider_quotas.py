@@ -18,7 +18,8 @@ import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -26,6 +27,7 @@ import certifi
 import psutil
 
 from .account_login import executable, managed_profiles_dir
+from .discovery import cli_kind
 from .platform_support import cli_command, data_directory
 
 HOSTS = ('api.z.ai', 'open.bigmodel.cn')
@@ -208,9 +210,11 @@ def discover(home=None):
     for root in sorted(roots)[:64]:
         add(read_json(root / 'settings.json').get('env'))
     # Inspect only known CLI processes, and never serialize their environment.
-    for process in psutil.process_iter(['name']):
-        name = (process.info.get('name') or '').lower().removesuffix('.exe')
-        if name not in ('claude', 'node', 'codex', 'opencode', 'zcode'):
+    for process in psutil.process_iter(['name', 'exe', 'cmdline']):
+        info = process.info
+        name = (info.get('name') or '').lower().removesuffix('.exe')
+        kind = cli_kind(name, info.get('cmdline') or [], info.get('exe'))
+        if kind not in ('Claude', 'Codex', 'OpenCode') and name != 'zcode':
             continue
         try:
             add(process.environ())
@@ -346,9 +350,16 @@ class ProviderQuotaSampler:
             delay = 600 if code == 'login_required' else 120
             if code == 'rate_limited':
                 try:
-                    value = float(error.headers.get('Retry-After', '300'))
+                    header = error.headers.get('Retry-After', '300')
+                    try:
+                        value = float(header)
+                    except (ValueError, TypeError):
+                        deadline = parsedate_to_datetime(header)
+                        if deadline.tzinfo is None:
+                            deadline = deadline.replace(tzinfo=timezone.utc)
+                        value = deadline.timestamp() - now
                     delay = max(120, min(3600, value)) if math.isfinite(value) else 300
-                except (ValueError, TypeError, AttributeError):
+                except (ValueError, TypeError, AttributeError, OverflowError):
                     delay = 300
             self.retry_after[source.id] = (now + delay, code)
             error.close()

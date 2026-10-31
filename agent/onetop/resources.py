@@ -12,6 +12,19 @@ def counter_rate(current,previous,seconds):
     return (current-previous)/seconds
 
 
+def host_cpu_percent(current,previous):
+    """Whole-host busy share, following psutil's platform counter semantics."""
+    if previous is None or current.keys()!=previous.keys():return None
+    delta={key:max(0,value-previous[key]) for key,value in current.items()}
+    # Linux includes guest time in user/nice already, and I/O wait is idle CPU.
+    # Those fields are absent on macOS/Windows. Clamp regressing OS counters
+    # individually, as psutil.cpu_percent does, instead of creating a spike.
+    total=sum(delta.values())-delta.get('guest',0)-delta.get('guest_nice',0)
+    if total<=0:return None
+    busy=total-delta.get('idle',0)-delta.get('iowait',0)
+    return round(max(0,min(100,100*busy/total)),1)
+
+
 def owner_of(pid,parents,roots):
     seen=set()
     while pid and pid not in seen:
@@ -72,12 +85,9 @@ class ResourceSampler:
         for s in sessions:s['resources']=groups.get(s['id'])
         shared=[{'id':f'backend:{pid}','pid':pid,'name':rows.get(pid,{}).get('name','Codex'),
                  **groups[f'backend:{pid}']} for pid in shared_roots if f'backend:{pid}' in groups]
-        cpu=psutil.cpu_times();values=cpu._asdict();total=sum(values.values());idle=values.get('idle',0)
-        host_cpu=None
-        if self.cpu_previous:
-            delta=total-self.cpu_previous[0]
-            if delta>0:host_cpu=round(max(0,min(100,100*(1-(idle-self.cpu_previous[1])/delta))),1)
-        self.cpu_previous=(total,idle)
+        values=psutil.cpu_times()._asdict()
+        host_cpu=host_cpu_percent(values,self.cpu_previous)
+        self.cpu_previous=values
         memory=psutil.virtual_memory();swap=psutil.swap_memory()
         disk_path='/System/Volumes/Data' if Path('/System/Volumes/Data').exists() else Path.home().anchor
         disk=psutil.disk_usage(disk_path);diskio=psutil.disk_io_counters()

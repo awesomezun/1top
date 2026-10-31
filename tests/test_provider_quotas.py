@@ -4,6 +4,8 @@ import sqlite3
 import tempfile
 import unittest
 import urllib.error
+from datetime import datetime, timezone
+from email.utils import format_datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -161,6 +163,25 @@ class ProviderConnectionTests(unittest.TestCase):
             self.assertEqual(sampler.query(source,300)[0]['status'],'rate_limited')
             self.assertEqual(query.call_count,1)
         self.assertEqual(sampler.retry_after[source.id][0],700)
+
+    def test_rate_limit_honors_http_date_and_recovers_after_deadline(self):
+        sampler=p.ProviderQuotaSampler();source=self.source();now=1800000000
+        header=format_datetime(datetime.fromtimestamp(now+600,timezone.utc),usegmt=True)
+        error=urllib.error.HTTPError('hidden',429,'hidden',{'Retry-After':header},None)
+        response=glm([{'type':'TOKENS_LIMIT','unit':3,'number':5,'percentage':42}])
+        with patch.object(p,'glm_query',side_effect=[error,response]) as query:
+            self.assertEqual(sampler.query(source,now)[0]['status'],'rate_limited')
+            self.assertEqual(sampler.query(source,now+400)[0]['status'],'rate_limited')
+            self.assertEqual(query.call_count,1)
+            self.assertEqual(sampler.query(source,now+600)[0]['windows'][0]['pct'],42)
+        self.assertNotIn(source.id,sampler.retry_after)
+
+    def test_invalid_retry_after_uses_bounded_default(self):
+        for header in ['bad-date','NaN','Infinity']:
+            sampler=p.ProviderQuotaSampler();source=self.source()
+            error=urllib.error.HTTPError('hidden',429,'hidden',{'Retry-After':header},None)
+            with patch.object(p,'glm_query',side_effect=error):sampler.query(source,100)
+            self.assertEqual(sampler.retry_after[source.id][0],400)
 
     def test_closing_cli_retains_key_only_in_memory_for_later_refresh(self):
         sampler=p.ProviderQuotaSampler();source=self.source()
