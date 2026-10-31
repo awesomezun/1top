@@ -140,7 +140,9 @@ def export_snapshot(state):
         'quotas':[select(q, ('kind','plan','updated','stale','note','windows')) for q in state.get('quotas', [])[:24]],
         'operations':operations,
         'account_quotas':[{'id':q['id'],'kind':q['kind'],'account_label':q['kind']+' · '+q['id'][-6:], 'alias':q.get('alias',''),
-            'plan':q.get('plan',''),'windows':[{k:w.get(k) for k in ('label','pct','reset')} for w in q.get('windows',[])[:8]],
+            'plan':q.get('plan',''),'provider':q.get('provider',''),'pool':q.get('pool',''),
+            'identity_source':q.get('identity_source',''),'identity_verified':q.get('identity_verified'),
+            'windows':[{k:w[k] for k in ('key','period','label','pct','reset','seconds','scope','meter') if k in w} for w in q.get('windows',[])[:16]],
             'updated':q.get('updated',0),'stale':q.get('stale',True),'note':q.get('note',''),'status':q.get('status',''),
             'calibration':select(weekly.get(q['id'],{}).get('calibration'), CALIBRATION),
             'weekly':{key:{k:value.get(k) for k in ('used_pp','observed_seconds','partial')}

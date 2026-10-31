@@ -257,11 +257,14 @@ def claude_credentials(root):
 
 class AccountQuotaSampler:
     def __init__(self):
+        from .provider_quotas import ProviderQuotaSampler
+        self.providers=ProviderQuotaSampler()
         self.lock=threading.Lock();self.rows=[];self.cached={};self.thread=None;self.refresh_failures={};self.profile_accounts={};self.profile_jobs={};self.profile_timeout=25
         self.local_refresh_lock=threading.Lock();self.next_local_refresh=0
         self.claude_verified={};self.claude_backoff={}
     def start(self):
         if self.thread:return
+        self.providers.start()
         self.thread=threading.Thread(target=self.loop,daemon=True);self.thread.start()
     def loop(self):
         while True:
@@ -276,7 +279,7 @@ class AccountQuotaSampler:
             row['stale']=row['stale'] or now-row['updated']>300
             for w in row['windows']:
                 if w['reset'] and w['reset']<=now:w['pct']=None
-        return rows
+        return rows+self.providers.snapshot(now)
     def refresh_claude_reports(self,now):
         """Refresh known local reports without spawning CLIs or rediscovering profiles."""
         if time.monotonic()<self.next_local_refresh or not self.local_refresh_lock.acquire(blocking=False):return

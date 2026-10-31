@@ -17,8 +17,9 @@ export interface WeeklyEstimate {
 }
 export interface AccountQuota {
   id:string;kind:string;account_label:string;alias?:string;plan:string;updated:number;stale:boolean;note:string;
+  provider?:string;pool?:string;identity_source?:string;identity_verified?:boolean|null;
   status?:string;
-  windows:Array<{label:string;pct:number|null;reset:number}>;
+  windows:Array<{label:string;pct:number|null;reset:number;key?:string;period?:string;seconds?:number|null;scope?:string;meter?:string}>;
   weekly?:Record<string,{used_pp:number|null;observed_seconds:number;partial:boolean}>;
   usage_points?:Array<[number,number,number]>; calibration?:ReturnType<typeof calibration>;
 }
@@ -108,9 +109,15 @@ export function snapshot(value: any): DeviceSnapshot {
     sessions,version:text(value.version,30),
     account_quotas:Array.isArray(value.account_quotas)?value.account_quotas.slice(0,24).map((q:any)=>({
       id:text(q.id,100),kind:text(q.kind,40),account_label:text(q.kind,40)+' · '+text(q.id,100).slice(-6),alias:text(q.alias,24),
+      provider:text(q.provider,40),pool:text(q.pool,80),
+      identity_source:['cli_profile','credential_fingerprint'].includes(q.identity_source)?q.identity_source:'',
+      identity_verified:typeof q.identity_verified==='boolean'?q.identity_verified:null,
       calibration:calibration(q.calibration),plan:text(q.plan,40),updated:number(q.updated)||0,stale:q.stale!==false,note:text(q.note,180),
-      status:['login_required','login_expired','credential_store_unavailable','access_denied','account_changed','rate_limited','refresh_pending','last_report','report_pending'].includes(q.status)?q.status:'',
-      windows:Array.isArray(q.windows)?q.windows.slice(0,8).map((w:any)=>({label:text(w.label,30),pct:number(w.pct,100),reset:number(w.reset)||0})):[],
+      status:['login_required','login_expired','credential_store_unavailable','access_denied','account_changed','rate_limited','refresh_pending','last_report','report_pending','provider_unavailable','invalid_response','no_quota','unsafe_cli_response','unsupported_cli'].includes(q.status)?q.status:'',
+      windows:Array.isArray(q.windows)?q.windows.slice(0,16).filter((w:any)=>w&&typeof w==='object').map((w:any)=>({
+        label:text(w.label,80),pct:number(w.pct,100),reset:number(w.reset)||0,key:text(w.key,80),
+        period:['5h','weekly','daily','monthly','unknown'].includes(w.period)?w.period:'',seconds:number(w.seconds),
+        scope:['models','mcp'].includes(w.scope)?w.scope:'',meter:text(w.meter,30)})):[],
       weekly:Object.fromEntries(KEYS.filter(k=>q.weekly?.[k]).map(k=>[k,{
         used_pp:number(q.weekly[k].used_pp,1e6),observed_seconds:number(q.weekly[k].observed_seconds)||0,
         partial:q.weekly[k].partial!==false}])),

@@ -88,22 +88,10 @@ def claude_windows(entries, now):
 
 
 def glm_windows(payload, now):
-    if payload.get('success') is not True or payload.get('code',0) not in (0,200):return []
-    windows=[]
-    for w in (payload.get('data') or {}).get('limits',[]):
-        if w.get('type') not in ('TOKENS_LIMIT','CREDIT_LIMIT'):continue
-        pct=w.get('percentage')
-        cap=w.get('usage')
-        if isinstance(cap,(int,float)) and cap>0:
-            current=w.get('currentValue')
-            if current is None and isinstance(w.get('remaining'),(int,float)):current=cap-w['remaining']
-            if isinstance(current,(int,float)):pct=current/cap*100
-        if not isinstance(pct,(int,float)):continue
-        mins={1:1440,3:60,5:1,6:10080}.get(w.get('unit'),0)*(w.get('number') or 0)
-        reset=epoch(w.get('nextResetTime'))
-        label='5시간' if mins==300 else '주간' if mins==10080 else f'{mins//60}시간' if mins else '플랜 한도'
-        windows.append({'label':label,'pct':min(100,max(0,pct)) if not reset or reset>now else None,'reset':reset,'t':now})
-    return windows
+    # Compatibility parser for older integrations. Collection uses account pools.
+    from .provider_quotas import glm_windows as parse, ProviderError
+    try:return parse(payload, now)
+    except ProviderError:return []
 
 
 def terminal_for(meta, terminals):
@@ -268,8 +256,6 @@ class Collector:
         self.range_lock = threading.Lock()
         self.range_cache = {}
         self.snapshot = {'ready': False, 'version': __version__, 'updated': 0, 'sessions': [], 'error': None}
-        self.agy_quota = {'kind': 'Antigravity', 'windows': [], 'note': '한도 확인 중', 'updated': 0}
-        self.glm_quota = {'kind': 'GLM', 'windows': [], 'note': '연결된 GLM 계정 한도 확인 중', 'updated': 0}
         self.trackers = {}
         self.index = {}
         self.index_at = 0
@@ -718,9 +704,8 @@ class Collector:
             windows.append({'label':'주간' if mins==10080 else '5시간' if mins==300 else f'{mins}분',
                             'pct':w.get('used_percent') if reset>now else None,'reset':reset,'t':q['t']})
         out.append({'kind':'Codex','windows':windows,'updated':q['t'],'note':'가장 최근 세션이 보고한 계정 한도'})
-        with self.lock:
-            out.append(dict(self.glm_quota))
-            out.append(dict(self.agy_quota))
+        # Legacy and account readers share one owner of provider polling.
+        out.extend(self.accounts.providers.snapshot(now))
         return out
 
     def collect(self):
@@ -842,68 +827,6 @@ class Collector:
             self.tick_mailbox()
             time.sleep(max(.2,3-(time.monotonic()-before)))
 
-    def agy_loop(self):
-        exe=HOME/'.local/bin/agy'
-        if not exe.exists():return
-        try:
-            version=run([str(exe),'--version'],5).strip()
-            if tuple(map(int,version.split('.')[:3]))<(1,1,11):return
-        except Exception:return
-        while True:
-            q={'kind':'Antigravity','windows':[],'updated':time.time(),'note':'공식 한도를 확인하지 못했습니다.'}
-            try:
-                env={**os.environ,'AGY_CLI_DISABLE_AUTO_UPDATE':'true'}
-                p=subprocess.run([str(exe),'-p','/usage','--output-format','json','--print-timeout','20s'],
-                                 env=env,cwd=str(HOME),capture_output=True,text=True,timeout=28)
-                for line in p.stdout.splitlines():
-                    try:e=json.loads(line)
-                    except ValueError:continue
-                    if e.get('num_turns',0)>0 or e.get('conversation_id'):
-                        q['note']='이 CLI에서는 안전한 한도 조회를 확인하지 못해 자동 조회를 중단했습니다.'
-                        with self.lock:self.agy_quota=q
-                        return
-                    cmd=e.get('command') or {}
-                    if e.get('status')!='SUCCESS' or cmd.get('name')!='usage':continue
-                    for group in (cmd.get('data') or {}).get('groups',[]):
-                        for b in group.get('buckets',[]):
-                            if b.get('disabled') or not isinstance(b.get('remaining_fraction'),(int,float)):continue
-                            reset=epoch(b.get('reset_time'))
-                            q['windows'].append({'label':group.get('name','')+' · '+('주간' if b.get('window')=='weekly' else b.get('window','')),
-                                                 'pct':max(0,min(100,(1-b['remaining_fraction'])*100)) if reset>time.time() else None,
-                                                 'reset':reset,'t':q['updated']})
-                    if q['windows']:q['note']='agy /usage 공식 한도 · 10분마다 확인'
-            except (OSError,subprocess.SubprocessError):pass
-            with self.lock:self.agy_quota=q
-            time.sleep(600)
-
-    def glm_loop(self):
-        while True:
-            specs=[s for s in self.specs if s['kind']=='GLM']
-            if not specs:
-                time.sleep(5);continue
-            q={'kind':'GLM','windows':[],'updated':0,'note':'공식 한도를 확인하지 못했습니다. 세션 토큰은 계속 수집합니다.'}
-            try:
-                # Use the active session's existing credential only with its allowlisted provider.
-                raw=run(['ps','eww','-p',str(specs[0]['pid']),'-o','command='])
-                host=specs[0].get('provider')
-                match=re.search(r'(?:^|\s)ANTHROPIC_AUTH_TOKEN=([^\s]+)',raw)
-                if not match:match=re.search(r'(?:^|\s)ANTHROPIC_API_KEY=([^\s]+)',raw)
-                if match and host in ('api.z.ai','open.bigmodel.cn'):
-                    key=match.group(1)
-                    if '\n' in key or '\r' in key:raise ValueError('Invalid credential')
-                    header=key.replace('\\','\\\\').replace('"','\\"')
-                    config=f'url = "https://{host}/api/monitor/usage/quota/limit"\nheader = "Authorization: {header}"\nheader = "Accept-Language: en-US,en"\n'
-                    result=subprocess.run(['/usr/bin/curl','--silent','--show-error','--fail','--max-time','15','--config','-'],
-                                          input=config,capture_output=True,text=True,timeout=18)
-                    del key,header,config,raw
-                    if result.returncode==0:
-                        payload=json.loads(result.stdout)
-                        q['windows']=glm_windows(payload,time.time())
-                        if q['windows']:
-                            q['updated']=time.time();q['note']='실행 중인 GLM 세션의 계정 · 공식 API · 2분마다 확인'
-            except (OSError,ValueError,subprocess.SubprocessError):pass
-            with self.lock:self.glm_quota=q
-            time.sleep(120)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1028,8 +951,6 @@ def main():
     server.controller=Controller(collector,Collector,state_file=DATA/'controls-v5.json')
     collector.controller=server.controller
     threading.Thread(target=collector.loop,daemon=True).start()
-    threading.Thread(target=collector.agy_loop,daemon=True).start()
-    threading.Thread(target=collector.glm_loop,daemon=True).start()
     print(f'1top v1.0.0 http://127.0.0.1:{args.port}',flush=True)
     server.serve_forever()
 

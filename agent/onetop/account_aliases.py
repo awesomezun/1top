@@ -15,7 +15,7 @@ def read(data):
 
 def apply(rows, data):
     aliases=read(data)
-    for row in rows:row['alias']=aliases.get(row.get('id'),'')
+    for row in rows:row['alias']=aliases.get(row.get('id'),row.get('pool','')[:24])
     return rows
 
 def set_alias(data, account_id, alias, account_ids):

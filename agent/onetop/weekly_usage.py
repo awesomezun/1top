@@ -55,6 +55,9 @@ def initialize(db):
 
 def record(db, quotas, now):
     for q in quotas:
+        # Agy /usage reports pools but not the signed-in account. Do not join
+        # account history across potentially different CLI logins.
+        if q.get('identity_verified') is False:continue
         t=q.get('updated')
         if q.get('stale',True) or not valid_number(t) or not 0<=now-t<=FRESH:continue
         w=next((w for w in q.get('windows',[]) if w.get('label')=='주간'),{})
