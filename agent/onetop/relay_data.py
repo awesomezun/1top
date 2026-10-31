@@ -10,6 +10,15 @@ CALIBRATION = ('pp_per_token', 'confidence', 'from', 'to', 'valid_until', 'sourc
 def select(value, keys):
     return {k: value.get(k) for k in keys} if isinstance(value, dict) else {}
 
+def period_metrics(window):
+    result = select(window, ('key','label','tokens','partial','observed_seconds','seconds'))
+    # Preserve absence for collectors that predate model attribution. Empty is
+    # a known zero, not permission to reconstruct models from live sessions.
+    if isinstance(window.get('by_model'), list):
+        result['by_model'] = [select(row, ('kind','model','tokens','session_count'))
+                              for row in window['by_model']]
+    return result
+
 def all_periods(db, state):
     """Same transaction and account attribution rules as the local time slider."""
     result = copy.deepcopy(state)

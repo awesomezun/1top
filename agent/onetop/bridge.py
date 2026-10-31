@@ -7,7 +7,7 @@ import websocket
 from . import __version__
 from .controls import accepts_instruction, accepts_message
 from .mailbox import readable as mailbox_readable
-from .relay_data import CALIBRATION, select, host_metrics, system_metrics, public_history
+from .relay_data import CALIBRATION, select, host_metrics, system_metrics, public_history, period_metrics
 
 RELAY='https://onetop-relay.gitreels.workers.dev'
 SSL=ssl.create_default_context(cafile=certifi.where())
@@ -151,7 +151,7 @@ def export_snapshot(state):
             for q in state.get('account_quotas',[])[:24]],
         'sessions':sessions,'applications':[{'name':a['name'],'evidence':a['evidence']} for a in state.get('applications',[])],'host':{'cpu':host.get('cpu'),'used_memory':memory.get('used',0),
         'total_memory':memory.get('total',0),'cores':host.get('cores',0),**host_metrics(host)},
-        'periods':[{k:w.get(k) for k in ('key','label','tokens','partial','observed_seconds','seconds')} for w in state.get('period_usage',{}).get('windows',[])]}
+        'periods':[period_metrics(w) for w in state.get('period_usage',{}).get('windows',[])]}
 
 
 class CloudLink:

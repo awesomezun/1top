@@ -26,6 +26,10 @@ class RelayParity(unittest.TestCase):
             db.executemany('INSERT INTO events VALUES(?,?,?,?,?,?,?,?)',[
                 (now-9*86400,'s','Claude',100,0,0,0,'old'),(now-26*3600,'s','Claude',20,0,0,0,'new'),
                 (now-100,'s','Claude',3,0,0,0,'new'),(now+10,'s','Claude',999,0,0,0,'new')])
+            db.execute('ALTER TABLE events ADD COLUMN model TEXT')
+            db.execute("UPDATE events SET model='claude-opus-5-5'")
+            db.execute('INSERT INTO events VALUES(?,?,?,?,?,?,?,?,?)',
+                       (now-50,'closed','Aside',7,1,2,3,None,'gpt-6.1-sol'))
             period,usage=window_usage(db,now,started,['Claude'])
             base={'ready':True,'updated':now,'started':started,'history_started':started,'period_usage':period,
                 'sessions':[{'id':'s','kind':'Claude','tokens':[123,0,0,0],'usage':{**usage['s'],'windows':usage['s'],'weekly_account':'new'}}],
@@ -36,6 +40,8 @@ class RelayParity(unittest.TestCase):
             payload=export_snapshot(result)
             self.assertEqual(len(payload['periods']),19)
             for p in payload['periods']:
+                self.assertEqual([sum(r['tokens'][i] for r in p['by_model']) for i in range(4)],p['tokens'])
+                self.assertIn(dict(kind='Aside',model='gpt-6.1-sol',tokens=[7,1,2,3],session_count=1),p['by_model'])
                 if p['key'] in result['remote_flows']:
                     self.assertEqual(sum(sum(b.values()) for b in payload['flow'][p['key']]['bins']),sum(p['tokens']))
                     self.assertLessEqual(len(payload['flow'][p['key']]['bins']),240)
@@ -44,6 +50,17 @@ class RelayParity(unittest.TestCase):
             self.assertEqual(estimate['tokens'],23) # switched account's 100 never relabelled
             self.assertTrue(estimate['partial']);self.assertEqual(estimate['calibration']['seconds'],300)
             self.assertEqual(payload['account_quotas'][0]['calibration']['tokens'],100)
+
+    def test_model_breakdown_preserves_missing_and_empty_and_only_exports_metrics(self):
+        windows=[dict(key='1h',tokens=[4,0,0,0]),dict(key='10m',tokens=[0,0,0,0],by_model=[]),
+                 dict(key='5h',tokens=[4,0,0,0],by_model=[dict(kind='Claude',model=None,
+                      tokens=[4,0,0,0],session_count=2,cwd='/private/path',prompt='PRIVATE',account='SECRET')])]
+        periods=export_snapshot({'period_usage':{'windows':windows}})['periods']
+        self.assertNotIn('by_model',periods[0])
+        self.assertEqual(periods[1]['by_model'],[])
+        self.assertEqual(periods[2]['by_model'],[dict(kind='Claude',model=None,tokens=[4,0,0,0],session_count=2)])
+        for secret in ('/private','PRIVATE','SECRET'):
+            self.assertNotIn(secret,json.dumps(periods))
 
     def test_extended_metrics_exclude_paths_and_private_operations(self):
         state={'sessions':[{'id':'s','kind':'Claude','title':'PRIVATE PROMPT','pids':[4],'effort':'high',

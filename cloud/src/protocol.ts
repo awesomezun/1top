@@ -29,11 +29,30 @@ export interface DeviceSnapshot extends ReturnType<typeof extras> {
   account_quotas:AccountQuota[];
   updated: number; recording_started: number; sessions: AgentSession[]; applications: Array<{name:string;evidence:string}>;
   host: ReturnType<typeof hostMetrics> & { cpu: number | null; used_memory: number; total_memory: number; cores: number };
-  periods: Array<{key: string; label: string; tokens: number[]; partial: boolean; observed_seconds: number;seconds:number|null}>;
+  periods: Array<{key: string; label: string; tokens: number[]; partial: boolean; observed_seconds: number;seconds:number|null;by_model?:PeriodModelUsage[]}>;
   version: string;
   operations: { updated: number | null; installed_skills: number | null; observed_events: number | null;
     goals: Array<{thread_id:string;runtime:string;status:string;tokens_used:number|null;time_used_seconds:number|null;session_connected:boolean;evidence:string}>;
     loop_state: 'not_verified'; skill_runtime: 'partial' };
+}
+export interface PeriodModelUsage {kind:string;model:string|null;tokens:number[];session_count:number}
+function periodModels(value:unknown,total:unknown):PeriodModelUsage[]|undefined {
+  const expected=vector(total);
+  if(!Array.isArray(value)||value.length>256||!expected)return undefined;
+  const result:PeriodModelUsage[]=[],seen=new Set<string>(),sums=[0,0,0,0];
+  for(const row of value){
+    const tokens=vector(row?.tokens),kind=text(row?.kind,40);
+    const model=row?.model===null?null:text(row?.model,160);
+    if(!tokens||!kind||kind!==row?.kind||(model!==null&&(!model||model!==row?.model))||
+       !Number.isSafeInteger(row?.session_count)||row.session_count<0)return undefined;
+    const key=JSON.stringify([kind,model]);
+    if(seen.has(key))return undefined;
+    seen.add(key);tokens.forEach((n,i)=>sums[i]+=n);
+    result.push({kind,model,tokens,session_count:row.session_count});
+  }
+  // Do not publish a partial/malformed breakdown as if it described the total.
+  if(sums.some((n,i)=>!Number.isFinite(n)||Math.abs(n-expected[i])>.01))return undefined;
+  return result;
 }
 export const text = (v: unknown, max = 180): string => typeof v === 'string' ? v.slice(0, max) : '';
 const number = (v: unknown, max = Number.MAX_SAFE_INTEGER): number | null =>
@@ -132,7 +151,11 @@ export function snapshot(value: any): DeviceSnapshot {
     applications:Array.isArray(value.applications)?value.applications.slice(0,60).map((a:any)=>({name:text(a.name,80),evidence:'application_process'})):[],
     host:{...hostMetrics(value.host),cpu:number(value.host?.cpu,100),used_memory:number(value.host?.used_memory)||0,
       total_memory:number(value.host?.total_memory)||0,cores:number(value.host?.cores,4096)||0},
-    periods:Array.isArray(value.periods)?value.periods.filter((p:any)=>KEYS.includes(p.key)).slice(0,19).map((p:any)=>({key:p.key,seconds:number(p.seconds),label:text(p.label,30),tokens:vector(p.tokens)||[0,0,0,0],partial:p.partial===true,observed_seconds:number(p.observed_seconds)||0})):[]
+    periods:Array.isArray(value.periods)?value.periods.filter((p:any)=>KEYS.includes(p.key)).slice(0,19).map((p:any)=>{
+      const byModel=periodModels(p.by_model,p.tokens);
+      return {key:p.key,seconds:number(p.seconds),label:text(p.label,30),tokens:vector(p.tokens)||[0,0,0,0],
+        partial:p.partial===true,observed_seconds:number(p.observed_seconds)||0,...(byModel===undefined?{}:{by_model:byModel})};
+    }):[]
   };
 }
 function contextUsage(c:any):AgentSession['context_usage'] {
