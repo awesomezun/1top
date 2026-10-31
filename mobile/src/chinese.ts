@@ -273,6 +273,7 @@ export const exact:Record<string,string>={
  "Time window":"时段",
  "Load":"负载",
  "Weekly limit left":"剩余每周额度",
+ "Limit left":"剩余额度",
  "Work trip":"工作行程",
  "since":"起",
  "Reset":"重置",

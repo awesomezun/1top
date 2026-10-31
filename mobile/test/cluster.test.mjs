@@ -49,3 +49,16 @@ test('the phone demo shows the web demo cluster at the same moment',async()=>{
 test('the dials use the desktop scale marks',()=>{
  for(const max of [2e8,1e8,5e7,2,3,5,10])assert.deepEqual(marks(max),desktop.marks(max));
 });
+
+test('burn and the cruise belong to a weekly window of an account whose identity is not unverified',async()=>{
+ const {accountWindow,burnAllowed}=await import('../src/cluster-model.ts');
+ const week={label:'주간',pct:40,reset:1},five={label:'5시간',pct:20,reset:1};
+ assert.equal(accountWindow({windows:[five,week]}),week);
+ assert.equal(burnAllowed({},week),true);
+ assert.equal(burnAllowed({identity_verified:false},week),false);
+ assert.equal(burnAllowed({},five),false);
+ const at=1_800_000_000;setDemoNow(at);const devices=demoDevices(),q=devices[0].snapshot.account_quotas[0];q.identity_verified=false;
+ const a=phone(devices,'1h',at).accounts.find(x=>x.id===q.id);
+ assert.deepEqual([a.burn,a.added],[null,null]);
+ setDemoNow(null);
+});

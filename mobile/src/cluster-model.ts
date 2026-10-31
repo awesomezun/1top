@@ -93,6 +93,11 @@ export function clusterState(devices:Device[],now:number){
 
 // The dashboard's weekly rules (weekly.js).
 export const weekly=(q:Any)=>q?.windows?.find((w:Any)=>w.label==='주간');
+/** The one place the cluster picks the window an account reads: its weekly window here. On merging with
+ *  the provider limits work this becomes fleet.ts representative (model weekly → 5h → daily, MCP last). */
+export const accountWindow=(q:Any)=>weekly(q);
+/** Burn and the period's added % belong to a weekly window of an account whose identity is not unverified. */
+export const burnAllowed=(q:Any,w:Any)=>!!w&&w.label==='주간'&&q?.identity_verified!==false;
 // Partial periods use the observed duration, never the selected window length.
 export function accountBurn(period:Any,quota:Any){
  if(!quota||quota.stale!==false||!valid(period?.used_pp)||!valid(period?.observed_seconds)||period.observed_seconds<120)return null;
@@ -141,7 +146,7 @@ export function marks(max:number){
  return {max,major,minor:major/5};
 }
 const local=(label:string)=>{const s=String(label||'');return s.includes('@')?s.split('@')[0]:s;};
-type Account={id:string;kind:string;label:string;plan:string|null;alias:string|null;who:string;pct:number|null;left:number|null;reset:number|null;current:boolean;reconnect:boolean;burn:number|null;added:number|null;range?:{state:'idle'|'enough'|'empty';at:number|null;early:boolean}|null};
+type Account={id:string;kind:string;label:string;plan:string|null;alias:string|null;who:string;window:string|null;weekly:boolean;pct:number|null;left:number|null;reset:number|null;current:boolean;reconnect:boolean;burn:number|null;added:number|null;range?:{state:'idle'|'enough'|'empty';at:number|null;early:boolean}|null};
 // When an account's weekly limit runs out at its current burn, and whether that comes before the reset.
 function range(a:Account,now:number){
  if(a.left===null||!valid(a.burn))return null;
@@ -149,8 +154,8 @@ function range(a:Account,now:number){
  const at=now+a.left/a.burn*HOUR;
  return a.reset&&at>=a.reset?{state:'enough' as const,at,early:false}:{state:'empty' as const,at,early:!!a.reset};
 }
-// The steady %/h that spends what is left exactly by the reset.
-const cruise=(a:Account|undefined,now:number)=>a&&a.left!==null&&a.reset&&a.reset>now?a.left/((a.reset-now)/HOUR):null;
+// The steady %/h that spends what is left of a weekly limit exactly by the reset.
+const cruise=(a:Account|undefined,now:number)=>a&&a.weekly&&a.left!==null&&a.reset&&a.reset>now?a.left/((a.reset-now)/HOUR):null;
 const contextFull=(s:ClusterSession)=>{const c=s.context_usage;return valid(c?.input_tokens)&&valid(c?.capacity)&&c.capacity>0&&c.input_tokens/c.capacity>=CONTEXT;};
 const stalled=(s:ClusterSession,state:string,now:number)=>state==='working'&&valid(s.last_usage)&&s.last_usage>0&&now-s.last_usage>STALL;
 export const display=(s:ClusterSession)=>(s.children_working||0)>0?'working':s.display_status||s.status;
@@ -182,9 +187,9 @@ export function readings(state:ClusterState,o:{period:WindowKey;now:number;pick?
  const live=instant(state),climb=valid(live.rate)?live.rate/HOUR:0;
  const tach={rate,max:o.tachMax||scaleMax(rate,w?.seconds),tokens:m.tokens,computers:m.computers,expected:m.expected,instant:live.rate,byKind:live.by,climb};
  const accounts:Account[]=state.account_quotas.map(q=>{
-  const p=state.weekly_usage.accounts.find(a=>a.id===q.id)?.periods?.[o.period],week=weekly(q),pct=valid(week?.pct)?week.pct:null;
-  return {id:q.id,kind:q.kind,label:q.account_label,plan:q.plan||null,alias:q.alias||null,who:local(q.account_label),pct,left:pct===null?null:Math.max(0,100-pct),
-   reset:valid(week?.reset)?week.reset:null,current:pct!==null&&q.stale===false,reconnect:RECONNECT.has(q.status),burn:accountBurn(p,q),added:valid(p?.used_pp)?p.used_pp:null};
+  const p=state.weekly_usage.accounts.find(a=>a.id===q.id)?.periods?.[o.period],week=accountWindow(q),pct=valid(week?.pct)?week.pct:null,burns=burnAllowed(q,week);
+  return {id:q.id,kind:q.kind,label:q.account_label,plan:q.plan||null,alias:q.alias||null,who:local(q.account_label),window:week?.label??null,weekly:!!week&&week.label==='주간',pct,left:pct===null?null:Math.max(0,100-pct),
+   reset:valid(week?.reset)?week.reset:null,current:pct!==null&&q.stale===false,reconnect:RECONNECT.has(q.status),burn:burns?accountBurn(p,q):null,added:burns&&valid(p?.used_pp)?p.used_pp:null};
  });
  for(const a of accounts)a.range=range(a,now);
  const tokens=(s:ClusterSession)=>{const v=s.usage.windows?.[o.period];return Array.isArray(v)?v.reduce((a:number,b:number)=>a+(valid(b)?b:0),0):0;};
@@ -206,7 +211,7 @@ export function readings(state:ClusterState,o:{period:WindowKey;now:number;pick?
  // else the account burning fastest. Its second needle reads the same subject over the last ten minutes.
  type Subject={type:'session'|'account';id:string;kind:string;value:number|null;account:string|null;session?:ClusterSession;recent:number|null};
  let subject:Subject|null=null;const pick=o.pick,RECENT='10m';
- const recentOf=(a:Account)=>{const q=state.account_quotas.find(q=>q.id===a.id),p=state.weekly_usage.accounts.find(x=>x.id===a.id)?.periods?.[RECENT];return p?accountBurn(p,q):null;};
+ const recentOf=(a:Account)=>{const q=state.account_quotas.find(q=>q.id===a.id),p=state.weekly_usage.accounts.find(x=>x.id===a.id)?.periods?.[RECENT];return p&&burnAllowed(q,accountWindow(q))?accountBurn(p,q):null;};
  if(pick?.type==='session'){const l=list.find(x=>x.s.id===pick.id);if(l){const r=row(l);subject={type:'session',id:r.id,kind:r.kind,value:r.burn,account:r.account,session:r.session,recent:burn(l.s,RECENT)};}}
  else if(pick?.type==='account'){const a=accounts.find(x=>x.id===pick.id);if(a)subject={type:'account',id:a.id,kind:a.kind,value:a.burn,account:a.id,recent:recentOf(a)};}
  const picked=!!subject;
