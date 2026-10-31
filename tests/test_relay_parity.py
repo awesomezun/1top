@@ -6,6 +6,18 @@ from onetop.relay_data import all_periods,public_history
 from onetop.usage import window_usage
 
 class RelayParity(unittest.TestCase):
+    def test_host_cpu_basis_is_preserved_without_redividing_metrics(self):
+        state={'sessions':[{'id':'s','kind':'Claude','resources':{'cpu':6.25}}],
+            'system':{'cpu_basis':'host_total','host':{'cpu':50,'cores':16},
+                'top':[{'pid':10,'cpu':6.25}], 'monitor':{'cpu':6.25}}}
+        payload=export_snapshot(state)
+        self.assertEqual(payload['system']['cpu_basis'],'host_total')
+        self.assertEqual(payload['system']['top'][0]['cpu'],6.25)
+        self.assertEqual(payload['sessions'][0]['cpu'],6.25)
+        self.assertEqual(payload['host']['cpu'],50)
+        state['system']['cpu_basis']='/private/path'
+        self.assertIsNone(export_snapshot(state)['system']['cpu_basis'])
+
     def test_every_slider_period_reconciles_flow_and_account_attribution(self):
         with sqlite3.connect(':memory:') as db:
             db.executescript('''CREATE TABLE events(t REAL,sid TEXT,kind TEXT,fresh INTEGER,cached INTEGER,written INTEGER,output INTEGER,account TEXT);

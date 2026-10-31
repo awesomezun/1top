@@ -28,6 +28,7 @@ export function systemMetrics(s:any,sessionIds:ReadonlySet<string>=new Set()){
  const shared=rows(s?.shared,30).map(r=>({...process(r),id:str(r?.id,80),count:num(r?.count,10000),pids:rows(r?.pids,64).filter(n=>pid(n)!==null)}));
  const owners=new Set([...sessionIds,...shared.filter(r=>r.pid!==null&&r.pid>0&&r.id===`backend:${r.pid}`).map(r=>r.id)]);
  return {
+ cpu_basis:s?.cpu_basis==='host_total'?'host_total' as const:s?.cpu_basis==='single_core'?'single_core' as const:null,
  sampler_ms:num(s?.sampler_ms),monitor:{pid:pid(s?.monitor?.pid),cpu:num(s?.monitor?.cpu,100000),rss:num(s?.monitor?.rss)},
  history:rows(s?.history,300).map(r=>({t:num(r?.t),cpu:num(r?.cpu,100),memory:num(r?.memory,100),rx:num(r?.rx),tx:num(r?.tx)})),
  top:rows(s?.top,15).map(r=>({...process(r),owner:typeof r?.owner==='string'&&owners.has(r.owner)?r.owner:null})),shared

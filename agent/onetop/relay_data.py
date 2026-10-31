@@ -51,7 +51,8 @@ def system_metrics(system, session_ids=()):
     owners.update(r['id'] for r in system.get('shared', [])[:30]
         if isinstance(r.get('pid'), int) and not isinstance(r['pid'], bool)
         and 0 < r['pid'] <= 2**32 and r.get('id') == f"backend:{r['pid']}")
-    return {'sampler_ms': system.get('sampler_ms'),
+    return {'cpu_basis': system.get('cpu_basis') if system.get('cpu_basis') in ('host_total','single_core') else None,
+        'sampler_ms': system.get('sampler_ms'),
         'monitor': select(system.get('monitor'), ('pid','cpu','rss')),
         'history': [select(r, ('t','cpu','memory','rx','tx')) for r in system.get('history', [])[-300:]],
         'top': [{**select(r, ('pid','ppid','name','created','cpu','rss')),

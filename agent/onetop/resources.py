@@ -34,7 +34,7 @@ def attribute(rows,session_roots,shared_roots):
         if row['cpu'] is not None:group['cpu']+=row['cpu'];group['cpu_known']=True
         row['owner']=owner
     for group in groups.values():
-        group['cpu']=round(group['cpu'],1) if group.pop('cpu_known') else None
+        group['cpu']=round(min(100,group['cpu']),1) if group.pop('cpu_known') else None
     return groups
 
 
@@ -53,7 +53,9 @@ class ResourceSampler:
             pid=info['pid'];identity=(pid,info['create_time']);ticks=ct.user+ct.system
             previous=self.previous.get(identity);rate=counter_rate(ticks,previous,dt)
             rows[pid]={'pid':pid,'ppid':info['ppid'],'name':info['name'] or 'unknown','created':info['create_time'],
-                       'cpu':round(rate*100,1) if rate is not None else None,'rss':mem.rss}
+                       # Match the host chart: all logical CPUs together are 100%.
+                       # Keep two decimals until grouping so small processes still add up.
+                       'cpu':round(min(100,rate*100/self.cores),2) if rate is not None else None,'rss':mem.rss}
             current[identity]=ticks
         self.previous=current;self.last=before
         roots={s['id']:s['pids'] for s in sessions if s.get('process_started') and len(s['pids'])==1}
@@ -105,6 +107,6 @@ class ResourceSampler:
         self.history.append({'t':now,'cpu':host_cpu,'memory':memory.percent,'rx':network['rx'],'tx':network['tx']})
         top=sorted(rows.values(),key=lambda r:(r['cpu'] or 0,r['rss']),reverse=True)[:15]
         monitor=rows.get(os.getpid(),{})
-        return {'host':host,'shared':shared,'top':top,'history':list(self.history),
+        return {'cpu_basis':'host_total','host':host,'shared':shared,'top':top,'history':list(self.history),
                 'sampler_ms':round((time.monotonic()-before)*1000,1),
                 'monitor':{k:monitor.get(k) for k in ('pid','cpu','rss')}}

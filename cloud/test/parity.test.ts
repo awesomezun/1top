@@ -10,6 +10,13 @@ async function socket(hub:any,role:string,id:string,control='1'){
 const report=()=>({as_of:100,coverage:[{source:'collector',kind:null,from:1,to:100}],
  series:{start:1,end:100,step:'60',bins:[1],total:[3],by_model:[{key:'opus',kind:'Claude',tokens:[3]}],by_project:[{key:'project:'+'a'.repeat(64),label:'demo',tokens:[3]}]},
  heatmap:{hours:[['2026-10-29',0,3]],days:[['2026-10-29',3]]}});
+it('preserves whole-host CPU units without dividing the values again',()=>{
+ const clean=snapshot({sessions:[{id:'s',cpu:6.25}],host:{cpu:50,cores:16},
+  system:{cpu_basis:'host_total',top:[{pid:10,cpu:6.25}],monitor:{cpu:6.25}}});
+ expect(clean.system.cpu_basis).toBe('host_total');expect(clean.sessions[0].cpu).toBe(6.25);
+ expect(clean.system.top[0].cpu).toBe(6.25);expect(clean.system.monitor.cpu).toBe(6.25);
+ expect(clean.host.cpu).toBe(50);expect(snapshot({sessions:[],system:{cpu_basis:'/private'}}).system.cpu_basis).toBeNull();
+});
 it('keeps every period and numeric evidence while dropping private nested fields',()=>{
  const c={pp_per_token:.01,seconds:300,used_pp:2,tokens:200,secret:'PRIVATE'};
  const keys=[...Object.keys(SPEED_SECONDS),'all'];
