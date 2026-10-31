@@ -131,7 +131,7 @@ def export_snapshot(state):
                  for g in ops.get('goals',[])], 'loop_state':'not_verified','skill_runtime':'partial'}
     weekly = {a['id']:a for a in state.get('weekly_usage',{}).get('accounts',[])}
     return {'version':__version__,'updated':state.get('updated',0),'recording_started':state.get('started',0),
-        'features':['history','account_alias'],
+        'features':['history','account_alias','usage_sessions'],
         'flow':{**export_flow(state), **state.get('remote_flows', {})},
         'system':system_metrics(state.get('system', {}), (s['id'] for s in sessions)),
         'collection_ms':state.get('collection_ms'), 'resume_prompt':state.get('resume_prompt',''),
@@ -263,8 +263,11 @@ class CloudLink:
         else:
             try:
                 with self.collector.lock:state=self.collector.snapshot
-                result=self.collector.history.response(data.get('period','1h'),str(data.get('step','60')),data.get('kind'),state)
-                reply['data']=public_history(result)
+                if data.get('view') == 'sessions':
+                    reply['data']=self.collector.usage_sessions(data.get('period','1h'),data.get('offset',0),data.get('limit',100))
+                else:
+                    result=self.collector.history.response(data.get('period','1h'),str(data.get('step','60')),data.get('kind'),state)
+                    reply['data']=public_history(result)
             except Exception:reply['error']='History is unavailable for this period or step.'
             finally:lock.release()
         try:self.ws.send(json.dumps(reply,ensure_ascii=False))

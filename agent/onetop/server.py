@@ -20,6 +20,7 @@ from urllib.parse import urlsplit, parse_qs
 from .controls import Controller, ActionError, target_key, process_start
 from .resources import ResourceSampler
 from .usage import session_usage, window_usage, WINDOWS
+from . import session_archive
 from .time_ranges import parse_period, extend_snapshot
 from .session_order import ordered_snapshot
 from .history import HistoryStore, initialize_capture
@@ -285,6 +286,8 @@ class Collector:
             CREATE INDEX IF NOT EXISTS event_time ON events(t);''')
         weekly_usage.initialize(self.db)
         initialize_capture(self.db)
+        from .accounts import profile_roots
+        session_archive.recover(self.db, roots=profile_roots())
         row = self.db.execute("SELECT value FROM meta WHERE key='started'").fetchone()
         self.started = float(row[0]) if row else time.time()
         self.db.execute("INSERT OR IGNORE INTO meta VALUES ('started',?)", (str(self.started),))
@@ -293,6 +296,15 @@ class Collector:
         self.history_started = float(self.db.execute("SELECT value FROM meta WHERE key='history_started'").fetchone()[0])
         self.db.commit()
         self.history = HistoryStore(DATA)
+
+    def usage_sessions(self, period='1h', offset=0, limit=100):
+        with self.lock:
+            state = self.snapshot
+        if not state.get('ready'):
+            raise ValueError('Collector is starting')
+        with closing(sqlite3.connect((DATA/'monitor.sqlite').as_uri()+'?mode=ro', uri=True, timeout=5)) as db:
+            db.execute('BEGIN')
+            return session_archive.response(db, state, period, offset, limit)
 
     def state_for_period(self, key):
         duration = parse_period(key)
@@ -752,6 +764,8 @@ class Collector:
                 try:self.read_tracker(s)
                 except OSError:s['note']='Aside 사용량 기록을 읽을 수 없습니다.'
             sessions.append(s)
+        # Keep display identity after its process/terminal leaves discovery.
+        session_archive.remember(self.db, sessions, now)
         # Retain local reports for user-selected ranges beyond 24 hours.
         self.db.commit()
         # The browser needs a chart, not a growing raw event log. Bound payloads by minute/provider.
@@ -878,6 +892,16 @@ class Handler(BaseHTTPRequestHandler):
         if host not in ('127.0.0.1','localhost'):
             self.send_error(403);return
         route=urlsplit(self.path).path
+        if route=='/api/usage-sessions':
+            query=parse_qs(urlsplit(self.path).query)
+            try:
+                result=self.server.collector.usage_sessions(query.get('period',['1h'])[0],
+                    query.get('offset',['0'])[0],query.get('limit',['100'])[0])
+            except (ValueError,OverflowError,TypeError):
+                self.json_response(400,{'ok':False,'message':'Invalid period or page'});return
+            except sqlite3.Error:
+                self.json_response(503,{'ok':False,'message':'Session archive is starting'});return
+            self.json_response(200,result);return
         if route=='/api/history':
             history=getattr(self.server.collector,'history',None)
             if history is None:

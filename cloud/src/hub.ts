@@ -158,7 +158,7 @@ export class AccountHub extends DurableObject<Env> {
           let query;try{query=historyQuery(value);}catch{fail('Invalid history period or step.');return;}
           a.history_at=Date.now();a.history=undefined;ws.serializeAttachment(a);
           const device=await this.readDevice(value.device_id),sockets=this.ctx.getWebSockets('device:'+value.device_id).filter(s=>s.readyState===1&&(s.deserializeAttachment() as Attachment).expires>Date.now());
-          if(!device||Date.now()-device.received>20000||sockets.length!==1||!device.snapshot.features?.includes('history')){fail('History is unavailable on this computer.');return;}
+          if(!device||Date.now()-device.received>20000||sockets.length!==1||!device.snapshot.features?.includes('view' in query?'usage_sessions':'history')){fail('History is unavailable on this computer.');return;}
           a.history={request_id:value.request_id,device_id:value.device_id,expires:Date.now()+15000};ws.serializeAttachment(a);
           sockets[0].send(JSON.stringify({type:'history_request',...a.history,...query,expires_at:a.history.expires}));return;
         }
