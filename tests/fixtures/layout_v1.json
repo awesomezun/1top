@@ -1,0 +1,5597 @@
+[
+ {
+  "name": "nothing stored, nothing to take over",
+  "raw": null,
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "empty string",
+  "raw": "",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "not JSON",
+  "raw": "{v:1",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "an array",
+  "raw": "[1,2]",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "no version",
+  "raw": "{\"tabs\":\"one\"}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "version as a string",
+  "raw": "{\"v\":\"1\",\"tabs\":\"one\"}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "a newer version is shown as the defaults and locked",
+  "raw": "{\"v\":2,\"tabs\":\"one\",\"presets\":{\"cluster\":{\"order\":[\"window\"]}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": true
+  }
+ },
+ {
+  "name": "version only",
+  "raw": "{\"v\":1}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "one tab, the dashboard preset",
+  "raw": "{\"v\":1,\"tabs\":\"one\",\"preset\":\"dashboard\"}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "one",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "unknown tab and preset values",
+  "raw": "{\"v\":1,\"tabs\":\"three\",\"preset\":\"basic\"}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "order: unknown dropped, first of each kept, the missing put back after their default neighbour",
+  "raw": "{\"v\":1,\"presets\":{\"cluster\":{\"order\":[\"fuel\",\"x\",\"dials\",\"fuel\"]}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "fuel",
+       "window",
+       "dials",
+       "alerts",
+       "odo",
+       "temps"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "order: reversed",
+  "raw": "{\"v\":1,\"presets\":{\"cluster\":{\"order\":[\"window\",\"fuel\",\"temps\",\"odo\",\"alerts\",\"dials\",\"periods\"]}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "window",
+       "fuel",
+       "temps",
+       "odo",
+       "alerts",
+       "dials",
+       "periods"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "hiding everything starts the group over",
+  "raw": "{\"v\":1,\"presets\":{\"cluster\":{\"order\":[\"dials\"],\"hidden\":[\"periods\",\"dials\",\"alerts\",\"odo\",\"temps\",\"fuel\",\"window\"]}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "hidden: unknown dropped, kept in display order",
+  "raw": "{\"v\":1,\"presets\":{\"cluster\":{\"hidden\":[\"window\",\"nope\",\"alerts\",\"window\"]}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "alerts",
+       "window"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "hidden: an empty list shows everything",
+  "raw": "{\"v\":1,\"presets\":{\"cluster\":{\"hidden\":[]}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "size: rounded and clamped; text ignored",
+  "raw": "{\"v\":1,\"presets\":{\"cluster\":{\"opts\":{\"dials\":{\"size\":0.6},\"window\":{\"size\":9}}}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 1,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 2,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "size: below range and as text",
+  "raw": "{\"v\":1,\"presets\":{\"cluster\":{\"opts\":{\"dials\":{\"size\":-3},\"window\":{\"size\":\"2\"}}}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 0,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "fuel count: clamped, null kept, text ignored",
+  "raw": "{\"v\":1,\"presets\":{\"cluster\":{\"opts\":{\"fuel\":{\"count\":12}}}},\"wide\":{\"cluster\":{\"opts\":{\"fuel\":{\"count\":1}}}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": 8
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": 3
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "fuel count as text",
+  "raw": "{\"v\":1,\"presets\":{\"cluster\":{\"opts\":{\"fuel\":{\"count\":\"5\"}}}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "alerts count: null means all six; in range kept",
+  "raw": "{\"v\":1,\"presets\":{\"cluster\":{\"opts\":{\"alerts\":{\"count\":null}}}},\"wide\":{\"cluster\":{\"opts\":{\"alerts\":{\"count\":4}}}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 4,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "weekly count: nearest step, ties to the lower; null kept",
+  "raw": "{\"v\":1,\"presets\":{\"dashboard\":{\"opts\":{\"weekly\":{\"count\":5}}}},\"wide\":{\"cluster\":{}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "weekly count 3 and sessions out of range",
+  "raw": "{\"v\":1,\"presets\":{\"dashboard\":{\"opts\":{\"weekly\":{\"count\":3},\"sessions\":{\"count\":40}}}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 2
+       },
+       "resources": {},
+       "sessions": {
+        "count": 10
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "weekly all, sessions below range, tokens small",
+  "raw": "{\"v\":1,\"presets\":{\"dashboard\":{\"opts\":{\"weekly\":{\"count\":null},\"sessions\":{\"count\":2},\"tokens\":{\"size\":0}}}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 0
+       },
+       "weekly": {
+        "count": null
+       },
+       "resources": {},
+       "sessions": {
+        "count": 3
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "shapes: known kept, unknown back to the default",
+  "raw": "{\"v\":1,\"presets\":{\"cluster\":{\"opts\":{\"periods\":{\"shape\":\"knob\"},\"dials\":{\"shape\":\"neon\",\"needle\":\"red\"},\"alerts\":{\"shape\":\"lens\"},\"odo\":{\"shape\":\"led0\"}}}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "knob"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "red"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "lens"
+       },
+       "odo": {
+        "shape": "led0"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "window tabs: unknown and repeated dropped; empty back to all",
+  "raw": "{\"v\":1,\"presets\":{\"cluster\":{\"opts\":{\"window\":{\"tabs\":[\"map\",\"x\",\"sessions\",\"map\"]}}}},\"wide\":{\"cluster\":{\"opts\":{\"window\":{\"tabs\":[]}}}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "map",
+         "sessions"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "options of unknown objects and unknown options ignored",
+  "raw": "{\"v\":1,\"presets\":{\"cluster\":{\"opts\":{\"nope\":{\"size\":1},\"dials\":{\"size\":1,\"glow\":true}}}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 1,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "the dashboard preset period buttons have no options",
+  "raw": "{\"v\":1,\"presets\":{\"dashboard\":{\"opts\":{\"periods\":{\"shape\":\"knob\",\"size\":0}}}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "presets not an object",
+  "raw": "{\"v\":1,\"presets\":[1]}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "wide dashboard: spans, heights, instrument, width and rows clamped",
+  "raw": "{\"v\":1,\"wide\":{\"dashboard\":{\"panels\":[\"shared\",\"speed\"],\"spans\":{\"summary\":2,\"map\":20,\"flow\":4.4,\"nope\":5},\"heights\":{\"sessions\":100,\"flow\":5000,\"map\":300},\"instrument\":\"scope\",\"instrumentWidth\":900,\"rows\":1}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "shared",
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 6,
+       "flow": 4,
+       "map": 12,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {
+       "flow": 1200,
+       "map": 300,
+       "sessions": 250
+      },
+      "instrument": "scope",
+      "instrumentWidth": 600,
+      "rows": 3
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "wide dashboard: hiding every panel keeps them all",
+  "raw": "{\"v\":1,\"wide\":{\"dashboard\":{\"hidden\":[\"speed\",\"summary\",\"flow\",\"map\",\"sessions\",\"shared\"],\"rows\":null,\"instrument\":\"dial\"}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "wide cluster order and hidden",
+  "raw": "{\"v\":1,\"wide\":{\"cluster\":{\"order\":[\"fuel\",\"dials\"],\"hidden\":[\"temps\",\"window\"]}}}",
+  "legacy": null,
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "fuel",
+       "window",
+       "dials",
+       "alerts",
+       "odo",
+       "temps"
+      ],
+      "hidden": [
+       "window",
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "taken over: the dashboard panels",
+  "raw": null,
+  "legacy": {
+   "dashboard": "{\"panels\":[\"map\",\"speed\"],\"spans\":{\"map\":4,\"summary\":2},\"heights\":{\"flow\":400},\"instrument\":\"scope\",\"instrumentWidth\":320,\"theme\":\"light\"}"
+  },
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "map",
+       "sessions",
+       "shared",
+       "speed",
+       "summary",
+       "flow"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 6,
+       "flow": 6,
+       "map": 4,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {
+       "flow": 400
+      },
+      "instrument": "scope",
+      "instrumentWidth": 320,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "taken over: the panel showed the dashboard",
+  "raw": null,
+  "legacy": {
+   "quickCluster": false
+  },
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "taken over: the panel showed the cluster",
+  "raw": null,
+  "legacy": {
+   "quickCluster": true
+  },
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "cluster",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "taken over: a broken dashboard entry",
+  "raw": null,
+  "legacy": {
+   "dashboard": "{panels:",
+   "quickCluster": "yes"
+  },
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ },
+ {
+  "name": "something stored: nothing is taken over",
+  "raw": "{\"v\":1}",
+  "legacy": {
+   "dashboard": "{\"panels\":[\"map\"]}",
+   "quickCluster": false
+  },
+  "expect": {
+   "layout": {
+    "v": 1,
+    "tabs": "two",
+    "preset": "dashboard",
+    "presets": {
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [
+       "temps"
+      ],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     },
+     "dashboard": {
+      "order": [
+       "periods",
+       "tokens",
+       "weekly",
+       "resources",
+       "sessions"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {},
+       "tokens": {
+        "size": 2
+       },
+       "weekly": {
+        "count": 4
+       },
+       "resources": {},
+       "sessions": {
+        "count": null
+       }
+      }
+     }
+    },
+    "wide": {
+     "dashboard": {
+      "panels": [
+       "speed",
+       "summary",
+       "flow",
+       "map",
+       "sessions",
+       "shared"
+      ],
+      "hidden": [],
+      "spans": {
+       "speed": 3,
+       "summary": 9,
+       "flow": 6,
+       "map": 6,
+       "sessions": 12,
+       "shared": 12
+      },
+      "heights": {},
+      "instrument": "sweep",
+      "instrumentWidth": null,
+      "rows": null
+     },
+     "cluster": {
+      "order": [
+       "periods",
+       "dials",
+       "alerts",
+       "odo",
+       "temps",
+       "fuel",
+       "window"
+      ],
+      "hidden": [],
+      "opts": {
+       "periods": {
+        "shape": "auto"
+       },
+       "dials": {
+        "size": 2,
+        "shape": "ring",
+        "needle": "default"
+       },
+       "alerts": {
+        "count": 6,
+        "shape": "label"
+       },
+       "odo": {
+        "shape": "drum"
+       },
+       "temps": {},
+       "fuel": {
+        "count": null
+       },
+       "window": {
+        "size": 1,
+        "tabs": [
+         "sessions",
+         "flow",
+         "weekly",
+         "map",
+         "heat",
+         "goals",
+         "system"
+        ]
+       }
+      }
+     }
+    }
+   },
+   "locked": false
+  }
+ }
+]
