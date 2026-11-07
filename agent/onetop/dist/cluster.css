@@ -1,0 +1,592 @@
+/* The cluster view (docs/design/cluster/cluster-design-spec_v1.0.0.md), in the dashboard's tokens, dark and light.
+   Sections: housing → dials → centre column → lower row → arrangements (side by side, wide, phone, landscape,
+   panels) → variants → reduced motion. Each arrangement sets the dial diameter --d from the housing's width
+   (cqi of .cluster); inside a dial every size is a share of its diameter (cqi of .cl-dial). */
+
+/* Housing */
+.cluster{--face-hi:color-mix(in srgb,var(--panel-2) 82%,var(--ink) 4%);--face-lo:color-mix(in srgb,var(--bg) 70%,#000 30%);--rim:var(--line-strong);
+ --off:color-mix(in srgb,var(--muted) 42%,transparent);--halo:color-mix(in srgb,var(--bg) 80%,#000);--well:color-mix(in srgb,var(--bg) 70%,var(--panel));
+ --spring:cubic-bezier(.34,1.3,.5,1);--glide:cubic-bezier(.22,.8,.24,1);
+ position:relative;display:grid;padding:var(--pt) var(--px);isolation:isolate;container:cluster/inline-size}
+:root[data-theme=light] .cluster{--face-hi:#fff;--face-lo:var(--panel-2);--halo:#fff;--off:color-mix(in srgb,var(--muted) 36%,transparent);--well:var(--panel-2)}
+/* The upper corners share the dials' centres; the lower ones are small. */
+.cl-body{position:absolute;inset:0;z-index:-1;border:1px solid var(--line);border-radius:var(--rx) var(--rx) var(--rb) var(--rb)/var(--ry) var(--ry) var(--rb) var(--rb);
+ background:linear-gradient(180deg,var(--panel-2),var(--panel) 55%,var(--bg));box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 6%,transparent),0 30px 70px -40px #000}
+:root[data-theme=light] .cl-body{box-shadow:inset 0 1px 0 #fff,0 24px 50px -36px rgba(0,0,0,.25)}
+.cl-main,.cl-foot{display:contents}
+
+/* Dials. The face: rim, scale on a 240° sweep, the lit arc, the cruise band, each account's mark and one needle. */
+.cl-dial{position:relative;width:var(--d);aspect-ratio:1;justify-self:center;container:dial/inline-size;
+ --box:14.5cqi;--fig:13.5cqi;--num:16cqi;--unit:max(10.5px,4cqi);--line:max(10px,3.6cqi);--chip:max(10px,3.2cqi);--low:54%;--chip-at:12.5%}
+.cl-dial{--gauge:var(--now,var(--lcd))}
+.cl-face{position:absolute;inset:0;width:100%;height:100%;overflow:visible;border-radius:50%;background:radial-gradient(circle at 50% 42%,var(--face-hi),var(--face-lo) 72%);
+ box-shadow:0 0 0 max(4px,1.6cqi) color-mix(in srgb,var(--bg) 70%,transparent),0 18px 40px -22px #000}
+:root[data-theme=light] .cl-face{box-shadow:0 0 0 max(4px,1.6cqi) color-mix(in srgb,var(--line) 60%,transparent),0 14px 30px -20px rgba(0,0,0,.3)}
+.cl-rim{fill:none;stroke:var(--rim);stroke-width:2}
+.cl-face-rings circle{fill:none;stroke:color-mix(in srgb,var(--ink) 7%,transparent);stroke-width:1.2}
+.cl-face-rings circle:nth-child(2){stroke-dasharray:2 6}
+.cl-fan{display:none;fill:var(--gauge);opacity:.13}
+.cl-track{fill:none;stroke:color-mix(in srgb,var(--ink) 8%,transparent);stroke-width:5}
+/* The lane: green → yellow → orange → red along the scale, faint all the way and lit up to the reading through the lit
+   arc, which is a mask (white) springing with the needle. */
+.cl-arc{fill:none;stroke:#fff;stroke-width:5;stroke-linecap:round;transition:stroke-dasharray 1.1s var(--spring)}
+.cl-lane path{fill:none;stroke-width:5}
+.cl-lane-bg{opacity:.2}
+.cl-lane-on{filter:drop-shadow(0 0 4px color-mix(in srgb,var(--gauge) 45%,transparent))}
+.cl-ticks line{stroke:var(--off);stroke-linecap:round}
+.cl-ticks .mj{stroke-width:3}.cl-ticks .mn{stroke-width:1.5}
+.cl-ticks line.on{stroke:var(--gauge)}
+/* The red zone (a car's redline): its ticks, numbers and a broad arc along the ticks are red; lit ticks glow brighter. */
+.cluster{--zone:#ff3b30}:root[data-theme=light] .cluster{--zone:#e0261c}
+.cl-red{fill:none;stroke:var(--zone);stroke-width:3.5;opacity:.5}
+.cl-ticks line.red{stroke:color-mix(in srgb,var(--zone) 55%,transparent)}
+.cl-ticks line.red.on{stroke:var(--zone)}
+.cl-nums text.red{fill:var(--zone)}
+.cl-multi polygon{stroke:var(--face-lo);stroke-width:1.5;stroke-linejoin:round}
+.cl-nums text{fill:color-mix(in srgb,var(--ink) 74%,transparent);font:600 18px/1 var(--font);font-variant-numeric:tabular-nums}
+.cl-needle{transform-box:view-box;transform-origin:170px 170px;transform:rotate(150deg);fill:var(--needle);transition:transform 1.1s var(--spring);filter:drop-shadow(0 0 3px color-mix(in srgb,var(--needle) 55%,transparent)) drop-shadow(0 0 5px rgba(0,0,0,.55))}
+:root[data-theme=light] .cl-needle{filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))}
+/* Every needle is a car's red one. */
+.cluster{--needle:#ff3b30}:root[data-theme=light] .cluster{--needle:#e0261c}
+.cl-shake{transform-box:view-box;transform-origin:170px 170px}
+.cl-hub{fill:var(--raised);stroke:var(--rim);stroke-width:1.5}.cl-hub2{fill:var(--bg)}
+.cluster.igniting :is(.cl-needle,.cl-arc){transition:none}
+/* The lower opening, which the needle never sweeps: the figure, its unit and the dial's name (level on both dials), then
+   the cruise (burn dial), each on a dark halo so a needle passing under a low reading never hides it; the burn dial's
+   subject and the token dial's odometer rest on the rim. */
+.cl-low{position:absolute;top:var(--low);left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:.6cqi;pointer-events:none}
+.cl-read{display:grid;justify-items:center;gap:1.6cqi}
+.cl-read>b{display:flex;align-items:center;justify-content:center;height:var(--box);font-size:var(--num);font-weight:650;line-height:var(--box);letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:var(--ink);
+ text-shadow:0 0 .12em var(--halo),0 0 .05em var(--halo)}
+.cl-read>b:has(.cl-lcd){line-height:0}
+.cl-lcd{--fs-on:var(--lcd);--fs-off:color-mix(in srgb,var(--fs-on) 8%,#0d1012);display:block;height:var(--fig);width:auto;max-width:100%;overflow:hidden;filter:drop-shadow(0 0 1.2cqi var(--halo))}
+:root[data-theme=light] .cl-lcd{--fs-off:#e4e9ec}
+.cl-lcd .fs-off{display:none}.cl-lcd .fs-digit{fill:var(--fs-on)}
+.cl-lcd .fs-unit-led{fill:var(--fs-on);font-weight:700;font-style:italic}
+/* The burn figure lights in its subject's colour, lifted a little so a darker tool colour still reads as a display. */
+.cl-dial .cl-read .cl-lcd{--fs-on:var(--gauge)}
+/* The odometer and the range: a car's lit display on its own dark plate, in both themes. */
+.cl-led{display:inline-flex;align-items:center;padding:.24em .5em;border:1px solid color-mix(in srgb,var(--line) 70%,#000);border-radius:.45em;background:#0a0d0f;line-height:0}
+.cl-led .cl-lcd{--fs-on:var(--led,#eef2f4);--fs-off:color-mix(in srgb,var(--fs-on) 13%,#0a0d0f);height:1.15em;filter:none}
+:root[data-theme=light] .cl-led .cl-lcd{--fs-off:color-mix(in srgb,var(--fs-on) 13%,#0a0d0f)}
+/* The centred face (data-face=center, and always with 0 straight below, data-sweep=down, whose scale turns 270° from the
+   bottom to the right like a speedometer): a pointer rides the rim instead of a needle across the figures, and the
+   figure sits at the dial's very centre. The unit, the
+   name and the display (odometer or range) are placed around it by their centres' offsets from the centre (cqi of the
+   dial), one arrangement per data-text: t1 all below; t2 name above; t3 name and unit above; t4 unit above; t5 the
+   display above. */
+.cluster[data-face=center] :is(.cl-hub,.cl-hub2){display:none}
+.cluster[data-face=center] .cl-low{position:absolute;inset:0;display:block}
+.cluster[data-face=center] .cl-read{display:contents}
+.cluster[data-face=center] :is(.cl-read>b,.cl-read>small,.cl-name,.cl-tach>.cl-odo,.cl-rng){position:absolute;left:50%;bottom:auto;transform:translate(-50%,-50%)}
+.cluster[data-face=center] .cl-read>b{top:50%}
+.cluster[data-face=center] .cl-read>small{top:calc(50% + var(--u))}
+.cluster[data-face=center] .cl-name{top:calc(50% + var(--n))}
+.cluster[data-face=center] :is(.cl-tach>.cl-odo,.cl-rng){top:calc(50% + var(--dsp))}
+.cluster[data-face=center] .cl-dial>*{--u:10.2cqi;--n:15.4cqi;--dsp:21.6cqi}
+.cluster[data-face=center][data-text=t2] .cl-dial>*{--n:-10.4cqi;--u:10.2cqi;--dsp:16.8cqi}
+.cluster[data-face=center][data-text=t3] .cl-dial>*{--n:-15.2cqi;--u:-10.2cqi;--dsp:11.8cqi}
+.cluster[data-face=center][data-text=t4] .cl-dial>*{--u:-10.2cqi;--n:10cqi;--dsp:16.6cqi}
+.cluster[data-face=center][data-text=t5] .cl-dial>*{--dsp:-12.4cqi;--u:10.2cqi;--n:15.4cqi}
+/* On the 240° scale the displays (odometer, range) take the lower opening between 0 and the full-scale number, their
+   names above larger digits; the unit and the name stay under the figure. */
+.cluster[data-face=center][data-sweep=side] .cl-dial>*{--u:10.2cqi;--n:15.4cqi;--dsp:29cqi}
+.cluster[data-face=center][data-sweep=side] :is(.cl-tach>.cl-odo,.cl-rng){flex-wrap:wrap;justify-content:center;row-gap:.3em;width:max-content;max-width:46cqi}
+.cluster[data-face=center][data-sweep=side] :is(.cl-tach>.cl-odo>small,.cl-rng-k){flex-basis:100%;text-align:center}
+.cluster[data-face=center][data-sweep=side] :is(.cl-tach>.cl-odo>.cl-led,.cl-rng .cl-led){font-size:max(11px,4.2cqi)}
+.cluster[data-face=center][data-sweep=side] .cl-rng-u{align-self:flex-end;padding-bottom:.3em}
+/* The odometer's and the range's display colour to compare (data-led): white (default), red, amber. */
+.cluster[data-led=red]{--led:#ff3b30}
+.cluster[data-led=amber]{--led:#ffae2b}
+:root:not([data-theme=light]) .cl-lcd .fs-glow{filter:url(#fsGlow)}
+.cl-read>small{font-size:var(--unit);font-weight:650;line-height:1.2;letter-spacing:.01em;color:color-mix(in srgb,var(--ink) 84%,transparent);white-space:nowrap}
+.cl-name{font-size:var(--line);line-height:1.15;white-space:nowrap}
+.cl-name{font-weight:650;letter-spacing:.04em;color:var(--muted);pointer-events:auto}
+.cl-read>small,.cl-name{text-shadow:0 0 .5em var(--halo)}
+/* The burn dial's name line names its subject: 한도 소진 · 전체 AI, a session's model and effort, or an account. */
+.cl-speed .cl-name{display:flex;align-items:center;justify-content:center;gap:.4em;max-width:46cqi}
+.cl-speed .cl-name>*{flex:none}
+.cl-speed .cl-name>em{font-style:normal;color:var(--accent)}
+.cl-speed .cl-name>b{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+.cl-speed .cl-name>i{width:.6em;height:.6em;border-radius:50%}
+.cl-speed .cl-name>u{padding:0 .4em;border-radius:.4em;background:var(--raised);text-decoration:none}
+.cl-speed .cl-name.picked{cursor:pointer}
+/* Range: hours of work left, like a car's distance to empty; red when it runs out before the reset. */
+.cl-rng{position:absolute;left:50%;bottom:var(--chip-at);transform:translateX(-50%);display:flex;align-items:center;gap:.4em;font-size:var(--chip);line-height:1.2;color:var(--muted);white-space:nowrap}
+.cl-rng small{font-size:1em;font-weight:600}
+.cl-rng.early .cl-rng-k{color:var(--red)}
+.cl-rng.early .cl-led{border-color:color-mix(in srgb,var(--red) 50%,#000);box-shadow:0 0 10px -3px var(--red)}
+.cl-rng.sign>:not(.cl-rng-w){display:none}
+.cl-rng-w{color:var(--amber)}
+/* From 200px the token dial holds the odometer in its lower opening, level with the burn dial's subject; under 280px
+   it drops its label (its tooltip keeps it), as a car's odometer has none. */
+.cl-tach>.cl-odo{position:absolute;left:50%;bottom:var(--chip-at);transform:translateX(-50%);display:flex;align-items:center;gap:.5em}
+.cl-tach>.cl-odo>small{font-size:var(--chip);font-weight:600}.cl-tach>.cl-odo .cl-odo-of{display:none}
+.cl-tach>.cl-odo>.cl-led{font-size:var(--chip)}
+/* A dial under 280px has the same lines at their smallest legible sizes, a slightly smaller figure and the odometer
+   without its label (its tooltip keeps it), so all of it stays inside the scale's circle; under 200px the subject leaves
+   the dial (the pressed row or gauge shows it) and the scale numbers take a larger share. */
+@container dial (width < 280px){
+ /* A container query styles what is inside the dial, not the dial itself, so the sizes go on its parts. */
+ .cl-dial>*{--box:12cqi;--fig:11.2cqi;--unit:max(9.5px,4cqi);--line:max(9.5px,3.6cqi);--chip:max(9.5px,3.2cqi);--chip-at:13%}
+ .cl-odo>small{display:none}
+ .cl-nums text{font-size:20px}
+}
+@container dial (width < 200px){
+ .cl-rng{display:none}
+ .cluster[data-face=center]:is([data-text=t1],[data-text=t3],[data-text=t5]) .cl-name{display:none}
+ .cl-nums text{font-size:23px}
+ /* The token unit is wider than the opening between 0 and the full-scale number here, so it drops below them. */
+ .cl-tach .cl-read{gap:9.5cqi}
+}
+
+/* Centre column: the period, then the panel with its seven pages; together as tall as the dials. */
+.cl-window{display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px;min-width:0;contain:size}
+.cl-gear{position:relative}
+.cl-gear>[role=group]{display:flex;gap:2px;height:40px;padding:4px;border:1px solid var(--line);border-radius:12px;background:var(--well)}
+.cl-gear button{flex:1 1 auto;min-width:0;padding:0 4px;border:0;border-radius:8px;background:none;color:var(--muted);font-size:var(--type-label);font-weight:600;white-space:nowrap;cursor:pointer;transition:background .25s,color .25s}
+.cl-gear button:hover{color:var(--ink)}
+.cl-gear button.on{background:var(--accent);color:var(--bg);font-weight:700;box-shadow:0 0 18px -6px var(--accent-line)}
+:root[data-theme=light] .cl-gear button.on{color:#fff}
+.cl-gear button[data-cluster-period=custom]:not(.on){color:var(--dim)}
+.cl-gear button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* Period dials to compare (cluster.js, ONETOP_CLUSTER_DIAL). Each is a dark, lit instrument part; the period under the
+   lens, the needle, the window, the pointer or the lever lights in the accent. */
+.cl-gear>.gd{position:relative;display:block;height:46px;padding:0;overflow:hidden;border-color:color-mix(in srgb,var(--line) 70%,#000);user-select:none;touch-action:none;cursor:grab}
+.cl-gear>.gd:active{cursor:grabbing}
+.cl-gear>.gd:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cl-gear>.gd button{position:absolute;height:24px;padding:0 6px;border-radius:6px;background:none;color:var(--muted);font-size:var(--type-label);font-weight:650;cursor:inherit}
+.cl-gear>.gd button.on{background:none;color:var(--accent);box-shadow:none;text-shadow:0 0 10px color-mix(in srgb,var(--accent) 45%,transparent)}
+.cl-gear>.gd button:hover{color:var(--ink)}.cl-gear>.gd button.on:hover{color:var(--accent)}
+/* drum: labels on a cylinder turning sideways behind a lens, lit in the middle and falling into shade at the sides; its
+   surface is a watch crown's (data-crown), the grip strongest at the top and bottom edges and quiet behind the words. */
+.cl-gear>.gd-drum{height:50px;background:linear-gradient(90deg,#040506,#1b2024 18%,#3a4248 50%,#1b2024 82%,#040506)!important;box-shadow:inset 0 6px 8px -6px rgba(0,0,0,.9),inset 0 -6px 8px -6px rgba(0,0,0,.9)}
+.gd-knurl{position:absolute;inset:0;pointer-events:none;-webkit-mask-image:linear-gradient(180deg,#000,#000 22%,rgba(0,0,0,.28) 40%,rgba(0,0,0,.28) 60%,#000 78%,#000);mask-image:linear-gradient(180deg,#000,#000 22%,rgba(0,0,0,.28) 40%,rgba(0,0,0,.28) 60%,#000 78%,#000)}
+.gd-knurl>i{position:absolute;top:0;bottom:0;left:0;width:var(--rw,3px);margin-left:calc(var(--rw,3px)/-2);transform-origin:50% 50%;background:linear-gradient(90deg,rgba(0,0,0,.55),rgba(255,255,255,.22) 50%,rgba(0,0,0,.55))}
+.gd-knurl[data-crown=flute]>i{width:9px;margin-left:-4.5px;border-radius:4px;background:linear-gradient(90deg,rgba(0,0,0,.7),rgba(255,255,255,.18) 35%,rgba(255,255,255,.3) 50%,rgba(255,255,255,.18) 65%,rgba(0,0,0,.7))}
+.gd-knurl[data-crown=band]{-webkit-mask-image:linear-gradient(180deg,#000,#000 24%,transparent 25%,transparent 75%,#000 76%,#000);mask-image:linear-gradient(180deg,#000,#000 24%,transparent 25%,transparent 75%,#000 76%,#000)}
+.gd-knurl[data-crown=band]>i{width:2.5px}
+.gd-knurl[data-crown=rubber]>i{width:12px;margin-left:-6px;border-radius:5px;background:linear-gradient(90deg,#050606,#1c2022 45%,#24292c 50%,#1c2022 55%,#050606)}
+.gd-knurl[data-crown=diamond]{background:repeating-linear-gradient(45deg,rgba(255,255,255,calc(.16*var(--k,1))) 0 1px,transparent 1px 6px),repeating-linear-gradient(-45deg,rgba(0,0,0,calc(.6*var(--k,1))) 0 1.5px,transparent 1.5px 6px)}
+/* rubber: a matte black barrel instead of steel. */
+.cl-gear>.gd-drum:has([data-crown=rubber]){background:linear-gradient(90deg,#020303,#0f1213 20%,#1a1e20 50%,#0f1213 80%,#020303)!important}
+/* The barrel's light: a soft highlight along the top, shade at both ends. */
+.gd-shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,0) 30%,rgba(0,0,0,0) 70%,rgba(0,0,0,.35)),linear-gradient(90deg,rgba(0,0,0,.75),transparent 22%,transparent 78%,rgba(0,0,0,.75))}
+/* The barrel itself takes no presses (in 3D it would sit in front of a tilted label); its labels and the dial do. */
+.gd-cyl{position:absolute;inset:0;perspective:420px;transform-style:preserve-3d;pointer-events:none}
+.gd-cyl button{left:50%;top:50%;backface-visibility:hidden;pointer-events:auto}
+.gd-lens{position:absolute;left:50%;top:7px;bottom:7px;width:78px;transform:translateX(-50%);border:1px solid color-mix(in srgb,var(--accent) 55%,transparent);border-radius:8px;
+ background:linear-gradient(180deg,rgba(255,255,255,.08),transparent 45%),rgba(6,8,9,.55);box-shadow:0 0 0 1px rgba(0,0,0,.6);pointer-events:none}
+.gd-cyl button{text-shadow:0 1px 2px rgba(0,0,0,.9)}
+/* tuner: a radio dial's strip of ticks and periods sliding under a fixed red needle, fading at both ends. */
+.gd-tuner{background:linear-gradient(180deg,#0a0d0f,#151a1d)!important;-webkit-mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent);mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent)}
+.gd-strip{position:absolute;top:0;bottom:0;left:0;background:repeating-linear-gradient(90deg,transparent 0 12px,color-mix(in srgb,var(--ink) 22%,transparent) 12px 13px) left bottom/100% 8px no-repeat}
+.gd-strip button{top:5px;transform:translateX(-50%)}
+.gd-strip button::after{content:'';position:absolute;left:50%;top:27px;width:2px;height:12px;margin-left:-1px;border-radius:1px;background:color-mix(in srgb,var(--ink) 45%,transparent)}
+.gd-strip button.on::after{background:var(--accent)}
+.gd-needle{position:absolute;left:50%;top:28px;bottom:2px;width:2px;margin-left:-1px;border-radius:1px;background:var(--needle);box-shadow:0 0 6px var(--needle)}
+.gd-needle::before{content:'';position:absolute;left:50%;top:-5px;margin-left:-4px;border:4px solid transparent;border-top:5px solid var(--needle)}
+/* roller: a drum turning up and down in a window, a step either side. */
+.cl-gear>.gd-roller{display:grid;grid-template-columns:30px minmax(0,1fr) 30px;background:linear-gradient(180deg,#050607,#1d2226 30%,#2a3136 50%,#1d2226 70%,#050607)!important}
+.gd-roll{position:relative;height:100%;perspective:260px;border-inline:1px solid color-mix(in srgb,var(--line) 60%,#000);pointer-events:none}
+.gd-roll button{pointer-events:auto}
+.gd-roll::before,.gd-roll::after{content:'';position:absolute;left:18%;right:18%;height:1px;background:color-mix(in srgb,var(--accent) 45%,transparent);pointer-events:none}
+.gd-roll::before{top:9px}.gd-roll::after{bottom:9px}
+.gd-roll button{left:50%;top:50%;backface-visibility:hidden}
+.cl-gear>.gd .gd-step{position:static;width:30px;height:100%;border-radius:0;color:var(--muted);font-size:20px;font-weight:500;line-height:1;cursor:pointer}
+/* knob: a ridged knob turned to the period it points at, its periods on an arc above it. */
+.cl-gear>.gd-knob{height:94px;background:radial-gradient(120% 90% at 50% 100%,#1c2226,#0b0e10 70%)!important}
+.gd-knob button{transform:translate(-50%,-50%);height:20px;font-size:var(--type-caption)}
+.gd-k{position:absolute;left:50%;top:70px;width:42px;height:42px;margin:-21px 0 0 -21px;border-radius:50%;
+ background:repeating-conic-gradient(from 0deg,rgba(255,255,255,.07) 0 3deg,transparent 3deg 9deg),radial-gradient(circle at 38% 30%,#57616a,#20262a 62%,#0a0c0e);
+ box-shadow:0 5px 12px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.2),0 0 0 3px #0a0d0f,0 0 0 4px color-mix(in srgb,var(--line) 70%,#000)}
+.gd-k i{position:absolute;left:50%;top:3px;width:3px;height:13px;margin-left:-1.5px;border-radius:2px;background:var(--accent);box-shadow:0 0 6px var(--accent)}
+/* lever: a lever sliding in a groove between notches, its periods underneath. */
+.cl-gear>.gd-lever{height:56px;background:linear-gradient(180deg,#121619,#0b0e10)!important}
+.gd-track{position:absolute;left:4%;right:4%;top:10px;height:12px;border-radius:6px;background:#050708;box-shadow:inset 0 2px 4px rgba(0,0,0,.9),0 1px 0 rgba(255,255,255,.05)}
+.gd-track>i{position:absolute;top:4px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:color-mix(in srgb,var(--ink) 25%,transparent)}
+.gd-lv{position:absolute;top:-6px;width:30px;height:24px;margin-left:-15px;border-radius:8px;background:linear-gradient(180deg,#68737b,#2c3337 55%,#1a1e21);
+ box-shadow:0 4px 9px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.3)}
+.gd-lv::after{content:'';position:absolute;left:50%;top:5px;bottom:5px;width:2px;margin-left:-1px;border-radius:1px;background:var(--accent);box-shadow:0 0 6px var(--accent)}
+.gd-labels{position:absolute;left:4%;right:4%;bottom:3px;display:flex}
+.cl-gear>.gd .gd-labels button{position:static;flex:1 1 0;min-width:0;padding:0;font-size:var(--type-caption)}
+.cl-range{position:absolute;left:50%;top:calc(100% + 8px);z-index:6;width:min(640px,calc(100vw - 32px));transform:translateX(-50%);box-shadow:0 18px 40px -18px rgba(0,0,0,.55)}
+.cl-range[hidden]{display:none}
+.cl-box{display:grid;grid-template-rows:auto minmax(0,1fr);gap:10px;min-width:0;min-height:0;padding:10px 12px 12px;container:box/inline-size;border:1px solid var(--line);border-radius:16px;background:var(--well);box-shadow:inset 0 0 30px -12px #000}
+:root[data-theme=light] .cl-box{box-shadow:inset 0 1px 0 #fff}
+/* Seven tabs spread over the panel's width; when they do not fit the row scrolls and the chosen tab stays in view. */
+.cl-modes{display:flex;min-width:0;padding:3px;border-radius:10px;background:color-mix(in srgb,var(--ink) 5%,transparent);overflow-x:auto;scrollbar-width:none;overscroll-behavior-x:contain}
+.cl-modes::-webkit-scrollbar{display:none}
+/* When the seven names do not fit one row (longer languages, narrow windows) they take two, all in view. */
+.cl-modes.wrap{flex-wrap:wrap;row-gap:2px}
+.cl-modes.wrap button{flex:1 0 calc(25% - 2px)}
+.cl-modes button{flex:1 0 auto;height:28px;padding:0 7px;border:0;border-radius:7px;background:none;color:var(--muted);font-size:var(--type-caption);font-weight:650;white-space:nowrap;cursor:pointer}
+.cl-modes button:hover{color:var(--ink)}
+.cl-modes button.on{background:var(--raised);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.cl-modes button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@container box (width < 400px){.cl-modes button{padding:0 3px;font-size:11px;letter-spacing:-.01em}}
+.cl-page{min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.cl-page[hidden],.cl-page [hidden]{display:none}
+.cl-empty{padding:18px 6px;font-size:var(--type-label);color:var(--muted);text-align:center}
+/* Sessions: a row picks the session for the burn dial; ↗ opens it. */
+.cl-sessions{display:grid;gap:2px}
+.cl-session{--c:var(--muted);display:grid;grid-template-columns:56px minmax(0,1fr) auto 22px;align-items:center;gap:9px;padding:7px 6px;border:1px solid transparent;border-radius:10px;cursor:pointer;outline:none}
+.cl-session:hover,.cl-session:focus-visible{background:var(--hover)}
+.cl-session:focus-visible{box-shadow:inset 0 0 0 1.5px var(--accent-line)}
+.cl-session.on{border-color:var(--accent-line);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.cl-state{display:grid;flex:none;place-items:center;width:14px;height:16px}
+.cluster{--work:var(--lcd)}
+/* A session's small gauge with its %/h under it, as in the menu bar's list. */
+.cl-pace{display:grid;justify-items:center;gap:1px;min-width:0}
+.cl-pace svg{width:28px;height:16px;overflow:visible}
+.cl-pace .mt,.cl-pace .mv{fill:none;stroke-width:3;stroke-linecap:round}.cl-pace .mt{stroke:color-mix(in srgb,var(--ink) 14%,transparent)}
+.cl-pace .mn{stroke:var(--ink);stroke-width:1.4;stroke-linecap:round}.cl-pace .mn.idle{stroke:var(--dim)}
+.cl-pace span{max-width:100%;overflow:hidden;font-size:var(--type-tiny);color:var(--muted);font-variant-numeric:tabular-nums;text-overflow:ellipsis;white-space:nowrap}
+.cl-what b .cl-nm{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.cl-what{display:grid;gap:2px;min-width:0}
+.cl-what b{display:flex;align-items:center;gap:6px;min-width:0;font-size:var(--type-body);font-weight:600;color:var(--ink);white-space:nowrap}
+.cl-what>span{display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;font-size:var(--type-caption);color:var(--muted);white-space:nowrap}
+.cl-what>span>*{flex:none}
+.cl-what .cl-tool{font-weight:600}
+.cl-what em{flex:0 1 auto;overflow:hidden;font-style:normal;color:var(--dim);text-overflow:ellipsis}
+.cl-what u{padding:0 5px;border-radius:5px;background:var(--raised);text-decoration:none;color:var(--muted)}
+/* A narrow panel keeps the tool and effort; the model shows on hover. */
+@container box (width < 440px){.cl-what em{display:none}}
+@container box (width < 300px){.cl-what u{display:none}}
+.cl-figs{display:grid;justify-items:end;gap:2px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cl-figs b{font-size:var(--type-body);font-weight:650;color:var(--ink)}
+.cl-figs span{font-size:var(--type-caption);color:var(--muted)}
+.cl-open{display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;border-radius:7px;background:none;color:var(--dim);font-size:13px;cursor:pointer;opacity:.55}
+.cl-session:hover .cl-open,.cl-session.on .cl-open,.cl-open:focus-visible{opacity:1}
+.cl-open:hover{background:var(--raised);color:var(--ink)}
+/* Token flow: the period's total, then by AI and by project, one chart above the other, each named with its legend. */
+.cl-page[data-page=flow]:not([hidden]){display:grid;grid-template-rows:max-content;grid-auto-rows:minmax(0,1fr);gap:6px;overflow:hidden}
+.cl-flow-sec{display:grid;grid-template-rows:max-content minmax(0,1fr);gap:2px;min-height:0}
+.cl-flow-k{display:flex;align-items:center;gap:10px;min-width:0;padding:0 4px;font-size:var(--type-caption);white-space:nowrap}
+.cl-flow-k>span{flex:none;font-weight:650;color:var(--ink)}
+.cl-flow-k>:is(.cl-legend,.history-legend){display:flex;flex:1 1 auto;flex-wrap:nowrap;gap:4px 10px;min-width:0;min-height:0;margin:0;padding:0;overflow:hidden;font-size:var(--type-tiny);
+ -webkit-mask-image:linear-gradient(90deg,#000 88%,transparent);mask-image:linear-gradient(90deg,#000 88%,transparent)}
+/* Legend names keep their length; what does not fit fades out at the end instead of every name being cut short. */
+.cl-flow-k>:is(.cl-legend,.history-legend)>*{flex:none}
+.cl-big{display:flex;align-items:baseline;gap:6px;padding:2px 4px 0}
+.cl-big b{font-size:clamp(18px,1.7vw,24px);font-weight:650;letter-spacing:-.03em;color:var(--ink);font-variant-numeric:tabular-nums}
+.cl-big small{font-size:var(--type-caption);color:var(--muted)}
+.cl-chart{position:relative;min-height:0}
+.cl-chart canvas{position:absolute;inset:0;width:100%;height:100%}
+.cl-trend-legend.history-legend{gap:4px 10px}
+.cl-trend-legend .history-legend-item{align-items:center;gap:5px;max-width:100%}
+.cl-trend-legend .history-legend-item>i{width:8px;height:8px;border-radius:2px;transform:none}
+.cl-trend-legend .history-legend-item>span{max-width:10em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-trend-legend .history-legend-item>:is(small,b){display:none}
+/* Weekly limits: a card per account; pressing one picks it for the burn dial. */
+.cl-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.cl-card{--c:var(--muted);display:grid;align-content:space-between;gap:7px;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:color-mix(in srgb,var(--ink) 2.5%,transparent);text-align:left;color:var(--muted);cursor:pointer}
+.cl-card:hover{border-color:var(--line-strong)}
+.cl-card:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.cl-add{place-content:center;justify-items:center;gap:4px;min-height:120px;border-style:dashed;text-align:center;color:var(--muted)}
+.cl-add>b{display:grid;place-items:center;width:30px;height:30px;border:1px solid var(--line-strong);border-radius:50%;font-size:20px;font-weight:500;line-height:1;color:var(--ink)}
+.cl-add>span{font-size:var(--type-body);font-weight:650;color:var(--ink)}
+.cl-add>small{font-size:var(--type-tiny);line-height:1.4}
+.cl-add:hover>b{border-color:var(--accent);color:var(--accent)}
+.cl-relogin{height:26px;padding:0 10px;border:1px solid color-mix(in srgb,var(--amber) 55%,var(--line));border-radius:8px;background:color-mix(in srgb,var(--amber) 12%,transparent);color:var(--amber);font:inherit;font-size:var(--type-caption);font-weight:650;cursor:pointer}
+.cl-relogin:hover{background:color-mix(in srgb,var(--amber) 22%,transparent)}
+.cl-card.on{border-color:var(--accent-line);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.cl-card-h{display:flex;align-items:center;gap:6px;min-width:0;font-size:var(--type-caption);font-weight:650;color:var(--ink);white-space:nowrap}
+.cl-card-h>.cl-tool{color:var(--c)}
+.cl-card-h em{font-style:normal;font-weight:550;color:var(--muted)}
+.cl-card-h small{margin-left:auto;overflow:hidden;font-weight:500;color:var(--dim);text-overflow:ellipsis}
+.cl-card-w{display:flex;align-items:baseline;gap:6px}
+.cl-card-w strong{font-size:24px;font-weight:660;letter-spacing:-.03em;color:var(--ink);font-variant-numeric:tabular-nums}
+.cl-card-w small{font-size:var(--type-caption);color:var(--muted)}
+.cl-card-bar{height:5px;border-radius:3px;background:color-mix(in srgb,var(--ink) 9%,transparent);overflow:hidden}
+.cl-card-bar s{display:block;height:100%;background:var(--c);transition:width 1s var(--glide)}
+.cl-card.stale .cl-card-bar s{opacity:.45}
+.cl-card-f{display:flex;justify-content:space-between;flex-wrap:wrap;gap:2px 8px;font-size:var(--type-tiny);color:var(--muted);white-space:nowrap}
+.cl-card-f b{font-weight:650;color:var(--ink)}
+.cl-card-f>span:first-child b{color:var(--c)}
+.cl-card-f b.warn{color:var(--amber)}
+.cl-card-f .eta{flex-basis:100%}
+.eta{color:var(--muted)}.eta b{color:var(--ink);font-weight:650}
+.eta.ok{color:var(--accent)}.eta.idle{color:var(--dim)}.eta.warn,.eta.warn b{color:var(--red)}
+/* The dashboard's own views: usage map, hour heatmap with the year, goals and computer resources. */
+.cl-pane-h{overflow:hidden;font-size:var(--type-caption);color:var(--muted);white-space:nowrap;text-overflow:ellipsis}
+.cl-pane-h b{font-weight:650;color:var(--ink);font-variant-numeric:tabular-nums}
+.cl-page[data-page=map]:not([hidden]){display:grid;grid-template-rows:auto minmax(0,1fr);gap:8px;overflow:hidden}
+.cl-map.map-surface{position:relative;height:auto;min-height:150px}
+.cl-map .map-mini>.map-tile-label{display:-webkit-box;max-width:100%;padding:5px 7px;overflow:hidden;font-size:var(--type-tiny);line-height:1.3;white-space:normal;overflow-wrap:normal;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+/* Both heatmaps fit the page's height: the rows take what the captions leave (container heat), never shrinking a grid. */
+.cl-page[data-page=heat]:not([hidden]){display:grid;grid-auto-rows:max-content;align-content:start;gap:6px;container:heat/size}
+.cl-heat.heatmap.is-hours{grid-template-columns:18px repeat(24,minmax(0,1fr));gap:2px;padding:0}
+.cl-heat .heat-cell{aspect-ratio:auto;height:var(--row);border-radius:2px}
+.cl-page[data-page=heat]{--row:clamp(6px,calc((100cqb - 118px)/14),13px)}
+.cl-heat .heat-label{font-size:var(--type-tiny);line-height:10px}
+.cl-year.heatmap-year{--cell:var(--row);--cell-gap:2px;width:auto;max-width:100%}
+.cl-year :is(.year-months,.year-days){font-size:var(--type-tiny)}
+.cl-year .year-days{background:var(--well)}
+.cl-year-h{margin-top:4px}
+.cl-goals{display:grid;gap:6px}
+.cl-goal{display:grid;gap:4px;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+.cl-goal>.status{--k:var(--muted);justify-self:start;height:20px;padding:0 8px;border:0;border-radius:999px;background:color-mix(in srgb,var(--k) 15%,transparent);color:var(--k);font-size:var(--type-tiny);font-weight:650}
+.cl-goal[data-status=active]>.status{--k:var(--lcd)}.cl-goal[data-status=complete]>.status{--k:var(--accent)}
+.cl-goal[data-status=paused]>.status{--k:var(--amber)}.cl-goal:is([data-status=blocked],[data-status=failed],[data-status=budget_limit],[data-status=usage_limit])>.status{--k:var(--red)}
+.cl-goal>b{display:-webkit-box;overflow:hidden;font-size:var(--type-label);font-weight:600;color:var(--ink);-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.cl-goal>small{min-width:0;overflow:hidden;font-size:var(--type-tiny);color:var(--muted);text-overflow:ellipsis;white-space:nowrap}
+.cl-page[data-page=system]:not([hidden]){display:grid;grid-template-rows:max-content minmax(80px,1fr) max-content;gap:8px}
+.cl-sys{position:relative;min-height:0}.cl-sys canvas{position:absolute;inset:0;width:100%;height:100%}
+.cl-procs{display:grid;gap:3px}
+.cl-proc{display:grid;grid-template-columns:minmax(0,1fr) auto 64px;align-items:baseline;gap:10px;font-size:var(--type-caption)}
+.cl-proc>span{overflow:hidden;color:var(--ink);text-overflow:ellipsis;white-space:nowrap}
+.cl-proc>b{font-weight:650;text-align:right;font-variant-numeric:tabular-nums}.cl-proc>small{color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.cl-proc-h>*{font-size:var(--type-tiny);font-weight:600;color:var(--dim)!important}
+.cl-key::before{content:'';display:inline-block;width:8px;height:8px;margin-right:5px;border-radius:2px;background:var(--k);vertical-align:.05em}
+
+/* Lower row: the odometer and trip under the token dial, the warnings in the middle, the fuel under the burn dial;
+   CPU and memory join the side with room. Each part is centred on its own axis; sizes follow the dial (--d). */
+.cl-lf,.cl-left{display:flex;align-items:center;justify-content:center;gap:var(--fgap);width:100%;min-height:var(--foot,0)}
+.cl-lf>*,.cl-left>*{flex:none}
+.cl-odo>small,.cl-fuel>small,.cl-temp>small{font-size:var(--lab);font-weight:650;line-height:1.2;letter-spacing:.03em;color:var(--muted);white-space:nowrap}
+.cl-odo{display:grid;justify-items:center;gap:5px}
+.cl-lf .cl-odo>.cl-led{font-size:calc(var(--odo)*.95)}
+/* The odometer's wheels: each digit a strip of 0–9 and a trailing 0 in a window one digit tall, rolling up slowly. */
+.cl-wheels{gap:0;line-height:1}
+.cl-wheels i{display:block;height:1.25em;overflow:hidden;font-style:normal}
+.cl-wheels i>span{display:block;transition:transform 1.6s cubic-bezier(.22,.8,.3,1)}
+.cl-wheels i b{display:flex;align-items:center;justify-content:center;height:1.25em;font-weight:inherit}
+.cl-wheels em{align-self:flex-end;font-style:normal;line-height:1.25em}
+.cl-wheels :is(i,em).lead{display:none}
+.cl-wheels[data-face=led] i,.cl-wheels[data-face=led0] i{width:.78em}
+.cl-wheels[data-face^=led] i b .cl-lcd{height:1.15em;width:auto;--fs-on:var(--led,#eef2f4)}
+.cl-wheels[data-face^=led] em{color:var(--led,#eef2f4);font:800 1.1em/1.25em var(--font)}
+.cl-wheels[data-face^=print] i,.cl-wheels[data-face=drum] i{width:.62em;font:650 1.1em/1 var(--font);color:#eef2f4;font-variant-numeric:tabular-nums}
+.cl-wheels[data-face^=print] em,.cl-wheels[data-face=drum] em{font:650 1.1em/1.25em var(--font);color:#8a949b}
+.cl-wheels:is([data-face=led0],[data-face=print0]) :is(i,em).lead{display:block;opacity:.32}
+.cl-wheels[data-face=drum]{gap:2px;padding:.2em .3em}
+.cl-wheels[data-face=drum] i{width:.78em;border-radius:3px;background:linear-gradient(180deg,#000,#1d2226 22%,#2a3034 50%,#1d2226 78%,#000);box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+.cl-wheels[data-face=drum] em{margin:0 -1px}
+.cl-rng .cl-wheels[data-face=drum] em{margin:0 1px;color:#eef2f4}
+@media (prefers-reduced-motion:reduce){.cl-wheels i>span{transition:none}}
+.cl-trip{display:grid;justify-items:center;gap:4px;font-size:calc(var(--lab) + .5px);line-height:1.25;color:var(--muted);white-space:nowrap}
+.cl-trip-v b{font-size:1.15em;font-weight:650;color:var(--ink);font-variant-numeric:tabular-nums}
+.cl-trip-v.outside>:is(.cl-trip-n,.cl-trip-u){display:none}
+.cl-trip-out{margin-left:4px;color:var(--amber)}
+.cl-trip-h{display:flex;align-items:center;gap:6px}
+.cl-trip-h button{height:1.9em;padding:0 .7em;border:1px solid var(--line);border-radius:6px;background:none;color:var(--muted);font:inherit;font-weight:600;cursor:pointer}
+.cl-trip-h button:hover{border-color:var(--line-strong);color:var(--ink)}
+.cl-temps{display:flex;gap:4px}
+.cl-temp{position:relative;display:grid;justify-items:center;gap:2px;padding:2px;border-radius:8px;outline:none}
+.cl-temp svg{display:block;width:var(--temp);height:auto;aspect-ratio:80/46;overflow:visible}
+.cl-temp .t-track,.cl-temp .t-val{fill:none;stroke-width:5;stroke-linecap:round}
+.cl-temp .t-track{opacity:.2}
+.cl-temp .t-val{transition:stroke-dasharray 1.1s var(--spring)}
+.cl-temp .t-needle{stroke:var(--ink);stroke-width:2.2;stroke-linecap:round;transform-box:view-box;transform-origin:40px 40px;transition:transform 1.1s var(--spring)}
+.cl-temp circle{fill:var(--ink)}
+.cl-temp .t-read{font-size:calc(var(--lab) + 1.5px);font-weight:650;line-height:1.2;color:var(--ink);font-variant-numeric:tabular-nums}
+.cl-temp.hot .t-read{color:var(--red)}
+.cl-temp:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cl-fuel{display:grid;justify-items:center;gap:5px;min-width:0}
+.cl-more{font-style:normal;font-weight:700;color:var(--ink)}
+.cl-fuel>div{display:flex;justify-content:center;gap:0}
+.cl-fuel>div:is([data-n="7"],[data-n="8"]) .cl-can{--lab:10.5px}
+.cl-fuel .cl-empty{padding:4px 0;font-size:var(--type-caption)}
+.cl-can{--c:var(--muted);position:relative;display:grid;justify-items:center;gap:4px;width:var(--can-w);padding:2px 0;border:0;border-radius:8px;background:none;color:var(--muted);cursor:pointer}
+.cl-can>i{position:relative;width:var(--can-t);height:var(--can);border-radius:4px;background:color-mix(in srgb,var(--ink) 9%,transparent);overflow:hidden}
+.cl-can>i>s{position:absolute;inset:auto 0 0;background:var(--c);transition:height 1s var(--glide)}
+.cl-can.low>i>s{background:var(--amber)}
+.cl-can.stale>i>s{opacity:.45}
+.cl-can.warn>i{box-shadow:0 0 0 1px var(--amber)}
+.cl-can.on>i{box-shadow:0 0 0 1.5px var(--c),0 0 12px -2px var(--c)}
+.cl-can>b{display:grid;justify-items:center;max-width:100%;line-height:1.2;white-space:nowrap}
+.can-tool{font-size:calc(var(--lab) - .5px);font-weight:650;color:var(--c)}
+.can-plan{max-width:100%;overflow:hidden;font-size:calc(var(--lab) + .5px);font-weight:700;color:var(--ink);text-overflow:ellipsis}
+.cl-can:hover .can-plan,.cl-can.on .can-plan{color:var(--c)}
+.cl-can:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* Hover and focus details for the fuel, CPU and memory. */
+.cl-tip{position:absolute;left:50%;bottom:calc(100% + 6px);z-index:7;display:none;gap:4px;min-width:180px;padding:9px 11px;border:1px solid var(--line-strong);border-radius:10px;background:var(--panel);
+ box-shadow:0 14px 30px -14px rgba(0,0,0,.6);transform:translateX(-50%);text-align:left;font-size:var(--type-caption);font-weight:500;line-height:1.45;color:var(--muted);white-space:nowrap}
+/* A touch screen keeps no hover, so a tap that picks a fuel gauge leaves no detail covering the dial. */
+.cl-can:focus-visible .cl-tip,.cl-temp:focus-visible .t-tip{display:grid}
+@media (hover:hover){.cl-can:hover .cl-tip,.cl-temp:hover .t-tip{display:grid}}
+.cl-tip-h{display:flex;align-items:center;gap:6px;font-weight:650;color:var(--ink)}
+.cl-tip-h>i{width:7px;height:7px;border-radius:50%;background:var(--c)}
+.cl-tip-h em{font-style:normal;font-weight:550;color:var(--muted)}
+.cl-tip-who{color:var(--dim)}
+.cl-tip b{font-weight:650;color:var(--ink)}
+.cl-tip .warn{color:var(--amber)}
+.cl-reset{color:var(--dim)}
+.t-tip .cl-tip-h+span{margin-bottom:3px}
+/* Warnings: only what is lit, each a short name with its count, in one line or two; calm notes for what is working
+   or just finished go first. Nothing shows when all is well. */
+.cl-alerts{display:flex;flex-wrap:wrap;justify-content:center;align-content:center;align-items:center;gap:6px;min-width:0}
+.cl-alerts:not(:has(.cl-note:not([hidden]),.cl-lamp.lit)){display:none}
+.cl-notes,.cl-lamps{display:contents}
+.cl-alerts{justify-self:center;width:min(100%,300px)}
+.cl-alerts :is(.cl-note,.cl-lamp){flex:0 0 calc(50% - 3px);justify-content:center}
+.cl-note{--c:var(--work);display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:1px solid color-mix(in srgb,var(--c) 45%,var(--line));border-radius:999px;background:none;color:var(--ink);font:inherit;font-size:var(--type-label);font-weight:600;white-space:nowrap;cursor:pointer}
+.cl-note[aria-disabled=true]{cursor:default}
+.cl-note:not([aria-disabled=true]):hover{border-color:color-mix(in srgb,var(--c) 75%,var(--line))}
+.cl-note:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.cl-note[aria-pressed=true]{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c)}
+.cl-lamp[aria-pressed=true]{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c)}
+.cl-note[hidden]{display:none}
+.cl-note i{width:7px;height:7px;border-radius:50%;background:var(--c)}
+.cl-note.done{--c:var(--accent)}
+.cl-note b{font-weight:700;font-variant-numeric:tabular-nums}
+/* Each warning: a quiet rim in its colour (yellow to look at, red when a limit runs out) and nothing behind it, its
+   symbol and count in that colour; no glow. */
+.cl-lamp{--c:var(--amber);display:none;align-items:center;gap:7px;height:26px;padding:0 10px;border:1px solid color-mix(in srgb,var(--c) 50%,var(--line));border-radius:999px;
+ background:none;color:var(--c);font-size:var(--type-label);font-weight:600;white-space:nowrap;cursor:pointer}
+.cl-lamp.lit{display:inline-flex}
+.cl-lamp:is(.empty,.live){--c:var(--red)}
+.cl-lamp[aria-disabled=true]{cursor:default}
+.cl-lamp:not([aria-disabled=true]):hover{border-color:color-mix(in srgb,var(--c) 75%,var(--line))}
+.cl-lamp:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.cl-lamp svg{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.cl-lamp svg circle{fill:currentColor}
+.cl-lamp-label{color:var(--ink)}
+.cl-lamp-label b{font-weight:700;color:var(--c);font-variant-numeric:tabular-nums}
+.cl-lamp:is(.waiting,.live).lit svg{animation:cl-blink 1.6s ease-in-out infinite}
+@keyframes cl-blink{50%{opacity:.4}}
+/* The tell-tale strip (data-lamps other than chips): a dark bar of lights, each grey until lit, then in its colour with a
+   glow behind the symbol; pressing a lit one filters as the chips do. */
+.cluster[data-lamps=chips] .cl-tells,.cluster:not([data-lamps=chips]) :is(.cl-notes,.cl-lamps){display:none}
+.cluster:not([data-lamps=chips]) .cl-alerts{display:flex;width:auto}
+.cl-tells{display:flex;align-items:center;gap:4px;padding:6px 10px;border:1px solid color-mix(in srgb,var(--line) 70%,#000);border-radius:14px;background:#0b0e10}
+.cl-tell{position:relative;display:grid;place-items:center;width:36px;height:34px;padding:0;border:0;border-radius:9px;background:none;color:#454d53;cursor:pointer}
+.cl-tell[aria-disabled=true]{cursor:default}
+.cl-tell svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:color .3s,filter .3s}
+.cl-tell svg circle{fill:currentColor}
+.cl-tell>b,.cl-tell>span{display:none}
+.cl-tell.lit{color:var(--c)}
+.cl-tell.lit svg{filter:drop-shadow(0 0 4px color-mix(in srgb,var(--c) 70%,transparent))}
+.cl-tell.live.late{--c:#ff4d40}
+.cl-tell:not([aria-disabled=true]):hover{background:color-mix(in srgb,var(--c) 10%,transparent)}
+.cl-tell[aria-pressed=true]{background:color-mix(in srgb,var(--c) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 60%,transparent)}
+.cl-tell:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* count: the count beside a lit light. */
+.cluster[data-lamps=count] .cl-tell.lit:has(b:not(:empty)){grid-auto-flow:column;gap:4px;width:auto;padding:0 8px}
+.cluster[data-lamps=count] .cl-tell.lit>b:not(:empty){display:block;font-size:13px;font-weight:750;color:var(--c);font-variant-numeric:tabular-nums}
+/* badge: the count on the light's corner. */
+.cluster[data-lamps=badge] .cl-tell.lit>b:not(:empty){display:grid;place-items:center;position:absolute;top:1px;right:1px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--c);color:#0b0e10;font-size:10px;font-weight:800;line-height:1}
+/* lens: each light behind its own lens, two rows of three. */
+.cluster[data-lamps=lens] .cl-tells{display:grid;grid-template-columns:repeat(3,44px);gap:6px;padding:8px}
+.cluster[data-lamps=lens] .cl-tell{width:44px;height:38px;border:1px solid color-mix(in srgb,var(--line) 60%,#000);background:radial-gradient(circle at 50% 35%,#15191c,#080a0b)}
+.cluster[data-lamps=lens] .cl-tell.lit{border-color:color-mix(in srgb,var(--c) 45%,#000);background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--c) 18%,#0b0d0e),#080a0b 75%)}
+.cluster[data-lamps=lens] .cl-tell.lit>b:not(:empty){display:block;position:absolute;right:4px;bottom:2px;font-size:10px;font-weight:800;color:var(--c)}
+/* label: its name under each light, no glow. */
+.cluster[data-lamps=label] .cl-tell{width:54px;height:46px;align-content:center;gap:2px}
+.cluster[data-lamps=label] .cl-tell>span{display:block;font-size:10px;font-weight:600;color:inherit;white-space:nowrap}
+.cluster[data-lamps=label] .cl-tell.lit svg{filter:none}
+.cluster[data-lamps=label] .cl-tell.lit>b:not(:empty){display:block;position:absolute;top:2px;right:6px;font-size:10px;font-weight:800;color:var(--c)}
+
+/* Arrangements. Side by side (the default: a dashboard up to 1180px, a phone's side-by-side layout and the tray
+   panels): both dials on top, the warnings, the odometer and fuel under their dials, then the centre column. The
+   upper corners keep the dials' centres because the dials sit as far from the top as from the sides. */
+.cluster{--px:20px;--pt:20px;--gap:16px;--col:20px;--rb:32px;--win:360px;
+ --d:min(360px,calc((100cqi - var(--col))/2));--ox:calc((100cqi - 2*var(--d) - var(--col))/2);--rx:calc(var(--px) + var(--ox) + var(--d)/2);--ry:var(--rx);
+ --odo:15px;--temp:44px;--can:36px;--can-t:14px;--lab:11px;--can-w:clamp(44px,calc(var(--d)*.23),62px);--cgap:clamp(4px,calc(var(--d)*.03),12px);--fgap:14px;
+ grid-template-columns:auto auto;justify-content:center;column-gap:var(--col);row-gap:var(--gap)}
+.cl-tach,.cl-speed{margin-top:var(--ox)}
+.cl-tach{order:1}.cl-speed{order:2}
+.cl-alerts{order:3;grid-column:1/-1}
+.cl-lf{order:4;grid-column:1/-1}.cl-left{order:5;grid-column:1/-1}
+.cl-window{order:6;grid-column:1/-1;height:var(--win)}
+/* Wide (from 1181px, and a phone on its side): the housing has a phone's sideways shape (19.5:9) and three axes,
+   dial · centre column · dial, with the lower row on the same axes. The dials take what the centre column (300 to 360px)
+   leaves, or the height less the lower row; what height is left is split above and below. --d resolves on each dial
+   (its cqi is the housing's width), so the centre track simply takes the rest. */
+@media (min-width:1181px),(orientation:landscape) and (max-height:500px){
+ .cluster:not(.tray,.compact){--px:36px;--pt:22px;--gap:14px;--col:24px;--rb:40px;--mid:clamp(300px,32cqi,360px);--foot:clamp(100px,8cqi,128px);
+  --hin:calc((100cqi + 2*var(--px))*9/19.5 - 2*var(--pt));
+  --d:min(calc((100cqi - var(--mid) - 2*var(--col))/2),calc(var(--hin) - var(--foot) - var(--gap)));
+  --rx:calc(var(--px) + var(--d)/2);--ry:calc(var(--pt) + (var(--hin) - var(--foot) - var(--gap))/2);
+  --odo:clamp(15px,calc(var(--d)*.058),22px);--temp:clamp(48px,calc(var(--d)*.15),66px);--can:clamp(36px,calc(var(--foot)*.42),54px);--can-t:clamp(14px,calc(var(--d)*.04),19px);--lab:clamp(11px,calc(var(--d)*.028),12.5px);
+  --can-w:clamp(46px,calc(var(--d)*.15),68px);--cgap:clamp(4px,calc(var(--d)*.016),10px);--fgap:clamp(12px,calc(var(--d)*.05),24px);
+  --spill:min(var(--col),var(--px));aspect-ratio:19.5/9;grid-template-columns:auto minmax(0,1fr) auto;justify-content:stretch;align-content:center}
+ .cluster:not(.tray,.compact) :is(.cl-tach,.cl-speed){margin-top:0}
+ .cluster:not(.tray,.compact) :is(.cl-main,.cl-foot)>*{order:0;grid-column:auto}
+ .cluster:not(.tray,.compact) .cl-window{height:auto;align-self:stretch}
+ /* The lower row's ends may reach past their dial into the gap beside it, so six fuel gauges fit under a smaller dial. */
+ .cluster:not(.tray,.compact) :is(.cl-lf,.cl-left){width:calc(var(--d) + 2*var(--spill));margin-inline:calc(-1*var(--spill))}
+ .cluster:not(.tray,.compact) .cl-alerts{align-self:center}
+ .cluster:not(.tray,.compact) .cl-alerts :is(.cl-note,.cl-lamp){height:28px;font-size:12.5px}
+}
+/* A phone held upright, one dial above the other: the housing's top follows the first dial; then the warnings, the
+   trip with CPU and memory, the fuel and last the centre column, each across the width, so the instruments stay together. */
+@media (max-width:560px){
+ .cluster:not(.pair,.tray,.compact){--px:16px;--pt:16px;--gap:14px;--rb:28px;--win:340px;--d:min(300px,100cqi);--ox:calc((100cqi - var(--d))/2);--rx:calc(var(--px) + 50cqi);--ry:calc(var(--pt) + 50cqi);
+  --odo:16px;--can-w:48px;--cgap:5px;grid-template-columns:minmax(0,1fr)}
+ .cluster:not(.pair,.tray,.compact) .cl-speed{margin-top:0}
+ .cluster:not(.pair,.tray,.compact) :is(.cl-alerts,.cl-lf,.cl-left,.cl-window){grid-column:1}
+ .cluster:not(.pair,.tray,.compact) .cl-lf{order:4}
+ .cluster:not(.pair,.tray,.compact) .cl-left{order:5}
+ .cluster:not(.pair,.tray,.compact) .cl-window{order:6}
+ .cluster.pair{--px:12px;--pt:12px;--col:10px;--gap:12px;--rb:26px;--win:320px}
+ .cluster.pair .cl-temps{display:none}
+ .cl-session{gap:7px}
+}
+/* A phone on its side: the cluster alone fills the screen with the same three axes, a little tighter. */
+@media (orientation:landscape) and (max-height:500px){
+ body[data-view=cluster] :is(.rail,main>header,main>footer,.notice){display:none}
+ body[data-view=cluster] main{margin:0;padding:0}
+ body[data-view=cluster] #clusterView{display:grid;align-content:center;height:100vh;height:100dvh}
+ .cluster:not(.tray,.compact){--px:24px;--pt:10px;--gap:8px;--col:16px;--rb:30px;--mid:300px;--foot:84px}
+ .cluster:not(.tray,.compact) .cl-gear>[role=group]{height:34px;padding:3px}
+ .cluster:not(.tray,.compact) .cl-box{gap:6px;padding:8px}
+}
+/* The tray and menu bar panels (440px): side by side, the panel's own period picker above, so no gear here; CPU and
+   memory live on the resources page. */
+.cluster:is(.tray,.compact){--px:12px;--pt:12px;--col:10px;--gap:12px;--rb:26px;--win:300px}
+.cluster:is(.tray,.compact) .cl-temps,.cluster.tray .cl-gear{display:none}
+/* In a panel the window is the panel itself: no well around it, the tabs across the top, and the panel scrolls; its
+   sessions page holds the panel's own list (gauges, shortcuts, menus), edge to edge. */
+.cluster.tray .cl-window{grid-template-rows:auto;height:auto;contain:none}
+.cluster.tray .cl-box{grid-template-rows:auto auto;gap:8px;padding:0 0 calc(var(--rb) - var(--pt));border:0;border-radius:0;background:none;box-shadow:none}
+.cluster.tray .cl-page{overflow:visible}
+.cluster.tray .cl-page:not(.hosted,[data-page=goals],[data-page=weekly]){height:280px}
+.cluster.tray .cl-page.hosted{margin:0 calc(-1*var(--px) - 14px)}
+.cl-page.hosted .q-sessions-list{overflow:visible}
+.cl-page.hosted [data-session-row].cl-picked{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.cl-page.hosted[data-only=working] [data-session-row]:not([data-state=working]),.cl-page.hosted[data-only=waiting] [data-session-row]:not([data-state=waiting]),
+.cl-page.hosted[data-only=done] [data-session-row]:not([data-state=done]){display:none}
+/* A panel with its dials one above the other (the layout switch's other arrangement). */
+.cluster.tray:not(.pair){--d:min(280px,100cqi);--ox:calc((100cqi - var(--d))/2);--rx:calc(var(--px) + 50cqi);--ry:calc(var(--pt) + 50cqi);grid-template-columns:minmax(0,1fr)}
+.cluster.tray:not(.pair) .cl-speed{margin-top:0}
+.cluster.tray:not(.pair) :is(.cl-alerts,.cl-lf,.cl-left,.cl-window){grid-column:1}
+/* A panel's map is small: each tile keeps only its name on one line; the figures are in its tooltip. */
+.cluster.tray .cl-map .map-tile{overflow:hidden}
+.cluster.tray .cl-map :is(.map-tile-value,.map-tile-detail){display:none}
+.cluster.tray .cl-map .map-tile-label{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The layout switch beside the logo, shown on a phone while the cluster is open. */
+.cl-layout-toggle{display:none;place-items:center;width:30px;height:30px;padding:0;border:1px solid var(--line);border-radius:9px;background:none;color:var(--muted);cursor:pointer}
+.cl-layout-toggle svg,.q-layout svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7}
+.cl-layout-toggle[aria-pressed=true],.q-layout[aria-pressed=true]{color:var(--accent);border-color:var(--accent-line)}
+@media (max-width:640px){
+ body[data-view=cluster] .rail{position:relative}
+ body[data-view=cluster] .cl-layout-toggle{display:grid;position:absolute;top:12px;right:15px}
+}
+
+/* Variants (data-style, data-layout), each within the spec. glow: the face lit behind the needle. plate: the figure
+   on a dark plate the needle passes under. */
+.cluster[data-style=glow] .cl-fan{display:block}
+.cluster[data-style=plate] .cl-read{gap:1.8cqi}
+.cluster[data-style=plate] .cl-read>b{box-sizing:content-box;padding:.6cqi 2.4cqi;border:1px solid var(--line);border-radius:2.6cqi;background:color-mix(in srgb,var(--bg) 86%,#000);box-shadow:0 1cqi 3cqi -1.5cqi #000}
+:root[data-theme=light] .cluster[data-style=plate] .cl-read>b{background:#1b2024;border-color:#1b2024;color:#e9ebef;--halo:#1b2024}
+:root[data-theme=light] .cluster[data-style=plate] .cl-tach .cl-lcd{--fs-on:#9dff3c;--fs-off:#253017}
+:root[data-theme=light] .cluster[data-style=plate] .cl-speed .cl-lcd{--fs-off:#20282c}
+/* cards: each axis of the lower row in its own well, all as tall as the row. band: one well across the housing. */
+.cluster[data-layout=cards] :is(.cl-lf,.cl-left,.cl-alerts){align-self:stretch;padding:8px 12px;border:1px solid var(--line);border-radius:16px;background:var(--well)}
+.cluster[data-layout=cards] .cl-alerts{min-height:var(--foot,auto)}
+@media (min-width:1181px),(orientation:landscape) and (max-height:500px){
+ .cluster[data-layout=band]:not(.tray,.compact) .cl-foot::before{content:'';position:absolute;grid-column:1/-1;grid-row:2;inset:0 calc(var(--col)*-.5);z-index:-1;border:1px solid var(--line);border-radius:20px;background:var(--well)}
+}
+.cluster[data-layout=band]:is(.tray,.compact) :is(.cl-lf,.cl-left),.cluster.pair[data-layout=band] :is(.cl-lf,.cl-left){padding:8px 0;border-block:1px solid var(--line)}
+
+/* Motion: while sessions work each needle shimmers within ±3° of its reading like a running engine; the figures
+   stay exact. With less motion asked for, nothing shimmers, blinks, rolls or springs. */
+.cluster.running .cl-tach .cl-shake{animation:cl-shimmer 2.3s ease-in-out infinite}
+.cluster.running .cl-speed .cl-shake{animation:cl-shimmer 3.1s ease-in-out -1.2s infinite reverse}
+@keyframes cl-shimmer{0%{transform:rotate(0)}17%{transform:rotate(2.4deg)}31%{transform:rotate(-1.1deg)}48%{transform:rotate(3deg)}63%{transform:rotate(.4deg)}79%{transform:rotate(-2deg)}91%{transform:rotate(1.2deg)}100%{transform:rotate(0)}}
+@media (prefers-reduced-motion:reduce){
+ .cluster.running :is(.cl-tach,.cl-speed) .cl-shake,.cl-lamp:is(.waiting,.live).lit svg{animation:none}
+ .cl-needle,.cl-arc,.cl-temp :is(.t-needle,.t-val),.cl-can>i>s,.cl-card-bar s{transition:none}
+}
