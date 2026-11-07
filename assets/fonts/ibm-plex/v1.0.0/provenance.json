@@ -1,0 +1,22 @@
+{
+  "family": "IBM Plex Sans / IBM Plex Sans KR",
+  "source": "https://github.com/google/fonts/tree/main/ofl/ibmplexsanskr",
+  "latin_source": "https://github.com/google/fonts/tree/main/ofl/ibmplexsans",
+  "license": "SIL Open Font License 1.1",
+  "web": "Local WOFF2 format conversion; all glyphs retained",
+  "native": "Bundled static KR faces with their original PostScript names; Latin glyphs included",
+  "files": {
+    "IBMPlexSans-OFL.txt": "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da",
+    "IBMPlexSans.ttf": "3b031aa4216174205bd8471f88a49b91f093169e9e87bd5262242bc5967fe2e3",
+    "IBMPlexSans.woff2": "35e11b05053e42be28803ac032deb7f6c41894c46190ee4bb74d706302e00085",
+    "IBMPlexSansKR-Bold.ttf": "9d82a8be5330f6d7b53121262867b402baca672eb69b852928f06d185d357f7d",
+    "IBMPlexSansKR-Bold.woff2": "d7274e1d71764488ce5636b53ee398faad20284cfe329af379b5168b0188a813",
+    "IBMPlexSansKR-Medium.ttf": "4a7130f56ce50bf10f9d383f624e50bad2c80bebc63e51f4269ece2c7d919166",
+    "IBMPlexSansKR-Medium.woff2": "700bd41553b12fd496e3a21fe12e7077e09904ef2648486c3c98e80eb0078a39",
+    "IBMPlexSansKR-OFL.txt": "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da",
+    "IBMPlexSansKR-Regular.ttf": "53750379270312368cf7641901f43a98dd892e3d9d5798cf25cdc245c85c71c0",
+    "IBMPlexSansKR-Regular.woff2": "cc2a183255bcb64f15984d1f59ecd067295729da6a07dedada2bdc3e0ce49d17",
+    "IBMPlexSansKR-SemiBold.ttf": "823c1956adf56c27c06b062725dfce23f266e4fd1366290f2957c8407482a817",
+    "IBMPlexSansKR-SemiBold.woff2": "a9688ad7d63a7961a1d4a6e31740ea9b1ef8addd52c3c640b4d87e0c7e98ef0e"
+  }
+}
