@@ -135,7 +135,7 @@ function customizeCluster(){
  const st=OneTopLayout.shared(),box=$('clusterView'),cl=()=>box.querySelector('.cluster');
  const wide=()=>{const c=cl();return !!c&&getComputedStyle(c).gridTemplateColumns.split(' ').length>=3;};
  const vis=el=>el&&!el.classList.contains('cl-off')&&getComputedStyle(el).display!=='none';
- OneTopCustomize.open({container:box,title:'계기판',state:st,group:()=>st.layout.wide.cluster,wide:innerWidth>=900,autoPeriods:true,
+ OneTopCustomize.open({container:box,title:'계기판',state:st,group:()=>st.layout.wide.cluster,wide:innerWidth>=900,autoPeriods:true,reports:window.OneTopReports?reportOptions:null,
   get axis(){return wide()?'x':'y';},
   known:['periods','dials','alerts','odo','temps','fuel','window'],
   parts:()=>{const c=cl(),o=st.layout.wide.cluster.order,out=[];if(!c)return out;
@@ -475,8 +475,17 @@ function periodByModel(){const w=data?.period_usage?.windows?.find(w=>w.key===se
  if(provider!=='all')return rows.filter(r=>r.kind===provider);
  const whole=Array.isArray(w.tokens)?w.tokens.reduce((a,b)=>a+(b||0),0):0,counted=rows.reduce((n,r)=>n+(Array.isArray(r.tokens)?r.tokens.reduce((a,b)=>a+(b||0),0):0),0);
  return whole-counted>whole*.005?[...rows,{kind:null,model:null,tokens:[whole-counted,0,0,0]}]:rows;}
+// The month's subscriptions at API prices and the week's agent hours, on top of the usage page (reports.js).
+let reportOpen=false,reportHTML='';
+const accountName=q=>{const alias=OneTopWeekly.poolName(q),n=accountNumbers()[q.id];return kindName(q.kind)+(alias?' '+alias:n?' '+n:'');};
+function renderReport(){
+ const el=$('reportPanel');if(!el||!window.OneTopReports)return;
+ const now=data?.updated||Date.now()/1000,html=OneTopReports.panel(data,{now,period:selectedPeriod,open:reportOpen,top:OneTopReports.soonest(data,selectedPeriod,now,accountName)});
+ if(html!==reportHTML){reportHTML=html;el.innerHTML=html;}
+}
 function renderMaps(){
  if(!data?.ready||!['sessions','maps'].includes(view))return;
+ if(view==='maps')renderReport();
  const source=view==='maps'&&mapGroup!=='session'?data.sessions:visibleSessions();
  const sessions=source.filter(s=>provider==='all'||s.kind===provider);
  const result=OneTopMaps.usage(sessions,selectedPeriod,view==='sessions'?'session':mapGroup,'ko',periodByModel());
@@ -493,6 +502,16 @@ function renderMaps(){
  $('usageLegend').innerHTML=OneTopMaps.legend(result.items);
  loadHistory();
 }
+// What the report sheets need; only this computer's own dashboard (not the remote one) saves plans and notices.
+const reportOptions=()=>({state:data,now:data?.updated||Date.now()/1000,period:selectedPeriod,label:accountName,onChange:()=>{reportHTML='';renderReport();renderWeekly();},
+ post:data?.action_token&&!data.remote?(path,body)=>fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Monitor-Token':data.action_token},body:JSON.stringify(body),signal:AbortSignal.timeout(10000)}).then(r=>r.ok?r.json():Promise.reject(Error(String(r.status)))):null});
+$('reportPanel').addEventListener('click',e=>{
+ const b=e.target.closest('button');if(!b||!window.OneTopReports)return;
+ const o=reportOptions();
+ if('reportMore' in b.dataset){reportOpen=!reportOpen;renderReport();}
+ else if('reportShape' in b.dataset)OneTopReports.openSettings(o);
+ else if('reportShare' in b.dataset)OneTopReports.openShare(o);
+});
 $('mapGroups').onclick=e=>{const b=e.target.closest('[data-map-group]');if(!b)return;mapGroup=b.dataset.mapGroup;document.querySelectorAll('[data-map-group]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.mapGroup===mapGroup)));renderMaps();};
 window.addEventListener('resize',renderMaps);
 
@@ -668,7 +687,7 @@ function renderWeekly(){
   const current=valid&&!q.stale,delta=OneTopWeekly.valid(p?.used_pp),status=current?'제공자 보고':RECONNECT.has(q.status)?'재연결 필요':q.updated?reportAge(q.updated):OneTopWeekly.unavailable(q)?'값 없음':'확인 필요';
   const rate=OneTopWeekly.accountBurn(p,q),rateKnown=OneTopWeekly.valid(rate);
   const rateNote=rateKnown?`최근 ${periodLabel}${p.partial?' 중 관측된 구간만 계산':''} · ${OneTopWeekly.duration(p.observed_seconds)} 관측에서 +${OneTopWeekly.number(p.used_pp)}%\n한도 증가량 ÷ 실제 관측 시간으로 계산한 평균입니다. 주간 한도 100%를 기준으로 한 시간당 소진 비율이며, 미래 소진량 예측이 아닙니다.`:'최소 2분의 유효한 한도 관측과 최신 계정 보고가 필요합니다.';
-  return `<article class="weekly-card ${current?'':'is-stale'}" style="--quota-color:${colors[q.kind]||'#8d9ba8'}"><div class="weekly-card-heading"><b>${dot(q.kind)}${esc(kindName(q.kind))}${accountChip(q.id,q.account_label)}<button type="button" class="alias-edit" data-alias-edit="${esc(q.id)}" title="계정 이름 바꾸기" aria-label="계정 이름 바꾸기">✎</button></b><span>${[esc(q.plan||''),status].filter(Boolean).join(' · ')}</span></div><p class="weekly-account" title="${esc(q.account_label)}">${esc(q.account_label)}</p><div class="weekly-value"><strong>${valid?OneTopWeekly.percent(n):'—'}</strong><span>/ 100% 사용${weekly?'':' · '+esc(w?.label||'플랜 한도')}</span><b>${current?OneTopWeekly.percent(Math.max(0,100-n))+' 남음':''}</b></div><div class="track"><i style="width:${valid?Math.min(100,n):0}%;background:var(--quota-color)"></i></div><div class="weekly-period"><span>${periodCaption()}</span><strong>${!burns?'—':delta?'+'+OneTopWeekly.number(p.used_pp)+'%':q.stale?'조회 필요':'다음 보고 대기'}</strong><span title="${esc(burns?rateNote:'주간 한도가 아닌 창이나 계정이 확인되지 않은 한도는 소진 속도를 계산하지 않습니다.')}">${!burns?'소진 속도 미계산':rateKnown?'평균 '+OneTopWeekly.burn(rate):delta?'소진 속도 확인 중':'한도 변화 기록 중'}</span></div><div class="weekly-chart" data-weekly-chart="${esc(q.id)}"></div><p class="weekly-note">${q.stale?esc(q.note):w?.reset?new Date(w.reset*1000).toLocaleString(OneTopI18n.locale(),{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화 · '+ago(q.updated)+' 확인':weekly?'주간 한도 확인 중':'한도 확인 중'}</p>${q.stale&&RECONNECT.has(q.status)?reconnectMarkup(q):''}${aliasEditing===q.id?aliasMarkup(q):''}</article>`;
+  return `<article class="weekly-card ${current?'':'is-stale'}" style="--quota-color:${colors[q.kind]||'#8d9ba8'}"><div class="weekly-card-heading"><b>${dot(q.kind)}${esc(kindName(q.kind))}${accountChip(q.id,q.account_label)}<button type="button" class="alias-edit" data-alias-edit="${esc(q.id)}" title="계정 이름 바꾸기" aria-label="계정 이름 바꾸기">✎</button></b><span>${[esc(q.plan||''),status].filter(Boolean).join(' · ')}</span></div><p class="weekly-account" title="${esc(q.account_label)}">${esc(q.account_label)}</p><div class="weekly-value"><strong>${valid?OneTopWeekly.percent(n):'—'}</strong><span>/ 100% 사용${weekly?'':' · '+esc(w?.label||'플랜 한도')}</span><b>${current?OneTopWeekly.percent(Math.max(0,100-n))+' 남음':''}</b></div><div class="track"><i style="width:${valid?Math.min(100,n):0}%;background:var(--quota-color)"></i></div><div class="weekly-period"><span>${periodCaption()}</span><strong>${!burns?'—':delta?'+'+OneTopWeekly.number(p.used_pp)+'%':q.stale?'조회 필요':'다음 보고 대기'}</strong><span title="${esc(burns?rateNote:'주간 한도가 아닌 창이나 계정이 확인되지 않은 한도는 소진 속도를 계산하지 않습니다.')}">${!burns?'소진 속도 미계산':rateKnown?'평균 '+OneTopWeekly.burn(rate):delta?'소진 속도 확인 중':'한도 변화 기록 중'}</span></div>${window.OneTopReports?OneTopReports.prediction(data,q,{period:selectedPeriod,now:data.updated||Date.now()/1000,label:accountName}):''}<div class="weekly-chart" data-weekly-chart="${esc(q.id)}"></div><p class="weekly-note">${q.stale?esc(q.note):w?.reset?new Date(w.reset*1000).toLocaleString(OneTopI18n.locale(),{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화 · '+ago(q.updated)+' 확인':weekly?'주간 한도 확인 중':'한도 확인 중'}</p>${q.stale&&RECONNECT.has(q.status)?reconnectMarkup(q):''}${aliasEditing===q.id?aliasMarkup(q):''}</article>`;
  }).join('')||'<div class="empty">계정을 연결하면 제공자가 보고한 주간 사용률이 표시됩니다. 아래 계정 한도에서 계정을 추가하세요.</div>';
  drawWeeklyCharts();
 }

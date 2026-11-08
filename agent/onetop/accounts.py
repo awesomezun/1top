@@ -318,6 +318,8 @@ class AccountQuotaSampler:
         # The two-minute background sampler owns credential/provider access.
         row={'id':key,'kind':'Claude','account_label':account.get('emailAddress') or account.get('displayName') or 'Claude 계정 '+key[-6:],
              'plan':account.get('seatTier') or ('max' if '_claude_max_' in str(account.get('organizationRateLimitTier') or '') else ''),
+             # The tier tells Max from Max 20x for the monthly value report; it stays on this computer.
+             'plan_tier':str(account.get('organizationRateLimitTier') or '')[:60],
              'windows':claude_windows({},now),'updated':0,'stale':True,'status':'report_pending',
              'note':'Claude Code의 다음 사용량 보고를 기다립니다.'}
         previous=self.cached.get(key)

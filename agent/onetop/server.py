@@ -25,6 +25,7 @@ from .time_ranges import parse_period, extend_snapshot
 from .session_order import ordered_snapshot
 from .history import HistoryStore, initialize_capture
 from . import weekly_usage
+from . import reports
 from .discovery import inventory, context, applications, orca_executable, registry_status, claude_transcript
 from . import __version__
 from .context_usage import request_context, stored_context
@@ -286,6 +287,7 @@ class Collector:
             CREATE INDEX IF NOT EXISTS event_time ON events(t);''')
         weekly_usage.initialize(self.db)
         initialize_capture(self.db)
+        self.reports_ready()
         from .accounts import profile_roots
         session_archive.recover(self.db, roots=profile_roots())
         row = self.db.execute("SELECT value FROM meta WHERE key='started'").fetchone()
@@ -804,6 +806,9 @@ class Collector:
         weekly_usage.restore_claude_last_report(self.db,account_quotas,now)
         account_aliases.apply(account_quotas,DATA)
         weekly_usage.record(self.db,account_quotas,now)
+        self.reports_ready()
+        try:self.spans.record(self.db,sessions,now)
+        except sqlite3.Error as e:print('state spans:',type(e).__name__,flush=True)
         weekly,estimates=weekly_usage.snapshot(self.db,account_quotas,now,
             bindings={s['id']:s['account_binding'][0] for s in sessions if s.get('account_binding')},
             recording_started=self.started)
@@ -825,7 +830,9 @@ class Collector:
         if self.resources is None:self.resources=ResourceSampler()
         system=self.resources.sample(sessions,self.shared_roots)
         roots = group_sessions(sessions)
+        report,notice_list,notice_settings=self.reports_snapshot(account_quotas,weekly,now)
         result={'ready':True,'version':__version__,'updated':now,'started':self.started,'sessions':sessions,
+                'reports':report,'notices':notice_list,'notification_settings':notice_settings,
                 'history_started':getattr(self,'history_started',self.started),
                 'root_sessions':roots,
                 'events':events,'recent':recent,'period_usage':periods,'quotas':quotas,'process_counts':self.process_counts,
@@ -835,6 +842,33 @@ class Collector:
                 'telemetry':{k:v for k,v in telemetry.items() if k!='sessions'},
                 'collection_ms':round((time.monotonic()-collect_started)*1000,1)}
         with self.lock:self.snapshot=result
+
+    def reports_ready(self):
+        # Made on first use, so a collector built without initialize() (as the tests do) still collects.
+        if getattr(self,'spans',None) is not None:return
+        try:reports.initialize(self.db)
+        except sqlite3.Error:pass
+        self.spans=reports.Spans();self.value_report=reports.Value();self.reports_value=None;self.reports_job=None;self.reports_weekly=(0,None,None)
+
+    def reports_snapshot(self,account_quotas,weekly,now):
+        """The reports and notices for this snapshot. The month's value is computed off the collection thread (the
+        first run reads five past months); the week and the notices are cheap and read every time."""
+        job=self.reports_job
+        if getattr(self,'history',None) is not None and (job is None or not job.is_alive()) and (self.reports_value is None or now-self.reports_value['end']>=60):
+            quotas=[dict(q) for q in account_quotas];overrides=reports.read_plans(DATA)
+            def compute():
+                try:self.reports_value=self.value_report.compute(self.history.model_totals,quotas,overrides,time.time())
+                except Exception as e:print('reports:',type(e).__name__,flush=True)
+            self.reports_job=threading.Thread(target=compute,daemon=True,name='1top-reports');self.reports_job.start()
+        if now-self.reports_weekly[0]>=30:
+            try:self.reports_weekly=(now,reports.weekly(self.db,now),reports.last_week(self.db,now))
+            except sqlite3.Error:self.reports_weekly=(now,None,None)
+        week,last=self.reports_weekly[1],self.reports_weekly[2]
+        names={q['id']:(q.get('alias') or (('Claude Code' if q.get('kind')=='Claude' else 'Agy CLI' if q.get('kind')=='Antigravity' else q.get('kind',''))+(' '+str(q.get('plan') or '').title() if q.get('plan') else ''))).strip() for q in account_quotas if q.get('id')}
+        try:items,settings=reports.notices(DATA,account_quotas,weekly,names,last,self.reports_value,now)
+        except (OSError,ValueError,TypeError) as e:print('notices:',type(e).__name__,flush=True);items,settings=[],reports.read_settings(DATA)
+        report={'version':1,'as_of':now,**({'value':self.reports_value} if self.reports_value else {}),**({'weekly':week} if week else {})}
+        return report,items,settings
 
     def tick_mailbox(self):
         # Terminal admission can take seconds. Keep collection fresh while a
@@ -878,7 +912,7 @@ class Handler(BaseHTTPRequestHandler):
             not secrets.compare_digest(self.headers.get('X-Monitor-Token',''),self.server.action_token)):
             self.send_error(403);return
         route=urlsplit(self.path).path
-        if route not in ('/api/action','/api/mailbox','/api/accounts/login','/api/accounts/authorize','/api/accounts/alias','/api/routing'):self.send_error(404);return
+        if route not in ('/api/action','/api/mailbox','/api/accounts/login','/api/accounts/authorize','/api/accounts/alias','/api/routing','/api/notifications','/api/reports/plan'):self.send_error(404);return
         try:
             length=int(self.headers.get('Content-Length','0'))
             if length<1 or length>(2200000 if route=='/api/action' else 4096) or self.headers.get('Content-Type')!='application/json':
@@ -893,6 +927,14 @@ class Handler(BaseHTTPRequestHandler):
                 result=self.server.account_login.start(payload.get('kind'))
             elif route=='/api/accounts/authorize':
                 result=self.server.account_login.authorize_claude(payload.get('account_id'))
+            elif route=='/api/notifications':
+                result={'settings':reports.set_settings(DATA,payload)}
+            elif route=='/api/reports/plan':
+                collector=self.server.collector
+                with collector.lock:rows=collector.snapshot.get('account_quotas',[])
+                saved=reports.set_plan(DATA,payload.get('account_id'),payload.get('plan'),payload.get('price'),{r['id'] for r in rows})
+                collector.reports_value=None;collector.value_report.current=None
+                result={'plan':saved}
             elif route=='/api/accounts/alias':
                 collector=self.server.collector
                 with collector.lock:
@@ -959,12 +1001,14 @@ class Handler(BaseHTTPRequestHandler):
                 snapshot = {**snapshot, 'workspace_usage': bridge.workspace_usage}
             data=json.dumps({**snapshot,'action_token':self.server.action_token},ensure_ascii=False).encode()
             mime='application/json; charset=utf-8'
+        elif route=='/api/notifications':
+            self.json_response(200,{'ok':True,'settings':reports.read_settings(DATA)});return
         elif route=='/api/telemetry':
             telemetry=getattr(self.server.collector,'telemetry',None)
             self.json_response(200,telemetry.snapshot() if telemetry else {'ready':False});return
         elif route=='/api/updates':
             self.json_response(200,getattr(self.server,'updates',None).value if getattr(self.server,'updates',None) else {});return
-        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/ranges.js','/speed.js','/weekly.js','/history.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js','/conversation.js','/quick.html','/quick.js','/quick.css','/cluster.js','/cluster.css','/cluster-pages.js','/layout.js','/customize.js'):
+        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/ranges.js','/speed.js','/weekly.js','/history.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js','/conversation.js','/quick.html','/quick.js','/quick.css','/cluster.js','/cluster.css','/cluster-pages.js','/layout.js','/customize.js','/reports.js'):
             name='index.html' if route=='/' else route[1:]
             data=(BASE/'dist'/name).read_bytes()
             mime={'html':'text/html','js':'application/javascript','css':'text/css','json':'application/json'}[name.rsplit('.',1)[1]]+'; charset=utf-8'

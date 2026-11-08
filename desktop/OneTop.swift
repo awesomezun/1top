@@ -3,7 +3,7 @@ import SwiftUI
 import WebKit
 
 @main
-final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverDelegate, WKNavigationDelegate, WKUIDelegate, NSToolbarDelegate {
+final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverDelegate, WKNavigationDelegate, WKUIDelegate, NSToolbarDelegate, WKDownloadDelegate {
     static func main() {
         let app = NSApplication.shared; let delegate = OneTopApp(); app.delegate = delegate
         withExtendedLifetime(delegate) { app.run() }
@@ -11,6 +11,7 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopo
     var statusItem: NSStatusItem!; var popover: NSPopover!; var window: NSWindow?
     var webView: WKWebView?; var loadingLabel: NSTextField?; var process: Process?; var timer: Timer?
     var ticks = 0; var webLoaded = false; var webLoading = false; var stopping = false
+    var savedDownloads: [ObjectIdentifier: URL] = [:]
     let dataDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/1top")
     let loginAgent = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents/si.1top.companion.plist")
     let testing = CommandLine.arguments.contains("--ui-test")
@@ -94,6 +95,7 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopo
     }
     func updated() {
         updateStatusTitle()
+        if !testing { Notices.show(model.snapshot?.notices) }
         syncDashboardAppearance()
         if model.connected, window != nil, !webLoaded, !webLoading { loadDashboard() }
         if !model.connected, !webLoaded { loadingLabel?.stringValue = QuickText.current("로컬 수집기에 연결하고 있습니다…\n연결되면 대시보드가 자동으로 열립니다.\n간략 보기의 수집기 다시 시작을 사용할 수 있습니다.") }
@@ -314,11 +316,25 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopo
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { showDashboard(); return true }
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        // The share card's PNG (a blob the dashboard asks to save) goes to Downloads.
+        if action.shouldPerformDownload { decisionHandler(.download); return }
         guard let url = action.request.url else { decisionHandler(.cancel); return }
         if url.scheme == "http" && url.host == "127.0.0.1" && url.port == model.baseURL.port { decisionHandler(.allow); return }
         if action.navigationType == .linkActivated && ["http", "https"].contains(url.scheme ?? "") { NSWorkspace.shared.open(url) }
         decisionHandler(.cancel)
     }
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { download.delegate = self }
+    func download(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String, completionHandler: @escaping (URL?) -> Void) {
+        let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
+        let name = (suggestedFilename as NSString).lastPathComponent, base = (name as NSString).deletingPathExtension, ext = (name as NSString).pathExtension
+        var url = folder.appendingPathComponent(name), n = 2
+        while FileManager.default.fileExists(atPath: url.path) { url = folder.appendingPathComponent("\(base) \(n)" + (ext.isEmpty ? "" : ".\(ext)")); n += 1 }
+        savedDownloads[ObjectIdentifier(download)] = url; completionHandler(url)
+    }
+    func downloadDidFinish(_ download: WKDownload) {
+        if let url = savedDownloads.removeValue(forKey: ObjectIdentifier(download)) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+    }
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) { savedDownloads.removeValue(forKey: ObjectIdentifier(download)) }
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if action.navigationType == .linkActivated, let url = action.request.url, ["http", "https"].contains(url.scheme ?? "") { NSWorkspace.shared.open(url) }; return nil
     }

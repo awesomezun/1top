@@ -748,8 +748,26 @@ struct QuickDashboard: View {
             } else {
                 TwoColumns(count: shown.count, width: m(440 - 28), spacing: m(8)) { weeklyRow(shown[$0]) }
             }
+            if let line = reportLine { Text(line).font(m.font(.label)).monospacedDigit().foregroundStyle(theme.muted).lineLimit(1).padding(.horizontal, m(2)) }
         }
         .preference(key: PanelShown.self, value: [.weekly: shown.count])
+    }
+    /// The month's value and the week in one line, on the whole month's plans, the same words as the tray's (quick.js).
+    /// The collector's multiple leaves out a tool whose plan has no price, as the dashboard's report does.
+    private var reportLine: String? {
+        let r = model.snapshot?.reports
+        var parts: [String] = []
+        if let v = r?.value, let ratio = v.ratio {
+            let p = (v.month ?? "").split(separator: "-").compactMap { Int($0) }
+            let name = p.count == 2 ? (Calendar.current.date(from: DateComponents(year: p[0], month: p[1], day: 1))?.formatted(.dateTime.month(.abbreviated).locale(Locale(identifier: language == "ko" ? "ko_KR" : language == "zh" ? "zh_CN" : "en_US"))) ?? "") : ""
+            let x = String(format: "%.1f", ratio)
+            parts.append(tr.pick("\(name) 본전 \(x)배", "\(name) value \(x)×", "\(name) 回本 \(x) 倍"))
+        }
+        if let w = r?.weekly, let work = w.working_s, let wait = w.waiting_s {
+            let h = Int((work / 3600).rounded()), q = Int((wait / 3600).rounded())
+            parts.append(tr.pick("이번 주 작업 \(h)시간", "Working this week \(h)h", "本周工作 \(h) 小时")); parts.append(tr.pick("대기 \(q)시간", "Waiting \(q)h", "等待 \(q) 小时"))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
     private func weeklyRow(_ q: AccountQuota) -> some View {
         let w = q.representativeWindow, weekly = w?.isWeekly == true

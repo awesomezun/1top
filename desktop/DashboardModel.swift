@@ -14,6 +14,19 @@ struct DesktopSnapshot: Decodable {
     var account_quotas: [AccountQuota]?
     var events: [UsageEvent]?
     var weekly_usage: WeeklyUsage?
+    /// This month's API value and the week's agent hours (the panel's one line under the accounts).
+    var reports: Reports?
+    struct Reports: Decodable {
+        struct Value: Decodable { var month: String?; var api_value: Double?; var plan_total: Double?; var ratio: Double? }
+        struct Weekly: Decodable { var working_s: Double?; var waiting_s: Double? }
+        var value: Value?; var weekly: Weekly?
+    }
+    /// What the collector decided to tell this computer (Notices.swift shows each once).
+    var notices: [Notice]?
+    struct Notice: Decodable {
+        var id: String; var type: String?; var title: String?; var body: String?; var at: Double?; var account_id: String?
+        var kind: String?; var account_label: String?; var end: Double?; var reset: Double?; var working_s: Double?; var waiting_s: Double?; var ratio: Double?
+    }
     // The first minute the token events cover; before it the cluster's trip is outside the record.
     var chart_range: ChartRange?
     struct ChartRange: Decodable { var start: Double? }

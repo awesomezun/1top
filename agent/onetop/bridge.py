@@ -98,6 +98,24 @@ def export_weekly(usage):
     return result
 
 
+REPORT_VALUE=('month','start','end','currency','prices_as_of','plan_total','api_value','ratio','api_billed','unpriced','excluded')
+def export_reports(report):
+    """The month's value and the week (report-contract v1.2.0): names, kinds, plans and totals only."""
+    if not isinstance(report,dict):return None
+    out={'version':1,'as_of':report.get('as_of')}
+    v=report.get('value')
+    if isinstance(v,dict):
+        out['value']={**select(v,REPORT_VALUE),
+            'plans':[select(p,('account_id','kind','plan','label','price','source')) for p in (v.get('plans') or [])[:24]],
+            'by_kind':[select(k,('kind','api_value','plan_total','ratio')) for k in (v.get('by_kind') or [])[:12]],
+            'by_model':[select(m,('model','kind','api_value','tokens')) for m in (v.get('by_model') or [])[:24]],
+            'months':[select(m,('month','api_value','plan_total')) for m in (v.get('months') or [])[:6]]}
+    w=report.get('weekly')
+    if isinstance(w,dict):
+        out['weekly']={**select(w,('start','end','since','working_s','waiting_s','previous','longest_wait')),'days':[select(d,('date','working_s','waiting_s')) for d in (w.get('days') or [])[:7]]}
+    return out
+
+
 def export_snapshot(state):
     sessions=[]
     for s in state.get('sessions',[]):
@@ -139,7 +157,8 @@ def export_snapshot(state):
                  for g in ops.get('goals',[])], 'loop_state':'not_verified','skill_runtime':'partial'}
     weekly = {a['id']:a for a in state.get('weekly_usage',{}).get('accounts',[])}
     return {'version':__version__,'updated':state.get('updated',0),'recording_started':state.get('started',0),
-        'features':['history','account_alias','usage_sessions'],
+        'features':['history','account_alias','usage_sessions','reports'],
+        'reports':export_reports(state.get('reports')),
         'flow':{**export_flow(state), **state.get('remote_flows', {})},
         'system':system_metrics(state.get('system', {}), (s['id'] for s in sessions)),
         'collection_ms':state.get('collection_ms'), 'resume_prompt':state.get('resume_prompt',''),

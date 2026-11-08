@@ -316,9 +316,17 @@
   const label=`${toolName(q.kind)} ${q.account_label} ${T(weekly?'주간 한도':w?.label||'계정 한도')} ${pct1(w?.pct)}`;
   return `<button type="button" class="q-tile" style="--tint:${color(q.kind)}" data-act="account" data-account="${esc(q.id)}" aria-label="${esc(label)}" title="${esc(q.account_label+' · '+(q.plan||'')+'\n'+T('클릭하면 5시간 한도와 초기화 시각을 확인합니다.'))}"><span class="q-tile-top"><i></i><b>${esc(toolName(q.kind))}</b>${q.pool?'':chip(q.id)}<strong class="${q.stale?'stale':''}">${pct1(w?.pct)}</strong></span><span class="q-tile-bottom"><span>${esc(handle)}</span><svg class="q-spark" data-spark="${esc(q.id)}" aria-hidden="true"></svg><span class="${q.stale?'stale':''}">${esc(status)}</span></span></button>`;
  }
+ // The month's value and the week in one line under the accounts (reports), on the whole month's plans as the
+ // dashboard reads it by default; the menu-bar panel says the same.
+ function reportLine(){
+  const r=S.data?.reports,v=r?.value,w=r?.weekly,parts=[],h=s=>T('{0}시간').replace('{0}',Math.round(s/3600));if(!v&&!w)return '';
+  if(v&&typeof v.ratio==='number'){const [y,m]=String(v.month||'').split('-').map(Number),name=y&&m?new Date(y,m-1,1).toLocaleDateString(root.OneTopI18n?.locale()||'ko-KR',{month:'short'}):'';parts.push(T('{0} 본전 {1}배').replace('{0}',name).replace('{1}',v.ratio.toFixed(1)));}
+  if(w)parts.push(T('이번 주 작업 {0}').replace('{0}',h(w.working_s)),T('대기 {0}').replace('{0}',h(w.waiting_s)));
+  return parts.length?`<p class="q-report">${esc(parts.join(' · '))}</p>`:'';
+ }
  function renderWeekly(){
   const rows=quotas(),want=S.cluster?null:LAYOUT?.layout.presets.dashboard.opts.weekly?.count,shown=pickTiles(rows,want===undefined?4:want??rows.length),disabled=!fresh()||S.busy;
-  const changed=update('qWeekly',`<div class="q-heading"><b>${esc(T(shown.every(q=>isWeekly(representative(q)))?'주간 한도':'계정 한도'))}</b><span>${esc(T('계정별 100%'))}</span><span class="q-spacer"></span><button class="q-plus" data-act="menu" data-menu="accounts" aria-label="${esc(T('구독 계정 추가 로그인'))}" ${disabled?'disabled':''}>${icon.plus}</button></div>${rows.length?`<div class="q-weekly-grid">${shown.map(weeklyTile).join('')}</div>`:`<p class="q-empty-note">${esc(T('+ 버튼으로 구독 계정을 연결하세요.'))}</p>`}`);
+  const changed=update('qWeekly',`<div class="q-heading"><b>${esc(T(shown.every(q=>isWeekly(representative(q)))?'주간 한도':'계정 한도'))}</b><span>${esc(T('계정별 100%'))}</span><span class="q-spacer"></span><button class="q-plus" data-act="menu" data-menu="accounts" aria-label="${esc(T('구독 계정 추가 로그인'))}" ${disabled?'disabled':''}>${icon.plus}</button></div>${rows.length?`<div class="q-weekly-grid">${shown.map(weeklyTile).join('')}</div>`:`<p class="q-empty-note">${esc(T('+ 버튼으로 구독 계정을 연결하세요.'))}</p>`}${reportLine()}`);
   if(changed)drawSparks();
  }
  function drawSparks(){

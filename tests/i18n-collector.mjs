@@ -11,7 +11,8 @@ context.window=context;vm.createContext(context);vm.runInContext(readFileSync(ne
 const i18n=context.OneTopI18n,hangul=/[가-힣]/;
 
 // Pieces the collector joins with a name or a number; the joined sentences are checked below instead.
-const PIECES=new Set([' CLI를 먼저 설치해 주세요.','Codex 계정 ','Claude 계정 ','터미널 제목을 ','(으)로 변경했습니다.',' 터미널로 이동했습니다.',' 새 작업 시작을 확인했습니다.',' 실제 시작은 상태 갱신으로 확인합니다.']);
+// The weekdays the collector's Korean notices are made of (reports.py); the apps write theirs from the notice's times.
+const PIECES=new Set(['월화수목금토일','요일',' CLI를 먼저 설치해 주세요.','Codex 계정 ','Claude 계정 ','터미널 제목을 ','(으)로 변경했습니다.',' 터미널로 이동했습니다.',' 새 작업 시작을 확인했습니다.',' 실제 시작은 상태 갱신으로 확인합니다.']);
 // Sent to the AI as written, and shown as it will be sent.
 const SENT=new Set(['이전에 중단된 작업을 이어서 진행해 주세요. 먼저 현재 진행 상태와 이미 완료한 변경을 확인하고, 중복 실행을 피해서 계속해 주세요.']);
 const JOINED=['Claude Code CLI를 먼저 설치해 주세요.','Codex CLI를 먼저 설치해 주세요.','Codex 계정 1a2b3c','Claude 계정 4f21a8','터미널 제목을 Checkout UI(으)로 변경했습니다.',

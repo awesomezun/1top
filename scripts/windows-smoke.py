@@ -92,6 +92,7 @@ with tempfile.TemporaryDirectory() as tmp:
             assert result['quick_data_ready'] is True, result
             assert result['quick_connection'] in (None, '실시간 · 이 PC'), result
             assert result['window_title'] == '1top — 이 PC', result
+            assert all(result['notifications_native'][k] for k in ('native_api_called','durable_dedup','settings_off','disabled_suppressed','settings_restored')), result['notifications_native']
             native=result['quick_native']
             assert all(native[k] for k in ('tool_window','not_app_window','within_work_area','blur_dismissed','preferences_restored','dashboard_unloaded','dashboard_reopened','login_enabled','login_disabled','login_quick_view')), native
             assert all(r['synced'] for r in native['languages']+native['themes']), native

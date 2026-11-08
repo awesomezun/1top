@@ -88,6 +88,10 @@ class FakeIcon:
         self.name, self.title, self.menu = name, title, menu
         self.menu_updates = 0
         self.stopped = False
+        self.notifications = []
+
+    def notify(self, body, title=None):
+        self.notifications.append((body, title))
 
     def update_menu(self):
         self.menu_updates += 1
@@ -205,7 +209,7 @@ class ShellTests(unittest.TestCase):
         shell = self.shell()
         self.assertEqual(self.labels(shell), ['간략 대시보드', '전체 대시보드', '브라우저에서 열기', '—', '로그인할 때 실행',
                                               '원격 대시보드 (선택)', '원격 기기 연결…', '업데이트 확인…', '—',
-                                              '로컬 수집기 다시 시작', '1top 종료'])
+                                              '로컬 수집기 다시 시작', '한도 예측 알림', '주간 리포트 알림', '1top 종료'])
         self.assertTrue(shell.tray.menu.items[0].default)
         api = shell.quick.options['js_api']
         api.preferences('en', 'light')
@@ -326,6 +330,21 @@ class ShellTests(unittest.TestCase):
                          'The local collector did not connect on port 18766.')
         self.assertEqual(shell_main.startup_message(StartupError('collector_exited', 'x'), 18766, 'zh'), '本地采集器意外退出。')
         self.assertEqual(shell_main.startup_message(RuntimeError('x'), 18766, 'ko'), '로컬 수집기를 시작하지 못했습니다.')
+
+    def test_notices_share_collector_settings_and_deduplicate(self):
+        import time
+        shell = self.shell()
+        state = {'notification_settings': {'limit': True, 'weekly': True},
+                 'notices': [{'id': 'weekly:fixture', 'type': 'weekly', 'at': time.time(), 'title': '주간 리포트', 'body': '작업 3시간'}]}
+        with patch('onetop.platform_support.data_directory', return_value=self.prefs.parent):
+            shell.receive_notifications(state)
+            shell.receive_notifications(state)
+            self.assertEqual(shell.tray.notifications, [('작업 3시간', '주간 리포트')])
+            state['notification_settings']['weekly'] = False
+            state['notices'][0]['id'] = 'weekly:off'
+            shell.receive_notifications(state)
+            self.assertFalse(shell.notification_settings['weekly'])
+            self.assertEqual(len(shell.tray.notifications), 1)
 
     def test_saved_preferences_are_only_language_and_theme(self):
         self.assertEqual(load_preferences(self.prefs), {'lang': 'ko', 'theme': 'dark'})

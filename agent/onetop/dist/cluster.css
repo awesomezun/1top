@@ -745,3 +745,6 @@
 .cz-ud{display:flex;gap:2px}.cz-ud button{width:28px;height:28px;padding:0;border:1px solid var(--line);border-radius:7px;background:none;color:var(--muted);cursor:pointer}
 .cz-reset{justify-self:center}
 @media (prefers-reduced-motion:reduce){.cz-jig [data-cz-part]{animation:none}.cz-sheet{transition:none}}
+
+/* The account that runs out before its reset, beside the fuel heading. */
+.cl-ahead{margin-left:.5em;font-style:normal;color:var(--amber);font-weight:650;overflow:hidden;text-overflow:ellipsis;max-width:60cqi;display:inline-block;vertical-align:bottom}

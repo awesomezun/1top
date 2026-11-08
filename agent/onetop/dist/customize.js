@@ -209,10 +209,12 @@
     <button type="button" class="cz-sw" role="switch" aria-checked="${!g.hidden.includes(id)}" aria-label="${esc(T('보이기'))}" ${c.hide||g.hidden.includes(id)?'':'disabled'}></button>${c.move?`<span class="cz-ud"><button type="button" data-cz-move="-1" aria-label="${esc(T('위로'))}">↑</button><button type="button" data-cz-move="1" aria-label="${esc(T('아래로'))}">↓</button></span>`:'<span></span>'}</div>`;}).join('');
   const s=sheet('cz-list',`<div class="cz-sh"><b>${esc(T(h.title+' 목록'))}</b><button type="button" data-cz-close>${esc(T('닫기'))}</button></div>
    ${h.tabs?`<div class="cz-row cz-tabs"><b>${esc(T('대시보드·계기판 탭'))}</b><div class="cz-mini"><button type="button" data-cz-tabs="two" aria-pressed="${h.state.layout.tabs!=='one'}">${esc(T('따로'))}</button><button type="button" data-cz-tabs="one" aria-pressed="${h.state.layout.tabs==='one'}">${esc(T('하나로'))}</button></div></div>`:''}
-   <div class="cz-rows">${rows}</div><button type="button" class="cz-reset" data-cz-reset>${esc(T('기본값으로 되돌리기'))}</button>`);
+   <div class="cz-rows">${rows}${h.reports&&root.OneTopReports?`<div class="cz-row cz-orow"><b>${esc(T('본전·주간 리포트'))}</b><button type="button" class="cz-shp" data-cz-reports>${esc(T(root.OneTopReports.NAMES[root.OneTopReports.settings().shape]))} ▸</button></div>`:''}</div><button type="button" class="cz-reset" data-cz-reset>${esc(T('기본값으로 되돌리기'))}</button>`);
   s.onclick=e=>{const b=e.target.closest('button');if(!b)return;const id=b.closest('.cz-row')?.dataset.id;
    if('czClose' in b.dataset)return closeSheet();
-   if('czReset' in b.dataset){change(()=>h.reset());return list();}
+   // The reports' look is kept apart from the layout (reports.js) and goes back to its defaults with it.
+   if('czReset' in b.dataset){change(()=>h.reset());if(h.reports&&root.OneTopReports){root.OneTopReports.save(root.OneTopReports.DEFAULTS);h.reports().onChange?.();}return list();}
+   if('czReports' in b.dataset){closeSheet();setTimeout(()=>root.OneTopReports.openSettings(h.reports()),330);return;}
    if(b.dataset.czTabs){change(()=>{h.state.layout.tabs=b.dataset.czTabs;});return list();}
    if(!id)return;
    if(b.classList.contains('cz-sw')){change(()=>{const g2=group();g2.hidden=g2.hidden.includes(id)?g2.hidden.filter(x=>x!==id):[...g2.hidden,id];});return list();}

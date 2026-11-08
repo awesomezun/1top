@@ -20,6 +20,8 @@ TEXT = {
     'menu_connect': ('원격 기기 연결…', 'Connect a remote device…', '连接远程设备…'),
     'menu_updates': ('업데이트 확인…', 'Check for updates…', '检查更新…'),
     'menu_restart': ('로컬 수집기 다시 시작', 'Restart the local collector', '重启本地采集器'),
+    'menu_notice_limit': ('한도 예측 알림', 'Limit forecast notifications', '额度预测通知'),
+    'menu_notice_weekly': ('주간 리포트 알림', 'Weekly report notifications', '每周报告通知'),
     'menu_quit': ('1top 종료', 'Quit 1top', '退出 1top'),
     'startup_title': ('1top — 시작할 수 없음', '1top — Unable to start', '1top — 无法启动'),
     'startup_intro': ('1top이 로컬 대시보드를 열지 못했습니다.', '1top could not open the local dashboard.',

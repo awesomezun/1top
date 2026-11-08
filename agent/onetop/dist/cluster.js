@@ -524,7 +524,7 @@
   const when=t=>{const d=new Date(t*1000);return d.toLocaleDateString(locale,{weekday:'short'})+' '+d.toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'});};
   const tool=a=>({Claude:'Claude',Codex:'Codex',Antigravity:'Agy',GLM:'GLM'})[a.kind]||ctx.kindName(a.kind);
   const plan=a=>a.plan||(a.alias||'').replace(/\s+models?$/i,'').replace(/^Claude and GPT$/i,'Claude·GPT');
-  return {q:s=>rootEl.querySelector(s),t:k=>root.OneTopI18n?root.OneTopI18n.t(k):k,lang:root.OneTopI18n?.language||'ko',W:ctx.weekly,locale,tool,plan,
+  return {q:s=>rootEl.querySelector(s),t:k=>root.OneTopI18n?root.OneTopI18n.t(k):k,lang:root.OneTopI18n?.language||'ko',W:ctx.weekly,locale,tool,plan,when,
    color:k=>ctx.colors[k]||'var(--dim)',fmt:v=>ctx.fmt?ctx.fmt(v):reading(v),
    // Range line: when this account's limit runs out at its current burn, or that it lasts to the reset.
    eta:a=>!a.range?'':a.range.state==='idle'?'<span class="eta idle">지금은 쓰지 않음</span>':a.range.state==='enough'?'<span class="eta ok">초기화 전까지 충분</span>'
@@ -682,7 +682,7 @@
    el.setAttribute('aria-disabled',String(!live||k==='live'||!n));el.setAttribute('aria-pressed',String(filter===k));}
  }
  function paintFuel(rootEl,r,ctx){
-  const {q,W,color,locale,eta,tool,plan}=kit(rootEl,ctx);
+  const {q,t,W,color,locale,eta,tool,plan,when}=kit(rootEl,ctx);
   // CPU and memory sit beside the trip under the token dial, whatever the number of saved limits.
   const lf=q('.cl-lf'),temps=q('.cl-temps');
   if(lf&&temps&&temps.parentElement!==lf)lf.prepend(temps);
@@ -707,10 +707,14 @@
   const draw=n=>{
   fuel.dataset.n=String(n);fuel.style.setProperty('--can-w',PITCH[Math.max(2,n)]+'px');
   const cans=W.pick(gauges,n),more=gauges.length-cans.length;
-  const heading=cans.some(a=>a.weekly===false)?'남은 한도':'남은 주간 한도',key=heading+'|'+more;
+  const heading=cans.some(a=>a.weekly===false)?'남은 한도':'남은 주간 한도';
+  // The account that runs out first before its reset, said in one line beside the heading (reports.js says the same
+  // on the account cards).
+  const first=r.accounts.filter(a=>a.range?.state==='empty'&&a.range.early).sort((x,y)=>x.range.at-y.range.at)[0];
+  const ahead=first?t('{0} {1} 바닥').replace('{0}',(tool(first)+' '+plan(first)).trim()).replace('{1}',when(first.range.at)):'',key=heading+'|'+more+'|'+ahead;
   const short=a=>(tool(a)+' '+plan(a)).trim();
   const rest=gauges.filter(a=>!cans.includes(a)).map(short).join(', ');
-  if(title.dataset.key!==key+rest){title.dataset.key=key+rest;title.innerHTML=`<span>${heading}</span>${more?` <em class="cl-more" title="${esc(rest)}">+${more}</em>`:''}`;}
+  if(title.dataset.key!==key+rest){title.dataset.key=key+rest;title.innerHTML=`<span>${heading}</span>${more?` <em class="cl-more" title="${esc(rest)}">+${more}</em>`:''}${ahead?` <em class="cl-ahead" title="초기화 전에 바닥납니다">${esc(ahead)}</em>`:''}`;}
   if(!r.accounts.length){fuel.dataset.keys='';fuel.innerHTML='<div class="cl-empty">연결된 구독 계정이 없습니다.</div>';}
   else keyed(fuel,cans,a=>a.id,a=>`<button type="button" class="cl-can" data-cluster-account="${esc(a.id)}" style="--c:${color(a.kind)}"><i><s></s></i><b></b><span class="cl-tip" role="tooltip"></span></button>`,
    (el,a)=>{const on=r.speed.account===a.id&&r.speed.picked,low=a.left!==null&&a.left<15;

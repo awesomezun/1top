@@ -250,6 +250,25 @@ class HistoryStore:
             LEFT JOIN metadata m ON m.sid=e.sid AND m.t=e.t WHERE e.t>? AND e.t<=?{where}'''
         yield from db.execute(sql,args)
 
+    def model_totals(self, start, end):
+        """{(kind, model): [fresh, cached, written, output]} between start and end: imported records before the
+        collector began, its own events after, as the history charts join them."""
+        out = collections.defaultdict(lambda: [0, 0, 0, 0])
+        with self.lock, closing(self.connect()) as db:
+            db.execute('ATTACH DATABASE ? AS collector', (self.monitor.as_uri()+'?mode=ro',))
+            row = db.execute("SELECT value FROM collector.meta WHERE key='started'").fetchone()
+            started = float(row[0]) if row else end
+            first = db.execute('SELECT MIN(t) FROM collector.events WHERE t<=?',(end,)).fetchone()[0]
+            started = max(started,first) if first is not None else end
+            for kind,model,*v in db.execute('SELECT kind,model,SUM(fresh),SUM(cached),SUM(written),SUM(output) FROM records WHERE t>? AND t<? GROUP BY kind,model',(start,min(end,started))):
+                out[(kind,model or 'unknown')] = [a+(b or 0) for a,b in zip(out[(kind,model or 'unknown')],v)]
+            columns = {r[1] for r in db.execute('PRAGMA collector.table_info(events)')}
+            model = "COALESCE(NULLIF(e.model,''),m.model,'unknown')" if 'model' in columns else "COALESCE(m.model,'unknown')"
+            for kind,model_name,*v in db.execute(f'''SELECT e.kind,{model},SUM(e.fresh),SUM(e.cached),SUM(e.written),SUM(e.output) FROM collector.events e
+                    LEFT JOIN metadata m ON m.sid=e.sid AND m.t=e.t WHERE e.t>? AND e.t<=? GROUP BY 1,2''',(max(start,started-0.000001),end)):
+                out[(kind,model_name)] = [a+(b or 0) for a,b in zip(out[(kind,model_name)],v)]
+        return dict(out)
+
     @staticmethod
     def _known(coverage, a, b):
         return any(c['from'] < b and c['to'] >= a for c in coverage)

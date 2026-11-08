@@ -92,6 +92,7 @@ body.quick-body{margin:0;background:var(--bg);color:var(--ink);font:var(--q-titl
 .q-tile-bottom>span.stale{color:var(--amber)}
 .q-chip{display:inline-flex;align-items:center;justify-content:center;min-width:15px;min-height:15px;padding:0 4px;border-radius:4px;background:var(--raised);color:var(--ink);font-size:var(--q-caption);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;flex:none}
 .q-chip.alias{padding:0 5px;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+.q-report{margin:8px 0 0;font-size:var(--q-label);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .q-empty-note{font-size:var(--q-label);color:var(--muted)}
 
 /* Resources */

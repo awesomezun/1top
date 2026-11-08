@@ -141,6 +141,8 @@ class Shell:
         self.zoom = 1.0
         self.summary = None
         self.connect_lock = threading.Lock()
+        self.notification_settings = {'limit': True, 'weekly': True}
+        self.notice_dispatcher = None
         width, height = runtime.desktop_size()
         self.dashboard_unloaded = quick_first and not os.environ.get('ONETOP_SMOKE_REPORT')
         self.window = webview.create_window(self.t('window_title'), 'about:blank' if self.dashboard_unloaded else self.url, width=width, height=height,
@@ -178,7 +180,44 @@ class Shell:
             item('menu_updates', lambda *_: self.check_updates()),
             self.pystray.Menu.SEPARATOR,
             item('menu_restart', lambda *_: threading.Thread(target=self.restart_collector, daemon=True).start()),
+            item('menu_notice_limit', lambda *_: self.toggle_notification('limit'), checked=lambda _: self.notification_settings['limit']),
+            item('menu_notice_weekly', lambda *_: self.toggle_notification('weekly'), checked=lambda _: self.notification_settings['weekly']),
             item('menu_quit', lambda *_: self.quit()))
+
+    def receive_notifications(self, state):
+        from onetop.windows_notices import Notices
+        from onetop.platform_support import data_directory
+        settings = state.get('notification_settings') if isinstance(state, dict) else None
+        if isinstance(settings, dict) and all(isinstance(settings.get(k), bool) for k in ('limit', 'weekly')):
+            if settings != self.notification_settings:
+                self.notification_settings = {k: settings[k] for k in ('limit', 'weekly')}
+                self.tray.update_menu()
+        if self.notice_dispatcher is None:
+            self.notice_dispatcher = Notices(data_directory() / 'windows-notices-v1.sqlite', self.tray.notify, lang=lambda: self.prefs['lang'])
+        return self.notice_dispatcher.consume(state)
+
+    def poll_notifications(self):
+        from onetop.desktop_startup import local_json
+        while not self.quitting.wait(5):
+            if not getattr(self.tray, 'visible', False):
+                continue
+            try:
+                self.receive_notifications(local_json(self.launcher.port, '/api/state') or {})
+            except Exception:
+                # Notification transport/storage failure must not stop monitoring or open modal dialogs.
+                pass
+
+    def toggle_notification(self, kind):
+        def update():
+            from onetop.desktop_startup import local_json
+            from onetop.windows_notices import set_settings
+            state = local_json(self.launcher.port, '/api/state') or {}
+            settings = state.get('notification_settings') or self.notification_settings
+            result = set_settings(self.launcher.port, state.get('action_token'), {kind: not settings.get(kind, True)})
+            if result is not None:
+                self.notification_settings = result
+                self.tray.update_menu()
+        threading.Thread(target=update, daemon=True).start()
 
     # Windows and preferences
     def set_preferences(self, lang, theme, from_quick=False):
@@ -339,6 +378,7 @@ class Shell:
 
     def run(self, smoke=None):
         threading.Thread(target=self.tray.run, daemon=True).start()
+        threading.Thread(target=self.poll_notifications, daemon=True).start()
         # Opened at login: the quick view, like the macOS login item's --quick-view.
         self.quick.events.loaded += self.opened_at_login
         if smoke:
@@ -351,6 +391,7 @@ class Shell:
         try:
             self.webview.start(gui='edgechromium', private_mode=False, storage_path=str(self.runtime.webview_storage()))
         finally:
+            self.quitting.set()
             self.tray.stop()
 
 
@@ -438,6 +479,43 @@ def quick_native_checks(shell):
     return result
 
 
+def notification_native_checks(shell):
+    """Windows CI only: real native notification API, durable dedup and the real guarded settings route."""
+    import tempfile
+    from onetop.windows_notices import Notices, set_settings
+    from onetop.desktop_startup import local_json
+    state = local_json(shell.launcher.port, '/api/state') or {}
+    original = local_json(shell.launcher.port, '/api/notifications')
+    original = original.get('settings', original) if isinstance(original, dict) else None
+    if not original:
+        raise RuntimeError('Notification settings route is unavailable')
+    attempts = []
+    def display(body, title):
+        shell.tray.notify(body, title)
+        attempts.append((body, title))
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / 'shown.sqlite'
+        row = {'id': 'weekly:windows-smoke', 'type': 'weekly', 'at': time.time(),
+               'title': '1top 검사 알림', 'body': 'Windows 알림 표시와 중복 방지 검사'}
+        fixture = {'notices': [row], 'notification_settings': {'limit': True, 'weekly': True}}
+        try:
+            first = Notices(path, display).consume(fixture)
+            again = Notices(path, display).consume(fixture)
+            off = set_settings(shell.launcher.port, state.get('action_token'), {'weekly': False})
+            actual = local_json(shell.launcher.port, '/api/notifications') or {}
+            actual = actual.get('settings', actual)
+            fixture['notification_settings']['weekly'] = False
+            fixture['notices'][0]['id'] = 'weekly:windows-disabled'
+            suppressed = Notices(path, display).consume(fixture)
+        finally:
+            restored = set_settings(shell.launcher.port, state.get('action_token'), original)
+    return {'native_api_called': len(attempts) == 1, 'durable_dedup': len(first) == 1 and not again,
+            'settings_off': bool(off and actual and actual.get('weekly') is False),
+            'disabled_suppressed': not suppressed and len(attempts) == 1,
+            'settings_restored': restored == original,
+            'visible_toast': 'OS notification policy controls visibility; API acceptance only'}
+
+
 def smoke(shell):
     from onetop.desktop_startup import local_json
     from onetop.windows_runtime import package_identity
@@ -484,6 +562,7 @@ def smoke(shell):
                               existing_data_preserved=migration_ok,
                               update_channel=(local_json(port, '/api/updates') or {}).get('channel'))
                 result['quick_native'] = quick_native_checks(shell)
+                result['notifications_native'] = notification_native_checks(shell)
                 if package_identity():
                     from PIL import ImageGrab
                     ImageGrab.grab(all_screens=True).save(Path(report).with_suffix('.png'))
