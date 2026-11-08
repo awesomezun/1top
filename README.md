@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/awesomezun/1top/releases/tag/v4.7.0"><img alt="Release 4.7.0" src="https://img.shields.io/badge/release-4.7.0_preview-9dff3c?style=flat-square&labelColor=15181c"></a>
+  <a href="https://github.com/awesomezun/1top/releases/tag/v4.8.0"><img alt="Release 4.8.0" src="https://img.shields.io/badge/release-4.8.0_preview-9dff3c?style=flat-square&labelColor=15181c"></a>
   <img alt="macOS, Windows, iPhone and Android" src="https://img.shields.io/badge/macOS_·_Windows_·_iPhone_·_Android-6ccfa9?style=flat-square&labelColor=15181c">
   <img alt="Korean, English and Chinese" src="https://img.shields.io/badge/한국어_·_English_·_中文-9ab9ff?style=flat-square&labelColor=15181c">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-e9b25c?style=flat-square&labelColor=15181c"></a>
@@ -38,15 +38,15 @@ See which AI is running on which computer, how fast it burns your weekly limit a
 
 | | Platform | Get it |
 | :---: | --- | --- |
-| <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13+ | [**1top-4.7.0-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v4.7.0/1top-4.7.0-macos-arm64.dmg) |
-| <img src="docs/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.7.0-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.7.0/1top-4.7.0-windows-x64-setup.exe) |
-| <img src="https://cdn.simpleicons.org/android/3DDC84" width="22" alt=""> | **Android** 7+ | [**1top-4.7.0-android.apk**](https://github.com/awesomezun/1top/releases/download/v4.7.0/1top-4.7.0-android.apk) · Google Play coming soon |
+| <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13+ | [**1top-4.8.0-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v4.8.0/1top-4.8.0-macos-arm64.dmg) |
+| <img src="docs/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.8.0-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.8.0/1top-4.8.0-windows-x64-setup.exe) |
+| <img src="https://cdn.simpleicons.org/android/3DDC84" width="22" alt=""> | **Android** 7+ | [**1top-4.8.0-android.apk**](https://github.com/awesomezun/1top/releases/download/v4.8.0/1top-4.8.0-android.apk) · Google Play coming soon |
 | <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **iPhone** | App Store coming soon |
 | 🌐 | **Browser** | [1top.si/app](https://1top.si/app?demo=1) — the demo needs no install |
 
-4.7.0 is a preview. The files, `SHA256SUMS` and `build-info.json` are in the [release](https://github.com/awesomezun/1top/releases/tag/v4.7.0). The Mac app is not notarized yet and the Windows installer is not code-signed yet, so macOS and Windows may ask you to confirm the first launch.
+4.8.0 is a preview. The files, `SHA256SUMS` and `build-info.json` are in the [release](https://github.com/awesomezun/1top/releases/tag/v4.8.0). The Mac app is not notarized yet and the Windows installer is not code-signed yet, so macOS and Windows may ask you to confirm the first launch.
 
-**New in 4.7.0:** a session's account follows you when you switch accounts in the middle of it, closing the Windows dashboard window lets go of its page as on the Mac, and a computer nobody is watching reports every 5 minutes, switching to every 3 seconds the moment your phone or the web opens it. 4.6.1 made the app much lighter on memory.
+**New in 4.8.0:** compare measured usage with your subscription cost, review weekly working and waiting time, and receive local quota and weekly-summary notifications. Unknown model prices and plan costs stay separate from confirmed savings.
 
 ## What you can see
 

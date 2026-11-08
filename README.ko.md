@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/awesomezun/1top/releases/tag/v4.7.0"><img alt="릴리스 4.7.0" src="https://img.shields.io/badge/릴리스-4.7.0_프리뷰-9dff3c?style=flat-square&labelColor=15181c"></a>
+  <a href="https://github.com/awesomezun/1top/releases/tag/v4.8.0"><img alt="릴리스 4.8.0" src="https://img.shields.io/badge/릴리스-4.8.0_프리뷰-9dff3c?style=flat-square&labelColor=15181c"></a>
   <img alt="macOS, Windows, iPhone, Android" src="https://img.shields.io/badge/macOS_·_Windows_·_iPhone_·_Android-6ccfa9?style=flat-square&labelColor=15181c">
   <img alt="한국어, 영어, 중국어" src="https://img.shields.io/badge/한국어_·_English_·_中文-9ab9ff?style=flat-square&labelColor=15181c">
   <a href="LICENSE"><img alt="MIT 라이선스" src="https://img.shields.io/badge/라이선스-MIT-e9b25c?style=flat-square&labelColor=15181c"></a>
@@ -39,15 +39,15 @@
 
 | | 플랫폼 | 받기 |
 | :---: | --- | --- |
-| <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13 이상 | [**1top-4.7.0-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v4.7.0/1top-4.7.0-macos-arm64.dmg) |
-| <img src="docs/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.7.0-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.7.0/1top-4.7.0-windows-x64-setup.exe) |
-| <img src="https://cdn.simpleicons.org/android/3DDC84" width="22" alt=""> | **Android** 7 이상 | [**1top-4.7.0-android.apk**](https://github.com/awesomezun/1top/releases/download/v4.7.0/1top-4.7.0-android.apk) · Google Play 준비 중 |
+| <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13 이상 | [**1top-4.8.0-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v4.8.0/1top-4.8.0-macos-arm64.dmg) |
+| <img src="docs/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.8.0-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.8.0/1top-4.8.0-windows-x64-setup.exe) |
+| <img src="https://cdn.simpleicons.org/android/3DDC84" width="22" alt=""> | **Android** 7 이상 | [**1top-4.8.0-android.apk**](https://github.com/awesomezun/1top/releases/download/v4.8.0/1top-4.8.0-android.apk) · Google Play 준비 중 |
 | <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **iPhone** | App Store 준비 중 |
 | 🌐 | **브라우저** | [1top.si/app](https://1top.si/app?demo=1) — 체험은 설치가 필요 없습니다 |
 
-4.7.0은 프리뷰입니다. 파일과 `SHA256SUMS`, `build-info.json`은 [릴리스](https://github.com/awesomezun/1top/releases/tag/v4.7.0)에 있습니다. 맥 앱은 아직 공증 전이고 윈도우 설치 파일은 아직 코드 서명 전이라, 처음 실행할 때 macOS와 Windows가 확인을 물을 수 있습니다.
+4.8.0은 프리뷰입니다. 파일과 `SHA256SUMS`, `build-info.json`은 [릴리스](https://github.com/awesomezun/1top/releases/tag/v4.8.0)에 있습니다. 맥 앱은 아직 공증 전이고 윈도우 설치 파일은 아직 코드 서명 전이라, 처음 실행할 때 macOS와 Windows가 확인을 물을 수 있습니다.
 
-**4.7.0에서 달라진 점:** 세션 도중 계정을 바꾸면 세션의 계정 표시도 따라 바뀌고, 윈도우 대시보드 창을 닫으면 맥처럼 웹 화면을 정리하며, 아무도 보지 않는 컴퓨터는 5분마다 보고하다가 휴대폰이나 웹으로 여는 순간 3초 간격으로 바뀝니다. 4.6.1에서는 메모리를 크게 줄였습니다.
+**4.8.0에서 달라진 점:** 사용량을 구독료와 비교하는 본전 리포트, 작업·대기 시간을 정리한 주간 리포트, 한도·주간 요약 알림을 추가했습니다. 가격이나 요금제를 확인하지 못한 사용량은 확인된 절약 금액과 구분합니다.
 
 ## 볼 수 있는 것
 
