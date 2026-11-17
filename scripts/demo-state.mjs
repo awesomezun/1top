@@ -1,6 +1,6 @@
 // An invented collector for screenshots and demos of the desktop dashboard and the menu bar and tray
 // panels: /api/state, /api/history and the mailbox in the shape the real collector answers with
-// (agent/onetop/server.py), with token use shaped like real use (tests/fixtures/demo/demo-usage.js). Projects,
+// (agent/onetop/server.py), with token use shaped like real use (site/src/demo-usage.js). Projects,
 // paths, accounts and terminals are made up.
 //   node scripts/demo-state.mjs [now] [period] > state.json
 //   import {demoState, demoHistory, demoMailbox} from './scripts/demo-state.mjs'
@@ -8,10 +8,11 @@
 // as the real collector writes them, and the dashboard translates them.
 // anchor is when the demo began: sessions stopped before it stay stopped, and limits reset relative to it.
 import {readFileSync} from 'node:fs';
-const VERSION=readFileSync(new URL('../pyproject.toml',import.meta.url),'utf8').match(/^version\s*=\s*"([^"]+)"/m)[1];
-import {vector} from '../tests/fixtures/demo/demo-usage.js';
-import {WORLD} from '../tests/fixtures/demo/demo-world.js';
-import {machines as worldMachines,accounts as worldAccounts,earlierMessages,DAY,WEEK,HISTORY_DAYS,STARTED} from '../tests/fixtures/demo/demo-model.js';
+const VERSION=JSON.parse(readFileSync(new URL('../mobile/package.json',import.meta.url),'utf8')).version;
+import {vector} from '../site/src/demo-usage.js';
+import {WORLD} from '../site/src/demo-world.js';
+import {demoReports} from '../site/src/demo-reports.js';
+import {machines as worldMachines,accounts as worldAccounts,earlierMessages,DAY,WEEK,HISTORY_DAYS,STARTED} from '../site/src/demo-model.js';
 
 const PERIODS=[['24h','24시간',86400],['12h','12시간',43200],['5h','5시간',18000],['1h','1시간',3600],['30m','30분',1800],['10m','10분',600]];
 const HOME='/Users/demo',ORCA=HOME+'/orca/workspaces';
@@ -161,7 +162,8 @@ export function demoState(now=Date.now()/1000,{period='1h',anchor=now,lang='ko'}
  const busy=Math.min(1,m.list.reduce((n,s,j)=>n+minuteAt(j,now-60),0)/(SCALE*3)),apps=[...new Set(['Orca','Claude',...ROWS.map(r=>r[7])])];
  const history=Array.from({length:300},(_,k)=>{const t=now-(299-k)*3,b=Math.min(1,m.list.reduce((n,s,j)=>n+minuteAt(j,t),0)/(SCALE*3));
   return {cpu:round(THIS.cpu[0]+THIS.cpu[1]*b,1),memory:round(58+3*b,1),rx:Math.round(THIS.network.rx[0]+THIS.network.rx[1]*b),t,tx:Math.round(THIS.network.tx[0]+THIS.network.tx[1]*b)};});
- return {account_quotas:quotas,action_token:'demo-token',
+ // This computer's reports (the MacBook Pro), as the web demo makes them for each computer.
+ return {account_quotas:quotas,action_token:'demo-token',reports:demoReports(0,now),notices:[],notification_settings:{limit:true,weekly:true},
   actions:[{action:'pause',message:'작업이 멈춘 것을 확인했습니다. 세션을 보존했으며, 재개 버튼으로 새 요청을 보낼 수 있습니다.',project:'mobile-app',sid:'s7',t:anchor-12*60,terminal:'Mobile'},
    {action:'focus',message:'Sent a request to bring the host application forward on that computer.',project:'checkout-web',sid:'s1',t:anchor-40*60,terminal:'Checkout UI'}],
   applications:apps.map((name,i)=>({evidence:'application_process',name,note:'',path:APPS[name]||'/Applications/'+name+'.app',pid:3100+i*11})),

@@ -1,0 +1,58 @@
+/* Remote-only parts added to the desktop dashboard, in its own tokens (--line, --panel, --ink, --muted). */
+.remote .rail-bottom .remote-link,.remote .rail-bottom #remoteSignOut{display:block}
+.remote .rail-bottom #remoteSignOut{margin:0;padding:0;border:0;background:none;color:var(--muted);font:inherit;text-align:left;cursor:pointer}
+.remote .rail-bottom #remoteSignOut:hover{color:var(--ink)}
+.remote .rail-bottom #remoteSignOut[hidden],.remote .remote-notice[hidden]{display:none}
+.remote .remote-computers{margin:0 0 18px}
+.remote .remote-computers-head h2{margin:0;font-size:var(--type-title,15px);font-weight:600}
+.remote .remote-computers-head p{margin:4px 0 12px;color:var(--muted);font-size:var(--type-caption,11.5px)}
+.remote .remote-computer-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.remote .remote-computer{display:grid;align-content:start;border:1px solid var(--line);border-radius:var(--radius,10px);background:var(--panel);overflow:hidden}
+.remote .remote-computer:hover{border-color:var(--muted)}
+.remote .remote-computer-pick{display:grid;gap:7px;align-content:start;padding:14px 16px;border:0;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.remote .remote-computer-disconnect{justify-self:start;margin:0 16px 12px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--muted);font:inherit;font-size:var(--type-caption,11.5px);cursor:pointer}
+.remote .remote-computer-disconnect:hover{border-color:color-mix(in srgb,var(--red,#f08a8a) 50%,transparent);color:var(--red,#f08a8a)}
+.remote .remote-computer.selected{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.remote .remote-computer-pick>b{display:flex;align-items:center;gap:7px;min-width:0;font-size:var(--type-body,13px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.remote .remote-computer-pick>small{color:var(--dim);font-size:var(--type-caption,11.5px)}
+.remote .remote-computer .dot.offline{background:#bd9d6a}
+.remote .remote-meter{display:grid;grid-template-columns:52px minmax(0,1fr) 38px;align-items:center;gap:8px;font-size:var(--type-caption,11.5px)}
+.remote .remote-meter small{color:var(--muted)}
+.remote .remote-meter i{height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.remote .remote-meter u{display:block;height:100%;background:var(--accent)}
+.remote .remote-meter em{font-style:normal;text-align:right;font-variant-numeric:tabular-nums}
+/* Paywall B over the demo (remote-paywall.js): the bar above the page's foot and the sheet from below. */
+.paywall-bar{position:fixed;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:10px;width:min(460px,calc(100% - 32px));padding:10px 16px;border:1px solid var(--line);border-radius:26px;background:color-mix(in srgb,var(--panel) 88%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 10px 30px -12px rgba(0,0,0,.5);font-size:13px;color:var(--amber,#e9b25c)}
+.paywall-bar>span:nth-child(2){flex:1}
+.paywall-dot{width:7px;height:7px;border-radius:50%;background:var(--amber,#e9b25c)}
+.paywall-bar button{border:0;background:none;padding:0;color:var(--lcd,#9dff3c);font:600 14px var(--font);cursor:pointer}
+.paywall-sheet{position:fixed;inset:auto 0 0 0;margin:0 auto;width:min(520px,100%);max-height:92vh;border:1px solid var(--line);border-bottom:0;border-radius:22px 22px 0 0;padding:10px 20px max(20px,env(safe-area-inset-bottom));background:var(--panel);color:var(--ink);font-family:var(--font)}
+.paywall-sheet[open]{display:flex;flex-direction:column;gap:12px;animation:paywallUp .45s cubic-bezier(.2,.8,.3,1)}
+.paywall-sheet::backdrop{background:rgba(0,0,0,.45)}
+@keyframes paywallUp{from{transform:translateY(100%)}to{transform:none}}
+@media (prefers-reduced-motion:reduce){.paywall-sheet[open]{animation:none}}
+.paywall-grab{align-self:center;width:36px;height:5px;border-radius:3px;background:var(--line)}
+.paywall-head{display:flex;gap:10px;align-items:flex-start}
+.paywall-head h2{flex:1;margin:0;font-size:19px;line-height:1.35}
+.paywall-close{flex:none;width:30px;height:30px;border:0;border-radius:50%;background:var(--raised,#1b1e24);color:var(--muted);cursor:pointer}
+.paywall-lock{margin:0;font-size:12.5px;color:var(--amber,#e9b25c)}
+.paywall-plans{display:flex;flex-direction:column;gap:8px;padding-top:8px}
+.paywall-plan{position:relative;display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:14px;background:var(--raised,#1b1e24);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.paywall-plan.on{border-color:var(--lcd,#9dff3c);background:color-mix(in srgb,var(--lcd,#9dff3c) 7%,var(--panel))}
+.paywall-radio{flex:none;width:20px;height:20px;border:1.5px solid var(--dim,#747c8a);border-radius:50%;display:grid;place-items:center}
+.paywall-plan.on .paywall-radio{border-color:var(--lcd,#9dff3c)}.paywall-plan.on .paywall-radio::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--lcd,#9dff3c)}
+.paywall-name{flex:1;display:flex;flex-direction:column}.paywall-name small,.paywall-price small{color:var(--muted);font-size:12px}
+.paywall-price{display:flex;flex-direction:column;align-items:flex-end}
+.paywall-badge{position:absolute;top:-10px;left:12px;padding:2px 8px;border-radius:999px;background:var(--lcd,#9dff3c);color:#0c1400;font-size:10.5px;font-weight:700}
+.paywall-cta{display:flex;flex-direction:column;align-items:center;width:100%;padding:13px 12px;border:0;border-radius:14px;background:var(--lcd,#9dff3c);color:#0c1400;font:700 16px var(--font);cursor:pointer}
+.paywall-cta small{font-size:11.5px;font-weight:500;opacity:.75;margin-top:2px}
+.paywall-note{margin:0;text-align:center;font-size:12.5px;color:var(--muted)}
+.paywall-links{display:flex;justify-content:center;gap:16px;margin:0;font-size:12.5px}.paywall-links a{color:var(--muted)}
+.paywall-fine{margin:0;text-align:center;font-size:10.5px;line-height:1.45;color:var(--dim,#747c8a)}
+:root[data-theme=light] .paywall-bar{color:var(--amber,#9a6410)}
+/* The dashboard's button:hover would paint over these; each keeps its own colour under the pointer. */
+.paywall-sheet .paywall-cta:hover:not(:disabled){background:color-mix(in srgb,var(--lcd,#9dff3c) 88%,#fff)}
+.paywall-sheet .paywall-plan:hover:not(:disabled){background:var(--raised,#1b1e24)}.paywall-sheet .paywall-plan.on:hover:not(:disabled){background:color-mix(in srgb,var(--lcd,#9dff3c) 9%,var(--panel))}
+.paywall-sheet .paywall-close:hover:not(:disabled){background:var(--hover);color:var(--ink)}
+.paywall-bar button:hover:not(:disabled){background:none;text-decoration:underline;text-underline-offset:3px}
+.paywall-sheet .paywall-cta small{color:#0c1400}

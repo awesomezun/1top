@@ -277,6 +277,7 @@ vm.runInContext(`selectedPeriod='30m';render();`,context);
 assert.deepEqual(providerTags(),['Claude','Codex','GLM']);
 assert.deepEqual(appTags(),['Zed','Orca','Terminal','Aside']);
 assert.match(html,/<img class="brand-mark" src="\/brand-mark_v1\.1\.0\.png"/);
+assert.deepEqual(fs.readFileSync(new URL('../agent/onetop/dist/brand-mark_v1.1.0.png',import.meta.url)),fs.readFileSync(new URL('../site/public/brand/v1.1.0/mark.png',import.meta.url)));
 assert.match(css,/\.session-summary \.summary-mini-track\{position:absolute;/);
 console.log('Sidebar follows actual working-first root order and period changes; canonical logo and compact absolute-positioned summary bars preserved.');
 

@@ -1,0 +1,67 @@
+{
+  "version": "4.2.0",
+  "app_version": "2.4.0",
+  "data": "generated synthetic fixtures only",
+  "sources": {
+    "desktop/OneTop.swift": "2562e218cb3cce60c1e3bfd0b8eb919e0a51452416fb275c7dbc5a92300b401d",
+    "desktop/QuickDashboard.swift": "d757c02e0a1f7d47d9dd39aa42a6bc0a229650182f238c4e588c38c19ab8dbf6",
+    "desktop/DashboardModel.swift": "9463f8566a136aabd8dd40a548ba43533c99ba2f4075fd060d840c7024815623",
+    "agent/onetop/dist/index.html": "52850148f6c454fc8973c7a0495a579c41f57cedd245f73b7fb8b3b458657360",
+    "agent/onetop/dist/app.js": "5d7bea9bbf6927b49ad6cee6bba1c88c72aae87e78b3e8823d8fb117fcaa06e9",
+    "agent/onetop/dist/style.css": "c3ad0d995462553bb4aec35b4f68f8e45615348808acec90ac192b65748d5325",
+    "agent/onetop/dist/maps.js": "f4842b015888a28cf046b9df34b7f8c4118af650e946fbd375bb07d0998358f4",
+    "agent/onetop/dist/maps.css": "f1d54114ef19a5df2eb7837c075434907e522aedcdfeb15773f9c16865f90803",
+    "scripts/showcase_v4.2.0/fixture_server.py": "0ac7c039969050076bb39374f3d84ffc540c36e9e5ff7f74e765b5095c830c11",
+    "scripts/showcase_v4.2.0/export-icons.swift": "8fa341c029b562f827300813ae62066f46fcd1cf62f82d3db51384a24d3aec10"
+  },
+  "media": {
+    "accounts.jpg": {
+      "sha256": "fe1b61f0f94c40029ca10300ef5cb46c540eb1e409f70ccbc629def068a17ebb",
+      "bytes": 56524
+    },
+    "accounts.mp4": {
+      "sha256": "58dde878f51b1177e5c36cac232969a9dfe6966bfd116dba594be7c89f578b87",
+      "bytes": 83876
+    },
+    "desktop.jpg": {
+      "sha256": "e36d345c0f8f50a8b0147df29371abb8e18ffc73f6bb9a8f51770549340f42b9",
+      "bytes": 185841
+    },
+    "desktop.mp4": {
+      "sha256": "929af6250e4f5f64af87fac6ef5a50b18f27973a572e6b5a9d99544e6b52f492",
+      "bytes": 532609
+    },
+    "icons/1top.png": {
+      "sha256": "3c5203ac2154811bd33978be17c4c9f3cb5660d29a458614772724339e4e281d",
+      "bytes": 1080
+    },
+    "icons/apple.png": {
+      "sha256": "1f88ce4d5b42a652f517339c7f33f4292ded9a9b2a315bc88007d95d75928096",
+      "bytes": 881
+    },
+    "icons/battery.png": {
+      "sha256": "2ac83a6158f75a9c0e9a13fcc164848d1cc229c479bb88a65214722d5ba15aa8",
+      "bytes": 643
+    },
+    "icons/wifi.png": {
+      "sha256": "3565e301db42051431c431ddb91541660b30a4e181dae5a99418e565c3eef237",
+      "bytes": 1330
+    },
+    "maps.jpg": {
+      "sha256": "458b9fa9b5968233e7de91cdbbfff683685a8013a8864f5dc6fa1d74d136293c",
+      "bytes": 200704
+    },
+    "maps.mp4": {
+      "sha256": "d3c9cd91d2aad025fdcc27fffb7da69102534f1c0de7c11f60cf16323a900c62",
+      "bytes": 884552
+    },
+    "menu.jpg": {
+      "sha256": "da241945aa3fdb7d37a603c480b7daf7724f42aea6e5aeb5e71508d709d366ec",
+      "bytes": 49032
+    },
+    "menu.mp4": {
+      "sha256": "67fc5a1f5461315bf16de897a611537456dd616eb48d87dd051f8994d5014b58",
+      "bytes": 91520
+    }
+  }
+}

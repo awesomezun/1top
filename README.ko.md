@@ -11,7 +11,7 @@
   <a href="https://github.com/awesomezun/1top/releases/tag/v4.8.0"><img alt="릴리스 4.8.0" src="https://img.shields.io/badge/릴리스-4.8.0_프리뷰-9dff3c?style=flat-square&labelColor=15181c"></a>
   <img alt="macOS, Windows, iPhone, Android" src="https://img.shields.io/badge/macOS_·_Windows_·_iPhone_·_Android-6ccfa9?style=flat-square&labelColor=15181c">
   <img alt="한국어, 영어, 중국어" src="https://img.shields.io/badge/한국어_·_English_·_中文-9ab9ff?style=flat-square&labelColor=15181c">
-  <a href="LICENSE"><img alt="MIT 라이선스" src="https://img.shields.io/badge/라이선스-MIT-e9b25c?style=flat-square&labelColor=15181c"></a>
+  <a href="LICENSE"><img alt="AGPL-3.0 라이선스" src="https://img.shields.io/badge/라이선스-AGPL--3.0-e9b25c?style=flat-square&labelColor=15181c"></a>
 </p>
 
 <p align="center">
@@ -130,4 +130,4 @@ Apple Silicon 앱은 `scripts/build-macos.sh`로 빌드합니다(`build/1top_v<�
 
 도구 어댑터를 더하는 방법은 [CONTRIBUTING.md](CONTRIBUTING.md)를 봐 주세요. 취약점은 [SECURITY.md](SECURITY.md)에 적힌 대로 비공개로 알려 주세요. 공개 이슈에 자격 증명, 실제 대화 기록, 개인 스크린샷을 올리지 말아 주세요.
 
-[MIT 라이선스](LICENSE)
+[GNU AGPL-3.0 라이선스](LICENSE)

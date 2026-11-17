@@ -1,0 +1,22 @@
+{
+  "version": "1.2.0",
+  "asset": "cover.png",
+  "purpose": "1top.si Open Graph and social sharing image",
+  "generator": "OpenAI image generation edit",
+  "predecessor": "site/public/og/v1.1.1/cover.png",
+  "typography_reference": "docs/design/type-candidates_v1.0.0/logos-compact.png; selected panel A, IBM Plex Sans",
+  "typography_requested": "IBM Plex Sans, semibold/bold visual style; modest spacing before top",
+  "canonical_waveform_reference": "site/public/brand/v1.1.0/mark.png",
+  "width": 1730,
+  "height": 909,
+  "bytes": 1421050,
+  "sha256": "35eca05bbc4118e13f7eb1e3f37fd1f17ed12b87da296f20d5d4e7bbb285a053",
+  "visual_review": [
+    "Numeral 1 visibly has the angled top flag and wide horizontal bottom foot.",
+    "A clear modest gap separates 1 and top.",
+    "Enlarged brand lockup retained; connected mint waveform remains recognizable.",
+    "Headline, secondary text, treemap, background grid and overall composition retained."
+  ],
+  "fidelity_limit": "Generated raster typography visually follows the chosen IBM Plex Sans reference; actual font embedding or pixel-identical glyphs are not claimed.",
+  "privacy": "No private session data or numerical usage claims."
+}

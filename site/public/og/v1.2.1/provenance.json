@@ -1,0 +1,20 @@
+{
+  "version": "1.2.1",
+  "asset": "cover.png",
+  "purpose": "1top.si Open Graph and social sharing image",
+  "generator": "OpenAI image generation edit",
+  "predecessor": "site/public/og/v1.2.0/cover.png",
+  "width": 1730,
+  "height": 909,
+  "bytes": 1436769,
+  "sha256": "b127b1e829e44c7996fee2ee84af50776f79347f90de85122490d3e68ded58e9",
+  "change": "Removed deliberate extra spacing between numeral 1 and top; wordmark reads as one naturally kerned word.",
+  "typography_requested": "IBM Plex Sans visual style, normal natural kerning without added tracking",
+  "visual_review": [
+    "Numeral 1 retains an angled top flag and horizontal bottom foot.",
+    "The 1top wordmark is contiguous without the earlier artificial gap; glyphs remain distinct.",
+    "Mint waveform, white enlarged wordmark, headline and treemap composition retained."
+  ],
+  "fidelity_limit": "Generated raster follows the requested typography visually; actual font embedding, exact kerning values and pixel-identical rendering are not claimed.",
+  "privacy": "No private session data or numerical usage claims."
+}

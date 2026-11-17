@@ -51,7 +51,7 @@ for(const phase of ['responding','working','writing'])assert.ok(c.TYPING[phase],
 
 // The demo relay keeps a mailbox like a computer: the conversation demo's earlier messages (demo-world.js)
 // come first, and a sent message follows the script, each step at its time, to the scripted reply.
-const {demoRelay}=await import('./fixtures/demo/remote-demo.js'),{WORLD}=await import('./fixtures/demo/demo-world.js');
+const {demoRelay}=await import('../site/src/remote-demo.js'),{WORLD}=await import('../site/src/demo-world.js');
 const relay=demoRelay(),device=relay.devices()[0],session=device.snapshot.sessions.find(s=>s.id===WORLD.conversation.session);
 assert.ok(session.capabilities.includes('mailbox')&&session.capabilities.includes('message_images')&&session.status==='working');
 const ask={device_id:device.id,session_id:session.id,control_key:session.control_key};

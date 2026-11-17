@@ -1,0 +1,12 @@
+{
+  "version": "1.1.0",
+  "source": "Existing AppKit waveform.path symbol from desktop/OneTop.swift and desktop/QuickDashboard.swift",
+  "exporter": "scripts/brand_v1.1.0/export.swift",
+  "brand_color": "#6ecca8",
+  "menu_color": "#ffffff",
+  "files": {
+    "icon.png": "9eb3dc79e6a3851a6d94da1b5cf2b0589b99a6edb12af6f16797a9ca4f82631d",
+    "menu-mark.png": "57c06eaa082fd3601493a878fdb20c656475c91aea08eaa054746102402e9ecf",
+    "mark.png": "c5c79e34170c482419cc3584704ec4706468bceace444ede2a832085bc220508"
+  }
+}

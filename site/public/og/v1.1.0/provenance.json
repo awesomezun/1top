@@ -1,0 +1,15 @@
+{
+  "version": "1.1.0",
+  "asset": "cover.png",
+  "purpose": "Open Graph and social sharing image for 1top.si",
+  "generator": "OpenAI image generation edit",
+  "predecessor": "site/public/og/v1.0.0/cover.png",
+  "canonical_reference": "site/public/brand/v1.1.0/mark.png",
+  "width": 1730,
+  "height": 909,
+  "sha256": "eb42d23f55e636e10b463d76db6c4770cac1a0aa053c222279966ed500a9247a",
+  "bytes": 1506869,
+  "correction": "Replaced the incorrect detached equalizer-bar icon with the existing connected zigzag waveform identity. White 1top wordmark retained.",
+  "visual_review": "Compared with canonical native waveform export and user-provided lockup. Connected baseline, central tall peak and deep neighboring valleys match the intended identity. The native exported mark remains the authoritative source; generative output is not pixel-identical in color or shape.",
+  "privacy": "No private session data or numerical usage claims."
+}

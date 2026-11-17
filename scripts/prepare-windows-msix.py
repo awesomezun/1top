@@ -96,7 +96,7 @@ def main():
     from PIL import Image
     assets = stage / 'Assets'
     assets.mkdir()
-    with Image.open(root / 'assets/brand/v1.1.0/icon.png') as icon:
+    with Image.open(root / 'site/public/brand/v1.1.0/icon.png') as icon:
         for filename, size in [('StoreLogo.png', 50), ('Square150x150Logo.png', 150), ('Square44x44Logo.png', 44),
                                ('Square44x44Logo.targetsize-44_altform-unplated.png', 44)]:
             icon.convert('RGBA').resize((size, size), Image.Resampling.LANCZOS).save(assets / filename)

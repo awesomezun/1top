@@ -1,0 +1,40 @@
+{
+  "version": "4.0.0",
+  "app_version": "2.2.0",
+  "data": "generated synthetic fixtures only",
+  "sources": {
+    "desktop/OneTop.swift": "bd64e139c82cd86fbfd8808f9b13ee8350cb337cf60ef93bea44052474ca02cf",
+    "desktop/QuickDashboard.swift": "cb8d345efe546e0edff1b56c65bdf56d657e65c5d9656f30facf68600235c7e4",
+    "desktop/DashboardModel.swift": "e33a9241b75dfd099514df76a9c39b28a0048d622925f9796bff6bf18b37d9ae",
+    "agent/onetop/dist/index.html": "ef827165cc40673738fde64154bd20e87e6ab501ca936e22fe06ab65fafa9107",
+    "agent/onetop/dist/app.js": "706d918160d020948e0d07cc5ad2fb190fa91f578fc701deba462932fb0759b5",
+    "agent/onetop/dist/style.css": "a8782382c3aa296436d94ba39745a6db6194f855c937a67e1b54cd447e649349",
+    "scripts/showcase_v4.0.0/fixture_server.py": "f173bd0e6947386f1235726544ec14bf85a548da745451f67d7b1e89b102517c"
+  },
+  "media": {
+    "accounts.jpg": {
+      "sha256": "e628d5fb76d55fb605576b8b9b9806de946bdf294f05dea87fdb61cb825ed7fe",
+      "bytes": 44710
+    },
+    "accounts.mp4": {
+      "sha256": "57a0bb155231f3303912ada65f3ea2a483202ff0f7eafa54b61a6c4c600ada14",
+      "bytes": 86823
+    },
+    "desktop.jpg": {
+      "sha256": "55833ef14bf25176e912e8cc78399bfe73b800584118917e2808ccc5b25bb4b8",
+      "bytes": 182314
+    },
+    "desktop.mp4": {
+      "sha256": "c1fc46ae1073a18d5797e240b01138831f3cebb5109fa041005213487e3133bd",
+      "bytes": 422237
+    },
+    "menu.jpg": {
+      "sha256": "4a15ea6e94b4fc1c4354642c83ab79574258aa8e09992f17e7a71ad0ec0a9450",
+      "bytes": 49536
+    },
+    "menu.mp4": {
+      "sha256": "77757eeac2fad52f01d314e2a1e5091766e15617e646f2805d0b8b8e00bd6415",
+      "bytes": 97396
+    }
+  }
+}

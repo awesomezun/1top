@@ -1,0 +1,14 @@
+{
+  "version": "2.5.0",
+  "asset": "cover.png",
+  "purpose": "1top.si Open Graph and social sharing image",
+  "generator": "Codex CLI built-in image_gen background plate + code-drawn usage share tiles and IBM Plex Sans type",
+  "predecessor": "site/public/og/v1.2.2/cover.png",
+  "source": "docs/design/og-image_v2.5.0/og-M2-usage-tiles_v2.5.0.png",
+  "width": 1672,
+  "height": 878,
+  "bytes": 446966,
+  "sha256": "7d7b78aae083d0bac44461d06efbd92562e3876237538ed1840043384b5d8bf8",
+  "change": "Large official lockup, hero headline Your AI work. / In view. and Sessions · Tokens · Computers on the left; a simplified usage share tile map with legible labels (website 37.7%, api-service 22.1%, research 13.2%, docs 7.9%) on the right.",
+  "privacy": "Example sessions and shares from the app demo recording; not usage claims."
+}

@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "asset": "icon.png",
+  "purpose": "Shared 1top native app icon and site favicon source",
+  "generator": "OpenAI image generation tool",
+  "reference": "site/public/media/v4.2.0/icons/1top.png",
+  "width": 1024,
+  "height": 1024,
+  "opaque": true,
+  "sha256": "9f2786f3b253031a787a03d1b8ab013f28e626cc347a22ff3c3f479f23664211",
+  "bytes": 784311,
+  "processing": "Generated as 1254 square; uniformly downsampled to required 1024 square with macOS sips. No cropping or content compositing. Original generation preserved.",
+  "visual_review": "Centered mint waveform identity, deep charcoal full square with unmasked corners, no lettering; reviewed at generated and final output."
+}

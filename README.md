@@ -10,7 +10,7 @@
   <a href="https://github.com/awesomezun/1top/releases/tag/v4.8.0"><img alt="Release 4.8.0" src="https://img.shields.io/badge/release-4.8.0_preview-9dff3c?style=flat-square&labelColor=15181c"></a>
   <img alt="macOS, Windows, iPhone and Android" src="https://img.shields.io/badge/macOS_·_Windows_·_iPhone_·_Android-6ccfa9?style=flat-square&labelColor=15181c">
   <img alt="Korean, English and Chinese" src="https://img.shields.io/badge/한국어_·_English_·_中文-9ab9ff?style=flat-square&labelColor=15181c">
-  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-e9b25c?style=flat-square&labelColor=15181c"></a>
+  <a href="LICENSE"><img alt="AGPL-3.0 license" src="https://img.shields.io/badge/license-AGPL--3.0-e9b25c?style=flat-square&labelColor=15181c"></a>
 </p>
 
 <p align="center">
@@ -129,4 +129,4 @@ Build the Apple Silicon app with `scripts/build-macos.sh` (it lands in `build/1t
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for adding a tool adapter, and report vulnerabilities privately as described in [SECURITY.md](SECURITY.md). Please never attach credentials, real conversation logs or private screenshots to a public issue.
 
-[MIT license](LICENSE)
+[GNU AGPL-3.0](LICENSE)

@@ -1,0 +1,67 @@
+{
+  "version": "4.8.0",
+  "status": "preview",
+  "signed": false,
+  "notarized": false,
+  "releases": "https://github.com/awesomezun/1top/releases/tag/v4.8.0",
+  "platforms": {
+    "macos": {
+      "architecture": "arm64",
+      "url": "https://github.com/awesomezun/1top/releases/download/v4.8.0/1top-4.8.0-macos-arm64.dmg",
+      "version": "4.8.0",
+      "status": "preview",
+      "signed": false,
+      "notarized": false,
+      "sha256": "e36e6f64ba3949b30a08e1624e83c61a66ae2731f65285278906fc494bb7127b",
+      "build": 18
+    },
+    "windows": {
+      "architecture": "x64",
+      "status": "microsoft-store-pending",
+      "distribution": "msix",
+      "url": null,
+      "store_product_id": null,
+      "signed": false,
+      "store_certified": false,
+      "legacy_preview": {
+        "architecture": "x64",
+        "url": "https://github.com/awesomezun/1top/releases/download/v4.8.0/1top-4.8.0-windows-x64-setup.exe",
+        "sha256": "3ad9b613ccf7320677e11be70239aeffca8a6d4864b1b0bdd9c3ec0151fb30d8",
+        "version": "4.8.0",
+        "signed": false,
+        "status": "preview"
+      },
+      "version": "4.8.0",
+      "test_msix": {
+        "version": "4.8.0.0",
+        "url": "https://github.com/awesomezun/1top/releases/download/v4.8.0/1top-4.8.0.0-windows-x64-test.msix",
+        "sha256": "cf9640a6b0e337dc88d9e339dde9d3d33d15339bb29fb517a12ad99030132a7f",
+        "status": "test-only",
+        "store_certified": false
+      }
+    },
+    "android": {
+      "status": "preview",
+      "version": "4.8.0",
+      "signed": true,
+      "url": "https://github.com/awesomezun/1top/releases/download/v4.8.0/1top-4.8.0-android.apk",
+      "sha256": "e1659a2bfa6fe3a1954ce863bbd7a55ac26a23f8b72fcc586223435d04bdb447",
+      "version_code": 21,
+      "bundle": {
+        "url": "https://github.com/awesomezun/1top/releases/download/v4.8.0/1top-4.8.0-android.aab",
+        "sha256": "c23e505263b4401c3e91b05846eec5605a7675770f6f3455e451c47ff6609ba9"
+      }
+    },
+    "ios": {
+      "status": "native-device-preview-store-distribution-pending",
+      "version": "4.8.0",
+      "build": 18,
+      "development": {
+        "status": "registered-device-only",
+        "bundle_id": "si.onetop.mobile.dev",
+        "url": "https://github.com/awesomezun/1top/releases/download/v4.8.0/1top-4.8.0-ios-development.ipa",
+        "sha256": "7730f23784f0624f1b79da67f0e54c5ae28dfe253c512d580688b633caa0fea2"
+      }
+    }
+  }
+}

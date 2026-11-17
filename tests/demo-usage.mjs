@@ -2,7 +2,7 @@
 // (mobile/test/parity.test.mjs, ios/OneTopTests/DemoUsageTests.swift), and the /app?demo relay built on
 // it reports periods, flow, sessions and limits that agree with each other.
 import assert from 'node:assert/strict';
-import {unit,usage,since,bins,computerMinutes,UNIT_CHECK} from './fixtures/demo/demo-usage.js';
+import {unit,usage,since,bins,computerMinutes,UNIT_CHECK} from '../site/src/demo-usage.js';
 
 assert.deepEqual(UNIT_CHECK.map(([a,b,c])=>unit(a,b,c)),[0.638385457219556,0.416402937611565,0.8966296215076,0.9844421946909279]);
 const now=1800000000.5,u=usage(23,1.2e6,[{weight:52,start:0,stop:Infinity},{weight:12,start:0,stop:now-3000}],now,now-600);
@@ -27,7 +27,7 @@ for(const seed of [23,37,61]){
 
 // The demo relay: the 1-hour period equals its flow, one tool carries most of the day, totals only grow.
 globalThis.setInterval=()=>0;
-const {demoRelay}=await import('./fixtures/demo/remote-demo.js');
+const {demoRelay}=await import('../site/src/remote-demo.js');
 const devices=demoRelay().devices(),byKind={};
 for(const d of devices){
  const s=d.snapshot,hour=s.periods.find(p=>p.key==='1h').tokens.reduce((a,b)=>a+b,0),flow=s.flow['1h'].bins.reduce((n,b)=>n+Object.values(b).reduce((a,c)=>a+c,0),0);
