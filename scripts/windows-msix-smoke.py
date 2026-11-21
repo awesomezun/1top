@@ -32,7 +32,8 @@ log.write_text('', encoding='utf-8')
 (profile / 'sessions').mkdir(exist_ok=True)
 script = temp / 'node_modules/@anthropic-ai/claude-code/cli.js'
 script.parent.mkdir(parents=True, exist_ok=True)
-script.write_text('const fs=require("fs"),p=require("path");fs.writeFileSync(p.join(process.env.CLAUDE_CONFIG_DIR,"sessions",process.pid+".json"),JSON.stringify({sessionId:process.env.FIXTURE_SESSION,status:"idle",cwd:process.cwd()}));setInterval(()=>{},1000);', encoding='utf-8')
+# Like Claude Code's own registry: pid and procStart (UTC) let the collector verify the process (session contract v1.1.0).
+script.write_text('const fs=require("fs"),p=require("path"),d=new Date(Date.now()-process.uptime()*1e3),z=n=>String(n).padStart(2,"0"),W=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],M=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];fs.writeFileSync(p.join(process.env.CLAUDE_CONFIG_DIR,"sessions",process.pid+".json"),JSON.stringify({pid:process.pid,procStart:W[d.getUTCDay()]+" "+M[d.getUTCMonth()]+" "+z(d.getUTCDate())+" "+z(d.getUTCHours())+":"+z(d.getUTCMinutes())+":"+z(d.getUTCSeconds())+" "+d.getUTCFullYear(),sessionId:process.env.FIXTURE_SESSION,status:"idle",cwd:process.cwd()}));setInterval(()=>{},1000);', encoding='utf-8')
 base = {'CLAUDE_CONFIG_DIR': str(profile), 'FIXTURE_SESSION': sid,
         'ONETOP_DATA': str(temp / 'state'), 'ONETOP_PORT': '18789'}
 results = []
