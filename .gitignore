@@ -26,3 +26,7 @@ site/.git/
 site/dist/
 
 cloud/.selfhost/
+
+# Internal docs (QA and release records, handoffs, design and research notes) live in the private
+# awesomezun/1top-docs repository. Clone it here as docs/ to read them beside the code; never commit them here.
+/docs/

@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://1top.si"><img src="docs/readme/v4.6.1/banner.png" alt="1top — 흩어진 AI 작업, 한눈에 보이게." width="100%"></a>
+  <a href="https://1top.si"><img src="assets/readme/v4.6.1/banner.png" alt="1top — 흩어진 AI 작업, 한눈에 보이게." width="100%"></a>
 </p>
 
 <p align="center">
@@ -33,14 +33,14 @@
 
 어떤 AI가 어느 컴퓨터에서 돌고, 주간 한도를 얼마나 빨리 쓰며, 계정마다 얼마나 남았는지 보여 줍니다. 맥 메뉴 막대, 윈도우 트레이, 브라우저, 휴대폰 어디서나 자동차 계기판처럼 읽고, 실행 중인 세션과 바로 대화합니다.
 
-![1top 계기판: 토큰 속도와 한도 소진 다이얼, 경고등, 계정별 연료 게이지, 세션 창](docs/readme/v4.6.0/cluster.jpg)
+![1top 계기판: 토큰 속도와 한도 소진 다이얼, 경고등, 계정별 연료 게이지, 세션 창](assets/readme/v4.6.0/cluster.jpg)
 
 ## 다운로드
 
 | | 플랫폼 | 받기 |
 | :---: | --- | --- |
 | <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13 이상 | [**1top-4.10.2-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v4.10.2/1top-4.10.2-macos-arm64.dmg) |
-| <img src="docs/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.10.2-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.10.2/1top-4.10.2-windows-x64-setup.exe) |
+| <img src="assets/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.10.2-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.10.2/1top-4.10.2-windows-x64-setup.exe) |
 | <img src="https://cdn.simpleicons.org/android/3DDC84" width="22" alt=""> | **Android** 7 이상 | [**1top-4.10.2-android.apk**](https://github.com/awesomezun/1top/releases/download/v4.10.2/1top-4.10.2-android.apk) · Google Play 준비 중 |
 | <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **iPhone** | App Store 준비 중 |
 | 🌐 | **브라우저** | [1top.si/app](https://1top.si/app?demo=1) — 체험은 설치가 필요 없습니다 |
@@ -70,28 +70,28 @@
 
 ### 대시보드
 
-![토큰 속도계, 주간 사용량, 토큰 흐름, 사용량 맵이 있는 대시보드](docs/readme/v4.6.0/dashboard.jpg)
+![토큰 속도계, 주간 사용량, 토큰 흐름, 사용량 맵이 있는 대시보드](assets/readme/v4.6.0/dashboard.jpg)
 
 | 세션 | 사용량 맵 |
 | --- | --- |
-| ![세션 표](docs/readme/v4.6.0/sessions.jpg) | ![사용량 맵](docs/readme/v4.6.0/usage-map.jpg) |
+| ![세션 표](assets/readme/v4.6.0/sessions.jpg) | ![사용량 맵](assets/readme/v4.6.0/usage-map.jpg) |
 | **세션과 대화** | **계정 한도** |
-| ![세션과 나누는 대화](docs/readme/v4.6.0/conversation.jpg) | ![계정 한도](docs/readme/v4.6.0/accounts.jpg) |
+| ![세션과 나누는 대화](assets/readme/v4.6.0/conversation.jpg) | ![계정 한도](assets/readme/v4.6.0/accounts.jpg) |
 | **계기판의 토큰 흐름** | **계기판의 한도** |
-| ![토큰 흐름을 보여 주는 계기판](docs/readme/v4.6.0/cluster-flow.jpg) | ![계정별 한도를 보여 주는 계기판](docs/readme/v4.6.0/cluster-limits.jpg) |
+| ![토큰 흐름을 보여 주는 계기판](assets/readme/v4.6.0/cluster-flow.jpg) | ![계정별 한도를 보여 주는 계기판](assets/readme/v4.6.0/cluster-limits.jpg) |
 
 ### 메뉴 막대와 트레이
 
 | macOS 메뉴 막대 | 계기판으로 | Windows 트레이 |
 | :---: | :---: | :---: |
-| <img src="docs/readme/v4.6.0/menu.jpg" alt="macOS 메뉴 막대 패널" width="260"> | <img src="docs/readme/v4.6.0/menu-cluster.jpg" alt="계기판으로 바꾼 메뉴 막대 패널" width="260"> | <img src="docs/readme/v4.6.0/tray.jpg" alt="Windows 트레이 패널" width="260"> |
+| <img src="assets/readme/v4.6.0/menu.jpg" alt="macOS 메뉴 막대 패널" width="260"> | <img src="assets/readme/v4.6.0/menu-cluster.jpg" alt="계기판으로 바꾼 메뉴 막대 패널" width="260"> | <img src="assets/readme/v4.6.0/tray.jpg" alt="Windows 트레이 패널" width="260"> |
 
 ### 아이폰과 안드로이드
 
 | | 대시보드 | 계기판 | 세션 | 한도 |
 | :---: | :---: | :---: | :---: | :---: |
-| **iPhone** | <img src="docs/readme/v4.6.0/iphone-dashboard.jpg" alt="아이폰 대시보드" width="180"> | <img src="docs/readme/v4.6.0/iphone-cluster.jpg" alt="아이폰 계기판" width="180"> | <img src="docs/readme/v4.6.0/iphone-sessions.jpg" alt="아이폰 세션" width="180"> | <img src="docs/readme/v4.6.0/iphone-limits.jpg" alt="아이폰 계정 한도" width="180"> |
-| **Android** | <img src="docs/readme/v4.6.0/android-dashboard.jpg" alt="안드로이드 대시보드" width="180"> | <img src="docs/readme/v4.6.0/android-cluster.jpg" alt="안드로이드 계기판" width="180"> | <img src="docs/readme/v4.6.0/android-sessions.jpg" alt="안드로이드 세션" width="180"> | <img src="docs/readme/v4.6.0/android-limits.jpg" alt="안드로이드 계정 한도" width="180"> |
+| **iPhone** | <img src="assets/readme/v4.6.0/iphone-dashboard.jpg" alt="아이폰 대시보드" width="180"> | <img src="assets/readme/v4.6.0/iphone-cluster.jpg" alt="아이폰 계기판" width="180"> | <img src="assets/readme/v4.6.0/iphone-sessions.jpg" alt="아이폰 세션" width="180"> | <img src="assets/readme/v4.6.0/iphone-limits.jpg" alt="아이폰 계정 한도" width="180"> |
+| **Android** | <img src="assets/readme/v4.6.0/android-dashboard.jpg" alt="안드로이드 대시보드" width="180"> | <img src="assets/readme/v4.6.0/android-cluster.jpg" alt="안드로이드 계기판" width="180"> | <img src="assets/readme/v4.6.0/android-sessions.jpg" alt="안드로이드 세션" width="180"> | <img src="assets/readme/v4.6.0/android-limits.jpg" alt="안드로이드 계정 한도" width="180"> |
 
 ## 동작 방식
 

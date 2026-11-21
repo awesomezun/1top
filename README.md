@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://1top.si"><img src="docs/readme/v4.6.1/banner.png" alt="1top — Your AI work. In view." width="100%"></a>
+  <a href="https://1top.si"><img src="assets/readme/v4.6.1/banner.png" alt="1top — Your AI work. In view." width="100%"></a>
 </p>
 
 <p align="center">
@@ -32,14 +32,14 @@
 
 See which AI is running on which computer, how fast it burns your weekly limit and what each account has left. Read it like a car's instrument cluster in the macOS menu bar, the Windows tray, the browser and on your phone, and talk to a running session from any of them.
 
-![The 1top cluster: token speed and limit burn dials, warning lights, a fuel gauge for each account and the sessions window](docs/readme/v4.6.0/cluster.jpg)
+![The 1top cluster: token speed and limit burn dials, warning lights, a fuel gauge for each account and the sessions window](assets/readme/v4.6.0/cluster.jpg)
 
 ## Download
 
 | | Platform | Get it |
 | :---: | --- | --- |
 | <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13+ | [**1top-4.10.2-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v4.10.2/1top-4.10.2-macos-arm64.dmg) |
-| <img src="docs/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.10.2-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.10.2/1top-4.10.2-windows-x64-setup.exe) |
+| <img src="assets/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.10.2-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.10.2/1top-4.10.2-windows-x64-setup.exe) |
 | <img src="https://cdn.simpleicons.org/android/3DDC84" width="22" alt=""> | **Android** 7+ | [**1top-4.10.2-android.apk**](https://github.com/awesomezun/1top/releases/download/v4.10.2/1top-4.10.2-android.apk) · Google Play coming soon |
 | <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **iPhone** | App Store coming soon |
 | 🌐 | **Browser** | [1top.si/app](https://1top.si/app?demo=1) — the demo needs no install |
@@ -69,28 +69,28 @@ Every screenshot uses invented example data, the same as the [browser demo](http
 
 ### Dashboard
 
-![Dashboard with the token speedometer, weekly usage, token flow and usage map](docs/readme/v4.6.0/dashboard.jpg)
+![Dashboard with the token speedometer, weekly usage, token flow and usage map](assets/readme/v4.6.0/dashboard.jpg)
 
 | Sessions | Usage maps |
 | --- | --- |
-| ![Session table](docs/readme/v4.6.0/sessions.jpg) | ![Usage maps](docs/readme/v4.6.0/usage-map.jpg) |
+| ![Session table](assets/readme/v4.6.0/sessions.jpg) | ![Usage maps](assets/readme/v4.6.0/usage-map.jpg) |
 | **Talk to a session** | **Account limits** |
-| ![A conversation with a session](docs/readme/v4.6.0/conversation.jpg) | ![Account limits](docs/readme/v4.6.0/accounts.jpg) |
+| ![A conversation with a session](assets/readme/v4.6.0/conversation.jpg) | ![Account limits](assets/readme/v4.6.0/accounts.jpg) |
 | **Token flow on the cluster** | **Limits on the cluster** |
-| ![The cluster showing token flow](docs/readme/v4.6.0/cluster-flow.jpg) | ![The cluster showing account limits](docs/readme/v4.6.0/cluster-limits.jpg) |
+| ![The cluster showing token flow](assets/readme/v4.6.0/cluster-flow.jpg) | ![The cluster showing account limits](assets/readme/v4.6.0/cluster-limits.jpg) |
 
 ### Menu bar and tray
 
 | macOS menu bar | As a cluster | Windows tray |
 | :---: | :---: | :---: |
-| <img src="docs/readme/v4.6.0/menu.jpg" alt="The macOS menu-bar panel" width="260"> | <img src="docs/readme/v4.6.0/menu-cluster.jpg" alt="The menu-bar panel as a cluster" width="260"> | <img src="docs/readme/v4.6.0/tray.jpg" alt="The Windows tray panel" width="260"> |
+| <img src="assets/readme/v4.6.0/menu.jpg" alt="The macOS menu-bar panel" width="260"> | <img src="assets/readme/v4.6.0/menu-cluster.jpg" alt="The menu-bar panel as a cluster" width="260"> | <img src="assets/readme/v4.6.0/tray.jpg" alt="The Windows tray panel" width="260"> |
 
 ### iPhone and Android
 
 | | Dashboard | Cluster | Sessions | Limits |
 | :---: | :---: | :---: | :---: | :---: |
-| **iPhone** | <img src="docs/readme/v4.6.0/iphone-dashboard.jpg" alt="iPhone dashboard" width="180"> | <img src="docs/readme/v4.6.0/iphone-cluster.jpg" alt="iPhone cluster" width="180"> | <img src="docs/readme/v4.6.0/iphone-sessions.jpg" alt="iPhone sessions" width="180"> | <img src="docs/readme/v4.6.0/iphone-limits.jpg" alt="iPhone account limits" width="180"> |
-| **Android** | <img src="docs/readme/v4.6.0/android-dashboard.jpg" alt="Android dashboard" width="180"> | <img src="docs/readme/v4.6.0/android-cluster.jpg" alt="Android cluster" width="180"> | <img src="docs/readme/v4.6.0/android-sessions.jpg" alt="Android sessions" width="180"> | <img src="docs/readme/v4.6.0/android-limits.jpg" alt="Android account limits" width="180"> |
+| **iPhone** | <img src="assets/readme/v4.6.0/iphone-dashboard.jpg" alt="iPhone dashboard" width="180"> | <img src="assets/readme/v4.6.0/iphone-cluster.jpg" alt="iPhone cluster" width="180"> | <img src="assets/readme/v4.6.0/iphone-sessions.jpg" alt="iPhone sessions" width="180"> | <img src="assets/readme/v4.6.0/iphone-limits.jpg" alt="iPhone account limits" width="180"> |
+| **Android** | <img src="assets/readme/v4.6.0/android-dashboard.jpg" alt="Android dashboard" width="180"> | <img src="assets/readme/v4.6.0/android-cluster.jpg" alt="Android cluster" width="180"> | <img src="assets/readme/v4.6.0/android-sessions.jpg" alt="Android sessions" width="180"> | <img src="assets/readme/v4.6.0/android-limits.jpg" alt="Android account limits" width="180"> |
 
 ## How it works
 
