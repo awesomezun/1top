@@ -72,6 +72,16 @@ class AppSeats(unittest.TestCase):
         row = next(r for r in resolve(record([tui], codex_logs=[log])) if r['id'] == 't1')
         self.assertNotEqual(row['terminal_match'], 'chat')
 
+    def test_an_aside_turn_that_errored_reads_as_interrupted(self):
+        # Aside marks a conversation whose last turn failed as 'errored'; it is over, not of unknown state.
+        from onetop.sessions.aside import build
+        from onetop.sessions import status
+        base = {'profile': '1', 'model': {'modelId': 'gpt', 'provider': 'openai-codex'}, 'trigger': {}, 'title': 't',
+                'running': True, 'path': None, 'db': '/x/state.db', 'created': 1, 'updated': 900, 'billing_accounts': {}}
+        rows = build([{**base, 'id': 's1', 'status': 'errored'}, {**base, 'id': 's2', 'status': 'idle'}])
+        status.apply(rows, {'captured_at': 1000})
+        self.assertEqual([r['display_status'] for r in rows], ['interrupted', 'idle'])
+
     def test_openmausbot_threads_from_its_ledger(self):
         threads = [{'id': 'th-1', 'bot': 'Pebble', 'kind': 'Claude', 'model': 'claude-sonnet-5', 'updated': 990, 'turns': 2}]
         rows = resolve(record([], openmausbot_threads=threads, openmausbot_running=True))

@@ -143,6 +143,7 @@ class Decisions(unittest.TestCase):
         self.assertEqual(describe({'argv':['claude','--new-runner']})['role'],'shape_unknown')
         self.assertEqual(describe({'argv':['claude','--bg-pty-host','--','claude','--bg-spare']})['role'],'helper')
         self.assertEqual(describe({'kind':'Claude','argv':['bfs','-S','bfs','-type','f']})['role'],'helper')
+        self.assertEqual(describe({'kind':'Claude','argv':['ugrep','-G','--ignore-files','-v','^\\s*$']})['role'],'helper')
         self.assertEqual(describe({'argv':['claude','--chrome-native-host']})['role'],'helper')
 
     def test_open_codex_rollout_keeps_its_profile_after_backend_account_switch(self):

@@ -77,8 +77,9 @@ def describe(row):
         return {'kind': kind, 'role': 'helper', 'explicit_session': None}
     if kind in ('Claude', 'GLM'):
         # Native Claude embeds search applets in the same executable. They carry
-        # argv[0]=bfs/rg, although the OS reports claude/versions/<version>.
-        if str(first).rsplit('/', 1)[-1] in ('bfs', 'rg', 'ripgrep'):
+        # argv[0]=bfs/rg/ugrep (ugrep from Claude Code 2.1.3xx), although the OS reports
+        # claude/versions/<version>.
+        if str(first).rsplit('/', 1)[-1] in ('bfs', 'rg', 'ripgrep', 'ugrep', 'ug'):
             return {'kind':kind, 'role':'helper'}
         # The PTY host also carries its child's --bg-spare args: host wins.
         # The Claude in Chrome extension's native messaging host is no conversation either.

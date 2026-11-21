@@ -13,7 +13,9 @@ def build(records):
         config, origin = r['model'], r['trigger']
         parent = r.get('parent')
         parent = parent if isinstance(parent, str) and parent != sid and re.fullmatch(r'[A-Za-z0-9_-]{1,120}', parent) else None
-        state = {'running':'working','streaming':'working','executing':'working'}.get(r['status'], r['status'])
+        # A turn that ended in an error is over: it reads as interrupted, not as an unknown state.
+        state = {'running':'working','streaming':'working','executing':'working','errored':'interrupted','error':'interrupted',
+                 'failed':'interrupted','cancelled':'interrupted','canceled':'interrupted','aborted':'interrupted'}.get(r['status'], r['status'])
         row = {'id':f'aside:{profile}:{sid}', 'conversation_id':sid, 'kind':'Aside', 'config_dir':str(Path(r['db']).parent),
             'cwd':r.get('cwd') or '', 'title':r['title'], 'connected':r['running'], 'runs':[], 'pids':[], 'pid':None,
             'path':r['path'], 'configured_model':config.get('modelId',''), 'provider':config.get('provider',''),
