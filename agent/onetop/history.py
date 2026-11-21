@@ -94,16 +94,22 @@ class HistoryStore:
 
     def connect(self):
         db = sqlite3.connect(self.path.as_uri(), uri=True, timeout=10)
-        db.execute('PRAGMA busy_timeout=10000')
+        try:db.execute('PRAGMA busy_timeout=10000')
+        except Exception:
+            db.close()
+            raise
         return db
 
     def files(self):
         from .accounts import profile_roots
         seen = set()
+        # T5: OpenMausBot's task runs can leave a Claude transcript too; its usage ledger (below) already counts them.
+        mausbot = re.sub(r'[^A-Za-z0-9]', '-', str(Path.home()/'.openmausbot'))  # Claude's project folder name
         for kind, root in profile_roots():
             pattern = 'rollout-*.jsonl' if kind == 'Codex' else '*.jsonl'
             folders = [root/'sessions',root/'archived_sessions'] if kind == 'Codex' else [root/'projects']
-            for path in (p for folder in folders for p in folder.rglob(pattern)):
+            for folder, path in ((folder, p) for folder in folders for p in folder.rglob(pattern)):
+                if kind != 'Codex' and path.relative_to(folder).parts[0].startswith(mausbot):continue
                 try:
                     st = path.stat(); key = (st.st_dev, st.st_ino)
                     if key in seen:continue
@@ -115,16 +121,23 @@ class HistoryStore:
         for path in (Path.home()/'.aside/u').glob('*/sessions/*/messages.jsonl'):
             try:yield 'Aside',path,path.stat().st_mtime
             except OSError:continue
+        # Most OpenMausBot Claude runs keep no transcript; its own monthly usage ledger is the record.
+        for path in (Path.home()/'.openmausbot'/'usage').glob('????-??.jsonl'):
+            try:yield 'OpenMausBot',path,path.stat().st_mtime
+            except OSError:continue
 
     def import_file(self, kind, path, chunk=8*1024*1024):
         """Atomic offset + usage update; resumed streams and copied messages deduplicate."""
-        from .server import vector
+        from .server import vector, first_codex_report
+        from .observe import openmausbot
         path = Path(path); stat = path.stat(); inode = f'{stat.st_dev}:{stat.st_ino}'
         with closing(self.connect()) as db:
             prior = db.execute('SELECT inode,offset,state FROM files WHERE path=?', (str(path),)).fetchone()
             offset, state = (prior[1], json.loads(prior[2])) if prior and prior[0] == inode and prior[1] <= stat.st_size else (0, {})
-            if kind == 'Codex' and state.get('metadata_schema') != 2:
-                offset,state = 0, {'metadata_schema':2}
+            # Schema 3 reads every rollout once more so each thread's first request, missed before,
+            # is counted; records already stored keep their keys and are not counted twice.
+            if kind == 'Codex' and state.get('metadata_schema') != 3:
+                offset,state = 0, {'metadata_schema':3}
             if offset == stat.st_size and prior:
                 return True
             state.setdefault('sid', path.stem)
@@ -136,6 +149,17 @@ class HistoryStore:
                     position = stream.tell(); line = stream.readline()
                     if not line or not line.endswith(b'\n'):
                         stream.seek(position); break
+                    if kind == 'OpenMausBot':
+                        # T5: one finished turn a line, from the app's own usage ledger.
+                        try:item = openmausbot.turn(json.loads(line))
+                        except (ValueError, UnicodeError):continue
+                        if not item or not sum(item['tokens']) or not item['t'] <= time.time()+60:continue
+                        sid = 'openmausbot:'+item['thread']
+                        key = 'openmausbot:'+hashlib.sha256(json.dumps([item['thread'],item['turn'],item['t']],separators=(',',':')).encode()).hexdigest()
+                        db.execute('INSERT OR IGNORE INTO records VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                                   (key,sid,'openmausbot_usage',item['kind'],item['t'],item['model'] or 'unknown','unknown',*item['tokens']))
+                        db.execute('INSERT OR REPLACE INTO metadata VALUES(?,?,?,?)', (sid,item['t'],item['model'] or 'unknown','unknown'))
+                        continue
                     if not any(mark in line for mark in (b'"usage"', b'"token_count"', b'"turn_context"', b'"session_meta"')):
                         continue
                     try:row = json.loads(line)
@@ -166,6 +190,9 @@ class HistoryStore:
                                 db.execute('INSERT OR REPLACE INTO metadata VALUES(?,?,?,?)',
                                            (sid,t,state['model'],state['cwd']))
                             values = vector(usage, True); old = state.get('total'); state['total'] = values
+                            # The thread's first request counts from zero (forks start above theirs).
+                            if old is None and first_codex_report(payload.get('info') or {}, values):
+                                old = [0, 0, 0, 0]
                             if old is None or any(a < b for a,b in zip(values,old)):continue
                             delta = [a-b for a,b in zip(values,old)]
                             if not sum(delta):continue
@@ -210,17 +237,23 @@ class HistoryStore:
 
     def _loop(self):
         while not self.stop_event.is_set():
-            paths = sorted(self.files(), key=lambda item:item[2])
-            self.progress = {'running': True, 'files_done': 0, 'files_total': len(paths), 'failed': 0}
-            for kind,path,_ in paths:
-                if self.stop_event.is_set():return
-                try:
-                    while not self.import_file(kind,path):
-                        if self.stop_event.wait(.005):return
-                except (OSError, sqlite3.Error, ValueError, TypeError):
-                    self.progress['failed'] += 1
-                self.progress['files_done'] += 1
-            self.progress['running'] = False
+            try:
+                paths = sorted(self.files(), key=lambda item:item[2])
+                self.progress = {'running': True, 'files_done': 0, 'files_total': len(paths), 'failed': 0}
+                for kind,path,_ in paths:
+                    if self.stop_event.is_set():return
+                    try:
+                        while not self.import_file(kind,path):
+                            if self.stop_event.wait(.005):return
+                    except Exception:
+                        self.progress['failed'] += 1
+                    self.progress['files_done'] += 1
+            except Exception as error:
+                # Discovery itself can fail before an import starts. Retry next
+                # cycle, without logging paths, credentials or transcript text.
+                self.progress = {**self.progress, 'error':type(error).__name__, 'failed':self.progress['failed']+1}
+            finally:
+                self.progress['running'] = False
             self.stop_event.wait(60)
 
     def _coverage(self, db, now, started, kind):

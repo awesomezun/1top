@@ -1,4 +1,4 @@
-// Every Korean text the collector writes for people (agent/onetop/*.py) reads in English and Chinese on
+// Every Korean text the collector writes for people (agent/onetop/**/*.py) reads in English and Chinese on
 // the dashboard, and the names the dashboard or the collector gives a project, a location or an account
 // are translated even where names are kept as written.
 import assert from 'node:assert/strict';
@@ -16,10 +16,12 @@ const PIECES=new Set(['월화수목금토일','요일',' CLI를 먼저 설치해
 // Sent to the AI as written, and shown as it will be sent.
 const SENT=new Set(['이전에 중단된 작업을 이어서 진행해 주세요. 먼저 현재 진행 상태와 이미 완료한 변경을 확인하고, 중복 실행을 피해서 계속해 주세요.']);
 const JOINED=['Claude Code CLI를 먼저 설치해 주세요.','Codex CLI를 먼저 설치해 주세요.','Codex 계정 1a2b3c','Claude 계정 4f21a8','터미널 제목을 Checkout UI(으)로 변경했습니다.',
- 'Checkout UI 터미널로 이동했습니다.','이어서 작업하는 새 요청을 보냈습니다. 새 작업 시작을 확인했습니다.','이어서 작업하는 새 요청을 보냈습니다. 실제 시작은 상태 갱신으로 확인합니다.'];
+ 'Checkout UI 터미널로 이동했습니다.','이어서 작업하는 새 요청을 보냈습니다. 새 작업 시작을 확인했습니다.','이어서 작업하는 새 요청을 보냈습니다. 실제 시작은 상태 갱신으로 확인합니다.',
+ '터미널 3곳','OpenBot 채팅'];
 
+// The session recognition packages (sessions/, observe/) write names and notes too, so every folder is read.
 const texts=new Set(JOINED);
-for(const file of readdirSync(agent).filter(f=>f.endsWith('.py')&&f!=='windows_text.py')){
+for(const file of readdirSync(agent,{recursive:true}).filter(f=>f.endsWith('.py')&&!f.endsWith('windows_text.py')&&!/(^|\/)(dist|__pycache__)\//.test(f))){
  const code=readFileSync(new URL(file,agent),'utf8');
  for(const m of code.matchAll(/(^|[^A-Za-z_])([fbr]?)(['"])((?:\\.|(?!\3).)*?)\3/gm)){
   const text=m[4].replace(/\\'/g,"'").replace(/\\"/g,'"');

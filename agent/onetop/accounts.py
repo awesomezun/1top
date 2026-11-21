@@ -227,14 +227,16 @@ def profile_roots(home=Path.home()):
             if path.is_dir() and not path.is_symlink():roots.add((kind,str(path)))
     for kind,key in [('Claude','CLAUDE_CONFIG_DIR'),('Codex','CODEX_HOME')]:
         if os.environ.get(key):roots.add((kind,os.environ[key]))
-    for process in psutil.process_iter(['name','exe','cmdline']):
-        info=process.info
-        if cli_kind(info.get('name') or '',info.get('cmdline') or [],info.get('exe')) not in ('Claude','Codex'):continue
+    # Fetch attributes inside the per-process boundary. On macOS proc_cmdline
+    # can raise SystemError (rather than psutil.Error) for one inaccessible PID.
+    for process in psutil.process_iter():
         try:
+            info=process.as_dict(attrs=['name','exe','cmdline'])
+            if cli_kind(info.get('name') or '',info.get('cmdline') or [],info.get('exe')) not in ('Claude','Codex'):continue
             env=process.environ()
             for kind,key in [('Claude','CLAUDE_CONFIG_DIR'),('Codex','CODEX_HOME')]:
                 if env.get(key):roots.add((kind,env[key]))
-        except (psutil.Error,OSError):pass
+        except (psutil.Error,OSError,SystemError):pass
     return [(kind,Path(root).expanduser()) for kind,root in sorted(roots)[:64]]
 
 

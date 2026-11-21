@@ -7,7 +7,7 @@ import websocket
 from . import __version__
 from .controls import accepts_instruction, accepts_message
 from .mailbox import readable as mailbox_readable
-from .relay_data import CALIBRATION, select, host_metrics, system_metrics, public_history, period_metrics
+from .relay_data import CALIBRATION, select, host_metrics, system_metrics, public_history, period_metrics, session_identity
 
 RELAY='https://onetop-relay.gitreels.workers.dev'
 SSL=ssl.create_default_context(cafile=certifi.where())
@@ -127,20 +127,20 @@ def export_snapshot(state):
         if identified and term:capabilities.append('rename')
         can_pause=identified and term and s.get('input_verified') is not False and s['kind'] in ('Claude','GLM','Codex')
         if (can_pause or identified and s['kind']=='Aside') and status in ('working','waiting'):capabilities.append('pause')
-        if can_pause and s.get('display_status')=='paused' and status in ('idle','interrupted'):capabilities.append('resume')
+        if can_pause and s.get('display_status')=='paused' and status in ('idle','interrupted','done'):capabilities.append('resume')
         if accepts_instruction(s):capabilities.append('prompt')
         if identified and mailbox_readable(s):
             capabilities.append('mailbox')
             if accepts_message(s):capabilities.append('message')
             if accepts_message(s) and s['kind'] in ('Claude','GLM','Codex'):capabilities.append('message_images')
-        if s['kind']!='Aside' and identified and (not term or status in ('idle','interrupted') or can_pause and status in ('working','waiting')):capabilities.append('terminate')
+        if s['kind']!='Aside' and identified and (not term or status in ('idle','interrupted','done') or can_pause and status in ('working','waiting')):capabilities.append('terminate')
         sessions.append({'id':s['id'],'control_key':s.get('control_key',''),'kind':s['kind'],
             'app':'Orca' if term else loc.get('app') or 'Unknown',
             'terminal':term.get('title') or loc.get('terminal',''),
             'project':s.get('project',''),'title':'',
             'model':s.get('model',''),'effort':s.get('effort'),
             'effort_source':s.get('effort_source'),'effort_updated':s.get('effort_updated'),
-            'status':s.get('display_status') or status,'tokens':s.get('tokens'),
+            'status':s.get('display_status') or status,'tokens':s.get('tokens'), **session_identity(s),
             'context_usage':{k:s['context_usage'].get(k) for k in ('basis','input_tokens','capacity','parts','observed_at','model')} if isinstance(s.get('context_usage'),dict) else None,
             **select(s, ('last_usage','request_input','context_size','terminal_note','pids')),
             'usage':select(u, ('last_minute','last_five_minutes','output_rate','history')),

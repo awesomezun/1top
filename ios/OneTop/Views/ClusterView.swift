@@ -39,6 +39,11 @@ struct ClusterCard: View {
     /// The card's inner width, which sizes the dials and decides how many fuel gauges fit.
     @State private var width: CGFloat = 360
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The look chosen in customizing: a theme draws the instruments, the window and the fuel stay (ClusterTheme.swift).
+    @State private var looks = ClusterThemePrefs.shared
+    /// '크게 보기': the theme over the whole screen, on its side.
+    @State private var bigTheme = false
+    private var themed: String? { preview == nil ? looks.theme : nil }
 
     private var caption: String { L.t("Last \(model.period.label)", "최근 \(model.period.label)") }
     private var reportKey: Double { model.devices.map(\.received).max() ?? 0 }
@@ -60,6 +65,7 @@ struct ClusterCard: View {
             .background(card ? theme.card : .clear, in: RoundedRectangle(cornerRadius: 32))
             .overlay(RoundedRectangle(cornerRadius: 32).stroke(card ? theme.line : .clear))
             .onAppear { if tripStart <= 0 || tripStart > now { tripStart = Self.midnight(now) } }
+            .fullScreenCover(isPresented: $bigTheme) { themeFull(r, now: now, odometer: odometer) }
         }
         .czProbe(preview == nil && !landscape ? "housing" : "preview", cz)
         .onChange(of: reportKey) { readAt = Date() }
@@ -111,13 +117,19 @@ struct ClusterCard: View {
         let side = floor(max(120, (width - 10) / 2) * Self.dialK[opts(.dials).size ?? 2])
         let rest = layout.order.filter { [.alerts, .odo, .fuel, .window].contains($0) && (shows($0) || $0 == .window) }
         return VStack(spacing: 14) {
-            HStack(spacing: 10) { tokenDial(r, side: side, odometer: odometer); burnDial(r, side: side) }
-                .frame(maxWidth: .infinity)
-                .czPart(.dials, cz)
+            if let id = themed {
+                // Below the card's gear, which sits in the housing's corner.
+                themeCompact(id, r, now: now, odometer: odometer).padding(.top, cz == nil ? 24 : 0)
+            } else {
+                HStack(spacing: 10) { tokenDial(r, side: side, odometer: odometer); burnDial(r, side: side) }
+                    .frame(maxWidth: .infinity)
+                    .czPart(.dials, cz)
+            }
+            // Under a theme's two instruments the rest stays the 1top cluster's: the lights, the odometer and trip, fuel.
             ForEach(rest, id: \.self) { id in
                 switch id {
                 case .alerts: lamps(r).czPart(.alerts, cz)
-                case .odo: lowerRow(r, now: now, odometer: odometer, showOdometer: side < 220, temps: false).czPart(.odo, cz)
+                case .odo: lowerRow(r, now: now, odometer: odometer, showOdometer: themed != nil || side < 220, temps: false).czPart(.odo, cz)
                 case .fuel: fuel(r, width: width).czPart(.fuel, cz)
                 default:
                     if shows(.window) {
@@ -137,7 +149,16 @@ struct ClusterCard: View {
     private func sideways(_ r: ClusterReadings, now: Double, odometer: Odo) -> some View {
         let col: CGFloat = 10, mid = max(250, min(360, width * 0.32)), side = floor(min(300, max(150, (width - mid - 2 * col) / 2)))
         let foot = side + col, sides = layout.order.filter { $0 == .odo || $0 == .fuel }
-        return VStack(spacing: 8) {
+        if let id = themed {
+            return AnyView(VStack(spacing: 8) {
+                themeStrip(id, r, now: now, odometer: odometer)
+                HStack(alignment: .top, spacing: col) {
+                    window(r, odometer: odometer, width: max(200, width - foot - col), pageHeight: 180, compact: true)
+                    if shows(.fuel) { fuel(r, width: foot).frame(width: foot) }
+                }
+            })
+        }
+        return AnyView(VStack(spacing: 8) {
             HStack(alignment: .top, spacing: col) {
                 tokenDial(r, side: side, odometer: odometer)
                 window(r, odometer: odometer, width: mid, pageHeight: max(80, side - 106), compact: true)
@@ -148,7 +169,7 @@ struct ClusterCard: View {
                 Group { if shows(.alerts) { lamps(r) } else { Color.clear.frame(height: 1) } }.frame(width: mid)
                 footPart(sides.last ?? .fuel, r, now: now, odometer: odometer, side: side, width: foot, col: col)
             }
-        }
+        })
     }
     @ViewBuilder private func footPart(_ id: Item, _ r: ClusterReadings, now: Double, odometer: Odo, side: CGFloat, width: CGFloat, col: CGFloat) -> some View {
         if !shows(id) {
@@ -163,12 +184,67 @@ struct ClusterCard: View {
 
     private func window(_ r: ClusterReadings, odometer: Odo, width: CGFloat, pageHeight: CGFloat, compact: Bool = false) -> some View {
         ClusterWindow(r: r, theme: theme, width: width, pageHeight: pageHeight, total: odometer.value, compact: compact,
-                      tabs: opts(.window).tabs ?? ScreenLayout.Mode.allCases, periodShape: periodShape, cz: compact ? nil : cz,
+                      tabs: opts(.window).tabs ?? ScreenLayout.Mode.allCases, periodShape: periodShape, periods: themed == nil || !compact, cz: compact ? nil : cz,
                       mode: $mode, pick: $pick, only: only, open: open)
     }
     private func periods(width: CGFloat) -> some View {
         @Bindable var model = model
         return PeriodControl(shape: periodShape, period: $model.period, theme: theme).frame(width: width)
+    }
+
+    // MARK: Theme
+    /// What the theme's figures stand for: a new report, period, pick, pressed warning or trip redraws it.
+    private func themeKey(_ r: ClusterReadings) -> String { "\(reportKey)|\(model.period.rawValue)|\(String(describing: pick))|\(only ?? "")|\(r.trip?.start ?? 0)" }
+    /// Upright: the theme's two headline instruments cut out side by side, as large as the 1top dials (themes/compact.js),
+    /// with '크게 보기' under them for the whole theme.
+    private func themeCompact(_ id: String, _ r: ClusterReadings, now: Double, odometer: Odo) -> some View {
+        let aspect = ClusterThemePrefs.compact[id] ?? 1280 / 480
+        return VStack(alignment: .trailing, spacing: 6) {
+            ThemeHostView(mode: .compact(id), key: themeKey(r), figures: { ClusterThemeFigures.make(r, period: model.period, now: now, odometer: odometer.value) },
+                          onPress: { themePress($0, r) })
+                .aspectRatio(aspect, contentMode: .fit)
+                .frame(maxWidth: ClusterThemePrefs.compactTall * aspect)
+                .frame(maxWidth: .infinity)
+            Button { bigTheme = true } label: {
+                Text("⤢ " + L.t("Full screen", "크게 보기")).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
+                    .padding(.horizontal, 10).frame(height: 26).background(.black.opacity(0.6), in: Capsule()).overlay(Capsule().stroke(.white.opacity(0.28)))
+            }
+            .buttonStyle(.plain).accessibilityIdentifier("cluster-theme-big")
+        }
+        .czPart(.dials, cz)
+    }
+    /// On its side: the whole theme across the screen.
+    private func themeStrip(_ id: String, _ r: ClusterReadings, now: Double, odometer: Odo) -> some View {
+        ThemeHostView(mode: .theme(id), key: themeKey(r), figures: { ClusterThemeFigures.make(r, period: model.period, now: now, odometer: odometer.value) },
+                      onPress: { themePress($0, r) })
+            .aspectRatio(1280 / 480, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .czPart(.dials, cz)
+    }
+    /// The theme over the whole screen, on its side; a warning pressed closes it to show its sessions.
+    private func themeFull(_ r: ClusterReadings, now: Double, odometer: Odo) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            if let id = looks.theme {
+                ThemeHostView(mode: .side(id), key: themeKey(r), figures: { ClusterThemeFigures.make(r, period: model.period, now: now, odometer: odometer.value) },
+                              onPress: { themePress($0, r) })
+                    .ignoresSafeArea()
+            }
+            Button { bigTheme = false } label: {
+                Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white).frame(width: 36, height: 36)
+                    .background(.black.opacity(0.55), in: Circle()).overlay(Circle().stroke(.white.opacity(0.3)))
+            }
+            .buttonStyle(.plain).padding(14).accessibilityLabel(L.t("Close", "닫기")).accessibilityIdentifier("cluster-theme-close")
+        }
+    }
+    /// A theme's warning, gear or trip answers as the cluster's own.
+    private func themePress(_ action: ThemeHostView.Press, _ r: ClusterReadings) {
+        switch action {
+        case .alert(let key): press(key, ids: lit(r, key)); if key != "live" { bigTheme = false }
+        case .period(let raw): if let p = Period(rawValue: raw) { model.period = p }
+        case .trip: tripStart = Date().timeIntervalSince1970
+        case .pick: break
+        }
     }
 
     // MARK: Dials

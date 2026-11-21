@@ -5,7 +5,8 @@ from .platform_support import lock_instance
 
 def main():
     parser=argparse.ArgumentParser(prog='1top',description='Your AI agents, across apps and computers.')
-    parser.add_argument('command',nargs='?',choices=['run','connect','local','version','statusline','telemetry-enable','telemetry-disable','telemetry-status','authorize-claude','gateway','gateway-claude','gateway-codex','gateway-glm'],default='run')
+    parser.add_argument('command',nargs='?',choices=['run','connect','local','version','capture-sessions','statusline','telemetry-enable','telemetry-disable','telemetry-status','authorize-claude','gateway','gateway-claude','gateway-codex','gateway-glm'],default='run')
+    parser.add_argument('--output',help='New anonymous capture file (capture-sessions only)')
     parser.add_argument('--profile',help='Exact existing 1top Claude profile to connect once')
     parser.add_argument('--config',help='Local statusline wrapper specification (statusline only)')
     parser.add_argument('--port',type=int,default=18766)
@@ -21,6 +22,12 @@ def main():
         parser.error('native arguments require a gateway client command')
     if args.relay and args.command!='connect':parser.error('--relay requires connect')
     if args.command=='version':print(__version__);return
+    if args.command=='capture-sessions':
+        if not args.output:parser.error('capture-sessions requires --output')
+        from .observe.capture import capture
+        record=capture(args.output)
+        print(json.dumps({'output':args.output,'processes':len(record['processes']),'registry_rows':len(record['claude_registry'])}));return
+    if args.output:parser.error('--output requires capture-sessions')
     if args.command=='authorize-claude':
         if not args.profile:parser.error('authorize-claude requires --profile')
         from .credential_store import authorize

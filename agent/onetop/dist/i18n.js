@@ -123,12 +123,25 @@ window.OneTopI18n=(()=>{
   ['{0} AI 코딩 연비','{0} AI coding mileage','{0} AI 编程油耗'],['{0} AI 코딩 영수증','{0} AI coding receipt','{0} AI 编程收据'],['{0} · API 가격 기준','{0} · at API prices','{0} · 按 API 价格'],['{0} · 구독 본전','{0} · Subscription value','{0} · 订阅回本'],
   ['구독료 {0} → API 가격 {1}','Plans {0} → API prices {1}','订阅费 {0} → API 价格 {1}'],['아낀 돈 {0}','Saved {0}','省下 {0}'],['구독료 {0}','Plans {0}','订阅费 {0}'],['API 가격 {0} · 구독료 {1}','API prices {0} · plans {1}','API 价格 {0} · 订阅费 {1}'],['월말 예상 {0}','month end {0}','月底预计 {0}'],
   ['{0}, 1top으로 본 내 AI 코딩','{0}, my AI coding on 1top','{0}，我在 1top 上的 AI 编程'],['구독료의 {0}배','{0}× my plans','订阅费的 {0} 倍'],['API 가격으로 {0}어치','{0} at API prices','按 API 价格值 {0}'],['이번 주 에이전트 작업 {0}','Agents worked {0} this week','本周智能体工作 {0}']);
+ // 4.9.0's cluster themes; each theme keeps the name the design session gave it.
+ entries.push(['계기판 디자인','Cluster design','组合仪表外观'],['⤢ 크게 보기','⤢ Full screen','⤢ 全屏'],['계기판 크게 보기','Cluster on full screen','全屏组合仪表'],['트립 다시 시작','Reset the trip','重置小计'],
+  ['테마','Theme','主题'],['아날로그','Analog','指针式'],['디지털','Digital','数字式'],['혼합','Mixed','混合式'],['1top 기본','1top default','1top 默认'],['지금의 계기판','Current cluster','当前仪表'],
+  ['계기 부분만 바뀝니다. 화면 창과 연료통은 그대로입니다.','Only the instruments change. The window and the fuel stay as they are.','只更换仪表部分，窗口和油量保持不变。'],
+  ['하위 작업 중','Subagents working','子代理工作中'],['방금 끝남','Just done','刚完成'],
+  // Session recognition (agent/onetop/sessions): a row's name, location and notes.
+  ['새 대화','New conversation','新对话'],['Orca 채팅','Orca chat','Orca 聊天'],['앱 채팅','App chat','应用聊天'],['백그라운드','Background','后台'],
+  ['실행의 Orca 터미널 ID',"The run's Orca terminal ID",'运行的 Orca 终端 ID'],['세션 관찰 기록','Session observations','会话观察记录'],
+  ['불러오는 중…','Loading…','正在加载…'],['계기판 디자인을 불러오지 못했습니다.',"Couldn't load the cluster designs.",'无法加载组合仪表外观。']);
  const dictionary=new Map(entries.map(([ko,en,zh])=>[ko,{en,zh}]));
  const hangul=/[\uac00-\ud7a3]/;
  const unit=u=>({일:language==='en'?'d':'天',시간:language==='en'?'h':'小时',분:language==='en'?'m':'分钟',초:language==='en'?'s':'秒'})[u];
  // Texts the dashboard builds around values. $n is the nth part, itself translated; a function gets
  // the match when a part is a name and must stay as it is.
  const patterns=[
+  // A conversation that runs in more than one terminal (sessions/naming.py).
+  [/^터미널 (\d+)곳$/,'$1 terminals','$1 个终端'],
+  // A chat seat in an app with no terminal, named by its app (OpenBot 채팅), the name kept as it is.
+  [/^([A-Za-z][\w .-]*) 채팅$/,m=>language==='en'?`${m[1]} chat`:`${m[1]} 聊天`],
   // The cluster's range and burn hints, built around a figure or an account's name (kept as it is).
   [/^이 속도면 약 ([^·\n]+)시간 뒤 한도 바닥$/,'At this rate the limit runs out in about $1 h','按此速度约 $1 小时后额度用尽'],
   [/^([^·\n]+)이 가장 먼저$/,m=>language==='en'?`${m[1]} runs out first`:`${m[1]} 最先用尽`],

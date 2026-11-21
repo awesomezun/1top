@@ -1,5 +1,5 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
-import {Animated,Easing,Pressable,ScrollView,type ScrollViewInstance,type StyleProp,StyleSheet,View,type ViewStyle,useWindowDimensions} from 'react-native';
+import {Animated,Easing,Modal,Pressable,ScrollView,type ScrollViewInstance,type StyleProp,StyleSheet,View,type ViewStyle,useWindowDimensions} from 'react-native';
 import {SafeAreaView,useSafeAreaInsets} from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 import {StatusBar} from 'expo-status-bar';
@@ -20,6 +20,8 @@ import {Lcd,Odometer,RangeWheels,burnCells,drumPlate,rangeCells,tokenCells} from
 import {PeriodDial} from './periods';
 import {Canvas,Editor,Gear,Part,useCalm,useEditor,useLayout,useQuiet,useSay} from './customize';
 import * as M from './customize-model';
+import {ThemeView,figures as themeFigures,shownFigures,useClusterTheme,type Press as ThemePress} from './cluster-themes';
+import {THEME_COMPACT} from './theme-host';
 import type {ObjectId} from './layout';
 import type {Device,Flow,SessionRow,WindowKey} from './types';
 
@@ -29,6 +31,10 @@ import type {Device,Flow,SessionRow,WindowKey} from './types';
 // lights, CPU and memory with the trip, the fuel, and the window: the period drum over seven pages. Upright the dials
 // stack or sit side by side (the switch at the top); on its side the cluster fills the screen with three axes,
 // dial · window · dial. The numbers are the desktop's (cluster-model.ts). New words are Korean for now.
+// With a theme chosen (customizing, cluster-themes plan v1.1.0): upright its two headline instruments, cut out of it
+// (themes/compact.js), stand in place of the dials and the rest stays the cluster's own; '크게 보기' shows the whole
+// theme over the screen on its side. On its side the whole theme draws across the housing, in place of the dials, the
+// lights, the odometer row and the period control. Its warnings, gear and trip answer as the cluster's own.
 type Mode='sessions'|'flow'|'weekly'|'map'|'heat'|'goals'|'system';
 const MODES:[Mode,string,string][]=[['sessions','Sessions','세션'],['flow','Token flow','토큰 흐름'],['weekly','Limits','한도'],['map','Usage map','사용량 맵'],['heat','Heatmap','히트맵'],['goals','Goals','목적지'],['system','Resources','리소스']];
 const SAVED={mode:'onetop.cluster.mode',trip:'onetop.cluster.trip'};
@@ -314,7 +320,7 @@ export function ClusterView({scrollRef,embedded}:{scrollRef?:React.RefObject<Scr
  const L=useLayout(),g=L.state.layout.presets.cluster,edit=useEditor(),quiet=useQuiet();
  const [hold]=useState<Hold>(()=>({})),[pick,setPickState]=useState<Pick>(null),[only,setOnly]=useState<Tell|null>(null),[mode,setModeState]=useState<Mode>('sessions');
  const [trip,setTrip]=useState<number|null>(null),[detail,setDetail]=useState<SessionRow|null>(null);
- const [wrapKey,setWrapKey]=useState(''),modesBox=useRef({w:0,content:0});
+ const [wrapKey,setWrapKey]=useState(''),modesBox=useRef({w:0,content:0,wk:'',ck:''}),look=useClusterTheme(),[big,setBig]=useState(false);
  const visible:Device[]=w.visible||[],at=w.clock/1000;
  // The page and the trip are kept on this phone; the first visit starts the trip at midnight.
  useEffect(()=>{Promise.all([SecureStore.getItemAsync(SAVED.mode),SecureStore.getItemAsync(SAVED.trip)]).then(([m,tr])=>{
@@ -339,8 +345,16 @@ export function ClusterView({scrollRef,embedded}:{scrollRef?:React.RefObject<Scr
  const add=valid(r.tach.instant)?r.tach.instant/HOUR*el:0,tr=r.trip,tripTokens=tr?.inRange&&tr.tokens!==null?tr.tokens+add:null;
  const loc=locale(w.lang),caption=t('Last ','최근 ')+periodLabel(period,t),percent=(n:number|null|undefined)=>pctNumber(n)+(valid(n)?'%':'');
  const burnText=(n:number|null|undefined)=>valid(n)?(n>=100?String(Math.round(n)):n>=10?n.toFixed(1):n.toFixed(2))+t('%/h','%/시간'):'—';
- const rowOf=(id:string)=>(w.rows as SessionRow[]).find(x=>x.key===id)||null,name=(s:ClusterSession)=>(s.terminal||'').trim()||(s.project==='0'&&s.kind==='Aside'?t('Aside default workspace','Aside 기본 작업공간'):s.project)||toolName(s.kind);
+ const rowOf=(id:string)=>(w.rows as SessionRow[]).find(x=>x.key===id)||null,name=(s:ClusterSession)=>s.display_name||(s.terminal||'').trim()||(s.project==='0'&&s.kind==='Aside'?t('Aside default workspace','Aside 기본 작업공간'):s.project)||toolName(s.kind);
+ // The theme's figures, sent again for a new report, period, pick, pressed light, trip or language.
+ const themeFig=()=>themeFigures(r,state,{now:at,odo,name}),stamp=[state.updated,period,pick?pick.type+pick.id:'',only||'',trip??'',w.lang].join('|');
+ useEffect(()=>{shownFigures.current=themeFig;});
  const press=quiet((k:Tell)=>{if(k==='live'||!count(k))return;const next=only===k?null:k;setOnly(next);setMode(k==='reconnect'||k==='empty'?'weekly':'sessions',true);});
+ // A theme's light shows what it is about (closing the full screen to show it), its gear the period, its trip resets.
+ const themePress=(p:ThemePress)=>{
+  if('alert' in p){const k=TELLS.find(([x])=>x===p.alert)?.[0];if(k&&k!=='live'&&count(k)){press(k);setBig(false);}}
+  else if('period' in p){const k=PERIOD_NAMES.find(([x])=>x===p.period)?.[0];if(k)quiet(()=>w.setPeriod(k))();}
+  else if('trip' in p)resetTrip();};
  const work=quick.segmentOn;
  // The layout (customizing): the dials' size, face and display colour, the lights' shape and count, the odometer's face,
  // the fuel's count, the window's size and pages, the period control's shape.
@@ -357,10 +371,13 @@ export function ClusterView({scrollRef,embedded}:{scrollRef?:React.RefObject<Scr
  const room=width-inset.left-inset.right,housingW=landscape?(box?.w??room)-2*OUT-2*PX-2:Math.min(room,820)-32-28,housingH=(box?.h??height-inset.top-inset.bottom)-2*OUT-2*PT-2;
  const mid=landscape?Math.max(300,Math.min(360,housingW*.32)):0;
  const full=Math.floor(landscape?Math.max(150,Math.min((housingW-mid-2*COL)/2,housingH-FOOT-GAP)):(housingW-10)/2),dial=Math.floor(full*dialK);
- const winW=landscape?housingW-2*dial-2*COL:housingW;
+ // With a theme on its side the window and the fuel share the row under it.
+ const tFoot=Math.floor(Math.min(320,housingW*.34)),themeSide=landscape&&!!look;
+ const winW=themeSide?housingW-(g.hidden.includes('fuel')?0:tFoot+COL):landscape?housingW-2*dial-2*COL:housingW;
  // The edit mode belongs to the upright screen.
  useEffect(()=>{if(landscape&&edit?.on)edit.close();},[landscape,edit]);
- const working=r.working>0,odoInDial=dial>=220,plateH=Math.max(13,Math.min(20,dial*.052));
+ // Under a theme's instruments the odometer joins the trip in the lower row.
+ const working=r.working>0,odoInDial=!look&&dial>=220,plateH=Math.max(13,Math.min(20,dial*.052));
  // Token dial: the period's average in tokens an hour on the lane; the figure in the colour at the reading.
  const div=r.tach.full>=1e9?1e9:1e6,tachF=r.tach.rate===null?null:r.tach.rate/r.tach.full,tachColor=tachF===null?quick.muted:colorAt(LANE,tachF);
  const odometer=(h:number,kind=odoFace)=><Plate style={kind==='drum'?drumPlate(h):undefined}><Odometer key={period} value={odo} height={h} color="#eef2f4" calm={calm} face={kind} led={led}/></Plate>;
@@ -402,7 +419,7 @@ export function ClusterView({scrollRef,embedded}:{scrollRef?:React.RefObject<Scr
  // reports a pool for each model family; one gauge stands for them all, the pool nearest its end.
  const agy=r.accounts.filter(a=>a.kind==='Antigravity'),lead=agy.length>1?[...agy].sort((a,b)=>(a.left??101)-(b.left??101))[0]:null;
  const gauges=lead?r.accounts.filter(a=>a.kind!=='Antigravity'||a===lead):r.accounts;
- const fuelRoom=landscape?dial+2*spill-8:housingW,cans=M.fuelCans(fuelRoom,gauges.length,g.opts.fuel?.count);
+ const fuelRoom=themeSide?tFoot:landscape?dial+2*spill-8:housingW,cans=M.fuelCans(fuelRoom,gauges.length,g.opts.fuel?.count);
  const shown=pickTiles(gauges,cans),more=gauges.length-shown.length,pitch=M.PITCH[Math.max(2,cans)];
  const fuel=<><Text style={st.label}>{r.accounts.some(a=>!a.weekly)?t('Limit left','남은 한도'):t('Weekly limit left','남은 주간 한도')}{more>0&&<Text style={[st.label,{color:quick.ink}]}> +{more}</Text>}</Text>
   {r.accounts.length?<View style={{flexDirection:'row',justifyContent:'center'}}>{shown.map(a=>{const on=r.speed.account===a.id&&r.speed.picked,low=a.left!==null&&a.left<15,color=toolColor(a.kind),plan=briefOf(a);
@@ -413,7 +430,7 @@ export function ClusterView({scrollRef,embedded}:{scrollRef?:React.RefObject<Scr
    :<Text style={st.tiny}>{t('No subscription accounts connected.','연결된 구독 계정이 없습니다.')}</Text>}</>;
 
  // The window: seven pages (or those chosen), under the period control.
- const flow=fleetFlow(reporting(visible),period),pageH=landscape?Math.max(100,dial-122):Math.round(300*winK);
+ const flow=fleetFlow(reporting(visible),period),pageH=themeSide?180:landscape?Math.max(100,dial-122):Math.round(300*winK);
  const cards=only==='reconnect'||only==='empty'?r.accounts.filter(a=>(r.tells[only] as string[]).includes(a.id)):r.accounts;
  const when=(sec:number)=>{const d=new Date(sec*1000);return d.toLocaleDateString(loc,{weekday:'short'})+' '+d.toLocaleTimeString(loc,{hour:'2-digit',minute:'2-digit',hourCycle:'h23'});};
  const goals=visible.flatMap(d=>d.snapshot.operations?.goals||[]);
@@ -458,11 +475,13 @@ export function ClusterView({scrollRef,embedded}:{scrollRef?:React.RefObject<Scr
  // The page names stay in one row when they fit and take two when they do not, as on the web: measured once per
  // language, width and set of pages.
  const modesKey=w.lang+'|'+winW+'|'+tabs.length,wrapModes=wrapKey===modesKey;
- const overflow=()=>{const b=modesBox.current;if(b.w>0&&b.content>b.w+1&&wrapKey!==modesKey)setWrapKey(modesKey);};
+ // Each size counts only for what it was measured under (the width for the row, the language, width and pages for
+ // the names): a turn of the phone leaves the other width's sizes behind.
+ const overflow=()=>{const b=modesBox.current;if(b.wk===String(winW)&&b.ck===modesKey&&b.w>0&&b.content>b.w+1&&wrapKey!==modesKey)setWrapKey(modesKey);};
  const tabButtons=tabs.map(([k,en,ko])=><Pressable key={k} accessibilityRole="tab" accessibilityState={{selected:shownMode===k}} onPress={quiet(()=>setMode(k))} style={[st.mode,wrapModes&&{flexBasis:'22%'},shownMode===k&&{backgroundColor:quick.raised}]}><Text numberOfLines={1} style={[st.modeText,shownMode===k&&{color:quick.ink}]}>{t(en,ko)}</Text></Pressable>);
  const windowBox=<View style={[st.window,{width:winW}]}>
   {wrapModes?<View style={[st.modes,{flexWrap:'wrap',rowGap:2}]}>{tabButtons}</View>
-   :<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.modes} onLayout={e=>{modesBox.current.w=e.nativeEvent.layout.width;overflow();}} onContentSizeChange={cw=>{modesBox.current.content=cw;overflow();}}>{tabButtons}</ScrollView>}
+   :<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.modes} onLayout={e=>{modesBox.current.w=e.nativeEvent.layout.width;modesBox.current.wk=String(winW);overflow();}} onContentSizeChange={cw=>{modesBox.current.content=cw;modesBox.current.ck=modesKey;overflow();}}>{tabButtons}</ScrollView>}
   <ScrollView nestedScrollEnabled style={{height:pageH}} contentContainerStyle={{gap:2,paddingBottom:6}}>{page}</ScrollView>
  </View>;
 
@@ -472,7 +491,9 @@ export function ClusterView({scrollRef,embedded}:{scrollRef?:React.RefObject<Scr
   :<View key={key} style={{width:dial+2*spill,marginLeft:key==='l'?-spill:0,marginRight:key==='r'?-spill:0,alignItems:'center',gap:4}}>{fuel}</View>;
  // Upright: each object in its place, customizable (Part); the gear in the empty corner beside the right dial.
  const object=(id:ObjectId)=>{switch(id){
-  case 'dials':return <Part key={id} id={id} style={{flexDirection:'row',justifyContent:'center',gap:Math.max(10,housingW-2*full)}} preview={v=><View style={{flexDirection:'row',gap:8}}>{dials(Math.floor((preview-8)/2),v)}</View>}>{dials(dial,face)}</Part>;
+  // Below the gear, which sits in the housing's corner.
+  case 'dials':return look?<Part key={id} id={id} style={{paddingTop:edit?.on?0:24}}>{themeCompact(look)}</Part>
+   :<Part key={id} id={id} style={{flexDirection:'row',justifyContent:'center',gap:Math.max(10,housingW-2*full)}} preview={v=><View style={{flexDirection:'row',gap:8}}>{dials(Math.floor((preview-8)/2),v)}</View>}>{dials(dial,face)}</Part>;
   case 'alerts':return <Part key={id} id={id} style={{alignSelf:'center'}} preview={v=>lightsFor(v,preview)}>{lightsFor(lamps,housingW)}</Part>;
   case 'odo':return <Part key={id} id={id} style={st.lf} preview={v=><View style={[st.lf,{width:preview}]}>{lowerFor(v)}</View>}>{lowerFor(odoFace)}</Part>;
   case 'fuel':return <Part key={id} id={id} style={{alignItems:'center',gap:6}} shown={cans}>{fuel}</Part>;
@@ -480,11 +501,23 @@ export function ClusterView({scrollRef,embedded}:{scrollRef?:React.RefObject<Scr
   case 'window':return <Part key={id} id={id} style={{alignSelf:'center'}}>{windowBox}</Part>;
   default:return null;
  }};
- const housing=landscape?<View style={[st.housing,{gap:GAP,paddingHorizontal:PX,paddingVertical:PT}]}>
+ const themeStrip=(id:string)=><View style={{width:housingW,aspectRatio:1280/480,alignSelf:'center'}}>
+  <ThemeView mode={{kind:'theme',id}} stamp={stamp} figures={themeFig} onPress={themePress} style={StyleSheet.absoluteFill} testID="cluster-theme"/></View>;
+ // Upright: the two instruments cut out, at most 240 high (themes/compact.js), with '크게 보기' under them.
+ const themeCompact=(id:string)=>{const a=THEME_COMPACT[id]||1280/480;return <View style={{gap:6}}>
+  <View style={{width:Math.min(housingW,240*a),aspectRatio:a,alignSelf:'center'}}><ThemeView mode={{kind:'compact',id}} stamp={stamp} figures={themeFig} onPress={themePress} style={StyleSheet.absoluteFill} testID="cluster-theme"/></View>
+  {!edit?.on&&<Pressable accessibilityRole="button" testID="cluster-theme-big" onPress={quiet(()=>setBig(true))} style={st.themeBig}><Text style={st.themeBigText}>{'⤢ '+t('Full screen','크게 보기')}</Text></Pressable>}</View>;};
+ const housing=themeSide&&look?<View style={[st.housing,{gap:GAP,paddingHorizontal:PX,paddingVertical:PT}]}>{themeStrip(look)}
+   <View style={{flexDirection:'row',gap:COL,alignItems:'flex-start',justifyContent:'center'}}>{windowBox}{!hide.has('fuel')&&<View style={{width:tFoot,alignItems:'center',gap:4}}>{fuel}</View>}</View></View>
+  :landscape?<View style={[st.housing,{gap:GAP,paddingHorizontal:PX,paddingVertical:PT}]}>
    <View style={{flexDirection:'row',gap:COL,alignItems:'flex-start',justifyContent:'center'}}>{dials(dial,face)[0]}<View style={{gap:8,width:winW}}>{periods(kind,winW)}{windowBox}</View>{dials(dial,face)[1]}</View>
    <View style={{flexDirection:'row',alignItems:'center',justifyContent:'center',height:FOOT}}>{sideOf(sides[0]||'odo','l')}<View style={{width:winW,alignItems:'center'}}>{!hide.has('alerts')&&lightsFor(lamps,winW)}</View>{sideOf(sides[1]||'fuel','r')}</View></View>
   :<Canvas style={st.housing}>{M.clusterOrder(g).map(object)}<Gear style={{position:'absolute',top:7,right:9}}/></Canvas>;
- const sheet=<SessionDetails key={detail?.key||'none'} row={detail} close={()=>setDetail(null)}/>;
+ // '크게 보기': the theme over the whole screen, on its side.
+ const sheet=<><SessionDetails key={detail?.key||'none'} row={detail} close={()=>setDetail(null)}/>
+  <Modal visible={big&&!!look} animationType={calm?'none':'fade'} onRequestClose={()=>setBig(false)} statusBarTranslucent navigationBarTranslucent supportedOrientations={['portrait','landscape']}>
+   <View style={{flex:1,backgroundColor:'#000'}}>{look&&<ThemeView mode={{kind:'side',id:look}} stamp={stamp} figures={themeFig} onPress={themePress} style={{flex:1}} testID="cluster-theme-full"/>}
+    <Pressable accessibilityRole="button" accessibilityLabel={t('Close','닫기')} testID="cluster-theme-close" hitSlop={8} onPress={()=>setBig(false)} style={[st.themeClose,{top:inset.top+14}]}><Text style={st.themeCloseText}>✕</Text></Pressable></View></Modal></>;
  if(landscape)return <SafeAreaView edges={['top','left','right','bottom']} style={{flex:1,backgroundColor:quick.background}}>{focused&&<StatusBar hidden style={w.theme==='light'?'dark':'light'}/>}<ScrollView onLayout={e=>{const {width:w0,height:h0}=e.nativeEvent.layout;if(!box||box.w!==w0||box.h!==h0)setBox({w:w0,h:h0});}} contentContainerStyle={{flexGrow:1,justifyContent:'center',padding:OUT}}>{housing}</ScrollView>{sheet}</SafeAreaView>;
  if(embedded)return <>{housing}{sheet}</>;
  // Its own tab: the 1top header as on the dashboard's tab and the iPhone's, the housing under it.
@@ -534,5 +567,9 @@ const make=()=>StyleSheet.create({
  goal:{gap:4,padding:10,borderRadius:10,borderWidth:1,borderColor:quick.line},
  goalStatus:{alignSelf:'flex-start',fontSize:10,fontWeight:'600',paddingHorizontal:8,paddingVertical:2,borderRadius:10,overflow:'hidden'},
  proc:{flexDirection:'row',alignItems:'center',gap:10,paddingVertical:3},
+ themeBig:{alignSelf:'flex-end',height:26,paddingHorizontal:10,justifyContent:'center',borderRadius:13,borderWidth:1,borderColor:'rgba(255,255,255,.28)',backgroundColor:'rgba(0,0,0,.6)'},
+ themeBigText:{fontSize:12,fontWeight:'600',color:'#fff'},
+ themeClose:{position:'absolute',right:14,width:36,height:36,borderRadius:18,alignItems:'center',justifyContent:'center',borderWidth:1,borderColor:'rgba(255,255,255,.3)',backgroundColor:'rgba(0,0,0,.55)'},
+ themeCloseText:{fontSize:15,fontWeight:'600',color:'#fff'},
 });
 let st=make();onTheme(()=>{st=make();});

@@ -87,6 +87,8 @@ struct ClusterReadings {
     var tells: Tells
     var heat: Heat
     var trip: Trip?
+    /// The period in 24 slices of tokens, oldest first, for the cluster themes' flow graphs (cluster-themes.js flow).
+    var flow: [Double]
 
     static let hour = 3600.0, doneWindow = 600.0
     static func valid(_ n: Double?) -> Bool { n.map { $0.isFinite && $0 >= 0 } ?? false }
@@ -207,8 +209,8 @@ struct ClusterReadings {
 
         // The window's session rows, for the dashboard's rows (a lead with its subagents).
         let all = model.groups.map { g -> Row in
-            let busy = g.members.contains { model.isWorking($0) }
-            return Row(group: g, state: busy ? "working" : g.root.status, tokens: g.tokens(in: period) ?? 0,
+            let busy = g.root.displayName != nil ? model.isWorking(g.root) : g.members.contains { model.isWorking($0) }
+            return Row(group: g, state: busy ? "working" : g.root.state, tokens: g.tokens(in: period) ?? 0,
                        estimate: g.estimate(in: period), burn: fresh ? g.pace(in: period) : nil)
         }
         let done = { (r: Row) in r.state != "working" && r.state != "waiting" && (r.group.root.lastUsage ?? 0) > 0 && now - r.group.root.lastUsage! <= Self.doneWindow }
@@ -267,10 +269,11 @@ struct ClusterReadings {
         // Warning lights, for the dashboard's rows (a lead with its subagents).
         var tells = Tells()
         for g in model.groups {
-            let s = g.root, busy = g.members.contains { model.isWorking($0) }
+            let s = g.root, busy = s.displayName != nil ? model.isWorking(s) : g.members.contains { model.isWorking($0) }
             if busy { tells.working.append(s.key) }
-            else if s.status == "waiting" { tells.waiting.append(s.key) }
-            else if let last = s.lastUsage, last > 0, now - last <= Self.doneWindow { tells.done.append(s.key) }
+            else if s.state == "waiting" { tells.waiting.append(s.key) }
+            else if s.state == "done" { tells.done.append(s.key) }
+            else if let last = s.lastUsage, last > 0, now - last <= Self.doneWindow, s.displayName == nil { tells.done.append(s.key) }
         }
         tells.reconnect = list.filter(\.reconnect).map(\.id)
         tells.empty = list.filter { $0.range?.early == true }.map(\.id)
@@ -281,30 +284,33 @@ struct ClusterReadings {
         let hosts = (live.isEmpty ? devices : live).compactMap { $0.snapshot?.host }
         heat = Heat(cpu: hosts.compactMap(\.cpu).filter { Self.valid($0) }.max(), memory: hosts.compactMap(\.memoryPercent).filter { Self.valid($0) }.max())
 
-        // Trip: tokens since the last reset from each computer's token bins (its finest bins first, coarser ones
-        // only before them), and their average per hour.
+        // Tokens in time from each computer's token bins: its finest bins first, coarser ones only before them.
+        var events: [(t: Double, n: Double)] = []
+        for d in live {
+            let flows = (d.snapshot?.flow ?? [:]).values.filter { $0.step > 0 && $0.start != nil }
+                .sorted { $0.step != $1.step ? $0.step < $1.step : ($0.start ?? 0) < ($1.start ?? 0) }
+            var covered = Double.infinity
+            for f in flows {
+                let first = f.start!
+                for (i, bin) in f.bins.enumerated() {
+                    let t = first + Double(i) * f.step
+                    guard t + f.step <= covered, let bin else { continue }
+                    events.append((t, bin.values.reduce(0) { $0 + (Self.valid($1) ? $1 : 0) }))
+                }
+                covered = Swift.min(covered, first)
+            }
+        }
+        // Trip: the tokens since the last reset, and their average per hour.
         if let start = trip, Self.valid(start), start <= now {
             let from = (updated ?? now) - 86_400, inRange = start >= from
-            var total = 0.0
-            if inRange {
-                for d in live {
-                    let flows = (d.snapshot?.flow ?? [:]).values.filter { $0.step > 0 && $0.start != nil }
-                        .sorted { $0.step != $1.step ? $0.step < $1.step : ($0.start ?? 0) < ($1.start ?? 0) }
-                    var covered = Double.infinity
-                    for f in flows {
-                        let first = f.start!
-                        for (i, bin) in f.bins.enumerated() {
-                            let t = first + Double(i) * f.step
-                            guard t + f.step <= covered, t >= start, t <= now, let bin else { continue }
-                            total += bin.values.reduce(0) { $0 + (Self.valid($1) ? $1 : 0) }
-                        }
-                        covered = Swift.min(covered, first)
-                    }
-                }
-            }
+            let total = inRange ? events.reduce(0) { $1.t >= start && $1.t <= now ? $0 + $1.n : $0 } : 0
             let hours = (now - start) / Self.hour
             self.trip = Trip(start: start, tokens: inRange ? total : nil, rate: inRange && hours > 0 ? total / hours : nil, inRange: inRange)
         } else { self.trip = nil }
+        let span = period.seconds, begin = now - span
+        var slices = Array(repeating: 0.0, count: 24)
+        for e in events where e.t >= begin && e.t <= now { slices[Swift.min(23, Int((e.t - begin) / span * 24))] += e.n }
+        flow = slices
     }
 
     private static func reach(left: Double, burn: Double, reset: Double?, now: Double, account: String) -> Reach {

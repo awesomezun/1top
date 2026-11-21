@@ -35,7 +35,7 @@ class ContinuationTests(unittest.TestCase):
         self.records = {}
         for pid, sid, kind in [(100, OLD, 'interactive'), (103, NEW, 'bg')]:
             self.records[pid] = {'pid': pid, 'sessionId': sid, 'kind': kind, 'status': 'idle',
-                'procStart': datetime.fromtimestamp(pid, timezone.utc).strftime('%a %b %d %H:%M:%S %Y')}
+                'cwd':'/work/ART-LSH', 'procStart': datetime.fromtimestamp(pid, timezone.utc).strftime('%a %b %d %H:%M:%S %Y')}
         self.records[100]['parkedJobId'] = 'job'
         self.records[103]['jobId'] = 'job'
 
@@ -73,7 +73,7 @@ class ContinuationTests(unittest.TestCase):
         self.assertEqual(chains(p, missing, self.meta), {})
         # Only Claude helpers may stand between the job and launchd.
         q = copy.deepcopy(p); q[101]['claude_role'] = 'interactive'
-        self.assertEqual(chains(q, r, self.meta), {})
+        self.assertEqual(chains(q, r, self.meta), {100: [100, 103]})  # R2 ignores ancestry
 
     def test_adopted_jobs_still_require_matching_profile_and_process_birth(self):
         p, r = self.adopted()
@@ -89,20 +89,18 @@ class ContinuationTests(unittest.TestCase):
                   'sessionId': '33333333-3333-4333-8333-333333333333',
                   'procStart': datetime.fromtimestamp(105, timezone.utc).strftime('%a %b %d %H:%M:%S %Y')}
         self.meta[105] = self.meta[100].copy()
-        self.assertEqual(chains(p, r, self.meta), {})
+        self.assertEqual(chains(p, r, self.meta), {100:[100,103],105:[105,103]})
         r[103]['status'] = 'busy'
         c = self.discover(p, r)
-        jobs = [s for s in c.specs if s['pid'] == 103]
-        self.assertEqual(len(jobs), 1)
-        self.assertEqual((jobs[0]['id'], jobs[0]['status']), (NEW, 'working'))
-        self.assertNotIn('terminal_owner_pid', jobs[0])
-        self.assertTrue(all(s.get('continuation_pending') for s in c.specs if s['pid'] != 103))
+        self.assertEqual(len(c.specs),1)
+        self.assertEqual({run['pid'] for run in c.specs[0]['runs']},{100,103,105})
+        self.assertFalse(c.specs[0]['input_verified'])
 
     def test_live_job_and_ancestry_link_the_continuation(self):
         self.assertEqual(chains(self.processes, self.records, self.meta), {100: [100, 103]})
 
     def test_wrong_parent_profile_birth_or_job_cannot_be_linked(self):
-        for field, value in [('ppid', 1), ('birth', 104.5)]:
+        for field, value in [('birth', 104.5)]:
             p = copy.deepcopy(self.processes); p[103][field] = value
             self.assertEqual(chains(p, self.records, self.meta), {})
         m = copy.deepcopy(self.meta); m[103]['config_dir'] = '/different'
@@ -117,43 +115,34 @@ class ContinuationTests(unittest.TestCase):
         self.assertEqual(chains(p, r, m), {})
 
     def test_discovery_keeps_one_stable_row_and_live_execution_pid(self):
-        (self.root/'sessions').mkdir(); (self.root/'projects/p').mkdir(parents=True)
-        for pid, record in self.records.items():
-            (self.root/'sessions'/f'{pid}.json').write_text(json.dumps(record))
-            (self.root/'projects/p'/f"{record['sessionId']}.jsonl").write_text('')
         terminal = {'handle': 'term-one', 'incarnationId': 'incarnation', 'title': 'Test'}
-        def run(args, **kwargs):
-            if args[0] == 'lsof': return ''
-            if 'terminal' in args: return json.dumps({'result': {'terminals': [terminal]}})
-            return ''
-        c = Collector(); c.process_cache = self.meta.copy()
-        with patch.object(c, 'processes', return_value=self.processes), \
-                patch.object(c, 'metadata', side_effect=lambda p: c.process_cache[p['pid']]), \
-                patch('onetop.server.run', side_effect=run), patch('onetop.server.inventory', return_value={}), \
-                patch('onetop.server.HOME', self.root):
-            c.discover()
+        c = self.discover(self.processes,self.records,[terminal])
         self.assertEqual(len(c.specs), 1)
         s = c.specs[0]
-        self.assertEqual((s['id'], s['active_session_id'], s['pids']), (OLD, NEW, [103]))
+        self.assertEqual((s['id'], s['active_session_id'], s['pids']), (NEW, NEW, [103]))
         self.assertTrue(s['input_verified']); self.assertEqual(c.process_counts, {'Claude': 1})
-        old_key = target_key({**s, 'pids': [100], 'process_started': '100', 'process_birth': 100.0})
+        # A mark or message sent before the job took over was keyed to the owner's own conversation and process.
+        old_key = target_key({**s, 'id': OLD, 'pids': [100], 'process_started': '100', 'process_birth': 100.0})
         self.assertIn(old_key, s['continuation_keys'])
 
-    def discover(self, processes, records):
+    def discover(self, processes, records, terminals=None):
+        from onetop.observe.transcripts import Reader
         (self.root/'sessions').mkdir(exist_ok=True); (self.root/'projects/p').mkdir(parents=True, exist_ok=True)
+        transcripts={}
         for pid, record in records.items():
-            (self.root/'sessions'/f'{pid}.json').write_text(json.dumps(record))
-            (self.root/'projects/p'/f"{record['sessionId']}.jsonl").write_text('')
-        def run(args, **kwargs):
-            if args[0] == 'lsof': return ''
-            if 'terminal' in args: return json.dumps({'result': {'terminals': []}})
-            return ''
-        c = Collector(); c.process_cache = {pid: self.meta.get(pid, self.meta[100]) for pid in processes}
-        with patch.object(c, 'processes', return_value=processes), \
-                patch.object(c, 'metadata', side_effect=lambda p: c.process_cache[p['pid']]), \
-                patch('onetop.server.run', side_effect=run), patch('onetop.server.inventory', return_value={}), \
-                patch('onetop.server.HOME', self.root):
-            c.discover()
+            path=self.root/'projects/p'/f"{record['sessionId']}.jsonl"
+            path.write_text('')
+            transcripts[record['sessionId']]={'path':str(path),'events':[]}
+        procs=[]
+        for pid,p in processes.items():
+            role=p['claude_role']
+            args=['claude','--bg-pty-host'] if role=='helper' else ['claude','--bg-spare'] if role=='background' else ['claude']
+            procs.append({**p,'argv':args,'config_dir':str(self.root),'app':('Terminal',''),
+                          'env':{'ORCA_TERMINAL_HANDLE':'term-one'}})
+        record={'captured_at':time.time(),'processes':procs,'claude_registry':{str(k):v for k,v in records.items()},
+                'claude_transcripts':transcripts,'codex_logs':[],'orca_terminals':terminals or []}
+        c=Collector();c.observer=Mock();c.observer.read.return_value=record
+        c.discover()
         return c
 
     def test_a_session_started_in_the_background_is_counted_alone(self):
@@ -170,7 +159,7 @@ class ContinuationTests(unittest.TestCase):
         p, r = self.adopted()
         r[103]['status'] = 'busy'; r[100]['status'] = 'shell'
         c = self.discover(p, r)
-        self.assertEqual([(s['id'], s['active_session_id'], s['pids'], s['status']) for s in c.specs], [(OLD, NEW, [103], 'working')])
+        self.assertEqual([(s['id'], s['active_session_id'], s['pids'], s['status']) for s in c.specs], [(NEW, NEW, [103], 'working')])
 
     def test_finished_turn_with_background_shell_is_idle(self):
         path = self.root/'turn.jsonl'

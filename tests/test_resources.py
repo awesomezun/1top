@@ -28,8 +28,8 @@ class ResourceTests(unittest.TestCase):
         # In two seconds, the parent uses one CPU and its child uses two CPUs.
         # On a 16-core host these are 6.25% and 12.5%, not 100% and 200%.
         def processes(parent,child):
-            return [NS(info=dict(pid=pid,ppid=ppid,name='fixture',create_time=0,
-                cpu_times=NS(user=seconds,system=0),memory_info=NS(rss=100)))
+            return [Mock(as_dict=Mock(return_value=dict(pid=pid,ppid=ppid,name='fixture',create_time=0,
+                cpu_times=NS(user=seconds,system=0),memory_info=NS(rss=100))))
                 for pid,ppid,seconds in [(10,0,parent),(11,10,child)]]
         Times=namedtuple('Times','user system idle')
         session={'id':'s','pids':[10],'process_started':'Thu Jan  1 00:00:00 1970','process_birth':0}

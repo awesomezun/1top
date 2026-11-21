@@ -35,6 +35,7 @@ from .effort import codex_level, backfill_codex, apply_statusline
 from .telemetry import TelemetryStore, session_index, bind_account, enrich
 from . import claude_continuation
 from . import account_aliases
+from .diagnostics import failure
 
 BASE = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -61,6 +62,12 @@ def epoch(value):
 
 def run(args, timeout=8):
     return subprocess.check_output(args, text=True, stderr=subprocess.DEVNULL, timeout=timeout)
+
+
+def first_codex_report(info, total):
+    """A Codex token report whose cumulative total equals its own request: the thread's first."""
+    last = info.get('last_token_usage')
+    return isinstance(last, dict) and sum(total) > 0 and vector(last, True) == total
 
 
 def vector(usage, codex=False):
@@ -96,53 +103,7 @@ def glm_windows(payload, now):
     except ProviderError:return []
 
 
-def terminal_for(meta, terminals):
-    """Join a process to a live Orca tab by identity, never by its directory."""
-    for field, key in [('orca_handle','handle'),('orca_tab','tabId')]:
-        matches=[t for t in terminals if meta.get(field) and t.get(key)==meta[field]]
-        if len(matches)==1:
-            t=matches[0]
-            return {k:t.get(k) for k in ('handle','tabId','title','worktreePath','incarnationId')}
-    return None
-
-
-def pane_thread_name(title, cwd):
-    suffix=' | '+Path(cwd).name
-    if not title.endswith(suffix):return None
-    name=title[:-len(suffix)]
-    # Codex decorates the stable thread name with a Braille activity spinner.
-    name = re.sub(r'^[\u2800-\u28ff]\s+', '', name)
-    # Codex adds this exact attention prefix while the stable thread name stays
-    # unchanged. Strip the decoration, not an arbitrary pipe-delimited prefix.
-    return re.sub(r'^\[\s*[.!]\s*\] Action Required \| ', '', name)
-
-
-def bind_terminal(spec, metadata, terminals, pane_titles, specs):
-    if spec.get('is_subagent'):
-        spec.update(pids=[], orca_terminal=None, terminal_match='unverified',
-                    terminal_note='하위 에이전트 · 부모 세션의 실행 위치에서 확인')
-        return
-    pids=spec['pids']
-    source='프로세스의 Orca 터미널 ID'
-    if spec['kind']=='Codex' and not spec.get('process_only'):
-        name=spec.get('thread_name')
-        unique=name and sum(s.get('thread_name')==name and s['cwd']==spec['cwd']
-                            for s in specs if s['kind']=='Codex')==1
-        matches=[pid for pid in pids if unique and
-                 pane_thread_name(pane_titles.get(metadata.get(pid,{}).get('tmux_pane'),''),spec['cwd'])==name]
-        # A shared backend's environment belongs to only one of its clients.
-        # Never attach that terminal to every thread, or pick a same-directory client.
-        if len(matches)!=1:
-            spec.update(orca_terminal=None,terminal_match='unverified',
-                        terminal_note='세션과 터미널 화면 제목의 고유한 일치를 확인하지 못했습니다.')
-            return
-        pids=matches
-        source='Codex 세션명·프로젝트와 터미널 화면 제목의 고유한 일치 → Orca 터미널 ID'
-        spec['pids']=matches
-    meta=metadata.get(spec.get('terminal_owner_pid', pids[0]),{}) if len(pids)==1 else {}
-    terminal=terminal_for(meta,terminals)
-    spec.update(orca_terminal=terminal,terminal_match='confirmed' if terminal else 'unavailable',
-                terminal_note=source if terminal else '프로세스는 실행 중이지만 현재 Orca 탭 목록에서 연결을 확인하지 못했습니다.')
+from .sessions.terminals import terminal_for, bind_terminal, pane_thread_name
 
 
 class Ledger:
@@ -193,7 +154,10 @@ class Ledger:
                     was_known = s['known']
                     # A decreasing cumulative counter is a reset, never negative spend.
                     reset = was_known and any(a < b for a, b in zip(v, old))
-                    delta = [max(0, a-b) for a,b in zip(v, old)] if was_known and not reset else ZERO[:]
+                    # The thread's first request: its cumulative total is that one request, so it counts
+                    # from zero. A fork or a tail read starts above its own request and stays a baseline.
+                    first = not was_known and first_codex_report(info, v)
+                    delta = [max(0, a-b) for a,b in zip(v, old)] if was_known and not reset else v[:] if first else ZERO[:]
                     if reset:
                         s['counter_reset'] = True
                     s['total'], s['known'] = v, True
@@ -273,8 +237,18 @@ class Collector:
         self.telemetry = None
         self.history = None
         self.controller = None
+        self.db = None
 
     def initialize(self):
+        try:self._initialize()
+        except Exception:
+            if self.db is not None:
+                self.db.close()
+                self.db = None
+            self.spans = None
+            raise
+
+    def _initialize(self):
         DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
         try:self.telemetry = TelemetryStore(DATA)
         except (OSError, sqlite3.Error):pass  # Auxiliary intake must not stop JSONL collection.
@@ -350,241 +324,28 @@ class Collector:
             self.speed_cache = (snapshot['updated'], rows)
             return rows
 
-    def processes(self):
-        rows = {}
-        for line in run(['ps','-axo','pid=,ppid=,tty=,rss=,pcpu=,lstart=,comm=']).splitlines():
-            p = line.split(None, 10)
-            if len(p) != 11:
-                continue
-            name = claude_continuation.process_name(p[10])
-            if name not in ('claude','claude bg-spare','claude bg-pty-host','codex','agy') or int(p[1]) == os.getpid():
-                continue
-            pid = int(p[0])
-            try:
-                process = psutil.Process(pid)
-                birth = process.create_time()
-                role = claude_continuation.role(name, process.cmdline() if name == 'claude' else ())
-            except psutil.Error:continue
-            rows[pid] = {'pid': pid, 'ppid': int(p[1]), 'tty': p[2], 'rss': int(p[3])/1024,
-                         'cpu': float(p[4]), 'exe': 'claude' if role else name,
-                         'claude_role': role, 'started':' '.join(p[5:10]),'birth':birth}
-        return rows
-
-    def metadata(self, process):
-        pid = process['pid']
-        if pid not in self.process_cache or self.process_cache[pid].get('started')!=process.get('started') or self.process_cache[pid].get('birth')!=process.get('birth'):
-            info = {'provider': '', 'configured_model': '', 'config_dir': str(HOME/'.claude')}
-            info['started']=process.get('started')
-            info['birth']=process.get('birth')
-            try:
-                env = psutil.Process(pid).environ()
-                # Deliberately whitelist metadata. Credentials never leave this function.
-                safe_ids={'ORCA_TERMINAL_HANDLE':'orca_handle','ORCA_TAB_ID':'orca_tab','TMUX_PANE':'tmux_pane'}
-                for key in ('ANTHROPIC_BASE_URL','ANTHROPIC_DEFAULT_OPUS_MODEL','ANTHROPIC_MODEL','CLAUDE_CONFIG_DIR',*safe_ids):
-                    if env.get(key):
-                        val = env[key]
-                        if key in safe_ids:
-                            info[safe_ids[key]]=val
-                        elif key.endswith('BASE_URL'):
-                            info['provider'] = urlsplit(val).hostname or ''
-                        elif key == 'CLAUDE_CONFIG_DIR':
-                            info['config_dir'] = val
-                        else:
-                            info['configured_model'] = val
-                del env
-            except (OSError, psutil.Error):
-                pass
-            self.process_cache[pid] = info
-        return self.process_cache[pid]
-
     def discover(self):
-        if platform.system()=='Windows':
-            from .windows_discovery import discover
-            return discover(self)
-        processes = self.processes()
-        self.process_cache = {k:v for k,v in self.process_cache.items() if k in processes}
-        specs, counts = [], collections.Counter()
-        for process in processes.values():
-            self.metadata(process)
-        registries = {pid: claude_continuation.registry(self.process_cache[pid]['config_dir'], pid)
-                      for pid, p in processes.items() if p['exe'] == 'claude'}
-        # A Claude Code background session (registry kind bg) runs from a plain-looking process under a PTY host;
-        # its verified registry, not its command line, says it is one.
-        def background(pid):
-            return registries.get(pid, {}).get('kind') == 'bg' and claude_continuation.verified(registries[pid], processes[pid])
-        for pid, p in processes.items():
-            if p.get('claude_role') == 'interactive' and background(pid):
-                p['claude_role'] = 'background'
-        continuations = claude_continuation.chains(processes, registries, self.process_cache)
-        continued = {pid for chain in continuations.values() for pid in chain[1:]}
-        cwds, open_logs = {}, {}
-        if processes:
-            try:
-                raw = run(['lsof','-p',','.join(map(str,processes)),'-Fn'], timeout=10)
-                pid, fd = None, ''
-                for l in raw.splitlines():
-                    if l.startswith('p') and l[1:].isdigit():
-                        pid = int(l[1:])
-                    elif l.startswith('f'):
-                        fd = l[1:]
-                    elif l.startswith('n'):
-                        if fd == 'cwd':
-                            cwds[pid] = l[1:]
-                        if '/.codex/' in l and l.endswith('.jsonl') and '/sessions/' in l:
-                            open_logs[l[1:]] = pid
-            except (OSError, subprocess.SubprocessError):
-                pass
-        for pid, p in processes.items():
-            if p.get('claude_role') == 'helper' or p.get('claude_role') == 'background' and (pid in continued or not background(pid)):
-                # A background job is counted through its verified interactive owner, or alone when it was started in
-                # the background (or its terminal has gone); a spare with no session is not counted.
-                continue
-            if p['exe'] == 'codex':
-                if p['tty'] != '??':
-                    counts['Codex'] += 1
-                    self.metadata(p)
-                continue
-            chain = continuations.get(pid, [pid])
-            owner_pid = pid
-            pid = chain[-1]
-            p = processes[pid]
-            meta = self.metadata(p)
-            kind = 'Antigravity' if p['exe']=='agy' else ('GLM' if meta['provider'] in ('api.z.ai','open.bigmodel.cn') or meta['configured_model'].lower().startswith('glm') else 'Claude')
-            counts[kind] += 1
-            reg = registries.get(pid) or claude_continuation.registry(meta['config_dir'], pid)
-            original = registries.get(owner_pid, reg)
-            sid = original.get('sessionId') or f'process-{pid}'
-            cwd = cwds.get(pid) or reg.get('cwd') or ''
-            path = claude_transcript(meta['config_dir'],reg.get('sessionId') or sid)
-            spec = {'id': sid, 'kind': kind, 'cwd': cwd, 'title': reg.get('name') or Path(cwd).name,
-                    'pid': pid, 'pids': [pid], 'cpu': p['cpu'], 'rss': round(p['rss']),
-                    'status': registry_status(reg), 'status_at': epoch(reg.get('statusUpdatedAt')),
-                    'waiting_for': reg.get('waitingFor'), 'path': path,
-                    'configured_model': meta['configured_model'], 'provider': meta['provider'], 'config_dir':meta['config_dir'],
-                    'source': 'Claude Code 세션 레지스트리' if reg else 'macOS 프로세스', 'connected': True}
-            if len(chain) > 1:
-                sources = [{'session_id': registries[p]['sessionId'],
-                            'path': claude_transcript(meta['config_dir'], registries[p]['sessionId'])}
-                           for p in chain]
-                spec.update(active_session_id=reg['sessionId'], continuation_sources=sources,
-                            terminal_owner_pid=owner_pid, continuation_processes=chain[:-1],
-                            source='Claude Code 검증된 백그라운드 이어하기')
-            elif reg.get('parkedJobId'):
-                spec.update(continuation_pending=True, status='unknown',
-                            note='백그라운드로 이어진 실제 세션을 확인 중입니다.')
-            if not spec.get('continuation_pending'):
-                completed = claude_continuation.completed_shell_turn(reg, path)
-                if completed:
-                    spec.update(status='idle', status_at=max(completed, spec['status_at']),
-                                status_source='claude_turn_completed')
-            if kind == 'Antigravity':
-                spec['note'] = '실행 상태는 확인됩니다. 이 설치의 대화 DB에는 검증된 토큰 필드가 없어 세션 토큰은 표시하지 않습니다.'
-            elif not path:
-                spec['note'] = '열린 프로세스는 확인되지만 해당 세션의 대화 기록을 찾지 못했습니다.'
-            specs.append(spec)
-        records = {}
-        try:
-            dbpath = max((HOME/'.codex').glob('state_*.sqlite'), key=lambda p:p.stat().st_mtime)
-            with sqlite3.connect('file:'+str(dbpath)+'?mode=ro',uri=True,timeout=1) as db:
-                columns={r[1] for r in db.execute('PRAGMA table_info(threads)')}
-                name_column='name' if 'name' in columns else 'NULL'
-                for r in db.execute(f'SELECT id,rollout_path,cwd,title,model,{name_column} FROM threads WHERE archived=0'):
-                    if r[1] in open_logs:
-                        records[r[1]] = r
-        except (OSError, ValueError, sqlite3.Error):
-            pass
-        for path, owner in open_logs.items():
-            r = records.get(path)
-            if not r:
-                try:
-                    with open(path) as f:
-                        p = json.loads(f.readline()).get('payload',{})
-                    r = (p.get('id',Path(path).stem),path,p.get('cwd',''),'',None,None)
-                except (OSError, ValueError):
-                    continue
-            matching = [p['pid'] for p in processes.values() if p['exe']=='codex' and p['tty']!='??' and cwds.get(p['pid'])==r[2]]
-            title = (r[5] or r[3] or '').split('\n',1)[0][:90]
-            if title.startswith(('# AGENTS','<','You are')):
-                title = Path(r[2]).name
-            specs.append({'id':r[0], 'path':path, 'kind':'Codex', 'cwd':r[2], 'title':title or Path(r[2]).name,
-                          'thread_name':r[5],
-                          'configured_model':r[4] or '', 'pid':owner, 'pids':matching, 'cpu':None, 'rss':None,
-                          'status':'unknown', 'status_at':0, 'connected':True,
-                          'source':'Codex 백엔드가 열고 있는 세션 기록',
-                          'note':'여러 CLI가 한 백엔드를 공유할 수 있습니다. 세션 수와 CLI 프로세스 수는 다를 수 있습니다.'})
-            cache_key = (path, r[0])
-            if cache_key not in self.session_metadata:
-                self.session_metadata[cache_key] = codex_metadata(path, r[0])
-            specs[-1].update(self.session_metadata[cache_key])
-        self.session_metadata = {key: value for key, value in self.session_metadata.items() if key[0] in open_logs}
-        try:
-            r = json.loads(run([orca_executable(),'terminal','list','--json'],timeout=5))['result']
-            self.terminals=r.get('terminals',[])
-            self.terminal_count = r.get('totalCount',len(r.get('terminals',[])))
-        except (OSError, ValueError, KeyError, subprocess.SubprocessError):
-            self.terminals=[]
-            self.terminal_count = None
-        pane_titles={}
-        try:
-            raw=run(['tmux','list-panes','-a','-F','#{pane_id}\t#{pane_title}'],timeout=3)
-            pane_titles=dict(line.split('\t',1) for line in raw.splitlines() if '\t' in line)
-        except (OSError, ValueError, subprocess.SubprocessError):pass
-        for spec in specs:
-            bind_terminal(spec,self.process_cache,self.terminals,pane_titles,specs)
-            if len(spec['pids'])==1 and spec['terminal_match']!='unverified':
-                spec['process_started']=processes[spec['pids'][0]]['started']
-                spec['process_birth']=processes[spec['pids'][0]]['birth']
-                spec['control_key']=target_key(spec)
-                spec['continuation_keys'] = [target_key({**spec, 'pids': [pid],
-                    'process_started': processes[pid]['started'], 'process_birth': processes[pid]['birth']})
-                    for pid in spec.get('continuation_processes', [])]
-        attached={pid for s in specs if s.get('control_key') for pid in s['pids']}
-        for pid,p in processes.items():
-            if p['exe']!='codex' or p['tty']=='??' or pid in attached:continue
-            cwd=cwds.get(pid,'');meta=self.process_cache.get(pid,{})
-            name=pane_thread_name(pane_titles.get(meta.get('tmux_pane'),''),cwd)
-            spec={'id':f'process-codex-{pid}','kind':'Codex','cwd':cwd,'title':name or 'Codex 세션 연결 미확인',
-                  'pid':pid,'pids':[pid],'path':None,'configured_model':'','cpu':None,'rss':None,
-                  'status':'unknown','status_at':0,'connected':True,'process_only':True,
-                  'source':'macOS CLI 프로세스 · 세션 기록 연결 미확인',
-                  'note':'터미널과 CLI 실행은 확인됐지만 대화 세션 ID·토큰 기록의 연결은 아직 확인되지 않았습니다.'}
-            bind_terminal(spec,self.process_cache,self.terminals,pane_titles,specs)
-            spec['process_started']=p['started'];spec['process_birth']=p['birth'];spec['control_key']=target_key(spec);specs.append(spec)
-        self.shared_roots=[pid for pid,p in processes.items() if p['exe']=='codex' and p['tty']=='??']
-        handles=collections.defaultdict(set)
-        for spec in specs:
-            if spec.get('orca_terminal') and spec.get('control_key'):
-                handles[spec['orca_terminal']['handle']].update(spec['pids'])
-        for spec in specs:
-            term=spec.get('orca_terminal') or {}
-            spec['input_verified']=bool(len(spec['pids'])==1 and term and
-                not spec.get('continuation_pending') and
-                processes[spec.get('terminal_owner_pid', spec['pids'][0])]['tty']!='??' and len(handles[term['handle']])==1)
-        self.app_inventory=inventory()
-        self.apps=applications(self.app_inventory)
-        tracked={pid for spec in specs for pid in (*spec['pids'], *spec.get('continuation_processes', []))}
-        tracked.update(pid for pid, p in processes.items() if p.get('claude_role') in ('helper', 'background'))
-        for spec in specs:
-            spec['location']=context(spec['pids'][0],self.app_inventory) if len(spec['pids'])==1 else {'app':'Unknown','terminal':'','match':'unverified'}
-        for pid,row in self.app_inventory.items():
-            if not row['kind'] or pid in tracked:continue
-            parent=row['ppid'];visited=set();nested=False
-            while parent in self.app_inventory and parent not in visited:
-                visited.add(parent)
-                if parent in tracked:nested=True;break
-                parent=self.app_inventory[parent]['ppid']
-            if nested:continue
-            # Observe unsupported CLI resources without inventing token usage or pause semantics.
-            specs.append({'id':f'cli-{pid}-{row["birth"]}', 'kind':row['kind'], 'cwd':row['cwd'],
-                'title':row['kind'], 'pid':pid, 'pids':[pid], 'path':None, 'configured_model':'',
-                'status':'unknown','status_at':0,'connected':True,'process_only':True,
-                'process_birth':row['birth'],'location':context(pid,self.app_inventory),
-                'source':'CLI executable and process ancestry','note':'CLI detected. Token and turn-control adapter not available yet.'})
-            specs[-1]['process_started']=process_start(pid)
-            if specs[-1]['process_started']:specs[-1]['control_key']=target_key(specs[-1])
-            counts[row['kind']]+=1
-        self.specs, self.process_counts = annotate_hierarchy(specs), dict(counts)
-        self.discovery_at = time.time()
+        from .observe import Observer
+        from .sessions import resolve
+        if not hasattr(self, 'observer'):
+            self.observer = Observer(HOME)
+        record = self.observer.read(run)
+        specs = resolve(record)
+        self.observation = record
+        self.specs = specs
+        self.app_inventory = {p['pid']: p for p in record['processes']}
+        self.apps = applications(self.app_inventory)
+        self.terminals = record.get('orca_terminals') or []
+        self.terminal_count = len(self.terminals) if record.get('orca_terminals') is not None else None
+        self.shared_roots = [p['pid'] for p in record['processes'] if p.get('kind') == 'Codex' and p.get('role') == 'helper']
+        self.process_counts = dict(collections.Counter(s['kind'] for s in specs))
+        self.discovery_at = record['captured_at']
+
+    def refresh_sessions(self):
+        from .sessions import resolve
+        if hasattr(self, 'observation'):
+            self.observation = self.observer.refresh(self.observation)
+            self.specs = resolve(self.observation)
 
     def read_tracker(self, spec):
         from .routing_attribution import attach
@@ -665,7 +426,7 @@ class Collector:
         spec['context_usage'] = stored_context(s) if not spec['loading'] else None
         spec['quota'] = s.get('quota')
         spec['counter_reset'] = s.get('counter_reset',False)
-        if spec['kind']=='Codex':
+        if spec['kind']=='Codex' and 'display_status' not in spec:
             spec['status'],spec['status_at']=s['status'],s['status_at']
         if not spec['loading'] and not s['known']:
             spec['note']='대화 기록에 유효한 사용량 보고가 없습니다. 0으로 간주하지 않습니다.'
@@ -674,6 +435,49 @@ class Collector:
             s.update(cursors[ledger_path])
         if start < st.st_size or effort_migrated or cursors is not None:
             self.db.execute('INSERT OR REPLACE INTO trackers VALUES (?,?)',(ledger_path,json.dumps(s,separators=(',',':'))))
+
+    def read_openmausbot(self, now):
+        """T5: OpenMausBot's ledger turns become events once each (the ledger only grows) and per-thread totals."""
+        from .observe import openmausbot
+        totals = {}
+        for path in openmausbot.ledgers(HOME, now):
+            key = 'openmausbot:' + str(path)
+            row = self.db.execute('SELECT data FROM trackers WHERE path=?', (key,)).fetchone()
+            s = json.loads(row[0]) if row else {}
+            try:
+                st = os.stat(path)
+                if s.get('inode') != st.st_ino or st.st_size < s.get('offset', 0):
+                    s = {'inode': st.st_ino, 'offset': 0, 'threads': {}}
+                if s['offset'] < st.st_size:
+                    with open(path, 'rb') as f:
+                        f.seek(s['offset'])
+                        raw = f.read(min(st.st_size - s['offset'], 64*1024*1024))
+                    end = raw.rfind(b'\n') + 1  # an unfinished last line waits
+                    for line in raw[:end].split(b'\n')[:-1]:
+                        try:
+                            item = openmausbot.turn(json.loads(line))
+                        except (ValueError, UnicodeError):
+                            continue
+                        if not item:
+                            continue
+                        thread = s['threads'].setdefault(item['thread'], {'tokens': ZERO[:], 'model': '', 'last': 0})
+                        thread['tokens'] = [a + b for a, b in zip(thread['tokens'], item['tokens'])]
+                        if item['t'] >= thread['last']:
+                            thread.update(model=item['model'], last=item['t'])
+                        if item['t'] >= self.started and sum(item['tokens']):
+                            self.db.execute('INSERT INTO events(t,sid,kind,fresh,cached,written,output,account,model,cwd) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                                            (item['t'], 'openmausbot:' + item['thread'], item['kind'], *item['tokens'], None, item['model'] or None, None))
+                    if end:
+                        s['offset'] += end
+                        self.db.execute('INSERT OR REPLACE INTO trackers VALUES (?,?)', (key, json.dumps(s, separators=(',', ':'))))
+            except OSError:
+                continue
+            for thread_id, thread in s.get('threads', {}).items():
+                total = totals.setdefault(thread_id, {'tokens': ZERO[:], 'model': '', 'last': 0})
+                total['tokens'] = [a + b for a, b in zip(total['tokens'], thread['tokens'])]
+                if thread['last'] >= total['last']:
+                    total.update(model=thread['model'], last=thread['last'])
+        return totals
 
     def read_continuation(self, spec, roots, telemetry_sessions, now):
         from .claude_statusline import session_binding
@@ -741,6 +545,8 @@ class Collector:
         collect_started=time.monotonic()
         if time.time()-self.discovery_at>9:
             self.discover()
+        else:
+            self.refresh_sessions()
         now=time.time()
         sessions=[]
         roots=self.accounts.roots()
@@ -750,9 +556,12 @@ class Collector:
         try:telemetry = self.telemetry.snapshot(now) if self.telemetry else {'available':False}
         except sqlite3.Error:telemetry = {'available':False}
         telemetry_sessions = session_index(telemetry)
+        mausbot = self.read_openmausbot(now)
         for src in self.specs:
-            s=dict(src)
-            s['account_binding']=weekly_usage.account_for(s,roots)
+            from .sessions import public
+            s=public(src)
+            s['account_binding']=(weekly_usage.bind_adapter(self.db,s,roots,now) if s['kind']=='Aside' else weekly_usage.account_for(s,roots))
+            s.pop('billing_account',None)
             from .claude_statusline import session_binding
             captured_binding = session_binding(s, now=now, quotas=account_quotas)
             if s.get('account_binding_uncertain'):
@@ -763,6 +572,9 @@ class Collector:
                 s['account_binding_source'] = 'claude_statusline_session'
             bind_account(s, telemetry_sessions, roots, now)
             s.update(tokens=None,model=s.get('configured_model',''),last_usage=0,loading=False)
+            if s.get('usage_adapter') == 'openmausbot' and s.get('conversation_id') in mausbot:
+                ledger = mausbot[s['conversation_id']]
+                s.update(tokens=ledger['tokens'], model=ledger['model'] or s['model'], last_usage=ledger['last'])
             if s['path']:
                 try:
                     if s.get('continuation_sources'):
@@ -774,18 +586,10 @@ class Collector:
                 apply_statusline(s, now)
             enrich(s, telemetry_sessions)
             # Registry states are reported, not inferred from CPU or a refreshing terminal clock.
-            if s['status'] not in ('working','idle','waiting','interrupted'):
+            if s['status'] not in ('working','subagents','done','idle','waiting','interrupted','disconnected'):
                 s['status']='unknown'
-            s['project']=Path(s['cwd']).name or '알 수 없음'
-            sessions.append(s)
-        from .aside import discover as aside_sessions
-        for s in aside_sessions(now=now):
-            s['account_binding']=weekly_usage.bind_adapter(self.db,s,roots,now)
-            s.pop('billing_account',None)
-            s.update(tokens=None,model=s.get('configured_model',''),last_usage=0,loading=False)
-            if s['path']:
-                try:self.read_tracker(s)
-                except OSError:s['note']='Aside 사용량 기록을 읽을 수 없습니다.'
+            # T5: an app seat is named by its agent or app, not by its workspace folder's id.
+            s['project']=s.get('project_name') or Path(s['cwd']).name or '알 수 없음'
             sessions.append(s)
         # Keep display identity after its process/terminal leaves discovery.
         session_archive.remember(self.db, sessions, now)
@@ -858,7 +662,7 @@ class Collector:
             quotas=[dict(q) for q in account_quotas];overrides=reports.read_plans(DATA)
             def compute():
                 try:self.reports_value=self.value_report.compute(self.history.model_totals,quotas,overrides,time.time())
-                except Exception as e:print('reports:',type(e).__name__,flush=True)
+                except Exception as e:failure('reports',e)
             self.reports_job=threading.Thread(target=compute,daemon=True,name='1top-reports');self.reports_job.start()
         if now-self.reports_weekly[0]>=30:
             try:self.reports_weekly=(now,reports.weekly(self.db,now),reports.last_week(self.db,now))
@@ -877,25 +681,29 @@ class Collector:
         if self.controller is None or worker and worker.is_alive():return
         def dispatch():
             try:self.controller.flush_mailbox()
-            except Exception as e:print('mailbox:',type(e).__name__,flush=True)
+            except Exception as e:failure('mailbox',e)
         self.mailbox_worker=threading.Thread(target=dispatch,daemon=True,name='1top-mailbox')
         self.mailbox_worker.start()
 
     def loop(self):
-        self.accounts.start()
-        self.initialize()
-        self.history.start()
+        initialized=False
         while True:
             before=time.monotonic()
-            try:self.collect()
+            try:
+                if not initialized:
+                    self.accounts.start()
+                    self.initialize()
+                    initialized=True
+                self.history.start()
+                self.collect()
             except Exception as e:
                 # No raw exception messages: paths and tool responses can contain private text.
                 with self.lock:self.snapshot={**self.snapshot,'error':type(e).__name__}
-                command = os.path.basename(e.cmd[0]) if isinstance(e,subprocess.TimeoutExpired) and isinstance(e.cmd,list) else ''
-                print('collector:',type(e).__name__,command,flush=True)
-            # Local conversations must work without pairing or a relay socket.
-            # One collector tick owns dispatch; the relay only admits requests.
-            self.tick_mailbox()
+                failure('collector',e)
+            # Local conversations still drain after a failed collection tick.
+            if initialized:
+                try:self.tick_mailbox()
+                except Exception as e:failure('mailbox',e)
             time.sleep(max(.2,3-(time.monotonic()-before)))
 
 
@@ -992,6 +800,8 @@ class Handler(BaseHTTPRequestHandler):
                 try:snapshot=self.server.collector.state_for_period(period)
                 except ValueError:
                     self.json_response(400,{'ok':False,'message':'유효한 기간을 입력하세요. 최소 10분입니다.'});return
+                except (sqlite3.Error,OSError):
+                    self.json_response(503,{'ok':False,'error':'state_temporarily_unavailable'});return
             else:
                 with self.server.collector.lock:snapshot=self.server.collector.snapshot
             snapshot=self.server.controller.decorate(snapshot)
@@ -1008,7 +818,8 @@ class Handler(BaseHTTPRequestHandler):
             self.json_response(200,telemetry.snapshot() if telemetry else {'ready':False});return
         elif route=='/api/updates':
             self.json_response(200,getattr(self.server,'updates',None).value if getattr(self.server,'updates',None) else {});return
-        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/ranges.js','/speed.js','/weekly.js','/history.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js','/conversation.js','/quick.html','/quick.js','/quick.css','/cluster.js','/cluster.css','/cluster-pages.js','/layout.js','/customize.js','/reports.js'):
+        elif route in ('/','/index.html','/app.js','/style.css','/maps.js','/ranges.js','/speed.js','/weekly.js','/history.js','/maps.css','/typography.css','/benchmark.json','/dashboard.js','/dashboard.css','/i18n.js','/effects.js','/conversation.js','/quick.html','/quick.js','/quick.css','/cluster.js','/cluster.css','/cluster-pages.js','/layout.js','/customize.js','/reports.js','/cluster-themes.js',
+                       '/themes/core.js','/themes/catalog.json','/themes/mini.json','/themes/pairs.js','/themes/compact.js','/themes/t01-06.js','/themes/t07-17.js','/themes/t18-28.js','/themes/t29-39.js','/themes/t40-50.js','/themes/t51-61.js','/themes/t62-72.js'):
             name='index.html' if route=='/' else route[1:]
             data=(BASE/'dist'/name).read_bytes()
             mime={'html':'text/html','js':'application/javascript','css':'text/css','json':'application/json'}[name.rsplit('.',1)[1]]+'; charset=utf-8'

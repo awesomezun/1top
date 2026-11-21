@@ -124,6 +124,8 @@
 .cl-tach>.cl-odo{position:absolute;left:50%;bottom:var(--chip-at);transform:translateX(-50%);display:flex;align-items:center;gap:.5em}
 .cl-tach>.cl-odo>small{font-size:var(--chip);font-weight:600}.cl-tach>.cl-odo .cl-odo-of{display:none}
 .cl-tach>.cl-odo>.cl-led{font-size:var(--chip)}
+/* In the dial the total hangs under the wheels, so the odometer keeps its place. */
+.cl-tach>.cl-odo>.cl-odo-sum{position:absolute;top:100%;left:0;right:0;margin-top:.3em;text-align:center;font-size:var(--chip)}
 /* A dial under 280px has the same lines at their smallest legible sizes, a slightly smaller figure and the odometer
    without its label (its tooltip keeps it), so all of it stays inside the scale's circle; under 200px the subject leaves
    the dial (the pressed row or gauge shows it) and the scale numbers take a larger share. */
@@ -348,18 +350,25 @@
 .cl-odo>small,.cl-fuel>small,.cl-temp>small{font-size:var(--lab);font-weight:650;line-height:1.2;letter-spacing:.03em;color:var(--muted);white-space:nowrap}
 .cl-odo{display:grid;justify-items:center;gap:5px}
 .cl-lf .cl-odo>.cl-led{font-size:calc(var(--odo)*.95)}
-/* The odometer's wheels: each digit a strip of 0–9 and a trailing 0 in a window one digit tall, rolling up slowly. */
+/* The total in three figures under the wheels (Total 31.2B). */
+.cl-odo-sum{font-size:var(--lab);font-weight:650;line-height:1.2;letter-spacing:.03em;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.cl-odo-sum:empty{display:none}
+/* The figure bright, the unit apart and lighter, so 22.3 B never reads as 22.38. */
+.cl-odo-sum b{font-weight:700;color:var(--ink)}
+.cl-odo-sum i{font-style:normal;font-weight:500;margin-left:.24em;letter-spacing:0}
+/* The odometer's wheels: each digit a strip of 0–9 and a trailing 0 in a window one digit tall, rolling up slowly.
+   --odo-k shrinks them when a week or longer needs more than ten (cluster.js odometer). */
 .cl-wheels{gap:0;line-height:1}
-.cl-wheels i{display:block;height:1.25em;overflow:hidden;font-style:normal}
+.cl-wheels i{display:block;height:1.25em;overflow:hidden;font-style:normal;font-size:calc(1em*var(--odo-k,1))}
 .cl-wheels i>span{display:block;transition:transform 1.6s cubic-bezier(.22,.8,.3,1)}
 .cl-wheels i b{display:flex;align-items:center;justify-content:center;height:1.25em;font-weight:inherit}
-.cl-wheels em{align-self:flex-end;font-style:normal;line-height:1.25em}
+.cl-wheels em{align-self:flex-end;font-style:normal;line-height:1.25em;font-size:calc(1em*var(--odo-k,1))}
 .cl-wheels :is(i,em).lead{display:none}
 .cl-wheels[data-face=led] i,.cl-wheels[data-face=led0] i{width:.78em}
 .cl-wheels[data-face^=led] i b .cl-lcd{height:1.15em;width:auto;--fs-on:var(--led,#eef2f4)}
-.cl-wheels[data-face^=led] em{color:var(--led,#eef2f4);font:800 1.1em/1.25em var(--font)}
-.cl-wheels[data-face^=print] i,.cl-wheels[data-face=drum] i{width:.62em;font:650 1.1em/1 var(--font);color:#eef2f4;font-variant-numeric:tabular-nums}
-.cl-wheels[data-face^=print] em,.cl-wheels[data-face=drum] em{font:650 1.1em/1.25em var(--font);color:#8a949b}
+.cl-wheels[data-face^=led] em{color:var(--led,#eef2f4);font:800 calc(1.1em*var(--odo-k,1))/1.25em var(--font)}
+.cl-wheels[data-face^=print] i,.cl-wheels[data-face=drum] i{width:.62em;font:650 calc(1.1em*var(--odo-k,1))/1 var(--font);color:#eef2f4;font-variant-numeric:tabular-nums}
+.cl-wheels[data-face^=print] em,.cl-wheels[data-face=drum] em{font:650 calc(1.1em*var(--odo-k,1))/1.25em var(--font);color:#8a949b}
 .cl-wheels:is([data-face=led0],[data-face=print0]) :is(i,em).lead{display:block;opacity:.32}
 .cl-wheels[data-face=drum]{gap:2px;padding:.2em .3em}
 .cl-wheels[data-face=drum] i{width:.78em;border-radius:3px;background:linear-gradient(180deg,#000,#1d2226 22%,#2a3034 50%,#1d2226 78%,#000);box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
@@ -502,6 +511,16 @@
 /* Wide, the window is the middle axis and always shows; the tab-row period picker scrolls sideways when it cannot fit. */
 @media (min-width:1181px),(orientation:landscape) and (max-height:500px){.cluster:not(.tray,.compact) .cl-window.cl-off{display:grid!important}.cluster:not(.tray,.compact) .cl-window.cl-bare{grid-template-rows:auto minmax(0,1fr);contain:size}.cluster:not(.tray,.compact) .cl-window.cl-bare>.cl-box{display:grid}}
 .cl-gear{min-width:0}.cl-gear>.gd-tabs{min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none}.cl-gear>.gd-tabs::-webkit-scrollbar{display:none}
+/* Upright, the period picker leaves the window and sits right under the dials it sets, centred and no wider than the
+   wide layout's centre column, instead of stretching across the housing above the pages. The window's pages keep the
+   window's place and height. A customized order still moves each (layout.js: periods, window). */
+.cluster:not(.tray,.compact) .cl-window{display:contents}
+.cluster:not(.tray,.compact) .cl-gear{order:var(--o,3);grid-column:1/-1;justify-self:center;width:min(100%,360px)}
+.cluster:not(.tray,.compact) .cl-window>.cl-box{order:var(--o,6);grid-column:1/-1;height:calc(var(--win)*var(--wk,1))}
+/* Upright with room, once the odometer sits in its dial (dials from 220px): CPU and memory under the token dial
+   and the weekly limits under the burn dial share one row, on the dials' axes as in the wide layout's lower row. */
+.cluster:not(.tray,.compact):has(.cl-tach>.cl-odo):has(.cl-temps:not(.cl-off)):has(.cl-left:not(.cl-off)) .cl-lf{grid-column:1}
+.cluster:not(.tray,.compact):has(.cl-tach>.cl-odo):has(.cl-temps:not(.cl-off)):has(.cl-left:not(.cl-off)) .cl-left{grid-column:2}
 /* Wide (from 1181px, and a phone on its side): the housing has a phone's sideways shape (19.5:9) and three axes,
    dial · centre column · dial, with the lower row on the same axes. The dials take what the centre column (300 to 360px)
    leaves, or the height less the lower row; what height is left is split above and below. --d resolves on each dial
@@ -517,7 +536,10 @@
  .cluster:not(.tray,.compact) :is(.cl-tach,.cl-speed){margin:0}
  .cluster:not(.tray,.compact) .cl-main>*{order:0;grid-column:auto}
  .cluster:not(.tray,.compact) .cl-foot>*{order:var(--fo,0);grid-column:auto}
- .cluster:not(.tray,.compact) .cl-window{height:auto;align-self:stretch}
+ .cluster:not(.tray,.compact) .cl-window{display:grid;height:auto;align-self:stretch}
+ .cluster:not(.tray,.compact) .cl-gear{order:0;grid-column:auto;justify-self:stretch;width:auto}
+ .cluster:not(.tray,.compact) .cl-window>.cl-box{order:0;grid-column:auto;height:auto}
+ .cluster:not(.tray,.compact):has(.cl-tach>.cl-odo):has(.cl-temps:not(.cl-off)):has(.cl-left:not(.cl-off)) :is(.cl-lf,.cl-left){grid-column:auto}
  /* The lower row's ends may reach past their dial into the gap beside it, so six fuel gauges fit under a smaller dial. */
  .cluster:not(.tray,.compact) :is(.cl-lf,.cl-left){width:calc(var(--d) + 2*var(--spill));margin-inline:calc(-1*var(--spill))}
  .cluster:not(.tray,.compact) .cl-alerts{align-self:center}
@@ -748,3 +770,58 @@
 
 /* The account that runs out before its reset, beside the fuel heading. */
 .cl-ahead{margin-left:.5em;font-style:normal;color:var(--amber);font-weight:650;overflow:hidden;text-overflow:ellipsis;max-width:60cqi;display:inline-block;vertical-align:bottom}
+/* A theme (customizing, cluster-themes.js) draws the instruments: its picture spans the housing's width above the
+   window, the fuel cans and the notes, which stay the cluster's. The cluster's own dials, odometer, temperatures and
+   lamps step aside, and so does the housing, as the theme brings its own. */
+.cl-theme{grid-column:1/-1;order:-1;min-width:0}
+.cl-theme{position:relative}.cl-theme svg{display:block;width:100%;height:auto;aspect-ratio:1280/480}
+/* '크게 보기' sits on the theme's lower right where the theme is small (a phone, a narrow window). */
+.cl-theme-big{display:none;position:absolute;right:8px;bottom:8px;z-index:2;font:600 12px/1 var(--font-sans,system-ui);color:#fff;background:rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.28);border-radius:99px;padding:6px 11px;cursor:pointer}
+@media (max-width:900px){.cl-theme-big{display:block}}
+/* Narrow: the theme's two headline instruments in place of the dials, as large as they are (themes/compact.js); the
+   lights, the odometer and trip, the fuel and the window with its period drum stay the cluster's own. '크게 보기' sits
+   under them, clear of the instruments. */
+.cluster[data-theme-compact] :is(.cl-tach,.cl-speed){display:none!important}
+.cluster[data-theme-compact] .cl-theme{order:0;margin-top:var(--ox)}
+.cluster[data-theme-compact] .cl-theme svg{height:100%;aspect-ratio:auto}
+.cluster[data-theme-compact] .cl-theme-big{position:static;margin:6px 0 0 auto}
+.ot-pair{display:flex;align-items:center;justify-content:center}.ot-cut{min-width:0}.ot-cut>svg{display:block;width:100%;height:100%}
+/* The full-screen view: the theme as large as the screen allows, on its side when the screen stands upright. */
+.cl-theme-full{position:fixed;inset:0;z-index:90;background:#000;display:grid;place-items:center;overflow:hidden}
+/* Centred on the screen itself: on its side the drawing is wider than the screen before it turns. */
+.cl-theme-full .cl-theme-art{position:absolute;left:50%;top:50%;width:min(100vw,calc(100vh*1280/480));transform:translate(-50%,-50%)}.cl-theme-full svg{display:block;width:100%;height:auto}
+@media (orientation:portrait){.cl-theme-full .cl-theme-art{width:min(calc(100vh - 32px),calc(100vw*1280/480));transform:translate(-50%,-50%) rotate(90deg)}}
+.cl-theme-close{position:absolute;top:max(12px,env(safe-area-inset-top));right:12px;width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.55);color:#fff;font-size:16px;cursor:pointer}
+.cl-theme-full svg *{pointer-events:none}.cl-theme-full :is([data-cl-alert],[data-cl-period],[data-cl-trip]),.cl-theme-full :is([data-cl-alert],[data-cl-period],[data-cl-trip]) *{pointer-events:all}
+.cl-theme [role=button]:focus-visible{outline:2px solid var(--lcd);outline-offset:2px}
+/* Only the parts a theme marks take a press, so a panel drawn over a lamp never swallows it. */
+.cl-theme svg *{pointer-events:none}.cl-theme :is([data-cl-alert],[data-cl-period],[data-cl-trip]),.cl-theme :is([data-cl-alert],[data-cl-period],[data-cl-trip]) *{pointer-events:all}
+.cluster[data-theme] :is(.cl-tach,.cl-speed,.cl-lf,.cl-lamps,.cl-tells,.cl-body){display:none!important}
+.cluster[data-theme]{aspect-ratio:auto!important;grid-template-columns:minmax(0,1fr) auto!important;justify-content:stretch!important;align-content:start!important;padding-top:0!important}
+.cluster[data-theme] .cl-window{grid-column:1!important;order:1!important;height:var(--win)!important;align-self:start!important}
+.cluster[data-theme] .cl-left{grid-column:2!important;order:1!important;align-self:start!important;width:auto!important;margin:0!important}
+.cluster[data-theme] .cl-alerts{grid-column:1/-1!important;order:2!important}
+/* The theme brings its own period gears, so the window's drum steps aside and the pages take the whole window. */
+.cluster[data-theme] .cl-gear{display:none!important}.cluster[data-theme] .cl-window{grid-template-rows:minmax(0,1fr)!important}
+/* The cluster's look gallery (customizing): the 1top instruments first, then the themes in two columns, 8:3 previews. */
+.cz-sheet.th-sheet{grid-template-rows:auto auto auto minmax(0,1fr)}.th-sheet .th-kinds{justify-self:start}.th-sheet .th-note{margin:0;color:var(--dim);font-size:var(--type-caption)}
+.th-sheet .th-cards{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));align-content:start;overflow-y:auto;overscroll-behavior:contain}
+.th-card .th-prev{aspect-ratio:1280/480;border-radius:8px;overflow:hidden;background:#07090b}.th-card .th-prev svg{display:block;width:100%;height:100%}
+.th-card small{display:block;color:var(--dim);font-size:var(--type-caption)}
+/* Narrow (a phone, or a window under 900px): the theme, then the fuel cans, then the window, each the full width. */
+@media (max-width:900px){
+ .cluster[data-theme]{grid-template-columns:minmax(0,1fr)!important}
+ .cluster[data-theme] .cl-left{grid-column:1!important;order:1!important;justify-self:center!important}
+ .cluster[data-theme] .cl-alerts{order:2!important}
+ .cluster[data-theme] .cl-window{grid-column:1!important;order:3!important}
+}
+/* The menu bar and tray panels' cluster in the chosen theme's colours (cluster-themes.js paintMini, themes/mini.json):
+   the 1top shape, the theme's faces, rims, ticks, figures, needles, lit displays and type on the two dials. The lights,
+   the odometer, the fuel and the window below keep the panel's own colours, so a light theme never washes the list out. */
+.cluster:is(.compact,.tray)[data-mini] :is(.cl-tach,.cl-speed){--panel-2:var(--m-face);--face-hi:var(--m-face);--face-lo:color-mix(in srgb,var(--m-face) 80%,var(--m-bg));
+ --rim:var(--m-rim);--line:color-mix(in srgb,var(--m-tick) 55%,var(--m-face));--line-strong:var(--m-rim);--ink:var(--m-num);--muted:color-mix(in srgb,var(--m-num) 66%,var(--m-face));
+ --dim:color-mix(in srgb,var(--m-num) 48%,var(--m-face));--needle:var(--m-needle);--zone:var(--m-warn);--lcd:var(--m-lcd);--off:var(--m-dim);--halo:var(--m-bg);--well:var(--m-bg);
+ --accent:var(--m-accent);color:var(--m-num);font-family:var(--m-font)}
+.cluster:is(.compact,.tray)[data-mini] :is(.cl-tach,.cl-speed) :is(b,span,small,em,text){font-family:inherit}
+/* The reading on each dial lights in the theme's display colour, so it reads on a yellow or silver face too. */
+.cluster:is(.compact,.tray)[data-mini] .cl-dial .cl-read .cl-lcd{--fs-on:var(--m-lcd);filter:none}

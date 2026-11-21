@@ -110,6 +110,29 @@ class HistoryTests(unittest.TestCase):
         r=self.response('5h','300','Codex');self.assertEqual(sum(v or 0 for v in r['series']['total']),15)
         self.assertEqual({x['key']:sum(v or 0 for v in x['tokens']) for x in r['series']['by_model']},{'second':10,'first':5})
 
+    def test_codex_history_from_an_older_import_gains_each_threads_first_request_once(self):
+        # Before schema 3 a thread's first request was only a baseline. Reading again adds it, and the
+        # records already stored keep their keys, so nothing counts twice.
+        first,second=self.now-600,self.now-300
+        usage=lambda n:{'input_tokens':n}
+        rows=[{'type':'session_meta','timestamp':first-10,'payload':{'id':'cx1','cwd':'/codex/b'}},
+              {'type':'event_msg','timestamp':first,'payload':{'type':'token_count','info':{'total_token_usage':usage(10),'last_token_usage':usage(10)}}},
+              {'type':'event_msg','timestamp':second,'payload':{'type':'token_count','info':{'total_token_usage':usage(25),'last_token_usage':usage(15)}}}]
+        p=self.write(rows,'rollout-first.jsonl');self.store.import_file('Codex',p)
+        def total():
+            self.store.cache.clear()
+            return sum(v or 0 for v in self.response('1h','60','Codex')['series']['total'])
+        self.assertEqual(total(),25)
+        # What an older import left: the first request missing, the file read to its end under schema 2.
+        from contextlib import closing
+        with closing(self.store.connect()) as db:
+            db.execute('DELETE FROM records WHERE t=?',(first,))
+            state=json.loads(db.execute('SELECT state FROM files WHERE path=?',(str(p),)).fetchone()[0])
+            db.execute('UPDATE files SET state=? WHERE path=?',(json.dumps({**state,'metadata_schema':2}),str(p)));db.commit()
+        self.assertEqual(total(),15)
+        self.store.import_file('Codex',p);self.assertEqual(total(),25)
+        self.store.import_file('Codex',p);self.assertEqual(total(),25)
+
     def test_top12_other_and_kind_filter(self):
         for i in range(16):self.event(self.now-100,kind='Codex',tokens=i+1,model=f'm{i}',cwd=f'/p{i}')
         self.event(self.now-100,kind='Claude',tokens=999)

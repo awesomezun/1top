@@ -11,6 +11,9 @@ export interface AgentSession extends ReturnType<typeof sessionMetrics> {
   context_usage?: {basis:'last_request_input';input_tokens:number;capacity:number|null;parts:number[]|null;observed_at:number;model:string}|null;
   weekly_account?:string; weekly_estimate?:Record<string,WeeklyEstimate>;
   root_session_id?:string; parent_session_id?:string|null;
+  display_name?:string; display_detail?:string; display_status?:string; shape_unknown?:boolean;
+  runs?:Array<{pid:number|null;birth:number|null;role:string;connected:boolean;status:string;display_status:string;
+    status_at:number|null;terminal_match:string;terminal:{handle:string;title:string}|null}>;
 }
 export interface WeeklyEstimate {
   used_pp:number;partial:boolean;period_seconds:number|null;tokens:number|null;account_id:string;
@@ -111,6 +114,15 @@ export function snapshot(value: any): DeviceSnapshot {
     if (!text(s.id, 200)) throw new Error('Missing session identity');
     return {
       ...sessionMetrics(s), id: text(s.id,200), control_key: text(s.control_key,200), kind:text(s.kind,40),
+      ...(typeof s.display_name==='string'?{display_name:text(s.display_name,200)}:{}),
+      ...(typeof s.display_detail==='string'?{display_detail:text(s.display_detail,400)}:{}),
+      ...(typeof s.display_status==='string'?{display_status:text(s.display_status,30)}:{}),
+      ...(typeof s.shape_unknown==='boolean'?{shape_unknown:s.shape_unknown}:{}),
+      ...(Array.isArray(s.runs)?{runs:s.runs.slice(0,250).filter((r:any)=>r&&typeof r==='object').map((r:any)=>({
+        pid:number(r.pid,2**32),birth:number(r.birth),role:text(r.role,40),connected:r.connected===true,
+        status:text(r.status,30),display_status:text(r.display_status,30),status_at:number(r.status_at),
+        terminal_match:text(r.terminal_match,40),terminal:r.terminal&&typeof r.terminal==='object'?{
+          handle:text(r.terminal.handle,200),title:text(r.terminal.title,200)}:null}))}:{}),
       app:text(s.app,80), terminal:text(s.terminal,120), project:text(s.project,100),
       title:text(s.title,160), model:text(s.model,80), status:text(s.status,30), tokens:vector(s.tokens),
       rate:number(s.rate), windows:Object.fromEntries(KEYS.map(k=>[k,vector(s.windows?.[k])])),

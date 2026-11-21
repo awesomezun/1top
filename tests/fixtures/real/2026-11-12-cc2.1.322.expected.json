@@ -1,0 +1,37 @@
+{
+ "contract": "session-contract v1.1.0 (docs/design/collector/session-contract_v1.1.0.md)",
+ "record": "2026-11-12-cc2.1.322.json",
+ "about": "What sessions/ must make of this record. Pids, session ids and job ids are the record's own; titles are its tokens.",
+ "unique_row_ids": true,
+ "display_name_never_matches": ["^/dev/", "미확인", "^process-", "^cli-"],
+ "one_row_per_conversation": [
+  "73a4f550-e424-4e48-8d77-e10a28d237b9",
+  "8a26d68e",
+  "e8e52e9b",
+  "64a078f9",
+  "00cf1719",
+  "fe9254c2",
+  "8d118e39"
+ ],
+ "runs_in_one_row": {
+  "73a4f550-e424-4e48-8d77-e10a28d237b9": [25822, 66127, 28212]
+ },
+ "merged_owner_and_job": [
+  {"owner": 88356, "job": 38652, "terminal_title": "T4"},
+  {"owner": 86122, "job": 50517, "terminal_title": "T21"}
+ ],
+ "owners_whose_job_has_gone_are_not_unknown": [7666, 37977, 97577, 16281, 68578, 28212],
+ "terminal_never": {"38652": "T22"},
+ "terminal_kept": {"34094": "T9"},
+ "status": {
+  "3c7b13a9-b233-402f-8ff5-5ea5d84202c6": "working",
+  "7441bbff-42e3-4ae9-a0c7-3b637cf4b617": "idle",
+  "73a4f550-e424-4e48-8d77-e10a28d237b9": "idle",
+  "8a26d68e": "idle"
+ },
+ "notes": [
+  "A conversation id given by its first eight characters matches the one conversation in the record that starts with them.",
+  "38652 is the background job 88356 parked; its row is 7441bbff's (the job continues that conversation), with 88356's tab.",
+  "34094 runs under a PTY host launchd adopted, so the Orca tab it inherited is its own; 38652's chain passes through 68578, another conversation's Claude, so its inherited tab is not."
+ ]
+}

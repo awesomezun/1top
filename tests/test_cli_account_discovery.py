@@ -12,6 +12,7 @@ from onetop.discovery import cli_kind
 def process(name, exe='', args=(), env=None):
     result = Mock()
     result.info = {'name': name, 'exe': exe, 'cmdline': list(args)}
+    result.as_dict.return_value = result.info
     result.environ.return_value = env or {}
     return result
 

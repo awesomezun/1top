@@ -10,6 +10,16 @@ CALIBRATION = ('pp_per_token', 'confidence', 'from', 'to', 'valid_until', 'sourc
 def select(value, keys):
     return {k: value.get(k) for k in keys} if isinstance(value, dict) else {}
 
+
+def session_identity(session):
+    """Canonical presentation fields, with local evidence excluded from runs."""
+    result = {k: session[k] for k in ('display_name','display_detail','display_status','shape_unknown') if k in session}
+    if 'runs' in session:
+        result['runs'] = [{**select(run, ('pid','birth','role','connected','status','display_status','status_at','terminal_match')),
+            'terminal': select(run.get('terminal'), ('handle','title')) or None}
+            for run in session['runs']]
+    return result
+
 def period_metrics(window):
     result = select(window, ('key','label','tokens','partial','observed_seconds','seconds'))
     # Preserve absence for collectors that predate model attribution. Empty is

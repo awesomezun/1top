@@ -751,7 +751,8 @@ struct SessionGroup: Identifiable {
     var members: [Session]
     var id: String { root.key }
     var childCount: Int { members.count - 1 }
-    var isWorking: Bool { members.contains(where: \.isWorking) }
+    /// Working as the collector says; from an older collector, while any member works.
+    var isWorking: Bool { root.displayName != nil ? root.isWorking : members.contains(where: \.isWorking) }
 
     func tokens(in period: Period) -> Double? {
         let known = members.compactMap { $0.tokens(in: period) }

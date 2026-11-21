@@ -12,6 +12,7 @@ import {load,save} from './layout-store';
 import * as M from './customize-model';
 import {ReportSettings} from './report-view';
 import {resetPrefs,shapeName,usePrefs} from './reports';
+import {ThemeView,galleryLabels,lookName,setClusterTheme,shownFigures,useClusterTheme} from './cluster-themes';
 
 // Customizing on Android (customizing-spec_v1.2.2), the web's edit mode (agent/onetop/dist/customize.js) on the phone:
 // the layout kept on this phone, shared by the dashboard and cluster tabs, and the edit mode over a screen's objects.
@@ -30,8 +31,9 @@ export function useCalm(){
 }
 
 type Screen='index'|'cluster';
-/** QA only (the demo): onetop://?qaLayout=<json> stores a layout, qaCustomize=on|list|off|<id>|gallery:<id> opens the
- *  edit mode on the screen in view, and qaReport=1 logs where every object and mark is ('[qa-layout] ' in the log). */
+/** QA only (the demo): onetop://?qaLayout=<json> stores a layout, qaTheme=<01…72|none> the cluster's look,
+ *  qaCustomize=on|list|themes|off|<id>|gallery:<id> opens the edit mode on the screen in view, and qaReport=1 logs where
+ *  every object and mark is ('[qa-layout] ' in the log). */
 type Qa={open:string;report:boolean;at:number;screen:Screen};
 type Resume={screen:Screen;sheet:'list'};
 type LayoutApi={state:LayoutState;change:(fn:(l:Layout)=>void)=>void;editing:boolean;setEditing:(screen:Screen,on:boolean)=>void;
@@ -48,7 +50,8 @@ export function LayoutProvider({children}:{children:React.ReactNode}){
  const change=useCallback((fn:(l:Layout)=>void)=>{const cur=now.current;if(!cur)return;const layout:Layout=JSON.parse(JSON.stringify(cur.layout));fn(layout);keep({layout,locked:cur.locked});},[keep]);
  useEffect(()=>{if(!w.demo)return;
   const take=(url:string|null)=>{if(!url)return;const {queryParams,path,hostname}=Linking.parse(url),q=queryParams||{},one=(v:unknown)=>Array.isArray(v)?v[0]:v;
-   const raw=one(q.qaLayout),open=one(q.qaCustomize);
+   const raw=one(q.qaLayout),open=one(q.qaCustomize),look=one(q.qaTheme);
+   if(typeof look==='string')setClusterTheme(look==='none'?null:look);
    if(typeof raw==='string'){const s=read(raw);if(!s.locked&&!now.current?.locked)keep(s);}
    if(typeof open==='string'){const screen=(hostname||path)==='cluster'?'cluster':'index';setQa({open,report:one(q.qaReport)==='1',at:Date.now(),screen});setTimeout(()=>router.navigate(screen==='cluster'?'/cluster':'/'),300);}};
   Linking.getInitialURL().then(take).catch(()=>{});const sub=Linking.addEventListener('url',e=>take(e.url));return()=>sub.remove();},[w.demo,keep]);
@@ -65,7 +68,7 @@ export function usePresetSwitch(){const L=useLayout();return (p:M.Preset)=>L.cha
 type Entry={ref:HostInstance|null;shown?:number|null;preview?:(shape:string)=>React.ReactNode};
 type Drag={id:ObjectId;x:number;y:number};
 type Grip={id:ObjectId;x:number;y:number};
-type Sheet={kind:'obj'|'gallery'|'list';id?:ObjectId};
+type Sheet={kind:'obj'|'gallery'|'list'|'themes';id?:ObjectId};
 type EditApi={on:boolean;preset:M.Preset;group:Group;open:()=>void;sel:ObjectId|null;drag:Drag|null;grip:Grip|null;rects:Partial<Record<ObjectId,M.Box>>;
  parts:React.RefObject<Map<ObjectId,Entry>>;canvas:React.RefObject<HostInstance|null>;measure:()=>void;pick:(id:ObjectId)=>void;change:(fn:(g:Group)=>void)=>void;
  startDrag:(id:ObjectId,x:number,y:number)=>void;moveDrag:(x:number,y:number)=>void;drop:(y:number)=>void;cancelDrag:()=>void;setGrip:(g:Grip|null)=>void;
@@ -107,7 +110,7 @@ export function Editor({screen,preset,scrollRef,children}:{screen:Screen;preset:
  useEffect(()=>{if(!focused&&on)close();},[focused,on,close]);
  // Back closes the gallery into its object's sheet, a sheet, then the edit mode.
  useEffect(()=>{if(!on||!focused)return;const sub=BackHandler.addEventListener('hardwareBackPress',()=>{
-  if(sheet?.kind==='gallery'){setSheet(sel?{kind:'obj',id:sel}:null);return true;}if(sheet){setSheet(null);setSel(null);return true;}close();return true;});return()=>sub.remove();},[on,focused,sheet,sel,close]);
+  if(sheet?.kind==='gallery'){setSheet(sel?{kind:'obj',id:sel}:null);return true;}if(sheet?.kind==='themes'){setSheet({kind:'list'});return true;}if(sheet){setSheet(null);setSel(null);return true;}close();return true;});return()=>sub.remove();},[on,focused,sheet,sel,close]);
  // A tab change from the list carries the edit mode to the screen that now shows the preset.
  // eslint-disable-next-line react-hooks/set-state-in-effect
  useEffect(()=>{if(focused&&L.resume?.screen===screen){L.setResume(null);enter();setSheet({kind:'list'});}},[focused,L,screen,enter]);
@@ -133,7 +136,7 @@ export function Editor({screen,preset,scrollRef,children}:{screen:Screen;preset:
  useEffect(()=>{if(!qa||!focused||qa.screen!==screen)return;L.doneQa();const [kind,id]=qa.open.split(':') as [string,ObjectId|undefined];
   // eslint-disable-next-line react-hooks/set-state-in-effect
   if(kind==='off'){close();return;}enter();
-  if(kind==='list')setSheet({kind:'list'});else if(kind==='gallery'&&id){setSel(id);setSheet({kind:'gallery',id});}else if(kind!=='on'){setSel(kind as ObjectId);setSheet({kind:'obj',id:kind as ObjectId});}
+  if(kind==='list')setSheet({kind:'list'});else if(kind==='themes')setSheet({kind:'themes'});else if(kind==='gallery'&&id){setSel(id);setSheet({kind:'gallery',id});}else if(kind!=='on'){setSel(kind as ObjectId);setSheet({kind:'obj',id:kind as ObjectId});}
   if(qa.report)setTimeout(()=>report(),1400);
   // eslint-disable-next-line react-hooks/exhaustive-deps
  },[qa,focused]);
@@ -155,7 +158,8 @@ export function Editor({screen,preset,scrollRef,children}:{screen:Screen;preset:
   {on&&sheet&&<SheetFrame key={sheet.kind+(sheet.id||'')} kind={sheet.kind} calm={calm}>
    {sheet.kind==='obj'&&sheet.id&&<ObjectSheet id={sheet.id} api={api} close={()=>{setSel(null);setSheet(null);}} gallery={()=>setSheet({kind:'gallery',id:sheet.id})} list={()=>{setSel(null);setSheet({kind:'list'});}}/>}
    {sheet.kind==='gallery'&&sheet.id&&<Gallery id={sheet.id} api={api} close={()=>setSheet(sel?{kind:'obj',id:sel}:null)}/>}
-   {sheet.kind==='list'&&<List api={api} screen={screen} close={()=>setSheet(null)} gallery={id=>setSheet({kind:'gallery',id})}/>}
+   {sheet.kind==='list'&&<List api={api} screen={screen} close={()=>setSheet(null)} gallery={id=>setSheet({kind:'gallery',id})} themes={()=>setSheet({kind:'themes'})}/>}
+   {sheet.kind==='themes'&&<ThemeGallery close={()=>setSheet({kind:'list'})}/>}
   </SheetFrame>}
  </EditContext.Provider>;
 }
@@ -286,9 +290,20 @@ function Gallery({id,api,close}:{id:ObjectId;api:EditApi;close:()=>void}){
     <Text style={[st.cardText,on&&{color:quick.ink}]}>{say(l)}</Text></Pressable>;})}</ScrollView></>;
 }
 
-/** Every object at once: its order, size or count, shape and whether it shows; the phone's tabs at the top and the reset below. */
-function List({api,screen,close,gallery}:{api:EditApi;screen:Screen;close:()=>void;gallery:(id:ObjectId)=>void}){
- const {t,say}=useSay(),reportLook=usePrefs(),[reports,setReports]=useState(false);
+/** The cluster's look: the 1top instruments, then the 72 themes drawn from the cluster's readings, narrowed by kind. A
+ *  card picks at once and the sheet stays, so looks can be tried in turn. */
+function ThemeGallery({close}:{close:()=>void}){
+ const {t}=useSay(),look=useClusterTheme(),{height}=useWindowDimensions();
+ return <><SheetHead title={t('Cluster design','계기판 디자인')} close={close}/>
+  <Text style={st.none}>{t('Only the instruments change. The window and the fuel stay as they are.','계기 부분만 바뀝니다. 화면 창과 연료통은 그대로입니다.')}</Text>
+  <ThemeView mode={{kind:'gallery',selected:look,labels:galleryLabels(t),ink:quick.ink}} stamp="" figures={()=>shownFigures.current?.()??null} onPress={p=>{if('pick' in p)setClusterTheme(p.pick);}}
+   style={{height:Math.min(620,height*.7)-96}} testID="theme-gallery"/></>;
+}
+
+/** Every object at once: its order, size or count, shape and whether it shows; the phone's tabs and the cluster's look at
+ *  the top and the reset below. */
+function List({api,screen,close,gallery,themes}:{api:EditApi;screen:Screen;close:()=>void;gallery:(id:ObjectId)=>void;themes:()=>void}){
+ const {t,say}=useSay(),reportLook=usePrefs(),look=useClusterTheme(),[reports,setReports]=useState(false);
  const L=useLayout(),g=api.group,known=M.KNOWN[api.preset],ids=g.order.filter(id=>known.includes(id)),movable=ids.filter(id=>M.caps(api.preset,id).move);
  const tabs=L.state.layout.tabs;
  // '하나로' takes the cluster tab into the dashboard's (choosing the preset in view); '따로' gives it back.
@@ -298,6 +313,7 @@ function List({api,screen,close,gallery}:{api:EditApi;screen:Screen;close:()=>vo
  return <><SheetHead title={say(M.PHRASES.list(M.TITLES[api.preset]))} close={close}/>
   <ScrollView style={{flexShrink:1}} contentContainerStyle={{gap:6}}>
    <View style={[st.orow,{minHeight:52}]}><Text style={[st.rowLabel,{flexShrink:1}]}>{t('Dashboard and Cluster tabs','대시보드·계기판 탭')}</Text><Mini><MiniButton label={t('Separate','따로')} on={tabs!=='one'} onPress={()=>setTabs('two')}/><MiniButton label={t('Combined','하나로')} on={tabs==='one'} onPress={()=>setTabs('one')}/></Mini></View>
+   {api.preset==='cluster'&&<View style={[st.orow,{minHeight:52}]}><Text style={[st.rowLabel,{flexShrink:1}]}>{t('Cluster design','계기판 디자인')}</Text><MiniButton label={lookName(look,t)+' ▸'} a11y={t('Cluster design','계기판 디자인')+' '+lookName(look,t)} onPress={themes}/></View>}
    {ids.map(id=>{const c=M.caps(api.preset,id),o=g.opts[id]||{},off=g.hidden.includes(id),value=c.size?<SizeControl value={M.sizeOf(g,id)} set={v=>api.change(x=>M.setSize(x,id,v))}/>
      :c.count?<CountControl id={id} value={o.count} step={d=>api.change(x=>M.stepCount(x,id,d,api.parts.current.get(id)?.shown))}/>:null;
     return <View key={id} style={st.lrow}>
@@ -309,7 +325,7 @@ function List({api,screen,close,gallery}:{api:EditApi;screen:Screen;close:()=>vo
    {/* The reports' look lives apart from the layout (reports.ts) and opens its own sheet. */}
    <View style={[st.orow,{minHeight:52}]}><Text style={[st.rowLabel,{flexShrink:1}]}>{t('Value · weekly report','본전·주간 리포트')}</Text><MiniButton label={shapeName(reportLook.shape,t)+' ▸'} onPress={()=>setReports(true)}/></View>
   </ScrollView>
-  <Pill label={t('Reset to defaults','기본값으로 되돌리기')} onPress={()=>{L.change(l=>M.reset(l,api.preset));resetPrefs();}} style={{alignSelf:'center'}}/>
+  <Pill label={t('Reset to defaults','기본값으로 되돌리기')} onPress={()=>{L.change(l=>M.reset(l,api.preset));resetPrefs();if(api.preset==='cluster')setClusterTheme(null);}} style={{alignSelf:'center'}}/>
   <ReportSettings visible={reports} close={()=>setReports(false)}/></>;
 }
 

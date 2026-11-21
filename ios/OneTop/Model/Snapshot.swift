@@ -38,6 +38,10 @@ struct Session: Codable, Identifiable, Hashable, Sendable {
     var title: String?
     var model: String?
     var status: String
+    /// The collector's own name, second line and state for the row (session contract v1.1.0); older collectors send none.
+    var displayName: String?
+    var displayDetail: String?
+    var displayStatus: String?
     var tokens: [Double]?
     var rate: Double?
     var windows: [String: [Double]?]?
@@ -75,10 +79,11 @@ struct Session: Codable, Identifiable, Hashable, Sendable {
               vector.allSatisfy({ $0.isFinite && $0 >= 0 }) else { return nil }
         return vector.reduce(0, +)
     }
-    var isWorking: Bool { status == "working" }
-    /// The terminal tab tells sessions apart; then the conversation title, then the project.
+    var state: String { displayStatus ?? status }
+    var isWorking: Bool { state == "working" }
+    /// The collector's name; from an older collector, the terminal tab, then the conversation title, then the project.
     var name: String {
-        for candidate in [terminal, title, displayProject] {
+        for candidate in [displayName, terminal, title, displayProject] {
             if let text = candidate?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty { return text }
         }
         return kind

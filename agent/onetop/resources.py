@@ -60,27 +60,34 @@ class ResourceSampler:
     def sample(self,sessions,shared_roots):
         before=time.monotonic();now=time.time();dt=before-self.last if self.last is not None else 0
         rows={};current={};denied=0
-        for p in psutil.process_iter(['pid','ppid','name','create_time','cpu_times','memory_info'],ad_value=None):
-            info=p.info;ct=info.get('cpu_times');mem=info.get('memory_info')
-            if ct is None or mem is None:denied+=1;continue
-            pid=info['pid'];identity=(pid,info['create_time']);ticks=ct.user+ct.system
-            previous=self.previous.get(identity);rate=counter_rate(ticks,previous,dt)
-            rows[pid]={'pid':pid,'ppid':info['ppid'],'name':info['name'] or 'unknown','created':info['create_time'],
-                       # Match the host chart: all logical CPUs together are 100%.
-                       # Keep two decimals until grouping so small processes still add up.
-                       'cpu':round(min(100,rate*100/self.cores),2) if rate is not None else None,'rss':mem.rss}
-            current[identity]=ticks
+        for p in psutil.process_iter():
+            try:
+                info=p.as_dict(attrs=['pid','ppid','name','create_time','cpu_times','memory_info'],ad_value=None);ct=info.get('cpu_times');mem=info.get('memory_info')
+                if ct is None or mem is None:denied+=1;continue
+                pid=info['pid'];identity=(pid,info['create_time']);ticks=ct.user+ct.system
+                previous=self.previous.get(identity);rate=counter_rate(ticks,previous,dt)
+                rows[pid]={'pid':pid,'ppid':info['ppid'],'name':info['name'] or 'unknown','created':info['create_time'],
+                           # Match the host chart: all logical CPUs together are 100%.
+                           # Keep two decimals until grouping so small processes still add up.
+                           'cpu':round(min(100,rate*100/self.cores),2) if rate is not None else None,'rss':mem.rss}
+                current[identity]=ticks
+            except (psutil.Error,OSError,SystemError,AttributeError):
+                denied+=1
+                continue
         self.previous=current;self.last=before
-        roots={s['id']:s['pids'] for s in sessions if s.get('process_started') and len(s['pids'])==1}
-        # A reused PID must never inherit resource ownership from a stale discovery.
-        for sid,pids in list(roots.items()):
-            spec=next(s for s in sessions if s['id']==sid)
-            row=rows.get(pids[0])
-            try:started=time.mktime(time.strptime(spec['process_started'],'%a %b %d %H:%M:%S %Y'))
-            except (ValueError,TypeError):started=0
-            birth=spec.get('process_birth')
-            valid=row and (row['created']==birth if birth is not None else abs((row.get('created') or 0)-started)<1.1)
-            if not valid:roots.pop(sid)
+        roots={}
+        for spec in sessions:
+            candidates=spec.get('runs') or ([{'pid':spec['pids'][0], 'birth':spec.get('process_birth')}]
+                if spec.get('process_started') and len(spec.get('pids',[]))==1 else [])
+            pids=[]
+            for run in candidates:
+                pid=run['pid'];row=rows.get(pid)
+                birth=run.get('birth')
+                if birth is None:
+                    try:birth=time.mktime(time.strptime(spec.get('process_started',''),'%a %b %d %H:%M:%S %Y'))
+                    except (ValueError,TypeError):continue
+                if row and abs((row.get('created') or 0)-birth)<1.1:pids.append(pid)
+            if pids and not spec.get('is_subagent'):roots[spec['id']]=sorted(set(pids))
         groups=attribute(rows,roots,shared_roots)
         for s in sessions:s['resources']=groups.get(s['id'])
         shared=[{'id':f'backend:{pid}','pid':pid,'name':rows.get(pid,{}).get('name','Codex'),

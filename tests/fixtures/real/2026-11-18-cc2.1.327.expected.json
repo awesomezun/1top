@@ -1,0 +1,19 @@
+{
+ "contract": "session-contract v1.3.0 (docs/design/collector/session-contract_v1.3.0.md)",
+ "record": "2026-11-18-cc2.1.327.json",
+ "about": "The first capture with Antigravity conversations and Orca's agent seats. Antigravity rows take their own conversation id and state instead of unknown.",
+ "unique_row_ids": true,
+ "display_name_never_matches": ["^/dev/", "미확인", "^process-", "^cli-"],
+ "one_row_per_conversation": ["484cb37d", "7ac13278", "9cf14c0c", "661f39ac", "0cdb6198", "050d7aae"],
+ "status": {
+  "484cb37d": "idle",
+  "7ac13278": "idle",
+  "050d7aae": "idle",
+  "3c7b13a9": "working"
+ },
+ "notes": [
+  "484cb37d…0cdb6198 are Antigravity conversations found through the presence lock each agy process holds; conversation_summaries.db says CASCADE_RUN_STATUS_IDLE.",
+  "050d7aae is a parked job stopped on a usage limit. Orca still reports its seat as working from fifteen hours earlier and marks it unverifiable, so Orca's state is only the last resort (§4 row 9).",
+  "3c7b13a9 is the conversation that took this capture."
+ ]
+}

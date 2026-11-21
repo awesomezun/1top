@@ -42,6 +42,11 @@
  function arc(cx,cy,r,a0,a1){const [x0,y0]=P(cx,cy,r,a0),[x1,y1]=P(cx,cy,r,a1);return `M${n2(x0)} ${n2(y0)}A${r} ${r} 0 ${a1-a0>180?1:0} 1 ${n2(x1)} ${n2(y1)}`;}
  const unitOf=n=>n>=1e9?[1e9,'B']:n>=1e6?[1e6,'M']:n>=1e3?[1e3,'k']:[1,''];
  function axis(v,max,last){const [d,u]=unitOf(max),x=v/d,s=Math.abs(x-Math.round(x))<1e-6?String(Math.round(x)):x.toFixed(1);return s+(last?u:'');}
+ // A period's total in three figures and k, M, B or T ({n:'31.2',u:'B'}): the dashboard gauge and the cluster's odometer.
+ // The unit is drawn apart from the figure (space, lighter), so B never reads as an 8.
+ const SUM_UNITS=[[1e12,'T'],[1e9,'B'],[1e6,'M'],[1e3,'k']];
+ function total(v){v=Math.max(0,Math.round(v||0));const [d,u]=SUM_UNITS.find(([d])=>v>=d*.9995)||[1,''],x=v/d;
+  const s=x>=99.95?String(Math.round(x)):x>=9.995?x.toFixed(1):x.toFixed(2);return {n:s.includes('.')?s.replace(/\.?0+$/,''):s,u};}
  function short(n){if(!valid(n))return '—';if(n<.5)return '0';const [d,u]=unitOf(n),v=n/d;return String(v>=100?Math.round(v):v>=10?+v.toFixed(1):+v.toFixed(2))+u;}
  // Seven-segment digits: four places, a decimal point slot after the first three.
  const SEG={0:'abcdef',1:'bc',2:'abged',3:'abgcd',4:'fgbc',5:'afgcd',6:'afgedc',7:'abc',8:'abcdefg',9:'abcdfg','-':'g',' ':''},polys={};
@@ -73,6 +78,11 @@
  function unitLine(x,y,size,g,o){
   return `<text x="${x}" y="${y}" class="fs-mut" font-size="${size}" text-anchor="middle">${esc(valid(o.rate)?o.text.perHour:o.text.checking)}</text>`;
  }
+ // 'Total' and the period's tokens under the gauge (o.total from total(), o.text.total the word).
+ function totalLine(x,y,size,o){
+  if(!o.total)return '';
+  return `<text x="${x}" y="${y}" class="fs-total" font-size="${size}" text-anchor="middle"><tspan class="fs-total-k">${esc(o.text.total||'Total')}</tspan> <tspan class="fs-total-n">${esc(o.total.n)}</tspan>${o.total.u?`<tspan class="fs-total-u" dx="${n2(size*.28)}">${esc(o.total.u)}</tspan>`:''}</text>`;
+ }
  function sweep(o){
   const cx=126,cy=108,Ro=82,Ri=69,Rs=63,N=36,A0=150,S=240,step=S/N,gp=1.5,live=valid(o.rate),frac=live?clamp(o.rate/o.max):0,lead=o.rate>0?frac*N:0;let s='',lit='';
   for(let i=0;i<=50;i++){const a=A0+S*i/50,maj=i%10===0,[x0,y0]=P(cx,cy,Ro+3,a),[x1,y1]=P(cx,cy,Ro+(maj?9:6),a);
@@ -87,7 +97,9 @@
   s+=`<path d="M${n2(ex)} ${n2(ey)}L${n2(ex+12)} ${n2(ey+12)}H${n2(fx-12)}L${n2(fx)} ${n2(ey)}" class="fs-track"/>`;
   const g=digits(o.rate);
   s+=seg7(g,cx,123,22,40,4.6,6,!live)+unitLine(cx,141,10.5,g,o);
-  s+=`<text x="${cx}" y="181" class="fs-mut" font-size="10.5" text-anchor="middle">${esc(live?o.text.average:o.text.connecting)}</text>`;
+  // With a total the caption moves under it; without one it keeps its place.
+  s+=live&&o.total?totalLine(cx,177,11.5,o)+`<text x="${cx}" y="192" class="fs-mut" font-size="9.5" text-anchor="middle">${esc(o.text.average)}</text>`
+   :`<text x="${cx}" y="181" class="fs-mut" font-size="10.5" text-anchor="middle">${esc(live?o.text.average:o.text.connecting)}</text>`;
   return s;
  }
  // Radar: one turn is the selected period, twelve o'clock is now. Bars are stacked by AI tool and the
@@ -115,7 +127,7 @@
   s+=`<circle cx="${cx}" cy="${cy}" r="${r0-3}" class="fs-disc"/><path d="M122 1L130 1L126 7.5Z" class="fs-now"/>`;
   const g=digits(o.rate);
   s+=`<text x="${cx}" y="80" class="fs-mut" font-size="9.5" text-anchor="middle">${esc(o.text.avgShort||'')}</text>`;
-  return s+seg7(g,cx,108,15,28,3.4,4.5,!live)+unitLine(cx,123,10,g,o);
+  return s+seg7(g,cx,108,15,28,3.4,4.5,!live)+unitLine(cx,123,10,g,o)+(live?totalLine(cx,137,9,o):'');
  }
  function face(o){return o.style==='scope'?scope(o):sweep(o);}
  // Moving layer, built once per style: the sweep's scanner light with a fading trail (each copy runs
@@ -132,6 +144,6 @@
  const glowFilter='<filter id="fsGlow" filterUnits="userSpaceOnUse" x="-12" y="-12" width="276" height="220" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="2.3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
  function instrument(o){return (o.style==='scope'?'':face(o))+(o.rate>0?motion(o.style):'')+(o.style==='scope'?face(o):'');}
  // seg7 also draws the reading in the Windows tray's quick view.
- const api={measure,niceMax,baseMax,scaleMax,instrument,face,motion,glowFilter,digits,seg7};
+ const api={measure,niceMax,baseMax,scaleMax,instrument,face,motion,glowFilter,digits,seg7,total};
  if(typeof module!=='undefined')module.exports=api;else root.OneTopSpeed=api;
 })(typeof window==='undefined'?globalThis:window);

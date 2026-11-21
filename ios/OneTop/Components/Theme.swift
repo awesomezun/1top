@@ -75,6 +75,9 @@ enum Format {
     static func status(_ status: String) -> String {
         switch status {
         case "working": L.t("Working", "작업 중")
+        case "subagents": L.t("Subagents working", "하위 작업 중")
+        case "done": L.t("Just done", "방금 끝남")
+        case "disconnected": L.t("Disconnected", "연결 끊김")
         case "waiting": L.t("Needs input", "확인 필요")
         case "paused": L.t("Paused", "일시정지")
         case "idle": L.t("Idle", "대기 중")

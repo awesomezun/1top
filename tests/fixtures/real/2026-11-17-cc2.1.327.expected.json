@@ -1,0 +1,22 @@
+{
+ "contract": "session-contract v1.2.0 (docs/design/collector/session-contract_v1.2.0.md)",
+ "record": "2026-11-17-cc2.1.327.json",
+ "about": "Taken on the first day of the v1.1.0 collector, when six resting conversations were shown as working. Each was a turn start Claude Code itself had closed.",
+ "unique_row_ids": true,
+ "display_name_never_matches": ["^/dev/", "미확인", "^process-", "^cli-"],
+ "status": {
+  "27fd50b9": "idle",
+  "5bcac8c7": "idle",
+  "7cf01e5d": "idle",
+  "8a26d68e": "idle",
+  "7441bbff": "idle",
+  "87ff79c6": "interrupted",
+  "3c7b13a9": "working"
+ },
+ "notes": [
+  "27fd50b9, 5bcac8c7, 7cf01e5d and 8a26d68e end on a compaction summary (isCompactSummary), which starts no turn.",
+  "7441bbff was resumed and a finished-task notification from the earlier run was written as a user row; Claude Code wrote idle 23 ms later and never answered (§4-1).",
+  "87ff79c6 ends on /model and /goal local commands, an api-request and then the user's interrupt marker.",
+  "3c7b13a9 is the conversation that took this capture."
+ ]
+}

@@ -156,4 +156,9 @@ for(const q of providers){
 }
 assert(mixed.accounts.some(a=>a.weekly===false),'the fixture has a non-weekly window');
 assert(!providers.some(q=>q.id===mixed.speed.account),'the speedometer never falls back to a pool with no weekly burn');
-console.log('Cluster: scale marks, token speed, picked subject, fuel and weekly cards, session window, tell-tales, range, cruise, context and stall warnings, trip, engine temperature, odometer motion, and provider windows passed.');
+// The odometer: a week and longer get thirteen wheels instead of ten; 'Total' under them (speed.js total, shared with
+// the dashboard gauge) reads three figures and k, M, B or T, past the wheels' reach too.
+{const {odoLong}=require('../agent/onetop/dist/cluster.js'),ranges=require('../agent/onetop/dist/ranges.js');
+ for(const [p,long] of [['10m',false],['24h',false],['custom:259200',false],['custom:604800',true],['custom:2592000',true],['custom:31536000',true],['all',true],[undefined,false]])assert.equal(odoLong(p,ranges),long,String(p));
+ for(const [v,s] of [[0,'0'],[7,'7'],[999,'999'],[1234,'1.23k'],[999400,'999k'],[999600,'1M'],[19280520,'19.3M'],[123456789,'123M'],[2903404728,'2.9B'],[22101754275,'22.1B'],[9999999999,'10B'],[1.234e12,'1.23T'],[2.5e13,'25T']]){const g=speed.total(v);assert.equal(g.n+g.u,s,String(v));}}
+console.log('Cluster: scale marks, token speed, picked subject, fuel and weekly cards, session window, tell-tales, range, cruise, context and stall warnings, trip, engine temperature, odometer motion and reach, and provider windows passed.');

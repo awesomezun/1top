@@ -29,7 +29,8 @@ function estimate(e:Any){
 function session(d:Device,s:Any,online:boolean){
  const status=online?s.status||'unknown':'unknown',base=({paused:'idle',resuming:'working'} as Record<string,string>)[status]||status;
  return {id:d.id+':'+s.id,device:d.id,source:s.id,kind:s.kind||'unknown',model:s.model||'',effort:s.effort||null,project:s.project||'',terminal:s.terminal||'',title:s.title||'',
-  status:base,display_status:status,context_usage:s.context_usage||null,last_usage:number(s.last_usage),tokens:vector(s.tokens),
+  // A collector with the session contract (v1.1.0) sends each row's own state and name; an older one does not.
+  status:base,display_status:online&&s.display_status||status,display_name:typeof s.display_name==='string'?s.display_name:undefined as string|undefined,context_usage:s.context_usage||null,last_usage:number(s.last_usage),tokens:vector(s.tokens),
   usage:{rate:valid(s.rate)?s.rate:null,windows:s.windows||{},weekly_account:s.weekly_account||null,
    weekly_estimate:Object.fromEntries(Object.entries(s.weekly_estimate||{}).map(([k,e])=>[k,estimate(e)])) as Any,last_minute:vector(s.usage?.last_minute)},
   is_subagent:!!s.parent_session_id,root_session_id:d.id+':'+(s.root_session_id||s.id),children_working:0,children_count:0};
@@ -179,7 +180,7 @@ function range(a:Account,now:number){
 const cruise=(a:Account|undefined,now:number)=>a&&a.weekly&&a.left!==null&&a.reset&&a.reset>now?a.left/((a.reset-now)/HOUR):null;
 const contextFull=(s:ClusterSession)=>{const c=s.context_usage;return valid(c?.input_tokens)&&valid(c?.capacity)&&c.capacity>0&&c.input_tokens/c.capacity>=CONTEXT;};
 const stalled=(s:ClusterSession,state:string,now:number)=>state==='working'&&valid(s.last_usage)&&s.last_usage>0&&now-s.last_usage>STALL;
-export const display=(s:ClusterSession)=>(s.children_working||0)>0?'working':s.display_status||s.status;
+export const display=(s:ClusterSession)=>s.display_name!==undefined?s.display_status||s.status:(s.children_working||0)>0?'working':s.display_status||s.status;
 function trip(state:ClusterState,start:number|null,now:number){
  if(!valid(start)||start>now)return null;
  const from=state.chart_range?.start??((valid(state.updated)?state.updated:now)-86400),inRange=start>=from;

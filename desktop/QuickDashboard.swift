@@ -922,6 +922,7 @@ struct QuickDashboard: View {
                 .help(tr("작업 중인 세션부터 표시합니다. 아래로 스크롤하면 모든 세션을 볼 수 있습니다."))
     }
     private func sessionName(_ s: DesktopSession) -> String {
+        if let name = s.display_name, !name.isEmpty { return name }
         if let title = s.orca_terminal?.title, !title.isEmpty { return title }
         if s.kind == "Aside", let title = s.title, !title.isEmpty { return title }
         return s.project ?? s.kind

@@ -13,7 +13,7 @@ struct SessionRow: View {
                 Text(session.name).font(.subheadline.weight(.semibold)).lineLimit(1)
                 Text([model.toolName(session), Tool.model(session.model), session.displayProject].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                Text([device?.name, session.app, session.terminal == session.name ? nil : session.terminal].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                Text((session.displayName != nil ? [device?.name, session.app, session.displayDetail] : [device?.name, session.app, session.terminal == session.name ? nil : session.terminal]).compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
             }
             Spacer(minLength: 8)
@@ -21,8 +21,8 @@ struct SessionRow: View {
                 Text(Format.tokens(session.tokens(in: period))).font(.subheadline.weight(.semibold).monospacedDigit())
                 Text(fresh ? Format.perHour(session.rate) : "—").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                 HStack(spacing: 4) {
-                    StatusGlyph(status: fresh ? session.status : "stale")
-                    Text(fresh ? Format.status(session.status) : L.t("Last report ", "마지막 보고 ") + (device.map { L.time($0.receivedDate) } ?? "—"))
+                    StatusGlyph(status: fresh ? session.state : "stale")
+                    Text(fresh ? Format.status(session.state) : L.t("Last report ", "마지막 보고 ") + (device.map { L.time($0.receivedDate) } ?? "—"))
                         .font(.caption2).foregroundStyle(fresh && session.isWorking ? .primary : .secondary)
                 }
             }

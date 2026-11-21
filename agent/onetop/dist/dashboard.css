@@ -190,6 +190,8 @@ body:not([data-view=sessions],[data-view=cluster]) .edit-dashboard{display:none}
 :root[data-theme=light] .fs-inst{--fs-on:var(--lcd);--fs-lead:var(--lcd-lead);--fs-off:#e7ebee;--fs-grid:#d3dade;--fs-red:#cf4334}
 .fs-inst text{fill:var(--ink);font-family:var(--font)}
 .fs-inst .fs-mut{fill:var(--muted)}
+/* The period's total under the gauge: the word and unit muted, the figure bright (speed.js totalLine). */
+.fs-inst .fs-total{fill:var(--muted);font-weight:600;letter-spacing:.02em}.fs-inst .fs-total-n{fill:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}.fs-inst .fs-total-u{font-weight:500;letter-spacing:0}
 .fs-inst .fs-unit-led{fill:var(--fs-on);font-weight:700;font-style:italic}
 .fs-inst .fs-scale{font:500 9.5px var(--mono);fill:var(--muted)}
 .fs-inst .fs-value{font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums}

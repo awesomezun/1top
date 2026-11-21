@@ -30,8 +30,8 @@ export function windowName(w:{key?:string;label:string;period?:string|null},t:(e
  return w.label;
 }
 /** The state a session is in, in the iPhone's words. */
-export const statusName=(status:string,t:(en:string,ko:string)=>string)=>({working:t('Working','작업 중'),waiting:t('Needs input','확인 필요'),paused:t('Paused','일시정지'),
- idle:t('Idle','대기 중'),interrupted:t('Interrupted','중단됨'),resuming:t('Resuming','재개 중')} as Record<string,string>)[status]||t('Unknown state','상태 미확인');
+export const statusName=(status:string,t:(en:string,ko:string)=>string)=>({working:t('Working','작업 중'),subagents:t('Subagents working','하위 작업 중'),waiting:t('Needs input','확인 필요'),paused:t('Paused','일시정지'),
+ done:t('Just done','방금 끝남'),disconnected:t('Disconnected','연결 끊김'),idle:t('Idle','대기 중'),interrupted:t('Interrupted','중단됨'),resuming:t('Resuming','재개 중')} as Record<string,string>)[status]||t('Unknown state','상태 미확인');
 /** How old a value that could not be refreshed is, so an old % never reads as current. */
 export function reportAge(updated:number|null|undefined,t:(en:string,ko:string)=>string,now=shownNow()/1000){
  if(!updated||!(updated>0))return t('Last report','마지막 보고');const s=Math.max(0,now-updated);

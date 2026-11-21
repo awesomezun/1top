@@ -38,7 +38,8 @@ function session(device,s,online){
   id:remoteId(device,s.id),device_id:device.id,device_name:device.name,source_id:s.id,
   // No path crosses the relay: the computer's name stands where the local dashboard shows the folder.
   kind:s.kind||'unknown',model:s.model||'',project:asideHome(s)?'Aside 기본 작업공간':s.project||'',title:conversationTitle(s),cwd:device.name||'',
-  status:base,display_status:status,effort:s.effort||null,effort_source:s.effort_source||null,effort_updated:number(s.effort_updated),
+  // A computer on a collector with the session contract (v1.1.0) sends each row's own state and name; an older one does not.
+  status:base,display_status:online&&s.display_status||status,...(typeof s.display_name==='string'?{display_name:s.display_name,display_detail:s.display_detail||''}:{}),effort:s.effort||null,effort_source:s.effort_source||null,effort_updated:number(s.effort_updated),
   context_usage:s.context_usage||null,last_usage:number(s.last_usage),request_input:number(s.request_input),context_size:number(s.context_size),terminal_note:s.terminal_note||'',
   tokens:vector(s.tokens),
   usage:{rate:valid(s.rate)?s.rate:null,windows:s.windows||{},weekly_account:s.weekly_account||null,weekly_estimate:estimates,

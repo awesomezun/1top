@@ -33,9 +33,13 @@ class ClaudeTrackingTests(unittest.TestCase):
     def test_process_metadata_preserves_spaces_without_exporting_secrets(self):
         env={'CLAUDE_CONFIG_DIR':'/Users/test/Application Support/profile',
              'ORCA_TAB_ID':'tab','ANTHROPIC_API_KEY':'secret'}
-        with patch('onetop.server.psutil.Process') as process:
-            process.return_value.environ.return_value=env
-            value=Collector().metadata({'pid':123,'started':'now','birth':1})
+        from onetop.observe.processes import Reader
+        process=Mock(pid=123)
+        process.as_dict.return_value={'pid':123,'ppid':1,'name':'claude','create_time':1}
+        process.exe.return_value='/usr/bin/claude';process.cmdline.return_value=['claude']
+        process.environ.return_value=env;process.cwd.return_value='/work';process.terminal.return_value='/dev/ttys1'
+        with patch('onetop.observe.processes.psutil.process_iter',return_value=[process]), patch('onetop.observe.processes.owned_process',return_value=True):
+            value=Reader().read()[0]
         self.assertEqual(value['config_dir'],env['CLAUDE_CONFIG_DIR'])
         self.assertNotIn('secret',json.dumps(value))
 

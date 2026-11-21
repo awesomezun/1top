@@ -127,7 +127,7 @@ class AsideTests(unittest.TestCase):
             rows=discover(home,100,True)
             self.assertEqual({r['id'] for r in rows},{'aside:0:active','aside:0:stored'})
             self.assertEqual(next(r for r in rows if r['aside_session']=='active')['status'],'working')
-            self.assertEqual(next(r for r in discover(home,100,False) if r['aside_session']=='active')['status'],'unknown')
+            self.assertEqual(next(r for r in discover(home,100,False) if r['aside_session']=='active')['status'],'disconnected')
             self.assertTrue(all(r['pids']==[] for r in rows))
             exported=export_snapshot({'sessions':rows})['sessions']
             self.assertIn('pause',next(r for r in exported if r['id']=='aside:0:active')['capabilities'])

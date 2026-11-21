@@ -21,6 +21,9 @@ import XCTest
         XCTAssertGreaterThanOrEqual(r.tach.climb, 0)
         let hold = ClusterReadings.Hold(); hold.period = "1h"; hold.full = 500e6
         XCTAssertEqual(ClusterReadings(model: model, now: now, hold: hold).tach.full, 500e6)
+        // The themes' flow: the hour in 24 slices from the same token bins, with tokens in it.
+        XCTAssertEqual(r.flow.count, 24)
+        XCTAssertGreaterThan(r.flow.reduce(0, +), 0)
         // Burn dial: every AI, the average of the accounts' burns, each account on the rim.
         let burning = r.accounts.filter { ClusterReadings.valid($0.burn) }
         XCTAssertFalse(burning.isEmpty)

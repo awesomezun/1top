@@ -8,32 +8,13 @@ import os,re,shutil,subprocess
 import psutil
 from .platform_support import owned_process, process_terminal
 
-CLI_NAMES={'claude':'Claude','codex':'Codex','gemini':'Gemini','opencode':'OpenCode',
-           'aider':'Aider','goose':'Goose','agy':'Antigravity','qwen':'Qwen Code',
-           'copilot':'GitHub Copilot','droid':'Droid','amp':'Amp'}
-PACKAGES={'@anthropic-ai/claude-code':'Claude','@openai/codex':'Codex',
-          '@google/gemini-cli':'Gemini','@github/copilot':'GitHub Copilot',
-          '@qwen-code/qwen-code':'Qwen Code','opencode-ai':'OpenCode'}
 APP_NAMES={'Cursor','Visual Studio Code','Code','Code - Insiders','Windsurf','Zed',
            'WindowsTerminal','Windows Terminal','powershell','pwsh','cmd','conhost','OpenConsole','Antigravity','Terminal','iTerm','iTerm2','Warp','Ghostty','Alacritty',
            'WezTerm','IntelliJ IDEA','PyCharm','WebStorm','Orca','ChatGPT','Claude'}
 
 def cli_kind(name,args,exe=''):
-    executable=Path(name).name.lower().removesuffix('.exe')
-    if executable in CLI_NAMES:return CLI_NAMES[executable]
-    # Native Claude installations expose a version number as their process name.
-    # Require the executable's installation path; a version or prompt alone is
-    # not evidence that the process belongs to Claude.
-    if re.search(r'(?:^|/)claude/versions/\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\.exe)?$',
-                 str(exe or '').replace('\\','/')):
-        return 'Claude'
-    if executable in ('node','nodejs','python','python3','python3.11','python3.12','python3.13'):
-        # The entrypoint only; never classify based on a prompt in later arguments.
-        entry=str(args[1]).replace('\\','/') if len(args)>1 else ''
-        for package,kind in PACKAGES.items():
-            if '/node_modules/'+package+'/' in entry:return kind
-        if executable.startswith('python') and len(args)>2 and args[1]=='-m' and args[2]=='aider':return 'Aider'
-    return None
+    from .observe.processes import cli_kind as classify
+    return classify(name,args,exe)
 
 def app_from(path,name=''):
     match=re.search(r'([^/]+)\.app(?:/|$)',path or '')
@@ -58,16 +39,8 @@ def claude_transcript(root, sid):
 
 
 def inventory():
-    rows={}
-    for p in psutil.process_iter(['pid','ppid','name','exe','cmdline','cwd','create_time']):
-        try:
-            d=p.info
-            if not owned_process(p):continue
-            rows[p.pid]={'pid':p.pid,'ppid':d['ppid'],'name':d['name'] or '',
-                'app':app_from(d['exe'],d['name']),'kind':cli_kind(d['name'] or '',d['cmdline'] or [],d['exe']),
-                'cwd':d['cwd'] or '', 'birth':d['create_time'], 'tty':process_terminal(p)}
-        except (psutil.Error,AttributeError):continue
-    return rows
+    from .observe.processes import Reader
+    return {row['pid']:row for row in Reader().read()}
 
 def context(pid,rows):
     visited=set();current=pid;nearest=None

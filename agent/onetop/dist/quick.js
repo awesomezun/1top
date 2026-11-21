@@ -29,7 +29,8 @@
 
  // Sessions: grouped root rows, working first, then the selected period's tokens.
  const stateOf=s=>s.display_status||s.status||'unknown';
- const working=s=>stateOf(s)==='working'||(s.children_working||0)>0;
+ // The collector's state as it is (session contract v1.1.0); an older collector's root counts as working while a child works.
+const working=s=>stateOf(s)==='working'||s.display_name===undefined&&(s.children_working||0)>0;
  function amount(s,period){const w=s.usage?.windows?.[period];if(!Array.isArray(w)||!w.length||!w.every(n=>finite(n)&&n>=0))return -1;return sum(w);}
  function orderSessions(rows,period){
   const sorted=[...rows].sort((a,b)=>working(a)!==working(b)?(working(a)?-1:1):amount(b,period)-amount(a,period)||(a.id<b.id?-1:a.id>b.id?1:0));
@@ -358,10 +359,10 @@
   const [tx,ty]=pt(angle,r-1.5);
   return `<svg width="20" height="12" viewBox="0 0 20 12" aria-hidden="true"><path d="${arc(359.9)}" fill="none" stroke="var(--line)" stroke-width="2.6" stroke-linecap="round"/>${pace>0?`<path d="${arc(Math.max(180.1,angle))}" fill="none" stroke="${tint}" stroke-width="2.6" stroke-linecap="round"/>`:''}${value!=null?`<path d="M${cx} ${cy}L${tx.toFixed(2)} ${ty.toFixed(2)}" stroke="${pace>0?'var(--ink)':'var(--dim)'}" stroke-width="1.2" stroke-linecap="round"/>`:''}<circle cx="${cx}" cy="${cy}" r="2" fill="${hub}"/></svg>`;
  }
- const STATE={working:'작업 중',waiting:'확인 필요',idle:'대기',paused:'일시정지',resuming:'재개 요청 중',interrupted:'중단됨'};
+ const STATE={working:'작업 중',subagents:'하위 작업 중',waiting:'확인 필요',done:'방금 끝남',idle:'대기',paused:'일시정지',resuming:'재개 요청 중',interrupted:'중단됨',disconnected:'연결 끊김'};
  const stateLabel=s=>T(STATE[stateOf(s)]||'미확인');
  const groupStateLabel=s=>{const n=s.children_working||0;return n>0?stateLabel(s)+({ko:` · 하위 ${n}개 작업 중`,en:` · ${n} subsessions working`,zh:` · ${n} 个子会话工作中`})[S.lang]:stateLabel(s);};
- const sessionName=s=>s.orca_terminal?.title||(s.kind==='Aside'&&s.title)||s.project||s.kind;
+ const sessionName=s=>s.display_name||s.orca_terminal?.title||(s.kind==='Aside'&&s.title)||s.project||s.kind;
  const projectName=s=>s.project==='0'?T('Aside 기본 작업공간'):(s.project||s.kind);
  const locationLabel=s=>{const name=s.orca_terminal?.title||s.location?.app||T('실행 위치 미확인');return s.orca_terminal?'Orca · '+name:name;};
  function sessionRow(s,scale){

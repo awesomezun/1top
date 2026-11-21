@@ -85,6 +85,8 @@ struct DesktopSession: Decodable, Identifiable {
     var id: String; var kind: String; var project: String?; var title: String?; var model: String?
     var effort: String?
     var status: String?; var display_status: String?; var tokens: [Double]?
+    /// The collector's own name and second line for the row (session contract v1.1.0); older collectors send none.
+    var display_name: String?; var display_detail: String?
     var usage: Usage?; var resources: Resources?; var orca_terminal: Terminal?
     var location: Location?; var control_key: String?; var input_verified: Bool?
     var children_count: Int?; var children_working: Int?; var children_ids: [String]?
@@ -114,15 +116,16 @@ struct DesktopSession: Decodable, Identifiable {
         guard let value = effort?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
         return value
     }
-    var isWorkingGroup: Bool { state == "working" || (children_working ?? 0) > 0 }
+    /// Working as the collector says; from an older collector, also while a child works.
+    var isWorkingGroup: Bool { state == "working" || display_name == nil && (children_working ?? 0) > 0 }
     var groupStateLabel: String {
-        (children_working ?? 0) > 0 ? "\(stateLabel) · 하위 \(children_working ?? 0)개 작업 중" : stateLabel
+        display_name == nil && (children_working ?? 0) > 0 ? "\(stateLabel) · 하위 \(children_working ?? 0)개 작업 중" : stateLabel
     }
     var terminalName: String { orca_terminal?.title ?? location?.app ?? "실행 위치 미확인" }
     var locationLabel: String { orca_terminal != nil ? "Orca · \(terminalName)" : terminalName }
     var stateLabel: String {
-        ["working":"작업 중", "waiting":"확인 필요", "idle":"대기", "paused":"일시정지",
-         "resuming":"재개 요청 중", "interrupted":"중단됨"][state] ?? "미확인"
+        ["working":"작업 중", "subagents":"하위 작업 중", "waiting":"확인 필요", "done":"방금 끝남", "idle":"대기", "paused":"일시정지",
+         "resuming":"재개 요청 중", "interrupted":"중단됨", "disconnected":"연결 끊김"][state] ?? "미확인"
     }
     func allows(_ action: String) -> Bool {
         guard let control_key, !control_key.isEmpty else { return false }

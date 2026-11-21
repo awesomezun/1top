@@ -72,16 +72,16 @@ function Labeled({label,children}:{label:string;children:React.ReactNode}){retur
 
 export {SessionDetails};
 /** A session in the list: what it is, where it runs, the period's tokens and its pace per hour. */
-function SessionItem({row,tags,onPress}:{row:SessionRow;tags:Record<string,string>;onPress:()=>void}){const w=useWorkspace(),ok=fresh(row.device),name=row.terminal||projectName(row,w.t)||row.kind;
+function SessionItem({row,tags,onPress}:{row:SessionRow;tags:Record<string,string>;onPress:()=>void}){const w=useWorkspace(),ok=fresh(row.device),name=row.display_name||row.terminal||projectName(row,w.t)||row.kind,state=row.display_status||row.status;
  const tokens=(()=>{const v=row.windows?.[w.period as WindowKey];return Array.isArray(v)?v.reduce((a,b)=>a+b,0):null;})();
  return <Pressable accessibilityRole="button" onPress={onPress} style={({pressed})=>[s.session,pressed&&{backgroundColor:quick.raised}]}>
   <View style={{width:4,height:46,borderRadius:2,backgroundColor:toolColor(row.kind)}}/>
   <View style={{flex:1,minWidth:0,gap:2}}><Text numberOfLines={1} style={{fontSize:15,fontWeight:'600',color:quick.ink}}>{name}</Text>
    <Text numberOfLines={1} style={s.small}>{[toolWithAccount(row,tags,w.period),shortModel(row.model),projectName(row,w.t)].filter(Boolean).join(' · ')}</Text>
-   <Text numberOfLines={1} style={[s.small,{color:quick.dim}]}>{[row.device.name,row.app,row.terminal===name?'':row.terminal].filter(Boolean).join(' · ')}</Text></View>
+   <Text numberOfLines={1} style={[s.small,{color:quick.dim}]}>{(row.display_detail!==undefined?[row.device.name,row.app,row.display_detail]:[row.device.name,row.app,row.terminal===name?'':row.terminal]).filter(Boolean).join(' · ')}</Text></View>
   <View style={{alignItems:'flex-end',gap:3}}><Text style={{fontSize:15,fontWeight:'600',color:quick.ink,fontVariant:['tabular-nums']}}>{short(tokens)}</Text>
    <Text style={[s.small,{fontSize:11}]}>{ok&&row.rate!==null?short((row.rate||0)*3600)+w.t(' tokens/h',' tokens/시간'):'—'}</Text>
-   <View style={{flexDirection:'row',alignItems:'center',gap:4}}><StateMark status={ok?row.status:'stale'} size={9}/><Text style={[s.small,{fontSize:11,color:ok&&row.status==='working'?quick.ink:quick.muted}]}>{ok?statusName(row.status,w.t):w.t('Last report ','마지막 보고 ')+w.when(row.device.received)}</Text></View></View>
+   <View style={{flexDirection:'row',alignItems:'center',gap:4}}><StateMark status={ok?state:'stale'} size={9}/><Text style={[s.small,{fontSize:11,color:ok&&state==='working'?quick.ink:quick.muted}]}>{ok?statusName(state,w.t):w.t('Last report ','마지막 보고 ')+w.when(row.device.received)}</Text></View></View>
  </Pressable>;}
 export function Sessions(){const w=useWorkspace(),[detail,setDetail]=useState<SessionRow|null>(null),[query,setQuery]=useState('');const tags=accountTags(w.devices||[]);
  const rows:SessionRow[]=w.rows.filter((r:SessionRow)=>!query.trim()||[r.terminal,r.project,projectName(r,w.t),r.model,toolName(r.kind),r.app,r.device.name].join(' ').toLowerCase().includes(query.trim().toLowerCase()));

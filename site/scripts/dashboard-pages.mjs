@@ -1,7 +1,7 @@
 // /app is the desktop dashboard itself: agent/onetop/dist's markup, styles and scripts, served at
 // /dashboard/ and never copied into the site, plus src/remote-app.js, which runs first and answers
 // the dashboard's /api/* requests from relay snapshots. Remote-only markup changes are listed here.
-import {readFileSync} from 'node:fs';
+import {readFileSync,readdirSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 
@@ -13,8 +13,10 @@ const url=name=>`/dashboard/${name}?v=${createHash('sha256').update(file(name)).
 // Every asset the dashboard's index.html loads, in its order.
 export function dashboardFiles(){
  const html=file('index.html').toString();
- // benchmark.json is fetched by app.js for Measurements.
- return [...html.matchAll(/(?:href|src)="\/([\w.-]+\.(?:css|js|png))"/g)].map(m=>m[1]).concat('benchmark.json');
+ // benchmark.json is fetched by app.js for Measurements. The cluster themes (cluster-themes.js) load their drawing code
+ // from themes/ beside it when one is chosen.
+ const themes=['core.js','catalog.json','mini.json','pairs.js','compact.js',...readdirSync(DIST+'themes').filter(n=>/^t\d\d-\d\d\.js$/.test(n)).sort()].map(n=>'themes/'+n);
+ return [...html.matchAll(/(?:href|src)="\/([\w.-]+\.(?:css|js|png))"/g)].map(m=>m[1]).concat('benchmark.json',...themes);
 }
 
 const REMOTE_FOOT='<div class="rail-bottom"><i class="dot green"></i> <span id="remoteIdentity" data-user-content>원격 워크스페이스</span><br><small id="localVersion">REMOTE</small><a class="remote-link" id="remoteHome" href="/" data-user-content>1top.si ↗</a><button id="remoteSignOut" type="button" data-user-content hidden>로그아웃</button><button id="helpButton">수치와 제어 이해하기 ↗</button></div></aside>';

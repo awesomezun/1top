@@ -1,7 +1,9 @@
 'use strict';
 const $=id=>document.getElementById(id),kinds=['Claude','Codex','GLM','Antigravity','Aside'];
 const colors={Claude:'#bd8965',Codex:'#378d76',GLM:'#7c86bd',Antigravity:'#619db9',Aside:'#a99bdb'};
-const labels={working:'작업 중',waiting:'확인 필요',idle:'대기 중',unknown:'미확인',interrupted:'중단됨',paused:'일시정지',resuming:'재개 요청 중'};
+const labels={working:'작업 중',subagents:'하위 작업 중',waiting:'확인 필요',done:'방금 끝남',idle:'대기 중',unknown:'미확인',interrupted:'중단됨',disconnected:'연결 끊김',paused:'일시정지',resuming:'재개 요청 중'};
+// The session table reads the weekly limit % (tokens where no estimate exists). Its % / tokens toggle was removed in
+// 4.10.0; usageUnit stays 'weekly' on screen, and the checks still read the tokens form.
 let data=null,provider='all',view='sessions',selectedId=null,busy=false,actionBusy=false,pendingAction=null,toastTimer,benchmark=null,selectedPeriod=OneTopDashboard.state.period,usageUnit='weekly',mapGroup='session';
 // Upgrade selections saved by the former continuous slider once; keep explicit
 // text entries made with the new control on subsequent reloads.
@@ -37,7 +39,10 @@ const accountChip=(id,label)=>{const alias=id&&OneTopWeekly.poolName(data?.accou
 const sessionAccount=s=>s.usage?.weekly_estimate?.[selectedPeriod]?.account_id||s.usage?.weekly_account;
 const hostApp=s=>s.orca_terminal?'Orca':s.location?.app||'실행 앱 미확인';
 const runtimeLabel=s=>s.kind==='Aside'?'앱 내부 세션':s.kind==='Claude'||s.kind==='GLM'?'Claude Code':kindName(s.kind);
-const display=s=>(s.children_working||0)>0?'working':s.display_status||s.status;
+// The collector decides each row's state and name (session contract v1.1.0); a computer on an older collector, which sends
+// no display_name, keeps the earlier reading: a root is working while a child works.
+const display=s=>s.display_name!==undefined?s.display_status||s.status:(s.children_working||0)>0?'working':s.display_status||s.status;
+const nameOf=s=>s.display_name||s.orca_terminal?.title||(s.kind!=='Aside'&&s.location?.terminal)||cleanTitle(s.title)||s.project;
 const visibleSessions=()=>data?.root_sessions??data?.sessions??[];
 // Aside conversations opened without a project run in ~/.aside/u/<n>; show that as Aside's own workspace, not as a project named "0".
 const asideHome=s=>s.kind==='Aside'&&/\/\.aside\/u\/[^/]+\/?$/.test(s.cwd||'');
@@ -135,7 +140,7 @@ function customizeCluster(){
  const st=OneTopLayout.shared(),box=$('clusterView'),cl=()=>box.querySelector('.cluster');
  const wide=()=>{const c=cl();return !!c&&getComputedStyle(c).gridTemplateColumns.split(' ').length>=3;};
  const vis=el=>el&&!el.classList.contains('cl-off')&&getComputedStyle(el).display!=='none';
- OneTopCustomize.open({container:box,title:'계기판',state:st,group:()=>st.layout.wide.cluster,wide:innerWidth>=900,autoPeriods:true,reports:window.OneTopReports?reportOptions:null,
+ OneTopCustomize.open({container:box,title:'계기판',state:st,group:()=>st.layout.wide.cluster,wide:innerWidth>=900,autoPeriods:true,reports:window.OneTopReports?reportOptions:null,themes:window.OneTopClusterThemes?themeOptions:null,
   get axis(){return wide()?'x':'y';},
   known:['periods','dials','alerts','odo','temps','fuel','window'],
   parts:()=>{const c=cl(),o=st.layout.wide.cluster.order,out=[];if(!c)return out;
@@ -154,7 +159,7 @@ function renderCluster(){
  if(!data?.ready||!window.OneTopCluster)return;
  OneTopCluster.render($('clusterView'),{layout:window.OneTopLayout?.shared?.().layout.wide.cluster,state:data,period:selectedPeriod,caption:periodCaption(),sessions:visibleSessions().filter(s=>provider==='all'||s.kind===provider),display,colors,kindName,fmt,
   speed:OneTopSpeed,tachMax:speedScale.key===selectedPeriod?speedScale.max:null,weekly:OneTopWeekly,reconnect:RECONNECT,accountChip:id=>accountChip(id,data.account_quotas?.find(q=>q.id===id)?.account_label),
-  name:s=>s.orca_terminal?.title||(s.kind!=='Aside'&&s.location?.terminal)||cleanTitle(s.title)||s.project,selectPeriod:key=>{selectPeriod(key);updateRangeControls();},open:openSession,rangeControls:updateRangeControls,drawFlow:drawClusterFlow,drawPage:drawClusterPage,
+  name:nameOf,selectPeriod:key=>{selectPeriod(key);updateRangeControls();},open:openSession,rangeControls:updateRangeControls,drawFlow:drawClusterFlow,drawPage:drawClusterPage,
   // The limits page adds an account with the dashboard's sign-in dialog and signs one in again with the limits view's own button.
   addAccount:()=>$('accountDialog')?.showModal(),relogin:id=>{const b=[...document.querySelectorAll('#weeklyOverview [data-account-authorize],#weeklyOverview [data-account-relogin]')].find(x=>(x.dataset.accountAuthorize||x.dataset.accountId)===id);if(b)b.click();else $('accountDialog')?.showModal();}});
  window.OneTopCustomize?.refresh();
@@ -176,6 +181,7 @@ function renderSessionSummary(){
 let speedScale={key:null,max:1,lower:0,since:0};
 function renderFleetSpeed(){
  const s=OneTopSpeed.measure(data,selectedPeriod),rate=s.rate===null?null:s.rate*3600,next=OneTopSpeed.scaleMax(rate,periodMeta()?.seconds),now=Date.now();
+ speedView.tokens=s.tokens;  // the period's total under the gauge, as the cluster's odometer shows it
  if(speedScale.key!==selectedPeriod||next>speedScale.max)speedScale={key:selectedPeriod,max:next,lower:0,since:0};
  else if(next<speedScale.max&&rate<speedScale.max*.4){if(speedScale.lower!==next){speedScale.lower=next;speedScale.since=now;}else if(now-speedScale.since>30000)speedScale.max=next;}
  else speedScale.lower=0;
@@ -235,8 +241,8 @@ function animateFleetSpeed(){
 function paintFleetSpeed(rate){
  const svg=$('fleetSpeedBand'),face=svg?.querySelector('[data-face]');if(!face)return;
  const t=s=>OneTopI18n.t(s),style=OneTopDashboard.state.instrument==='scope'?'scope':'sweep',caption=t(periodCaption());
- face.innerHTML=OneTopSpeed.face({style,rate,max:Number(svg.dataset.max)||1,grow:speedView.grow,color:k=>colors[k]||'#8b939f',bins:style==='scope'&&rate!==null?speedBins():null,
-  text:{perHour:t('tokens/시간'),checking:t('확인 중'),connecting:t('수집기 연결 확인 중'),average:caption+' '+t('평균'),avgShort:t('평균'),range:t('범위'),rangeValue:caption,scale:t('눈금'),peak:t('최고'),low:t('최저'),now:t('지금')}});
+ face.innerHTML=OneTopSpeed.face({style,rate,max:Number(svg.dataset.max)||1,grow:speedView.grow,total:Number.isFinite(speedView.tokens)?OneTopSpeed.total(speedView.tokens):null,color:k=>colors[k]||'#8b939f',bins:style==='scope'&&rate!==null?speedBins():null,
+  text:{total:'Total',perHour:t('tokens/시간'),checking:t('확인 중'),connecting:t('수집기 연결 확인 중'),average:caption+' '+t('평균'),avgShort:t('평균'),range:t('범위'),rangeValue:caption,scale:t('눈금'),peak:t('최고'),low:t('최저'),now:t('지금')}});
  speedView.bars=[...face.querySelectorAll('.fs-bar')];
  if(radar.frame)lightRadar(radar.head);
 }
@@ -275,7 +281,7 @@ function renderSidebar(orderedRows){
  const hosts=apps.map(app=>`<button class="provider-nav ${query===app.toLocaleLowerCase()?'active':''}" data-app-filter="${esc(app)}" aria-pressed="${query===app.toLocaleLowerCase()}"><i class="dot" style="background:#8b939f"></i><span>${esc(app)}</span><small>${roots.filter(s=>hostApp(s)===app).length}</small></button>`).join('');
  if($('hostApps').innerHTML!==hosts)$('hostApps').innerHTML=hosts;
 }
-const SESSION_GROUPS=[['working','작업 중',['working','resuming']],['waiting','확인 필요',['waiting']],['paused','일시정지',['paused']],['idle','대기 중',['idle']],['other','상태 미확인',['unknown','interrupted']]];
+const SESSION_GROUPS=[['working','작업 중',['working','resuming']],['subagents','하위 작업 중',['subagents']],['waiting','확인 필요',['waiting']],['paused','일시정지',['paused']],['idle','대기 중',['idle','done']],['other','상태 미확인',['unknown','interrupted','disconnected']]];
 const sessionGroup=s=>SESSION_GROUPS.find(g=>g[2].includes(display(s)))?.[0]||'other';
 // The table has two bands, as the user asked: working roots first (a root with a working child
 // counts as working), then every other session together. Each band is in selected-period token
@@ -295,7 +301,7 @@ function renderTable(){
  const matches=s=>(provider==='all'||s.kind===provider)&&(state==='all'||display(s)===state)&&(modelFilter==='all'||(s.model||'')===modelFilter)&&[s.project,s.title,s.kind,s.model,s.orca_terminal?.title,hostApp(s),s.location?.terminal,s.id,s.agent_path].join(' ').toLocaleLowerCase().includes(query);
  const children=s=>(s.children_ids||[]).map(id=>data.sessions.find(c=>c.id===id)).filter(Boolean);
  let rows=visibleSessions().filter(s=>matches(s)||children(s).some(matches));
- const order={working:0,waiting:1,resuming:2,paused:3,interrupted:4,unknown:5,idle:6},sort=$('sort').value;
+ const order={working:0,subagents:1,waiting:2,resuming:3,paused:4,interrupted:5,unknown:6,done:7,idle:8,disconnected:9},sort=$('sort').value;
  // Compare the same token unit across accounts, regardless of the displayed quota estimate.
  const numeric=s=>sort==='period'?total(s.usage?.windows?.[selectedPeriod]):sort==='rate'?s.usage?.rate:sort==='total'?total(s.tokens):s.resources?.[sort];
  const compare=(a,b)=>Number(working(b))-Number(working(a))||
@@ -311,10 +317,10 @@ function renderTable(){
  const filtered=!!query||state!=='all'||modelFilter!=='all',collapsed=OneTopDashboard.state.collapsed||{};
  const cell=s=>{const r=s.resources,u=s.usage||{},pv=u.windows?.[selectedPeriod],period=periodMeta(),title=cleanTitle(s.title),task=title||s.project;
   // The first line is whatever tells sessions apart: the terminal tab, else the conversation title.
-  const term=s.is_subagent?(s.agent_path?.split('/').filter(Boolean).at(-1)||'하위 에이전트'):(s.orca_terminal?.title||(s.kind!=='Aside'&&s.location?.terminal)||''),primary=term||task;
+  const term=s.is_subagent?(s.agent_path?.split('/').filter(Boolean).at(-1)||'하위 에이전트'):s.display_name||(s.orca_terminal?.title||(s.kind!=='Aside'&&s.location?.terminal)||''),primary=term||task;
   const place=s.kind==='Aside'?'Aside 앱 안에서 실행 · 별도 프로세스 없음':s.is_subagent?'하위 에이전트':s.pids.length===1?'PID '+s.pids[0]:'PID 연결 미확인';
   // A session without a conversation title (a relay sends none taken from prompts) shows its project once.
-  const second=[...new Set([term?title:'',s.project].filter(Boolean))];
+  const second=!s.is_subagent&&s.display_detail!==undefined?[s.display_detail].filter(Boolean):[...new Set([term?title:'',s.project].filter(Boolean))];
   return `<tr class="${s.is_subagent?'subagent-row':''}" tabindex="0" data-session="${esc(s.id)}" data-group-of="${bandOf(s)}" aria-label="${esc(primary)} ${esc(s.project)} ${s.kind} ${labels[display(s)]}, 상세 보기"><td><div class="cell-line"><span class="cell-primary" title="${esc(s.terminal_note||primary)}" data-user-content>${s.is_subagent?'↳ ':''}${s.orca_terminal&&s.control_key&&!s.is_subagent?`<button type="button" class="terminal-rename" data-rename="${esc(s.id)}" title="터미널 제목 변경">${esc(term)}<span class="rename-pencil" aria-hidden="true">✎</span></button>`:esc(primary)}</span>${s.children_count?`<button class="children-toggle" data-children="${esc(s.id)}" aria-expanded="${expandedSessions.has(s.id)}" title="하위 사용량을 포함한 합계입니다"><span aria-hidden="true">${expandedSessions.has(s.id)?'▾':'▸'}</span> 하위 ${s.children_count}</button>`:''}</div><span class="cell-task" title="${esc(second.join(' · ')+'\n'+(s.cwd||'')+'\n'+place)}" data-user-content>${second.map((v,i)=>i===second.length-1&&second.length>1?`<span class="cell-project">${esc(v)}</span>`:esc(v)).join(' · ')}</span></td><td><span class="provider-cell">${s.kind==='Aside'?esc(model(s.model))+effortBadge(s):dot(s.kind)+esc(runtimeLabel(s))+accountChip(sessionAccount(s),data.account_quotas?.find(q=>q.id===sessionAccount(s))?.account_label)}</span><span class="cell-sub">${s.kind==='Aside'?'Aside 앱':esc(model(s.model))+effortBadge(s)}</span></td><td>${status(s)}</td><td class="num period-value" title="${pv?exact(total(pv))+' tokens':'사용량 미확인'}">${sessionWeeklyCell(s,pv,period)}</td><td class="num ${s.tokens?'':'unknown-value'}" title="${s.tokens?exact(total(s.tokens))+' tokens · 출력 '+fmt(s.tokens[3]):'유효한 사용량 보고 없음'}">${fmt(total(s.tokens))}</td><td class="num">${sessionBurnCell(s)}</td><td class="num" title="${r?r.count+'개 프로세스':s.kind==='Aside'?'Aside 앱 안에서 실행':'미귀속'}">${pct(r?.cpu)}</td><td class="num" title="${bytes(r?.rss)} / ${bytes(data.system?.host?.memory?.total)}">${memoryPercent(r?.rss)}</td><td>${actions(s)}</td></tr>`;};
  const html=TABLE_BANDS.map(([key,label])=>{
   const members=rows.filter(s=>bandOf(s)===key);if(!members.length)return '';
@@ -414,7 +420,6 @@ $('hostApps').onclick=e=>{const b=e.target.closest('[data-app-filter]');if(!b)re
 $('modelFilter').onchange=renderTable;
 $('clearFilter').onclick=()=>{provider='all';render();};$('search').oninput=renderTable;$('stateFilter').onchange=renderTable;$('sort').onchange=renderTable;
 
-$('usageMode').onclick=e=>{const b=e.target.closest('[data-unit]');if(b){usageUnit=b.dataset.unit;render();}};
 $('periodCards').onclick=e=>{const b=e.target.closest('[data-period]');if(b)selectPeriod(b.dataset.period);};
 function openDetail(e){if(e.target.closest('button'))return;const r=e.target.closest('[data-session]');if(r)openSession(r.dataset.session);}
 function openSession(id){selectedId=id;renderDetail(selectedId);if(!$('detailDialog').open)$('detailDialog').show();document.body.classList.add('inspecting');drawCharts();}
@@ -505,6 +510,8 @@ function renderMaps(){
 // What the report sheets need; only this computer's own dashboard (not the remote one) saves plans and notices.
 const reportOptions=()=>({state:data,now:data?.updated||Date.now()/1000,period:selectedPeriod,label:accountName,onChange:()=>{reportHTML='';renderReport();renderWeekly();},
  post:data?.action_token&&!data.remote?(path,body)=>fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Monitor-Token':data.action_token},body:JSON.stringify(body),signal:AbortSignal.timeout(10000)}).then(r=>r.ok?r.json():Promise.reject(Error(String(r.status)))):null});
+// The cluster's look (cluster-themes.js): the gallery previews this computer's readings and a pick redraws the cluster.
+const themeOptions=()=>({figures:()=>window.OneTopCluster?.themeFigures?.(),onChange:()=>{if(view==='cluster')renderCluster();}});
 $('reportPanel').addEventListener('click',e=>{
  const b=e.target.closest('button');if(!b||!window.OneTopReports)return;
  const o=reportOptions();
@@ -678,7 +685,6 @@ $('weeklyOverview').addEventListener('click',async e=>{
 });
 function renderWeekly(){
  $('summary').hidden=false;$('weeklyOverview').hidden=false;
- document.querySelectorAll('[data-unit]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.unit===usageUnit)));
  const rows=(data.account_quotas||[]).filter(q=>provider==='all'||q.kind===provider);
  const periodLabel=periodMeta()?.label||selectedPeriod;
  $('weeklyOverview').innerHTML=rows.map(q=>{
@@ -735,7 +741,8 @@ function sessionBurnCell(s){
  if(!e&&q){const c=data.weekly_usage?.accounts.find(a=>a.id===q.id)?.calibration;if(c)e={account_id:q.id,basis:'calibrated_token_equivalent',calibration:c};}
  const rate=s.tokens==null?null:OneTopWeekly.sessionBurn(e,s.usage?.rate,q);
 
- return OneTopDashboard.rateCell(rate,s.kind,OneTopWeekly.basis(e));
+ // Without a basis the hint names why the rate is unknown, such as a limit that cannot be read.
+ return OneTopDashboard.rateCell(rate,s.kind,OneTopWeekly.basis(e)||OneTopI18n.t(OneTopWeekly.pending(s.usage?.weekly_account,q,s.tokens==null?null:1)));
 }
 let renameRequest=null;
 document.addEventListener('click',event=>{

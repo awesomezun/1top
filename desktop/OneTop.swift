@@ -103,8 +103,10 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopo
     // The dashboard keeps its theme and language in its own storage; the quick view and the menus follow them.
     func syncDashboardAppearance() {
         guard webLoaded, !pushingPreferences, let webView else { return }
-        webView.evaluateJavaScript("(()=>{try{const s=JSON.parse(localStorage.getItem('onetop.dashboard.v1')||'{}')||{};return [s.theme||'dark',s.lang||'ko']}catch(e){return ['dark','ko']}})()") { [weak self] value, _ in
-            guard let self, !self.pushingPreferences, let pair = value as? [String], pair.count == 2 else { return }
+        webView.evaluateJavaScript("(()=>{try{const s=JSON.parse(localStorage.getItem('onetop.dashboard.v1')||'{}')||{},c=JSON.parse(localStorage.getItem('onetop.clusterTheme.v1')||'{}')||{};return [s.theme||'dark',s.lang||'ko',typeof c.theme==='string'?c.theme:'']}catch(e){return ['dark','ko','']}})()") { [weak self] value, _ in
+            guard let self, !self.pushingPreferences, let pair = value as? [String], pair.count == 3 else { return }
+            // The cluster theme chosen on the dashboard paints the menu bar's dials too (ClusterPanel, ClusterMini).
+            if !self.testing, UserDefaults.standard.string(forKey: "clusterTheme") ?? "" != pair[2] { UserDefaults.standard.set(pair[2], forKey: "clusterTheme") }
             let theme = pair[0] == "light" ? "light" : "dark", lang = QuickText(pair[1]).lang
             self.applyAppearance(theme)
             guard !self.testing else { return }

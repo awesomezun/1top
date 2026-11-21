@@ -160,6 +160,25 @@ class Mailbox:
         with self.lock:
             return [dict(r) for r in self.records if r['status'] == 'queued']
 
+    def rebind(self, spec):
+        """Follow only a proven R2 transition, retaining queued IDs and replies."""
+        previous = set(spec.get('previous_session_ids', []))
+        if not previous or not spec.get('control_key'):
+            return
+        paths = {s.get('path') for s in spec.get('continuation_sources', []) if s.get('path')}
+        with self.lock:
+            changed = False
+            for row in self.records:
+                if row['session_id'] not in previous:
+                    continue
+                verified = (row.get('control_key') in spec.get('continuation_keys', []) if row['status'] == 'queued'
+                            else row.get('path') in paths and row.get('kind') == spec.get('kind'))
+                if verified:
+                    row.update(session_id=spec['id'],control_key=spec['control_key'])
+                    changed = True
+            if changed:
+                self.save()
+
     def pending_sessions(self):
         with self.lock:
             return {r['session_id'] for r in self.records if r.get('path') and

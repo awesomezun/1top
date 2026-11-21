@@ -440,6 +440,9 @@ struct CustomizeSheet<Preview: View>: View {
     /// The reports' look lives apart from the layout (ReportPrefs) and opens its own sheet.
     @State private var reportSheet = false
     @State private var reportPrefs = ReportPrefs.shared
+    /// The cluster's look (a theme or the 1top instruments), in the cluster's list only.
+    @State private var themeSheet = false
+    @State private var looks = ClusterThemePrefs.shared
 
     var body: some View {
         NavigationStack(path: $session.path) {
@@ -609,6 +612,15 @@ struct CustomizeSheet<Preview: View>: View {
                         }
                         .padding(2).overlay(RoundedRectangle(cornerRadius: 9).stroke(theme.line))
                     }
+                    if preset == .cluster {
+                        row(L.t("Cluster design", "계기판 디자인")) {
+                            Button { themeSheet = true } label: {
+                                Text(ClusterThemePrefs.name(looks.theme) + " ▸").font(.system(size: 14, weight: .semibold)).lineLimit(1).padding(.horizontal, 10).frame(height: 32)
+                                    .background(theme.raised, in: RoundedRectangle(cornerRadius: 8)).overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.line))
+                            }
+                            .buttonStyle(.plain).accessibilityIdentifier("cz-theme")
+                        }
+                    }
                     ForEach(ids, id: \.self) { id in listRow(id, first: id == movable.first, last: id == movable.last) }
                     row(L.t("Value · weekly report", "본전·주간 리포트")) {
                         Button { reportSheet = true } label: {
@@ -620,10 +632,11 @@ struct CustomizeSheet<Preview: View>: View {
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
-            pillButton(L.t("Reset to defaults", "기본값으로 되돌리기"), id: "cz-reset") { store.reset(preset); reportPrefs.reset() }
+            pillButton(L.t("Reset to defaults", "기본값으로 되돌리기"), id: "cz-reset") { store.reset(preset); reportPrefs.reset(); if preset == .cluster { looks.theme = nil } }
         }
         .padding(.horizontal, 14).padding(.top, 18).padding(.bottom, 10)
         .sheet(isPresented: $reportSheet) { ReportSettingsSheet() }
+        .sheet(isPresented: $themeSheet) { ThemeGallerySheet() }
         .accessibilityElement(children: .contain).accessibilityIdentifier("cz-list-sheet")
     }
     private func listRow(_ id: Item, first: Bool, last: Bool) -> some View {

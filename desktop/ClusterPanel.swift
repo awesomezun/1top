@@ -33,18 +33,58 @@ private func colorAt(_ stops: [(Double, ClusterRGB)], _ at: Double) -> ClusterRG
 /// A tool colour lifted a little, so a darker one still reads as a lit display.
 private func lift(_ c: ClusterRGB) -> ClusterRGB { ((c.0 + (255 - c.0) * 0.22).rounded(), (c.1 + (255 - c.1) * 0.22).rounded(), (c.2 + (255 - c.2) * 0.22).rounded()) }
 
-/// The dashboard's colours the cluster uses beyond the panel's own (dashboard.css, cluster.css).
+/// The chosen cluster theme's colours for the dials (agent/onetop/dist/themes/mini.json, read from the collector), as the
+/// tray's dials take them (cluster-themes.js paintMini): the 1top shape in the theme's faces, rims, figures and needles.
+/// The theme is the one chosen on the dashboard, which OneTop.swift copies to "clusterTheme".
+struct ClusterMini: Decodable {
+    let bg, face, rim, tick, num, needle, hub, lcd, lcdDim, accent, warn: String
+    let font: String; let light: Bool
+    nonisolated(unsafe) static var table: [String: ClusterMini] = [:]
+    nonisolated(unsafe) private static var asked = false
+    /// Reads the palettes once from the collector; then() redraws when they arrive.
+    static func load(from base: URL, then: @escaping @MainActor () -> Void) {
+        guard !asked else { return }
+        asked = true
+        URLSession.shared.dataTask(with: base.appendingPathComponent("themes/mini.json")) { data, _, _ in
+            let t = data.flatMap { try? JSONDecoder().decode([String: ClusterMini].self, from: $0) } ?? [:]
+            // A failed read keeps what was read before and asks again on the next opening.
+            DispatchQueue.main.async { if t.isEmpty { asked = false } else { table = t; then() } }
+        }.resume()
+    }
+    static func chosen(_ id: String) -> ClusterMini? { id.isEmpty ? nil : table[id] }
+    /// The theme's type for the dials' numbers (core.js FONTS), on the Mac's own faces.
+    func font(size: CGFloat, weight: Font.Weight) -> Font {
+        switch font {
+        case "rounded": .system(size: size, weight: weight, design: .rounded)
+        case "ui": .system(size: size, weight: weight)
+        default:
+            .custom(["din": "DIN Alternate", "cond": "DIN Condensed", "futura": "Futura", "avenir": "Avenir Next", "helv": "Helvetica Neue",
+                     "gill": "Gill Sans", "wide": "Eurostile"][font] ?? "Helvetica Neue", size: size).weight(weight)
+        }
+    }
+}
+
+/// The dashboard's colours the cluster uses beyond the panel's own (dashboard.css, cluster.css). With a theme's palette
+/// (the dials only) its faces, rims, numbers, needle and red zone are the theme's.
 struct ClusterPalette {
     let theme: QuickTheme
+    var mini: ClusterMini? = nil
     private func pick(_ dark: String, _ day: String) -> Color { color(rgb(theme.light ? day : dark)) }
+    private func m(_ key: KeyPath<ClusterMini, String>) -> Color? { mini.map { color(rgb($0[keyPath: key])) } }
     var panel2: Color { pick("#161a1e", "#f8f9fa") }
-    var lineStrong: Color { pick("#2f363c", "#d3d9de") }
-    var faceHi: Color { pick("#1f2428", "#ffffff") }
-    var faceLo: Color { pick("#08090a", "#f8f9fa") }
-    var halo: Color { pick("#090a0c", "#ffffff") }
-    var off: Color { theme.muted.opacity(theme.light ? 0.36 : 0.42) }
-    /// The red zone and every needle: a car's red.
-    var zone: Color { pick("#ff3b30", "#e0261c") }
+    var lineStrong: Color { m(\.rim) ?? pick("#2f363c", "#d3d9de") }
+    var faceHi: Color { m(\.face) ?? pick("#1f2428", "#ffffff") }
+    var faceLo: Color { mini.map { let a = rgb($0.face), b = rgb($0.bg); return color((a.0 * 0.8 + b.0 * 0.2, a.1 * 0.8 + b.1 * 0.2, a.2 * 0.8 + b.2 * 0.2)) } ?? pick("#08090a", "#f8f9fa") }
+    var halo: Color { m(\.bg) ?? pick("#090a0c", "#ffffff") }
+    var off: Color { mini.map { color(rgb($0.tick)).opacity(0.3) } ?? theme.muted.opacity(theme.light ? 0.36 : 0.42) }
+    /// The dials' numbers and units.
+    var ink: Color { m(\.num) ?? theme.ink }
+    /// Light shadows under the needle on a light face.
+    var light: Bool { mini?.light ?? theme.light }
+    /// The red zone and every needle: a car's red, or the theme's.
+    var zone: Color { m(\.warn) ?? pick("#ff3b30", "#e0261c") }
+    var needle: Color { m(\.needle) ?? zone }
+    func numberFont(size: CGFloat, weight: Font.Weight) -> Font { mini?.font(size: size, weight: weight) ?? .system(size: size, weight: weight) }
     var red: Color { pick("#f08a8a", "#b8403d") }
     /// The lit displays (odometer, range) and the warning lights sit on their own dark plate in both themes.
     static let led = color(rgb("#eef2f4")), plate = color(rgb("#0a0d0f")), strip = color(rgb("#0b0e10")), dark = color(rgb("#454d53"))
@@ -321,7 +361,7 @@ private struct ClusterDial<Name: View, Display: View>: View {
     private var face: some View {
         Canvas { context, _ in
             let ctx = context
-            let c = CGPoint(x: d / 2, y: d / 2), ink = palette.theme.ink
+            let c = CGPoint(x: d / 2, y: d / 2), ink = palette.ink
             ctx.fill(Path(ellipseIn: CGRect(x: 0, y: 0, width: d, height: d)),
                      with: .radialGradient(Gradient(colors: [palette.faceHi, palette.faceLo]), center: CGPoint(x: c.x, y: 142.8 * s), startRadius: 0, endRadius: 187.5 * s))
             ctx.stroke(Path(ellipseIn: CGRect(x: c.x - 160 * s, y: c.y - 160 * s, width: 320 * s, height: 320 * s)), with: .color(palette.lineStrong), lineWidth: 2 * s)
@@ -349,7 +389,7 @@ private struct ClusterDial<Name: View, Display: View>: View {
                 // 0 and the full-scale number sit past the ends of the scale, in the corners of the opening.
                 let end: Double = f < 1e-6 ? -1 : f > 1 - 1e-6 ? 1 : 0
                 let size = (tiny ? 23.0 : small ? 20 : 18) * Double(s)
-                ctx.draw(Text(number(v)).font(.system(size: size, weight: .semibold)).monospacedDigit()
+                ctx.draw(Text(number(v)).font(palette.numberFont(size: size, weight: .semibold)).monospacedDigit()
                             .foregroundColor(red ? palette.zone : ink.opacity(0.74)),
                          at: point(f, end != 0 ? 126 : 100, turn: end * 10 * Double.pi / 180), anchor: .center)
             }
@@ -380,9 +420,9 @@ private struct ClusterDial<Name: View, Display: View>: View {
                         CGPoint(x: c + 148 * s, y: c + 1.2 * s), CGPoint(x: c + 106 * s, y: c + 4 * s)])
             p.closeSubpath()
         }
-        .fill(palette.zone)
-        .shadow(color: palette.theme.light ? .black.opacity(0.3) : palette.zone.opacity(0.55), radius: palette.theme.light ? 1.5 : 3)
-        .shadow(color: palette.theme.light ? .clear : .black.opacity(0.55), radius: 5)
+        .fill(palette.needle)
+        .shadow(color: palette.light ? .black.opacity(0.3) : palette.needle.opacity(0.55), radius: palette.light ? 1.5 : 3)
+        .shadow(color: palette.light ? .clear : .black.opacity(0.55), radius: 5)
         .frame(width: d, height: d)
     }
     /// A running engine: the needle wavers within ±3° of its reading (cl-shimmer), easing between its keyframes.
@@ -419,7 +459,7 @@ private struct ClusterDial<Name: View, Display: View>: View {
                 .background { if style == "plate" { plate } }
                 .shadow(color: palette.theme.light || style == "plate" ? .clear : palette.halo, radius: 0.012 * d)
                 .position(x: d / 2, y: d / 2)
-            Text(unit).font(.system(size: unitSize, weight: .semibold)).foregroundStyle(palette.theme.ink.opacity(0.84)).lineLimit(1).fixedSize()
+            Text(unit).font(palette.numberFont(size: unitSize, weight: .semibold)).foregroundStyle(palette.ink.opacity(0.84)).lineLimit(1).fixedSize()
                 .shadow(color: palette.halo, radius: unitSize * 0.5)
                 .position(x: d / 2, y: d / 2 + 0.102 * d)
             if !tiny { name.position(x: d / 2, y: d / 2 + 0.154 * d) }
@@ -880,6 +920,10 @@ struct QuickCluster<SessionsPage: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var palette: ClusterPalette { ClusterPalette(theme: theme) }
+    /// The theme chosen on the dashboard paints the two dials only (ClusterMini); the rest keeps the panel's colours.
+    @AppStorage("clusterTheme") private var clusterTheme = ""
+    @State private var miniLoaded = false
+    private var dialPalette: ClusterPalette { ClusterPalette(theme: theme, mini: ClusterMini.chosen(clusterTheme)) }
     private var now: Double { model.now.timeIntervalSince1970 }
     private static var accountTells: Set<String> { ["reconnect", "empty"] }
     private func readings() -> ClusterReadings {
@@ -918,7 +962,10 @@ struct QuickCluster<SessionsPage: View>: View {
     }
 
     var body: some View {
-        if let preview { previewed(preview) } else { housing }
+        Group { if let preview { previewed(preview) } else { housing } }
+            // The theme palettes come from the collector once; miniLoaded redraws when they arrive.
+            .onAppear { ClusterMini.load(from: model.baseURL) { miniLoaded.toggle() } }
+            .id(miniLoaded)
     }
     /// The housing and what the layout shows in it: the dials always on top, where the housing takes their round
     /// shape, then the warnings, the odometer and trip, the fuel and the window in the layout's order, hidden ones left
@@ -1004,9 +1051,10 @@ struct QuickCluster<SessionsPage: View>: View {
         // On the light theme the plate keeps the dark display's green.
         let tone: Color = style == "plate" && theme.light ? color(rgb("#9dff3c")) : r.tach.rate == nil ? theme.muted : color(colorAt(lane, f))
         let small = d / m.zoom < 280, chip = max(m(small ? 9.5 : 10), 0.032 * d), led = max(m(11), 0.042 * d)
-        return ClusterDial(d: d, zoom: m.zoom, palette: palette, scale: ClusterReadings.tachMarks(full, div: div),
+        let mini = dialPalette.mini
+        return ClusterDial(d: d, zoom: m.zoom, palette: dialPalette, scale: ClusterReadings.tachMarks(full, div: div),
                            number: { $0 == 0 ? "0" : ClusterReadings.scaleNumber($0) + unit }, fraction: f, stops: lane,
-                           figure: .tokens(r.tach.rate), figureColor: tone, unit: tr("tokens/시간"), running: r.working > 0 && !reduceMotion,
+                           figure: .tokens(r.tach.rate), figureColor: mini.map { color(rgb($0.lcd)) } ?? tone, unit: tr("tokens/시간"), running: r.working > 0 && !reduceMotion,
                            shimmer: (2.3, 0, false), testing: testing, igniting: igniting, fever: ClusterReadings.feverLevel(full), style: style,
                            name: dialName(Text(tr("토큰 속도")), d: d),
                            display: Group {
@@ -1025,9 +1073,10 @@ struct QuickCluster<SessionsPage: View>: View {
         let tone = lift(picked ? AgentPalette.rgb(sub?.kind ?? "") : rgb("#6ccfa9"))
         let figure: Color = r.speed.value == nil ? theme.muted : color(tone)
         let marks = (r.speed.multi ?? []).map { (f: $0.value / r.speed.max, color: AgentPalette.color($0.kind)) }
-        return ClusterDial(d: d, zoom: m.zoom, palette: palette, scale: ClusterReadings.burnMarks(r.speed.max), number: ClusterReadings.scaleNumber,
+        let mini = dialPalette.mini
+        return ClusterDial(d: d, zoom: m.zoom, palette: dialPalette, scale: ClusterReadings.burnMarks(r.speed.max), number: ClusterReadings.scaleNumber,
                            fraction: r.speed.value.map { $0 / r.speed.max } ?? 0, stops: [(0, tone), (1, tone)], marks: marks,
-                           figure: .burn(r.speed.value), figureColor: figure, unit: tr("%/시간"), running: r.working > 0 && !reduceMotion,
+                           figure: .burn(r.speed.value), figureColor: mini.map { color(rgb($0.lcd)) } ?? figure, unit: tr("%/시간"), running: r.working > 0 && !reduceMotion,
                            shimmer: (3.1, -1.2, true), testing: testing, igniting: igniting, fever: ClusterReadings.burnLevel(r.speed.max),
                            style: opts(.dials).shape ?? "ring", name: subjectName(r, d: d), display: range(r, d: d))
             .accessibilityElement(children: .contain)

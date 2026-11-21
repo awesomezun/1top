@@ -109,7 +109,8 @@
   // Every session, the window scrolling: working first, then those waiting for a look, then the rest, each by its
   // tokens in the period and then by its last use. A warning pressed (o.only: working, waiting or just done) shows
   // only its sessions.
-  const done=r=>r.state==='idle'&&valid(r.s.last_usage)&&r.s.last_usage>0&&now-r.s.last_usage<=600;
+  // Just done: the collector says so (session contract v1.1.0), or, from an older one, idle with use in the last ten minutes.
+  const done=r=>r.state==='done'||r.state==='idle'&&valid(r.s.last_usage)&&r.s.last_usage>0&&now-r.s.last_usage<=600;
   const only={working:r=>r.state==='working',waiting:r=>r.state==='waiting',done}[o.only],step=r=>r.state==='working'?0:r.state==='waiting'?1:2;
   const rows=(only?list.filter(only):list).slice().sort((a,b)=>step(a)-step(b)||b.tokens-a.tokens||(b.s.last_usage||0)-(a.s.last_usage||0)).map(row);
   // The burn dial reads one subject: the session or account picked; with nothing picked, every account with a burn,
@@ -355,9 +356,7 @@
  const TELLS_MARKUP=`<div class="cl-tells" role="group" aria-label="경고등">${TELLS.map(([k,label,c])=>`<button type="button" class="cl-tell ${k}" data-cluster-alert="${k}" style="--c:${c}" title="${label}"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg><b></b><span>${label}</span></button>`).join('')}</div>`;
  const ALERTS_MARKUP=`<div class="cl-alerts">${NOTES_MARKUP}${LAMPS_MARKUP}${TELLS_MARKUP}</div>`;
  const TEMP=(k,label)=>`<div class="cl-temp ${k}" tabindex="0"><small>${label}</small><svg viewBox="0 0 80 46" aria-hidden="true"><defs><linearGradient id="clTemp-${k}" x1="8" x2="72" gradientUnits="userSpaceOnUse">${LANE.map(([f,c])=>`<stop offset="${f}" stop-color="${c}"/>`).join('')}</linearGradient></defs><path class="t-track" d="M8 40 A32 32 0 0 1 72 40" stroke="url(#clTemp-${k})"/><path class="t-val" d="M8 40 A32 32 0 0 1 72 40" pathLength="100" stroke-dasharray="0 100" stroke="url(#clTemp-${k})"/><line class="t-needle" x1="40" y1="40" x2="40" y2="14"/><circle cx="40" cy="40" r="3.5"/></svg><b class="t-read">—</b><span class="cl-tip t-tip" role="tooltip"></span></div>`;
- const ODO_MARKUP=`<div class="cl-lf"><div class="cl-temps">${TEMP('cpu','CPU')}${TEMP('memory','메모리')}</div><div class="cl-odo"><small><span>합계</span><span class="cl-odo-of"> · <span class="cl-odo-span"></span></span></small><b class="cl-led" role="img"></b></div>
-     <div class="cl-trip"><div class="cl-trip-v"><span>트립</span> <b class="cl-trip-n"></b> <span class="cl-trip-u">tokens</span><span class="cl-trip-out" hidden>기록 범위 밖</span></div>
-     <div class="cl-trip-h"><span class="cl-trip-since"></span><button type="button" data-cluster-trip title="지금부터 다시 셉니다">리셋</button></div></div></div>`;
+ const ODO_MARKUP=`<div class="cl-lf"><div class="cl-temps">${TEMP('cpu','CPU')}${TEMP('memory','메모리')}</div><div class="cl-odo"><small><span>합계</span><span class="cl-odo-of"> · <span class="cl-odo-span"></span></span></small><b class="cl-led" role="img"></b><span class="cl-odo-sum" aria-hidden="true"></span></div></div>`;
  // Fuel gauges' centre-to-centre spacing by how many show: 2–4 → 58px, 5 → 56, 6 → 54, 7 → 50, 8 → 47.
  const PITCH=[0,58,58,58,58,56,54,50,47];
  const FUEL_MARKUP=`<div class="cl-fuel"><small>남은 주간 한도</small><div></div></div>`;
@@ -382,6 +381,62 @@
   if(kind==='live')return;only=only===kind?null:kind;
   setMode(rootEl,ACCOUNT_TELLS.includes(kind)?'weekly':'sessions',true);
  }
+ // A theme (customizing, cluster-themes.js) draws the instruments in place of the cluster's own: the dials, the period
+ // gears, the warnings, the odometer and trip and the engine temperature. The window, the fuel cans and the notes stay.
+ // Its needles glide from one reading to the next and test full scale when the theme first shows, as the dials do.
+ const themeHere={id:null,from:null,to:null,frame:0,big:null,small:null},NARROW='(max-width:900px)';
+ // Crossing 900px lays the cluster out again: the instruments and the odometer change places.
+ root.matchMedia?.(NARROW).addEventListener?.('change',()=>{if(last&&mounted?.isConnected)render(mounted,last.ctx);});
+ // A theme's warning, gear or trip pressed, in the cluster or its full-screen view: as the cluster's own.
+ function themeAct(rootEl,target){
+  const a=target.closest?.('[data-cl-alert]');if(a){press(rootEl,a.dataset.clAlert);return true;}
+  const g=target.closest?.('[data-cl-period]');if(g){toggleRange(rootEl,false);(last?.ctx||{}).selectPeriod?.(g.dataset.clPeriod);return true;}
+  if(target.closest?.('[data-cl-trip]')){save({trip:Math.floor(now())});if(last)render(rootEl,last.ctx);return true;}
+  return false;
+ }
+ // Narrow (a phone held upright, a window under 900px) the theme shows only its two headline instruments in place of
+ // the dials, the rest of the cluster as it is (themes/compact.js); '크게 보기' shows the whole theme over the screen,
+ // on its side when the phone is upright, as a video goes full screen. It follows the readings until closed.
+ function themeBig(rootEl,on){
+  if(!on){themeHere.big?.remove();themeHere.big=null;return;}
+  if(themeHere.big)return;const d=root.document,o=d.createElement('div');o.className='cl-theme-full';o.setAttribute('role','dialog');o.setAttribute('aria-label','계기판 크게 보기');
+  o.innerHTML='<div class="cl-theme-art"></div><button type="button" class="cl-theme-close" aria-label="닫기">✕</button>';
+  // A warning pressed shows its sessions in the window, so the view closes; a gear or the trip stays on it.
+  o.onclick=e=>{if(e.target.closest('.cl-theme-close')){themeBig(rootEl,false);return;}if(themeAct(rootEl,e.target)&&e.target.closest('[data-cl-alert]'))themeBig(rootEl,false);};
+  o.onkeydown=e=>{if(e.key==='Escape')themeBig(rootEl,false);};
+  d.body.append(o);themeHere.big=o;if(themeHere.frameD&&themeHere.id)o.firstChild.innerHTML=root.OneTopClusterThemes.svg(themeHere.id,themeHere.frameD);o.querySelector('.cl-theme-close').focus();
+ }
+ const GLIDE=['rate','burn','heat','cpu','mem','fuelLeft','minLeft'];
+ function paintTheme(rootEl,r,ctx){
+  const TH=root.OneTopClusterThemes,c=rootEl.querySelector('.cluster'),box=rootEl.querySelector('.cl-theme');if(!TH||!c||!box)return;
+  const id=TH.settings().theme;
+  if(!id||ctx.panel){if(c.dataset.theme||c.dataset.themeCompact){delete c.dataset.theme;delete c.dataset.themeCompact;box.hidden=true;box.firstChild.textContent='';themeHere.id=null;themeBig(rootEl,false);}return;}
+  // Drawn once loaded, with the whole cluster, so the odometer finds its place beside the instruments.
+  if(!TH.find(id)){TH.load().then(()=>{if(last&&mounted===rootEl)render(rootEl,last.ctx);}).catch(()=>{});return;}
+  const d=TH.figures(r,{now:now(),gears:GEARS,state:ctx.state,name:ctx.name});
+  const small=!!root.matchMedia?.(NARROW).matches;
+  if(small){delete c.dataset.theme;c.dataset.themeCompact=id;}else{delete c.dataset.themeCompact;c.dataset.theme=id;}
+  box.hidden=false;if(themeHere.small!==small){themeHere.small=small;if(themeHere.id===id){themeRun(box,id,null);return;}}
+  if(themeHere.id!==id){themeHere.id=id;themeHere.from=null;themeHere.to=d;themeRun(box,id,calm()?null:'ignite');return;}
+  themeHere.from=themeHere.frameD||themeHere.to;themeHere.to=d;themeRun(box,id,calm()?null:'glide');
+ }
+ function themeDraw(box,id,d){
+  const TH=root.OneTopClusterThemes;box.firstChild.innerHTML=themeHere.small?TH.cutout(id,d):TH.svg(id,d);themeHere.frameD=d;if(themeHere.big)themeHere.big.firstChild.innerHTML=TH.svg(id,d);
+  // Each part a theme marks is a button: the warnings, the gears and the trip.
+  [box,themeHere.big].filter(Boolean).flatMap(el=>[...el.querySelectorAll('[data-cl-alert],[data-cl-period],[data-cl-trip]')]).forEach(g=>{g.setAttribute('role','button');g.setAttribute('tabindex','0');g.style.cursor='pointer';
+   const label=g.dataset.clAlert?({waiting:'응답 대기',reconnect:'재로그인',empty:'한도 부족',live:'수집 지연'})[g.dataset.clAlert]:g.dataset.clPeriod?root.OneTop?.periodKo(g.dataset.clPeriod):'트립 다시 시작';
+   if(label)g.setAttribute('aria-label',label);if(g.dataset.clPeriod===themeHere.to?.period)g.setAttribute('aria-pressed','true');});
+ }
+ function themeRun(box,id,how){
+  root.cancelAnimationFrame?.(themeHere.frame);
+  const to=themeHere.to,O=root.OneTop;if(!how||!O){themeDraw(box,id,to);return;}
+  const start=performance.now(),D=how==='ignite'?1500:450,from=themeHere.from||to,io=p=>p<.5?4*p*p*p:1-(-2*p+2)**3/2;
+  const step=t=>{const p=Math.min(1,(t-start)/D);let d;
+   if(how==='ignite'){const up=io(Math.min(1,p/.4)),down=io(Math.max(0,(p-.45)/.55)),full=O.ignition(to,1);d=p<.45?O.ignition(to,up):{...to,...Object.fromEntries(GLIDE.map(k=>[k,full[k]+(to[k]-full[k])*down])),fuel:to.fuel};}
+   else{const k=io(p);d={...to,...Object.fromEntries(GLIDE.map(n=>[n,(from[n]??to[n])+(to[n]-(from[n]??to[n]))*k]))};}
+   themeDraw(box,id,p<1?d:to);if(p<1)themeHere.frame=root.requestAnimationFrame(step);};
+  themeHere.frame=root.requestAnimationFrame(step);
+ }
  function mount(rootEl,ctx){
   // Pages the host cannot draw are left out.
   tabs=MODES.filter(([k])=>(k!=='flow'||ctx.drawFlow)&&(!HOSTED.includes(k)||ctx.drawPage));
@@ -390,7 +445,7 @@
   mode=tabs.some(([k])=>k===stored().mode)?stored().mode:tabs.some(([k])=>k==='sessions')?'sessions':tabs[0][0];only=null;clearInterval(P.ticker);
   // A hosted list is lifted out before the markup is rebuilt, so it survives a remount.
   if(ctx.sessionsHost&&rootEl.contains(ctx.sessionsHost))ctx.sessionsHost.remove();
-  rootEl.innerHTML=`<div class="cluster${ctx.panel?' tray':''}" aria-label="계기판"><div class="cl-body"></div>
+  rootEl.innerHTML=`<div class="cluster${ctx.panel?' tray':''}" aria-label="계기판"><div class="cl-body"></div><div class="cl-theme" hidden><div class="cl-theme-art"></div><button type="button" class="cl-theme-big" data-cluster-big>⤢ 크게 보기</button></div>
    <div class="cl-main">${dial('cl-tach','토큰 속도')}<div class="cl-window" aria-live="off"><div class="cl-gear"><div role="group" aria-label="기간"></div><div class="range-toolbar cl-range" hidden><h2 data-range-label>최근 1시간</h2><div class="chart-periods range-buttons" role="group" aria-label="계기판 기간"></div></div></div><div class="cl-box">
     <div class="cl-modes" role="tablist" aria-label="표시창">${tabs.map(([k,label])=>`<button type="button" role="tab" data-cluster-mode="${k}">${label}</button>`).join('')}</div>
     <div class="cl-page" data-page="sessions" role="tabpanel"><div class="cl-sessions"></div></div>
@@ -414,8 +469,9 @@
    if(e.target.closest('[data-act]'))return;
    if(e.target.closest('[data-cluster-clear]')){choose(null);return;}
    const m=e.target.closest('[data-cluster-mode]');if(m){setMode(rootEl,m.dataset.clusterMode);return;}
+   if(e.target.closest('[data-cluster-big]')){themeBig(rootEl,true);return;}
+   if(themeAct(rootEl,e.target))return;
    const w=e.target.closest('[data-cluster-alert]');if(w){press(rootEl,w.dataset.clusterAlert);return;}
-   if(e.target.closest('[data-cluster-trip]')){save({trip:Math.floor(now())});render(rootEl,ctxNow());return;}
    const o=e.target.closest('[data-cluster-open]');if(o){ctxNow().open?.(o.dataset.clusterOpen);return;}
    const st=e.target.closest('[data-gear-step]');if(st){const box=st.closest('.gd');GD.target=clampI(GD.target+Number(st.dataset.gearStep));gearRun(box);gearCommit(rootEl,GD.target);return;}
    const g=e.target.closest('[data-cluster-period]');if(g&&g.closest('[data-dragged]'))return;if(g){if(g.dataset.clusterPeriod==='custom')toggleRange(rootEl,!rangeOpen);else{toggleRange(rootEl,false);ctxNow().selectPeriod?.(g.dataset.clusterPeriod);}return;}
@@ -425,6 +481,7 @@
    const s=e.target.closest('[data-cluster-session],[data-session-row]');if(s)session(s);
   };
   rootEl.onkeydown=e=>{
+   const part=e.target.closest?.('.cl-theme [role="button"]');if(part&&(e.key==='Enter'||e.key===' ')){e.preventDefault();part.dispatchEvent(new MouseEvent('click',{bubbles:true}));return;}
    const tab=e.target.closest('[data-cluster-mode]');
    if(tab&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){e.preventDefault();const i=tabs.findIndex(([k])=>k===mode),next=tabs[(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length][0];setMode(rootEl,next);rootEl.querySelector(`[data-cluster-mode="${next}"]`).focus();return;}
    if(e.key==='Escape'&&rangeOpen){toggleRange(rootEl,false);rootEl.querySelector('[data-cluster-period="custom"]')?.focus();return;}
@@ -471,17 +528,24 @@
  // face: drum (printed digits each in its own shaded window, the default), led (lit segments), led0 (with dim leading
  // zeros), print (printed digits), print0 (printed with dim leading zeros, as the earlier odometer).
  const ODOS=['led','led0','print','print0','drum'],odoFace=()=>ODOS.includes(root.ONETOP_CLUSTER_ODO)?root.ONETOP_CLUSTER_ODO:chosen('odo','shape',ODOS,'drum');
- const ODO={shown:null,period:null,at:0};
+ const ODO={shown:null,period:null,at:0,sum:0};
+ // A week and longer can pass ten billion tokens, so those periods get thirteen wheels (to 9,999,999,999,999) instead of
+ // ten; the wheels shrink to keep the ten-wheel width. 'Total' under them reads the count in three figures and k, M, B
+ // or T (speed.js total, 31.2 B), and goes on past the wheels' reach.
+ const ODO_WEEK=604800,odoLong=(p,R=root.OneTopRanges)=>p==='all'||(R?.seconds?.(String(p??''))??0)>=ODO_WEEK;
  let glyphs=null;
  const odoGlyph=(d,S)=>{if(!S?.seg7)return String(d);glyphs||=Array.from({length:10},(_,k)=>{const h=40,w=22,W=Math.ceil(w+h*Math.tan(9*Math.PI/180)+2);
   return `<svg class="cl-lcd" viewBox="0 -1 ${W} ${h+2}" style="aspect-ratio:${W}/${h+2}" aria-hidden="true">${S.seg7({c:[String(k)],u:'',center1:true},W/2,h,w,h,h*.115,6,false)}</svg>`;});return glyphs[d];};
  function odometer(rootEl,value,S,force=false){
-  const el=rootEl.querySelector('.cl-odo>.cl-led');if(!el)return;const period=last?.r.period,target=Math.max(0,Math.min(9999999999,Math.round(value||0)));
-  if(ODO.period!==period){ODO.period=period;ODO.shown=null;}
+  const el=rootEl.querySelector('.cl-odo>.cl-led');if(!el)return;const period=last?.r.period,long=odoLong(period),real=Math.max(0,Math.round(value||0)),target=Math.min(long?9999999999999:9999999999,real);
+  if(ODO.period!==period){ODO.period=period;ODO.shown=null;ODO.sum=0;}
   // A new face (customizing) redraws at once; otherwise the wheels move once every three seconds.
   const face=odoFace();if(!force&&ODO.shown!==null&&now()-ODO.at<3&&ODO.face===face)return;ODO.at=now();ODO.face=face;
-  const total=ODO.shown===null?target:Math.max(ODO.shown,target),zeros=face==='led0'||face==='print0',n=zeros?10:String(total).length,s=String(total).padStart(n,'0');
-  ODO.shown=total;el.setAttribute('aria-label',total.toLocaleString(root.OneTopI18n?.locale()||'ko-KR')+' tokens');
+  const total=ODO.shown===null?target:Math.max(ODO.shown,target),zeros=face==='led0'||face==='print0',n=zeros?(long?13:10):String(total).length,s=String(total).padStart(n,'0');
+  ODO.shown=total;ODO.sum=Math.max(ODO.sum,real);el.setAttribute('aria-label',ODO.sum.toLocaleString(root.OneTopI18n?.locale()||'ko-KR')+' tokens');
+  const sum=rootEl.querySelector('.cl-odo>.cl-odo-sum'),g=S?.total?.(ODO.sum);
+  if(sum&&g)sum.innerHTML=`Total <b>${esc(g.n)}</b>${g.u?`<i>${esc(g.u)}</i>`:''}`;
+  el.style.setProperty('--odo-k',String(Math.min(1,13/(n+Math.floor((n-1)/3)))));
   const key=face+'|'+n;
   if(el.dataset.wheels!==key){el.dataset.wheels=key;el.dataset.face=face;el.classList.add('cl-wheels');
    const strip=Array.from({length:20},(_,k)=>`<b>${face.startsWith('led')?odoGlyph(k%10,S):k%10}</b>`).join('');
@@ -506,15 +570,14 @@
    el.innerHTML=[...s].map(ch=>ch==='.'?'<em>.</em>':`<i data-d="${ds[k]}"><span style="transform:${at(ds[k++])}">${strip}</span></i>`).join('');return;}
   el.querySelectorAll('i').forEach((w,i)=>{if(Number(w.dataset.d)===ds[i])return;w.dataset.d=String(ds[i]);w.firstElementChild.style.transform=at(ds[i]);});
  }
- // Between readings the odometer (every three seconds), the trip and the flow chart's current bar run on at the last
+ // Between readings the odometer (every three seconds) and the flow chart's current bar run on at the last
  // minute's rate. Capped so a stalled refresh does not run away.
  function tick(rootEl,L=last){
   if(!L||!rootEl.isConnected||rootEl.hidden||calm())return;
   const {r,ctx,at}=L,el=Math.min(30,Math.max(0,now()-at));if(!el)return;
   const total=Math.max(0,(r.tach.tokens||0)+r.tach.climb*el);odometer(rootEl,total,ctx.speed);
   const big=rootEl.querySelector('.cl-page[data-page="flow"] .cl-big b');if(big&&ctx.fmt)big.textContent=ctx.fmt(total);
-  const tr=r.trip,add=r.tach.climb*el;
-  if(tr?.inRange)rootEl.querySelector('.cl-trip-n').textContent=short(tr.tokens+add,ctx.speed);
+  const add=r.tach.climb*el;
   if(L===last&&mode==='flow'&&add>0&&(L.flowAt=(L.flowAt||0)+1)%4===0)ctx.drawFlow?.(Object.entries(r.tach.byKind).filter(([,v])=>v>0).map(([kind,v])=>({t:now(),kind,n:v/HOUR*el})));
  }
  // What every painter reads: the page's translation and locale, the dashboard's colours and numbers, and an
@@ -683,16 +746,16 @@
  }
  function paintFuel(rootEl,r,ctx){
   const {q,t,W,color,locale,eta,tool,plan,when}=kit(rootEl,ctx);
-  // CPU and memory sit beside the trip under the token dial, whatever the number of saved limits.
+  // CPU and memory sit under the token dial, whatever the number of saved limits (the trip left in 4.10.2).
   const lf=q('.cl-lf'),temps=q('.cl-temps');
   if(lf&&temps&&temps.parentElement!==lf)lf.prepend(temps);
   // From 220px the odometer sits in the token dial's lower opening, level with the burn dial's subject, so both
-  // dials fill to the same depth; the trip stays in the lower row. Smaller dials keep both in the lower row, side by side.
-  const odo=q('.cl-odo'),trip=q('.cl-trip'),tach=q('.cl-tach');
+  // dials fill to the same depth. Smaller dials keep it in the lower row beside CPU and memory.
+  const odo=q('.cl-odo'),tach=q('.cl-tach');
   if(odo)odo.title=`합계 · ${ctx.caption}`;
-  if(lf&&odo&&trip&&tach&&!rootEl.querySelector('.cluster.compact')){const inDial=tach.offsetWidth>=220;
+  if(lf&&odo&&tach&&!rootEl.querySelector('.cluster.compact')){const inDial=tach.offsetWidth>=220;
    if(inDial&&odo.parentElement!==tach)tach.append(odo);
-   if(!inDial&&odo.parentElement!==lf)lf.insertBefore(odo,trip);}
+   if(!inDial&&odo.parentElement!==lf)lf.append(odo);}
   // Fuel: a gauge per account (as many as the room beside it holds, up to eight, by provider first, then +N) filled with
   // what is left of its weekly limit, named by tool and plan; the details show on hover or focus, and pressing one
   // picks it for the burn dial. The gauges sit closer as there are more of them (PITCH, centre to centre), never so
@@ -735,15 +798,8 @@
   draw(fits());
  }
  function paintTrip(rootEl,r,ctx){
-  const {q,locale}=kit(rootEl,ctx);
-  // Trip: the tokens since the last reset; before the record begins they are outside it.
-  const tr=r.trip,outside=!!tr&&!tr.inRange;
-  const d=tr?new Date(tr.start*1000):null,today=d&&d.toDateString()===new Date().toDateString();
-  // English puts the word first (since 09:00); Korean and Chinese after (09:00부터, 09:00起).
-  const at=tr?esc(d.toLocaleString(locale,{...(today?{}:{month:'numeric',day:'numeric'}),hour:'2-digit',minute:'2-digit',hourCycle:'h23'})):'';
-  q('.cl-trip-since').innerHTML=!tr?'':root.OneTopI18n?.language==='en'?`<span>since</span> <span>${at}</span>`:`<span>${at}</span><span>부터</span>`;
-  q('.cl-trip-v').classList.toggle('outside',outside);q('.cl-trip-out').hidden=!outside;
-  q('.cl-trip-n').textContent=tr?.inRange?short(tr.tokens,ctx.speed):'—';
+  // The 1top cluster's trip computer was removed in 4.10.2 (themes still draw r.trip); this paints the odometer.
+  const {q}=kit(rootEl,ctx);
   // Odometer: the period's tokens, digit wheels rolling to the new count.
   q('.cl-odo-span').textContent=ctx.caption;odometer(rootEl,r.tach.tokens,ctx.speed);
  }
@@ -781,7 +837,9 @@
   // The trip runs from the last reset, kept in this browser; the first visit starts it at midnight, so it opens on
   // today's tokens.
   tripStart=stored().trip;if(!valid(tripStart)){tripStart=midnight();save({trip:tripStart});}
-  const c=rootEl.querySelector('.cluster');c.classList.toggle('pair',layout()==='pair');place(c);c.dataset.style=dialStyle();c.dataset.layout=lowerRow();c.dataset.led=ledScheme();c.dataset.sweep=DOWN?'down':'side';c.dataset.face=CENTER?'center':'hub';c.dataset.lamps=lampStyle();c.dataset.text=textPlace();
+  const c=rootEl.querySelector('.cluster');c.classList.toggle('pair',layout()==='pair');
+  // The menu bar and tray panels keep the 1top cluster in the chosen theme's colours.
+  if(ctx.panel)root.OneTopClusterThemes?.paintMini(c,()=>{if(last&&mounted===rootEl)render(rootEl,last.ctx);});place(c);c.dataset.style=dialStyle();c.dataset.layout=lowerRow();c.dataset.led=ledScheme();c.dataset.sweep=DOWN?'down':'side';c.dataset.face=CENTER?'center':'hub';c.dataset.lamps=lampStyle();c.dataset.text=textPlace();
   const r=readings(ctx.state,{...ctx,pick,only:ACCOUNT_TELLS.includes(only)?null:only,trip:tripStart,hold:tachHold});last={r,ctx,at:now()};
   // A pick that left the readings (a session that ended) lets the burn dial go back to every AI.
   if(pick&&!r.speed.picked)pick=null;
@@ -791,7 +849,7 @@
   const {q,lang,W,color,fmt,eta,tool,plan}=kit(rootEl,ctx);
   // A pressed warning whose count went to nothing lets go.
   if(only&&!(only==='working'?r.working:r.tells[only]?.length))only=null;
-  paintDials(rootEl,r,ctx,igniting);paintLamps(rootEl,r,only);
+  paintDials(rootEl,r,ctx,igniting);paintLamps(rootEl,r,only);paintTheme(rootEl,r,ctx);
   if(HOSTED.includes(mode)||mode==='flow')ctx.drawPage?.(mode,q(`.cl-page[data-page="${mode}"]`));
   // Page 1, running sessions: a row picks the session for the burn dial; ↗ opens its detail.
   const box=q('.cl-sessions');
@@ -860,7 +918,7 @@
   root.requestAnimationFrame(step);
  }
  // The compact cluster on the menu bar and tray panels (desktop/QuickDashboard.swift draws the same): both dials side
- // by side, the warnings, then the odometer with the trip and the fuel. The panel's own period picker sets the window.
+ // by side, the warnings, then the odometer and the fuel. The panel's own period picker sets the window.
  // Its pick is its own; the trip runs from the dashboard's reset, kept in the same storage. A fuel gauge picks for the
  // burn dial; the warnings only tell, as the panel's own session list sits below.
  const P={el:null,last:null,pick:null,igniting:false,ignition:false,ticker:null};
@@ -871,7 +929,6 @@
   const again=()=>{if(P.last)compact(rootEl,P.last.ctx);};
   rootEl.onclick=e=>{
    if(e.target.closest('[data-cluster-clear]')){P.pick=null;again();return;}
-   if(e.target.closest('[data-cluster-trip]')){save({trip:Math.floor(now())});again();return;}
    const a=e.target.closest('[data-cluster-account]');if(a){const id=a.dataset.clusterAccount;P.pick=P.pick?.type==='account'&&P.pick.id===id?null:{type:'account',id};again();}
   };
   rootEl.onkeydown=e=>{if(e.key==='Escape'&&P.pick){P.pick=null;again();}};
@@ -882,7 +939,7 @@
   let trip=stored().trip;if(!valid(trip)){trip=midnight();save({trip});}
   const r=readings(ctx.state,{...ctx,pick:P.pick,trip,hold:P.hold||(P.hold={})});P.last={r,ctx,at:now()};
   if(P.pick&&!r.speed.picked)P.pick=null;
-  const c=rootEl.querySelector('.cluster');c.dataset.style=dialStyle();c.dataset.layout=lowerRow();c.dataset.led=ledScheme();c.dataset.sweep=DOWN?'down':'side';c.dataset.face=CENTER?'center':'hub';c.dataset.lamps=lampStyle();c.dataset.text=textPlace();
+  const c=rootEl.querySelector('.cluster');root.OneTopClusterThemes?.paintMini(c,()=>{if(P.last)compact(rootEl,P.last.ctx);});c.dataset.style=dialStyle();c.dataset.layout=lowerRow();c.dataset.led=ledScheme();c.dataset.sweep=DOWN?'down':'side';c.dataset.face=CENTER?'center':'hub';c.dataset.lamps=lampStyle();c.dataset.text=textPlace();
   paintDials(rootEl,r,ctx,P.igniting);paintLamps(rootEl,r,null,false);paintTrip(rootEl,r,ctx);paintFuel(rootEl,r,ctx);
   if(P.ignition){P.ignition=false;igniteCompact(rootEl);}
  }
@@ -890,6 +947,8 @@
   if(!rootEl?.querySelector('.cluster')||!P.last){P.ignition=true;return;}
   if(!calm())sweep(rootEl,()=>P.last.r,v=>{P.igniting=v;});
  }
- const api={marks,readings,range,cruise,trip,heat,instant,render,ignite,compact,igniteCompact,layout,dialStyle};
+ // The cluster's figures as the themes read them, for the gallery's previews; null before the first reading.
+ function themeFigures(){const TH=root.OneTopClusterThemes;return TH&&last?TH.figures(last.r,{now:now(),gears:GEARS,state:last.ctx.state,name:last.ctx.name}):null;}
+ const api={marks,readings,range,cruise,trip,heat,instant,render,ignite,compact,igniteCompact,layout,dialStyle,themeFigures,odoLong};
  if(typeof module!=='undefined')module.exports=api;else root.OneTopCluster=api;
 })(typeof window!=='undefined'?window:globalThis);

@@ -19,6 +19,8 @@ struct ClusterWindow: View {
     /// The tabs to show, in their order.
     var tabs: [ScreenLayout.Mode] = ScreenLayout.Mode.allCases
     var periodShape = "auto"
+    /// A theme draws its own period gears, so the control steps aside (ClusterView, a theme chosen).
+    var periods = true
     /// The editor over the period control and the window while customizing.
     var cz: CustomizeSession? = nil
     @Binding var mode: String
@@ -46,7 +48,7 @@ struct ClusterWindow: View {
     var body: some View {
         @Bindable var model = model
         VStack(spacing: compact ? 6 : 8) {
-            PeriodControl(shape: periodShape, period: $model.period, theme: theme).czPart(.periods, cz)
+            if periods { PeriodControl(shape: periodShape, period: $model.period, theme: theme).czPart(.periods, cz) }
             VStack(spacing: compact ? 6 : 8) {
                 tabRow
                 ScrollView { page.frame(maxWidth: .infinity, alignment: .top).padding(.bottom, 6) }

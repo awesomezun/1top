@@ -154,8 +154,9 @@ struct ClusterReadings {
         guard let quota, !quota.stale, quota.identity_verified != false, let period else { return nil }
         return period.burnPerHour
     }
-    /// The display state the dashboard gives a row: working while any of its subagents works.
-    static func display(_ s: DesktopSession) -> String { (s.children_working ?? 0) > 0 ? "working" : s.state }
+    /// The display state the dashboard gives a row: the collector's own (session contract v1.1.0); from an older collector,
+    /// working while any of its subagents works.
+    static func display(_ s: DesktopSession) -> String { s.display_name == nil && (s.children_working ?? 0) > 0 ? "working" : s.state }
 
     /// A tokens-per-percent measurement, from a session's estimate or its account's own.
     struct Calibration {
@@ -263,7 +264,7 @@ struct ClusterReadings {
         // Every session: working first, then those waiting for a look, then the rest, each by its tokens in the period
         // and then by its last use. A warning pressed (only: working, waiting or done) shows only its sessions.
         func done(_ r: (s: DesktopSession, state: String, tokens: Double)) -> Bool {
-            r.state == "idle" && Self.valid(r.s.last_usage) && r.s.last_usage! > 0 && now - r.s.last_usage! <= 600
+            r.state == "done" || r.state == "idle" && Self.valid(r.s.last_usage) && r.s.last_usage! > 0 && now - r.s.last_usage! <= 600
         }
         let shown = all.filter { r in
             switch only { case "working": r.state == "working"; case "waiting": r.state == "waiting"; case "done": done(r); default: true }

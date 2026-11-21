@@ -72,9 +72,9 @@ def terminal_title(value):
 def accepts_instruction(spec):
     if not spec.get('control_key'):return False
     state=spec.get('status','unknown')
-    if spec['kind']=='Aside':return state in ('working','idle','interrupted')
+    if spec['kind']=='Aside':return state in ('working','idle','interrupted','done','subagents')
     return bool(spec.get('orca_terminal') and spec.get('input_verified') is True and
-                spec['kind'] in ('Claude','GLM','Codex') and state in ('idle','interrupted') and
+                spec['kind'] in ('Claude','GLM','Codex') and state in ('idle','interrupted','done','subagents') and
                 spec.get('display_status')!='resuming')
 
 
@@ -83,7 +83,7 @@ def accepts_message(spec):
     if accepts_instruction(spec):return True
     return bool(spec.get('control_key') and spec.get('orca_terminal') and
                 spec.get('input_verified') is True and spec['kind'] in ('Claude','GLM','Codex') and
-                spec.get('status') in ('working','idle','interrupted'))
+                spec.get('status') in ('working','idle','interrupted','done','subagents'))
 
 
 class Controller:
@@ -116,18 +116,16 @@ class Controller:
             self.save_state()
 
     def decorate(self,snapshot):
+        from .sessions.status import control_display
         sessions=[];changed=False
         with self.state_lock:
             for src in snapshot.get('sessions',[]):
-                s=dict(src);mark=self.paused.get(s['id']);s['display_status']=s.get('status','unknown')
-                if mark and mark['key']!=s.get('control_key'):
-                    self.paused.pop(s['id'],None);mark=None;changed=True
-                if mark and s.get('status_at',0)>mark['at'] and (s.get('status')=='working' or mark['phase']=='resuming' and s.get('status') in ('idle','interrupted')):
+                s=dict(src);mark=self.paused.get(s['id'])
+                s['display_status'], valid = control_display(s, mark)
+                if mark and not valid:
                     self.paused.pop(s['id'],None);mark=None;changed=True
                 if mark:
                     s['pause_state']=dict(mark)
-                    if mark['phase']=='resuming':s['display_status']='resuming'
-                    elif s.get('status') in ('idle','interrupted'):s['display_status']='paused'
                 sessions.append(s)
             if changed:self.save_state()
             result = {**snapshot,'sessions':sessions,'actions':list(self.audit[-20:]),'resume_prompt':RESUME_PROMPT}
@@ -155,6 +153,7 @@ class Controller:
         if self.lock.locked():return
         with self.collector.lock:snapshot=self.collector.snapshot
         if time.time()-snapshot.get('updated',0)>20:return
+        for spec in snapshot.get('sessions',[]):self.mailbox.rebind(spec)
         # Replies continue to be collected while the phone is disconnected.
         pending = self.mailbox.pending_sessions()
         for spec in snapshot.get('sessions',[]):
@@ -186,6 +185,7 @@ class Controller:
             spec=next((s for s in snapshot.get('sessions',[]) if s['id']==sid and
                        (s.get('control_key')==key or key in s.get('continuation_keys', []))),None)
         if not spec or not key or not mailbox_readable(spec):raise ActionError('Session reply source is unavailable.')
+        self.mailbox.rebind(spec)
         return self.mailbox.read(spec)
 
     def status(self,spec):
@@ -226,7 +226,7 @@ class Controller:
         while time.monotonic()<until:
             time.sleep(.4)
             current=self.resolve(spec['id'],spec['control_key'])
-            if self.status(current) in ('idle','interrupted'):return current
+            if self.status(current) in ('idle','interrupted','done'):return current
         raise ActionError('중단 요청은 보냈지만 완료를 아직 확인하지 못해 CLI 종료를 보류했습니다. 터미널에서 확인 후 다시 시도하세요.')
 
     def enqueue_message(self, sid, key, rid, prompt, images):
@@ -362,7 +362,7 @@ class Controller:
                     with self.state_lock:mark=self.paused.get(sid)
                     if not mark or mark['key']!=key or mark['phase']!='paused':
                         raise ActionError('이 모니터에서 일시정지한 세션이 아니거나 이미 재개를 요청했습니다.')
-                    if state not in ('idle','interrupted') or not terminal or spec.get('input_verified') is False:
+                    if state not in ('idle','interrupted','done') or not terminal or spec.get('input_verified') is False:
                         raise ActionError('현재 대기 상태와 터미널 연결을 확인할 수 없습니다.')
                     # Persist before input. An ambiguous transport result must never duplicate a prompt.
                     self.remember(spec,'resuming')
@@ -372,12 +372,12 @@ class Controller:
                 elif action=='pause':
                     if state in ('working','waiting'):
                         self.interrupt(spec);spec=self.wait_stopped(spec)
-                    elif state not in ('idle','interrupted'):
+                    elif state not in ('idle','interrupted','done'):
                         raise ActionError('작업 상태를 확인할 수 없어 일시정지를 보류했습니다.')
                     self.remember(spec,'paused')
                     result={'message':'작업이 멈춘 것을 확인했습니다. 세션을 보존했으며, 재개 버튼으로 새 요청을 보낼 수 있습니다.'}
                 elif action=='interrupt':
-                    if state in ('idle','interrupted'):
+                    if state in ('idle','interrupted','done'):
                         result={'message':'이미 작업이 멈춘 상태입니다. 세션을 유지했습니다.'}
                     elif state not in ('working','waiting'):
                         raise ActionError('작업 상태를 확인할 수 없습니다. 터미널에서 확인하세요.')
@@ -387,10 +387,10 @@ class Controller:
                 else:
                     if state in ('working','waiting'):
                         self.interrupt(spec);spec=self.wait_stopped(spec)
-                    elif state not in ('idle','interrupted'):
+                    elif state not in ('idle','interrupted','done'):
                         raise ActionError('작업 상태를 확인할 수 없어 CLI 종료를 보류했습니다. 터미널에서 확인하세요.')
                     spec=self.resolve(sid,key)
-                    if self.status(spec) not in ('idle','interrupted'):
+                    if self.status(spec) not in ('idle','interrupted','done'):
                         raise ActionError('새 작업이 시작되어 종료를 보류했습니다.')
                     exited=terminate_pid(spec['pids'][0],spec['process_started'])
                     if exited:self.remember(spec,None)

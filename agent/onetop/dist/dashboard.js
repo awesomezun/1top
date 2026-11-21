@@ -152,8 +152,10 @@ window.OneTopDashboard=(()=>{
   return `<div class="burn-gauge${rate>0?'':' is-zero'}" title="${esc(note)}"><canvas width="72" height="36" data-burn-rate="${rate}" data-kind="${esc(kind)}" role="img" aria-label="${esc(number(rate))}${suffix}"></canvas><strong>${esc(number(rate))}<small>${suffix}</small></strong></div>`;
  }
  function nice(n){if(n<=0)return 1;const power=10**Math.floor(Math.log10(n)),ratio=n/power;return (ratio<=1?1:ratio<=2?2:ratio<=5?5:10)*power;}
+ // The shared scale starts at 10%/h and steps to 50%, 100%, then the next round number once a session passes it.
+ function gaugeStep(peak){for(const step of [10,50,100])if(peak<=step)return step;return nice(peak);}
  function sharedGaugeMax(peak,scope){
-  const next=nice(Math.max(1,peak)),now=performance.now();
+  const next=gaugeStep(Math.max(0,peak)),now=performance.now();
   // Expand immediately; shrink only after a sustained drop to avoid polling jitter.
   if(scope!==gaugeScale.scope||next>gaugeScale.max)gaugeScale={scope,max:next,lower:null,since:0};
   else if(next<gaugeScale.max&&peak<=gaugeScale.max*.4){

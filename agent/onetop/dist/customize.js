@@ -9,7 +9,7 @@
  const T=s=>root.OneTopI18n?root.OneTopI18n.t(s):s;
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const SIZES=['작게','보통','크게'];
- const NAMES={periods:'기간 선택',dials:'두 계기',alerts:'경고등',odo:'합계·트립',temps:'CPU·메모리',fuel:'남은 한도',window:'창(탭)',tokens:'토큰 사용',weekly:'계정 한도',resources:'CPU·메모리',sessions:'세션 목록'};
+ const NAMES={periods:'기간 선택',dials:'두 계기',alerts:'경고등',odo:'합계',temps:'CPU·메모리',fuel:'남은 한도',window:'창(탭)',tokens:'토큰 사용',weekly:'계정 한도',resources:'CPU·메모리',sessions:'세션 목록'};
  const SHAPES={
   periods:[['auto','이 화면 기본'],['tabs','탭'],['drum','드럼'],['tuner','튜너'],['roller','롤러'],['knob','노브'],['lever','레버']],
   dials:[['ring','고리'],['glow','빛'],['plate','판']],
@@ -209,12 +209,15 @@
     <button type="button" class="cz-sw" role="switch" aria-checked="${!g.hidden.includes(id)}" aria-label="${esc(T('보이기'))}" ${c.hide||g.hidden.includes(id)?'':'disabled'}></button>${c.move?`<span class="cz-ud"><button type="button" data-cz-move="-1" aria-label="${esc(T('위로'))}">↑</button><button type="button" data-cz-move="1" aria-label="${esc(T('아래로'))}">↓</button></span>`:'<span></span>'}</div>`;}).join('');
   const s=sheet('cz-list',`<div class="cz-sh"><b>${esc(T(h.title+' 목록'))}</b><button type="button" data-cz-close>${esc(T('닫기'))}</button></div>
    ${h.tabs?`<div class="cz-row cz-tabs"><b>${esc(T('대시보드·계기판 탭'))}</b><div class="cz-mini"><button type="button" data-cz-tabs="two" aria-pressed="${h.state.layout.tabs!=='one'}">${esc(T('따로'))}</button><button type="button" data-cz-tabs="one" aria-pressed="${h.state.layout.tabs==='one'}">${esc(T('하나로'))}</button></div></div>`:''}
-   <div class="cz-rows">${rows}${h.reports&&root.OneTopReports?`<div class="cz-row cz-orow"><b>${esc(T('본전·주간 리포트'))}</b><button type="button" class="cz-shp" data-cz-reports>${esc(T(root.OneTopReports.NAMES[root.OneTopReports.settings().shape]))} ▸</button></div>`:''}</div><button type="button" class="cz-reset" data-cz-reset>${esc(T('기본값으로 되돌리기'))}</button>`);
+   <div class="cz-rows">${h.themes&&root.OneTopClusterThemes?`<div class="cz-row cz-orow"><b>${esc(T('계기판 디자인'))}</b><button type="button" class="cz-shp" data-cz-theme>${esc(root.OneTopClusterThemes.nameOf(root.OneTopClusterThemes.settings().theme))} ▸</button></div>`:''}${rows}${h.reports&&root.OneTopReports?`<div class="cz-row cz-orow"><b>${esc(T('본전·주간 리포트'))}</b><button type="button" class="cz-shp" data-cz-reports>${esc(T(root.OneTopReports.NAMES[root.OneTopReports.settings().shape]))} ▸</button></div>`:''}</div><button type="button" class="cz-reset" data-cz-reset>${esc(T('기본값으로 되돌리기'))}</button>`);
   s.onclick=e=>{const b=e.target.closest('button');if(!b)return;const id=b.closest('.cz-row')?.dataset.id;
    if('czClose' in b.dataset)return closeSheet();
    // The reports' look is kept apart from the layout (reports.js) and goes back to its defaults with it.
-   if('czReset' in b.dataset){change(()=>h.reset());if(h.reports&&root.OneTopReports){root.OneTopReports.save(root.OneTopReports.DEFAULTS);h.reports().onChange?.();}return list();}
+   if('czReset' in b.dataset){change(()=>h.reset());if(h.reports&&root.OneTopReports){root.OneTopReports.save(root.OneTopReports.DEFAULTS);h.reports().onChange?.();}
+    // The cluster's look (cluster-themes.js) is kept apart too and goes back to the 1top instruments.
+    if(h.themes&&root.OneTopClusterThemes){root.OneTopClusterThemes.save({theme:null});h.themes().onChange?.();}return list();}
    if('czReports' in b.dataset){closeSheet();setTimeout(()=>root.OneTopReports.openSettings(h.reports()),330);return;}
+   if('czTheme' in b.dataset){closeSheet();setTimeout(()=>root.OneTopClusterThemes.picker(h.themes()),330);return;}
    if(b.dataset.czTabs){change(()=>{h.state.layout.tabs=b.dataset.czTabs;});return list();}
    if(!id)return;
    if(b.classList.contains('cz-sw')){change(()=>{const g2=group();g2.hidden=g2.hidden.includes(id)?g2.hidden.filter(x=>x!==id):[...g2.hidden,id];});return list();}

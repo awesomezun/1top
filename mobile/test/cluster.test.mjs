@@ -90,3 +90,25 @@ test('range as the drum shows it',()=>{
  assert.deepEqual([4.62,9.94,9.96,23.4,140,1200,null,undefined,-1,Number.NaN].map(rangeText),['4.6','9.9','10','23','140','999','--','--','--','--']);
 });
 
+
+test('the phone hands the cluster themes the figures the dashboard hands them from the same reports',async()=>{
+ const {figures}=await import('../src/theme-figures.ts');
+ const vm=await import('node:vm'),{readFileSync}=await import('node:fs'),box={};box.window=box;vm.createContext(box);
+ vm.runInContext(readFileSync(new URL('../../agent/onetop/dist/themes/core.js',import.meta.url),'utf8'),box);
+ const themes=require('../../agent/onetop/dist/cluster-themes.js'),before=globalThis.OneTop;globalThis.OneTop=box.OneTop;
+ // Each surface names a session as its own window does; here both by its id.
+ const name=s=>s.id;
+ try{
+  for(const at of [1_800_000_000,1_800_000_037]){
+   setDemoNow(at);const devices=demoDevices();
+   for(const period of ['10m','1h','24h']){
+    const state=clusterState(devices,at*1000),a=readings(state,{period,now:at,trip:at-5400,sessions:state.root_sessions});
+    const wstate=remoteState(devices,{period,now:at*1000}),b=desktop.readings(wstate,{period,now:at,speed,weekly,reconnect:RECONNECT,display,sessions:wstate.root_sessions,trip:at-5400});
+    // The dashboard adds the period's Korean name; the phone's theme page adds it from the same table.
+    const {periodLabel,...web}=JSON.parse(JSON.stringify(themes.figures(b,{now:at,state:wstate,name:x=>name(x)})));
+    assert.equal(periodLabel,box.OneTop.periodKo(period));
+    assert.deepEqual(JSON.parse(JSON.stringify(figures(a,state,{now:at,odo:null,name}))),web,period+' at '+at);
+   }
+  }
+ }finally{globalThis.OneTop=before;setDemoNow(null);}
+});

@@ -25,16 +25,9 @@ def process_name(command):
 
 
 def role(name, arguments=()):
-    arguments = list(arguments)
-    if name == 'claude bg-spare' or '--bg-spare' in arguments[1:]:
-        return 'background'
-    if name == 'claude bg-pty-host' or '--bg-pty-host' in arguments[1:]:
-        return 'helper'
-    if name == 'claude':
-        if arguments[1:3] == ['daemon', 'run']:
-            return 'helper'
-        return 'interactive'
-    return None
+    from .observe.processes import describe
+    result=describe({'argv':list(arguments) or [name], 'kind':'Claude' if name.startswith('claude') else None})
+    return result['role'] if result['kind']=='Claude' else None
 
 
 def registry(root, pid):
@@ -100,58 +93,12 @@ def verified(record, process):
 
 
 def chains(processes, records, metadata):
-    """Return unique live job chains anchored to their original interactive process.
-
-    A matching job ID alone is insufficient: require process ancestry (or, for a job a PTY host the system
-    adopted runs, the same working directory), profile, registry birth and a single candidate. Daemon/PTY
-    helpers are transport only.
-    """
-    result = {}
-    def descendant(child, parent):
-        seen = set()
-        while child in processes and child not in seen:
-            if child == parent:
-                return True
-            seen.add(child)
-            child = processes[child]['ppid']
-        return False
-    def hosted(child):
-        # Newer Claude Code runs a parked job under a PTY host the system adopted (its parent is launchd), not
-        # under the terminal's process; only Claude helpers may stand between the job and launchd.
-        seen, parent = set(), processes[child]['ppid']
-        while parent in processes and parent not in seen:
-            seen.add(parent)
-            if processes[parent].get('claude_role') != 'helper':
-                return False
-            if processes[parent]['ppid'] == 1:
-                return True
-            parent = processes[parent]['ppid']
-        return False
-    for pid, process in processes.items():
-        if process.get('claude_role') != 'interactive' or not verified(records.get(pid, {}), process):
-            continue
-        chain, current = [pid], pid
-        for _ in range(16):
-            job = records[current].get('parkedJobId')
-            if not isinstance(job, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', job):
-                break
-            candidates = [p for p, row in processes.items()
-                          if p not in chain and row.get('claude_role') == 'background'
-                          and verified(records.get(p, {}), row)
-                          and records[p].get('kind') == 'bg' and records[p].get('jobId') == job
-                          and metadata[p].get('config_dir') == metadata[pid].get('config_dir')
-                          and (descendant(p, current) or
-                               hosted(p) and records[p].get('cwd') and records[p].get('cwd') == records[current].get('cwd'))]
-            if len(candidates) != 1:
-                break
-            current = candidates[0]
-            chain.append(current)
-        if len(chain) > 1:
-            result[pid] = chain
-    # An adopted host proves no terminal ancestry. Two live owners can retain the
-    # same parked job after a resume, so candidate uniqueness must work in both
-    # directions. Leave a contested job standalone instead of charging its usage
-    # to two rows or routing its input through an arbitrary owner's terminal.
-    owners = Counter(p for chain in result.values() for p in chain[1:])
-    return {pid: chain for pid, chain in result.items()
-            if all(owners[p] == 1 for p in chain[1:])}
+    """Compatibility entry point; the session contract owns R1–R6."""
+    from .sessions.identity import resolve
+    procs=[]
+    for pid,p in processes.items():
+        role=p.get('claude_role')
+        argv=['claude','--bg-pty-host'] if role=='helper' else ['claude','--bg-spare'] if role=='background' else ['claude']
+        procs.append({**p,'argv':argv,'config_dir':metadata.get(pid,{}).get('config_dir','~/.claude')})
+    rows=resolve({'processes':procs,'claude_registry':{str(k):v for k,v in records.items()}})
+    return {run['pid']:[run['pid'],run['active_pid']] for row in rows for run in row['runs'] if run['pid']!=run['active_pid']}
