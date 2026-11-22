@@ -2,9 +2,10 @@
 const $=id=>document.getElementById(id),kinds=['Claude','Codex','GLM','Antigravity','Aside','Devin'];
 const colors={Claude:'#bd8965',Codex:'#378d76',GLM:'#7c86bd',Antigravity:'#619db9',Aside:'#a99bdb',Devin:'#c97a96'};
 const labels={working:'작업 중',subagents:'하위 작업 중',waiting:'확인 필요',done:'방금 끝남',idle:'대기 중',unknown:'미확인',interrupted:'중단됨',disconnected:'연결 끊김',paused:'일시정지',resuming:'재개 요청 중'};
-// The session table reads the weekly limit % (tokens where no estimate exists). Its % / tokens toggle was removed in
-// 4.10.0; usageUnit stays 'weekly' on screen, and the checks still read the tokens form.
-let data=null,provider='all',view='sessions',selectedId=null,busy=false,actionBusy=false,pendingAction=null,toastTimer,benchmark=null,selectedPeriod=OneTopDashboard.state.period,usageUnit='weekly',mapGroup='session';
+// The session table's period column reads tokens for every session; the weekly limit stays in the burn gauge.
+// Its % / tokens toggle was removed in 4.10.0, and since 4.11.2 the column no longer mixes weekly % with tokens.
+// usageUnit stays 'tokens' on screen; the checks still read the weekly form.
+let data=null,provider='all',view='sessions',selectedId=null,busy=false,actionBusy=false,pendingAction=null,toastTimer,benchmark=null,selectedPeriod=OneTopDashboard.state.period,usageUnit='tokens',mapGroup='session';
 // Upgrade selections saved by the former continuous slider once; keep explicit
 // text entries made with the new control on subsequent reloads.
 if(OneTopDashboard.state.rangeScale!=='fixed-v1'){

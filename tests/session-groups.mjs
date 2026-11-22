@@ -21,6 +21,8 @@ const context=vm.createContext({
  OneTopI18n:{locale:()=> 'ko-KR',t:s=>s,language:'ko'}
 });
 vm.runInContext(source,context);
+// With the % / tokens toggle gone, the period column shows tokens for every session.
+assert.equal(vm.runInContext('usageUnit',context),'tokens');
 vm.runInContext(`data={ready:true,updated:Date.now()/1000,account_quotas:[],period_usage:{windows:[{key:'1h',label:'1시간',seconds:3600}]}};`,context);
 const controlFixture={id:'root',kind:'Codex',status:'idle',display_status:'paused',children_working:1,
  control_key:'fixture',orca_terminal:{title:'Fixture root'},input_verified:true};
@@ -201,6 +203,12 @@ assert.equal(visibleText(unknownCell),'—');
 vm.runInContext('data.account_quotas[0].stale=true',context);
 assert.equal(visibleText(vm.runInContext('sessionWeeklyCell(compactSession,[100,0,0,0],null)',context)),'≈17.7%');
 assert.equal(JSON.parse(vm.runInContext('sessionBurnCell(compactSession)',context)).rate,null);
+// On screen (tokens) the same estimated session reads tokens, not %, while its burn gauge keeps %/h.
+vm.runInContext("usageUnit='tokens';data.account_quotas[0].stale=false",context);
+const tokenCell=visibleText(vm.runInContext('sessionWeeklyCell(compactSession,[100,0,0,0],null)',context));
+assert.match(tokenCell,/^100/);assert.doesNotMatch(tokenCell,/%/);
+assert.equal(JSON.parse(vm.runInContext('sessionBurnCell(compactSession)',context)).rate,21.6);
+vm.runInContext("usageUnit='weekly';data.account_quotas[0].stale=true",context);
 assert.doesNotMatch(source,/주간 한도 환산/);
 console.log('Period usage and burn rate stay in separate columns; stale rates are unknown, missing estimates use tokens once.');
 vm.runInContext(`
