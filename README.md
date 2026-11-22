@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/awesomezun/1top/releases/tag/v4.10.2"><img alt="Release 4.10.2" src="https://img.shields.io/badge/release-4.10.2_preview-9dff3c?style=flat-square&labelColor=15181c"></a>
+  <a href="https://github.com/awesomezun/1top/releases/tag/v4.11.2"><img alt="Release 4.11.2" src="https://img.shields.io/badge/release-4.11.2_preview-9dff3c?style=flat-square&labelColor=15181c"></a>
   <img alt="macOS, Windows, iPhone and Android" src="https://img.shields.io/badge/macOS_·_Windows_·_iPhone_·_Android-6ccfa9?style=flat-square&labelColor=15181c">
   <img alt="Korean, English and Chinese" src="https://img.shields.io/badge/한국어_·_English_·_中文-9ab9ff?style=flat-square&labelColor=15181c">
   <a href="LICENSE"><img alt="AGPL-3.0 license" src="https://img.shields.io/badge/license-AGPL--3.0-e9b25c?style=flat-square&labelColor=15181c"></a>
@@ -38,15 +38,15 @@ See which AI is running on which computer, how fast it burns your weekly limit a
 
 | | Platform | Get it |
 | :---: | --- | --- |
-| <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13+ | [**1top-4.10.2-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v4.10.2/1top-4.10.2-macos-arm64.dmg) |
-| <img src="assets/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.10.2-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.10.2/1top-4.10.2-windows-x64-setup.exe) |
-| <img src="https://cdn.simpleicons.org/android/3DDC84" width="22" alt=""> | **Android** 7+ | [**1top-4.10.2-android.apk**](https://github.com/awesomezun/1top/releases/download/v4.10.2/1top-4.10.2-android.apk) · Google Play coming soon |
+| <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13+ | [**1top-4.11.2-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v4.11.2/1top-4.11.2-macos-arm64.dmg) |
+| <img src="assets/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.11.2-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.11.2/1top-4.11.2-windows-x64-setup.exe) |
+| <img src="https://cdn.simpleicons.org/android/3DDC84" width="22" alt=""> | **Android** 7+ | [**1top-4.11.2-android.apk**](https://github.com/awesomezun/1top/releases/download/v4.11.2/1top-4.11.2-android.apk) · Google Play coming soon |
 | <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **iPhone** | App Store coming soon |
 | 🌐 | **Browser** | [1top.si/app](https://1top.si/app?demo=1) — the demo needs no install |
 
-4.10.2 is a preview. The files, `SHA256SUMS` and `build-info.json` are in the [release](https://github.com/awesomezun/1top/releases/tag/v4.10.2). The Mac app is not notarized yet and the Windows installer is not code-signed yet, so macOS and Windows may ask you to confirm the first launch.
+4.11.2 is a preview. The files, `SHA256SUMS` and `build-info.json` are in the [release](https://github.com/awesomezun/1top/releases/tag/v4.11.2). The Mac app is not notarized yet and the Windows installer is not code-signed yet, so macOS and Windows may ask you to confirm the first launch.
 
-**New in 4.10.2:** choose from 72 cluster themes, see each conversation as one session with 'Subagents working' and 'Just done' states, count the sessions and tokens of bots such as OpenBot and OpenMausBot, and get each Codex thread's first request counted. The odometer grows to thirteen digits for a week and longer, with the period's total under it and under the dashboard gauge.
+**New in 4.11.2:** OpenBot agents that run on Devin or Antigravity now show up with their sessions and tokens, and terminal Agy CLI sessions get their tokens too. The usage maps count every session used in the chosen period, ended ones included, so they add up to the token flow. The session table shows tokens for every session in the period column; the weekly limit stays in the burn gauge. Claude Code's search helper no longer shows up as an unknown session.
 
 ## What you can see
 
