@@ -7,7 +7,7 @@
 (function(root){
  'use strict';
  const valid=n=>typeof n==='number'&&Number.isFinite(n)&&n>=0;
- const KINDS=['Claude','Codex','GLM','Antigravity','Aside'],rank=k=>KINDS.includes(k)?KINDS.indexOf(k):KINDS.length;
+ const KINDS=['Claude','Codex','GLM','Antigravity','Aside','Devin'],rank=k=>KINDS.includes(k)?KINDS.indexOf(k):KINDS.length;
  // Marks on a 1-2-2.5-5 step so a dial reads four or five numbers: 200 → 50, 100 → 25, 50 → 10, 2 → 0.5.
  function marks(max){
   const p=10**Math.floor(Math.log10(max)),major=[5,2.5,2,1,.5,.25,.2,.1].map(m=>m*p).find(s=>max/s>=4-1e-9)||p/10;

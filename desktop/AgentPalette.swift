@@ -13,6 +13,7 @@ enum AgentPalette {
         case "Codex": return (55, 141, 118)
         case "GLM": return (124, 134, 189)
         case "Antigravity": return (97, 157, 185)
+        case "Devin": return (201, 122, 150)
         default: return (169, 155, 219)
         }
     }

@@ -25,7 +25,7 @@ import type {Device,Flow,Quota,SessionRow,WindowKey} from './types';
 export {quick,toolColor,toolName};
 const PERIODS:[WindowKey][]=[['10m'],['30m'],['1h'],['5h'],['12h'],['24h']];
 const SECONDS:Record<WindowKey,number>={'10m':600,'30m':1800,'1h':3600,'5h':18000,'12h':43200,'24h':86400};
-const ORDER=['Claude','Codex','GLM','Antigravity','Aside'];
+const ORDER=['Claude','Codex','GLM','Antigravity','Aside','Devin'];
 
 export function pct(n:number|null|undefined){if(!valid(n))return '—';if(n===0)return '0%';if(n<.05)return '<0.1%';const t=Math.round(n*10)/10;return (Number.isInteger(t)?String(t):t.toFixed(1))+'%';}
 type T=(en:string,ko:string)=>string;

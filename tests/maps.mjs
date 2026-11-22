@@ -46,4 +46,18 @@ assert.equal(byModel.total,100);
 assert.deepEqual(byModel.items.map(x=>[x.label,x.detail,x.value,x.count]),[['claude-opus-5-5','Claude Code',60,2],['모델 정보 없음','내역 없는 컴퓨터',30,0],['claude-opus-5-5','Codex',10,1]]);
 assert.equal(M.usage(sessions,'1h','model','ko',[]).total,0);
 assert.deepEqual(M.usage(sessions,'1h','model').items.map(x=>[x.label,x.detail]),[['모델 정보 없음','Claude Code'],['모델 정보 없음','Codex']]);
-console.log('Map accounting, exact-area layout, unknown/zero cases, period model splits and capacity guards passed.');
+// The period's record (GET /api/usage-sessions): ended sessions count, a listed tree gathers its children, a listed
+// tree with nothing recorded stays (zero or unreported), and sessions past the page are one tile.
+const live=[{id:'root',kind:'Claude',project:'App',root_session_id:'root',usage:{windows:{'5h':[1,0,0,0]}}},{id:'child',kind:'Claude',root_session_id:'root'},
+ {id:'quiet',kind:'Codex',project:'Quiet',usage:{windows:{'5h':[0,0,0,0]}}},{id:'agy',kind:'Antigravity',project:'Agy',usage:{windows:{'5h':null}}}];
+const roots=[live[0],live[2],live[3]];
+const record={tokens:[900,100,0,10],next_offset:3,sessions:[
+ {id:'ended',kind:'Devin',project:'Atlas',title:'Map check',app:'OpenBot',model:'claude-opus-5-5',tokens:[0,500,0,10]},
+ {id:'child',kind:'Claude',tokens:[300,0,0,0]},{id:'root',kind:'Claude',tokens:[100,0,0,0]}]};
+const rows=M.fromRecord(record,live,roots,'5h'),r=M.usage(rows,'5h');
+assert.equal(r.total,1010);
+assert.deepEqual(r.items.map(x=>[x.label,x.value,x.count]),[['Atlas',510,1],['App',400,2],['그 외 세션',100,1]]);
+assert.equal(r.items[0].detail,'OpenBot · Devin · claude-opus-5-5');
+assert.deepEqual([r.known,r.zero,r.unknown],[5,1,1]);
+assert.equal(M.fromRecord({...record,next_offset:null},live,roots,'5h').some(x=>x.id==='record-rest'),false);
+console.log('Map accounting, exact-area layout, unknown/zero cases, period model splits, period records and capacity guards passed.');

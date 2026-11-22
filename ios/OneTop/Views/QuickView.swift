@@ -66,7 +66,7 @@ struct SpeedReading {
         }
         self.bins = bins
     }
-    static func order(_ kind: String) -> Int { ["Claude", "Codex", "GLM", "Antigravity", "Aside"].firstIndex(of: kind) ?? 9 }
+    static func order(_ kind: String) -> Int { ["Claude", "Codex", "GLM", "Antigravity", "Aside", "Devin"].firstIndex(of: kind) ?? 9 }
 }
 
 /// Scope: one turn is the period. The newest bin sits just right of ▼ (now) and the ring goes

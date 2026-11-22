@@ -57,6 +57,9 @@ def anonymize(record):
     antigravity=[{**a, 'root':token('C',a.get('root')), 'title':token('N',a.get('title'))} for a in record.get('antigravity_sessions',[])]
     openbot=[{'workspace':token('P',a.get('workspace')), 'name':token('N',a.get('name'))} for a in record.get('openbot_agents',[])]
     mausbot=[{**a, 'bot':token('N',a.get('bot'))} for a in record.get('openmausbot_threads') or []]
+    devin=[{**a, 'cwd':token('P',a.get('cwd')), 'title':token('N',a.get('title'))} for a in record.get('devin_sessions') or []]
+    acp=[{**a, 'cwd':token('P',a.get('cwd')), 'title':token('N',a.get('title')), 'root':token('C',a.get('root'))}
+         for a in record.get('antigravity_conversations') or []]
     from ..sessions.terminals import pane_thread_name
     panes={}
     for p in record['processes']:
@@ -77,7 +80,8 @@ def anonymize(record):
         'processes':procs,'claude_registry':regs,'claude_transcripts':transcripts,
         'codex_logs':logs,'orca_terminals':terminals if record.get('orca_terminals') is not None else None,'tmux_panes':panes,
         'aside_sessions':aside,'orca_agents':agents if record.get('orca_agents') is not None else None,'antigravity_sessions':antigravity,'openbot_agents':openbot,'openmausbot_threads':mausbot,
-        'openmausbot_running':bool(record.get('openmausbot_running')),'tokens':list(tokens.values())}
+        'openmausbot_running':bool(record.get('openmausbot_running')),'devin_sessions':devin,'antigravity_conversations':acp,
+        'openbot_running':bool(record.get('openbot_running')),'devin_running':bool(record.get('devin_running')),'tokens':list(tokens.values())}
 
 
 def capture(path):

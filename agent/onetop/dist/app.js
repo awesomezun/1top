@@ -1,6 +1,6 @@
 'use strict';
-const $=id=>document.getElementById(id),kinds=['Claude','Codex','GLM','Antigravity','Aside'];
-const colors={Claude:'#bd8965',Codex:'#378d76',GLM:'#7c86bd',Antigravity:'#619db9',Aside:'#a99bdb'};
+const $=id=>document.getElementById(id),kinds=['Claude','Codex','GLM','Antigravity','Aside','Devin'];
+const colors={Claude:'#bd8965',Codex:'#378d76',GLM:'#7c86bd',Antigravity:'#619db9',Aside:'#a99bdb',Devin:'#c97a96'};
 const labels={working:'작업 중',subagents:'하위 작업 중',waiting:'확인 필요',done:'방금 끝남',idle:'대기 중',unknown:'미확인',interrupted:'중단됨',disconnected:'연결 끊김',paused:'일시정지',resuming:'재개 요청 중'};
 // The session table reads the weekly limit % (tokens where no estimate exists). Its % / tokens toggle was removed in
 // 4.10.0; usageUnit stays 'weekly' on screen, and the checks still read the tokens form.
@@ -130,7 +130,9 @@ function render(){
 let clusterPage='';
 function drawClusterPage(page,el){
  clusterPage=page;
- OneTopClusterPages.drawPage(page,el,{state:data,byModel:periodByModel(),sessions:data.sessions.filter(s=>provider==='all'||s.kind===provider),period:selectedPeriod,caption:periodCaption(),group:mapGroup,fmt,open:openSession,
+ OneTopClusterPages.drawPage(page,el,{state:data,byModel:periodByModel(),sessions:page==='map'?mapSessions(data.sessions):[],period:selectedPeriod,caption:periodCaption(),group:mapGroup,fmt,
+  // An ended session's tile has no live session to open.
+  open:id=>{if(data.sessions.some(s=>s.id===id))openSession(id);},
   history:{load:()=>loadHistory(),message:what=>historyMessage(what||'히트맵'),data:()=>historyView.data},slots:historyView.slots});
 }
 // Customizing the cluster view (customize.js): wide, the dials and the centre window keep their axes and the lower row
@@ -488,11 +490,28 @@ function renderReport(){
  const now=data?.updated||Date.now()/1000,html=OneTopReports.panel(data,{now,period:selectedPeriod,open:reportOpen,top:OneTopReports.soonest(data,selectedPeriod,now,accountName)});
  if(html!==reportHTML){reportHTML=html;el.innerHTML=html;}
 }
+// The selected period's sessions as the collector recorded them, ended ones included (GET /api/usage-sessions), so a
+// usage map adds up to the token flow: asked again with the period and every 15 seconds while a map shows. Without
+// it (an older collector, the remote workspace) a map counts the listed sessions.
+const periodRecord={key:'',at:0,data:null,loading:false};
+async function loadPeriodRecord(){
+ const key=selectedPeriod;
+ if(periodRecord.loading||key===periodRecord.key&&Date.now()-periodRecord.at<15000)return;
+ periodRecord.loading=true;periodRecord.at=Date.now();
+ try{const r=await fetch('/api/usage-sessions?'+new URLSearchParams({period:key,limit:'200'}),{cache:'no-store',signal:AbortSignal.timeout(10000)});
+  const next=r.ok?await r.json():null;if(key===selectedPeriod){periodRecord.key=key;periodRecord.data=Array.isArray(next?.sessions)?next:null;}}
+ catch{if(key===selectedPeriod){periodRecord.key=key;periodRecord.data=null;}}
+ finally{periodRecord.loading=false;if(periodRecord.key===selectedPeriod){renderMaps();if(view==='cluster')renderCluster();}}
+}
+function mapSessions(listed){
+ loadPeriodRecord();
+ const record=periodRecord.key===selectedPeriod?periodRecord.data:null;
+ return (record?OneTopMaps.fromRecord(record,data.sessions,visibleSessions(),selectedPeriod):listed).filter(s=>provider==='all'||s.kind===provider);
+}
 function renderMaps(){
  if(!data?.ready||!['sessions','maps'].includes(view))return;
  if(view==='maps')renderReport();
- const source=view==='maps'&&mapGroup!=='session'?data.sessions:visibleSessions();
- const sessions=source.filter(s=>provider==='all'||s.kind===provider);
+ const sessions=mapSessions(view==='maps'&&mapGroup!=='session'?data.sessions:visibleSessions());
  const result=OneTopMaps.usage(sessions,selectedPeriod,view==='sessions'?'session':mapGroup,'ko',periodByModel());
  if(view==='sessions'){
   $('sessionMapTotal').textContent=fmt(result.total)+' tokens';

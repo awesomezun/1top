@@ -278,7 +278,7 @@ struct DesktopUsageTrend {
     // Canonical bottom-to-top order; independent of event arrival order.
     var series: [String] {
         let kinds = Set(bins.flatMap { $0.tokensByKind.keys })
-        let preferred = ["Claude", "Codex", "GLM", "Antigravity", "Aside"]
+        let preferred = ["Claude", "Codex", "GLM", "Antigravity", "Aside", "Devin"]
         return preferred.filter(kinds.contains) + kinds.filter { !preferred.contains($0) }
             .sorted { $0.utf16.lexicographicallyPrecedes($1.utf16) }
     }

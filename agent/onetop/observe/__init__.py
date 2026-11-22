@@ -2,7 +2,7 @@
 import platform
 import time
 from pathlib import Path
-from . import processes, claude_registry, transcripts, orca, codex, aside, tmux, antigravity, openbot, openmausbot
+from . import processes, claude_registry, transcripts, orca, codex, aside, tmux, antigravity, openbot, openmausbot, devin
 from ..discovery import claude_transcript
 
 
@@ -15,6 +15,7 @@ class Observer:
         self.run = None
         self.agents_at = 0
         self.ledger_at = 0
+        self.apps_at = 0
 
     def refresh(self, record):
         """Cheap event/registry refresh between topology scans; immutable records."""
@@ -45,7 +46,12 @@ class Observer:
         bots = record.get('openmausbot_threads')
         if bots is None or now - self.ledger_at >= 5:
             bots, self.ledger_at = openmausbot.read(self.home, now), now
-        result = {**record, 'captured_at': now, 'orca_agents': seats,
+        # T5: Devin sessions and the ACP runtime's Antigravity conversations, from their own databases.
+        found = {k: record.get(k) for k in ('devin_sessions', 'antigravity_conversations')}
+        if None in found.values() or now - self.apps_at >= 5:
+            found, self.apps_at = {'devin_sessions': devin.read(self.home, now),
+                                   'antigravity_conversations': antigravity.conversations(self.home, now)}, now
+        result = {**record, **found, 'captured_at': now, 'orca_agents': seats,
                   'antigravity_sessions': antigravity.refresh(record.get('antigravity_sessions', [])), 'claude_registry':regs, 'claude_transcripts':observed,
                   'codex_logs':logs, 'aside_sessions':aside.read(self.home, now, running), 'openmausbot_threads': bots}
         self.transcripts.prune()
@@ -58,5 +64,6 @@ class Observer:
             'processes':procs, 'orca_terminals':orca.read(run), 'antigravity_sessions':antigravity.read(procs, run),
             'openbot_agents':openbot.read(self.home, procs), 'tmux_panes':tmux.read(run),
             'openmausbot_running':any('/OpenMausBot.app/Contents/MacOS/' in str(p.get('exe') or '') for p in procs),
+            'openbot_running':openbot.running(procs), 'devin_running':any(p.get('name') == 'devin' for p in procs),
             'codex_logs':codex.read(procs, self.transcripts, run, platform.system())}
         return self.refresh(record)

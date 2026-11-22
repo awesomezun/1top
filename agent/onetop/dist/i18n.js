@@ -130,6 +130,7 @@ window.OneTopI18n=(()=>{
   ['하위 작업 중','Subagents working','子代理工作中'],['방금 끝남','Just done','刚完成'],
   // Session recognition (agent/onetop/sessions): a row's name, location and notes.
   ['새 대화','New conversation','新对话'],['Orca 채팅','Orca chat','Orca 聊天'],['앱 채팅','App chat','应用聊天'],['백그라운드','Background','后台'],
+  ['Devin CLI 세션','Devin CLI session','Devin CLI 会话'],
   ['실행의 Orca 터미널 ID',"The run's Orca terminal ID",'运行的 Orca 终端 ID'],['세션 관찰 기록','Session observations','会话观察记录'],
   ['불러오는 중…','Loading…','正在加载…'],['계기판 디자인을 불러오지 못했습니다.',"Couldn't load the cluster designs.",'无法加载组合仪表外观。']);
  const dictionary=new Map(entries.map(([ko,en,zh])=>[ko,{en,zh}]));

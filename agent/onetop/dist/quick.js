@@ -6,8 +6,8 @@
  'use strict';
  const PERIODS=[['10m','10분',600],['30m','30분',1800],['1h','1시간',3600],['5h','5시간',18000],['12h','12시간',43200],['24h','24시간',86400]];
  const SECONDS=Object.fromEntries(PERIODS.map(([k,,s])=>[k,s]));
- const CANONICAL=['Claude','Codex','GLM','Antigravity','Aside'];
- const COLORS={Claude:'#bd8965','Claude Code':'#bd8965',Codex:'#378d76',GLM:'#7c86bd',Antigravity:'#619db9'};
+ const CANONICAL=['Claude','Codex','GLM','Antigravity','Aside','Devin'];
+ const COLORS={Claude:'#bd8965','Claude Code':'#bd8965',Codex:'#378d76',GLM:'#7c86bd',Antigravity:'#619db9',Devin:'#c97a96'};
  const color=k=>COLORS[k]||'#a99bdb';
  const toolName=k=>k==='Claude'?'Claude Code':k==='Antigravity'?'Agy CLI':k;
  const finite=n=>typeof n==='number'&&Number.isFinite(n);

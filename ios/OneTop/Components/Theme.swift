@@ -9,6 +9,7 @@ enum Tool {
         case "GLM": Color(red: 0.561, green: 0.596, blue: 0.878)
         case "Antigravity": Color(red: 0.380, green: 0.616, blue: 0.725)
         case "Aside": Color(red: 0.663, green: 0.608, blue: 0.859)
+        case "Devin": Color(red: 0.788, green: 0.478, blue: 0.588)
         default: Color.gray
         }
     }

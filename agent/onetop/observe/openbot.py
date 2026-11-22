@@ -6,6 +6,8 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from .readonly import connect
+
 
 def database(home):
     system = platform.system()
@@ -16,14 +18,18 @@ def database(home):
     return Path(home)/'.config'/'OpenBot'/'openbot.db'
 
 
+def running(processes):
+    return any('OpenBot' in str((p.get('app') or ('', ''))[0]) or '/OpenBot.app/' in str(p.get('exe') or '')
+               for p in processes)
+
+
 def read(home, processes):
     """Only while an OpenBot process runs; names only, never messages or settings."""
-    if not any('OpenBot' in str((p.get('app') or ('', ''))[0]) or '/OpenBot.app/' in str(p.get('exe') or '')
-               for p in processes):
+    if not running(processes):
         return []
     path = database(home)
     try:
-        with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=1)) as db:
+        with closing(connect(path)) as db:
             rows = db.execute('SELECT agent_json FROM projection_agents').fetchall()
     except (OSError, ValueError, sqlite3.Error):
         return []

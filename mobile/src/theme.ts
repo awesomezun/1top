@@ -20,5 +20,5 @@ export function applyTheme(name:ThemeName){if(name===current)return;current=name
 /** Runs when the theme changes; modules rebuild their StyleSheet here. */
 export function onTheme(rebuild:()=>void){listeners.add(rebuild);}
 
-export const toolColor=(kind:string)=>({Claude:'#d4956b',Codex:'#3fae8c',GLM:'#8f98e0',Antigravity:'#619db9',Aside:'#a99bdb'} as Record<string,string>)[kind]||'#8b939f';
+export const toolColor=(kind:string)=>({Claude:'#d4956b',Codex:'#3fae8c',GLM:'#8f98e0',Antigravity:'#619db9',Aside:'#a99bdb',Devin:'#c97a96'} as Record<string,string>)[kind]||'#8b939f';
 export const toolName=(kind:string)=>kind==='Claude'?'Claude Code':kind==='Antigravity'?'Agy CLI':kind;

@@ -206,7 +206,7 @@ export type Readings=ReturnType<typeof readings>;
 export type Hold={period?:string;full?:number;skey?:string;smax?:number};
 type Subject={type:'session'|'account'|'all';id:string|null;kind:string|null;value:number|null;account:string|null;session?:ClusterSession;count?:number;cruise?:number|null};
 export type Reach={state?:'idle'|'unknown'|'reconnect';hours?:number;early?:boolean;account?:string};
-const KINDS=['Claude','Codex','GLM','Antigravity','Aside'],rank=(k:string)=>KINDS.includes(k)?KINDS.indexOf(k):KINDS.length;
+const KINDS=['Claude','Codex','GLM','Antigravity','Aside','Devin'],rank=(k:string)=>KINDS.includes(k)?KINDS.indexOf(k):KINDS.length;
 /** The cluster's readings (cluster.js readings): period, now in seconds, the subject picked, the trip's start, the
  *  warning pressed (only) and the scales held while the period stays (hold). */
 export function readings(state:ClusterState,o:{period:WindowKey;now:number;pick?:Pick;only?:Only;trip?:number|null;tachMax?:number|null;sessions?:ClusterSession[];hold?:Hold|null;rate?:number|null;burn?:number|null}){

@@ -40,7 +40,7 @@ struct QuickMetrics {
 }
 
 private let periodSeconds: [String: Double] = ["10m": 600, "30m": 1800, "1h": 3600, "5h": 18000, "12h": 43200, "24h": 86400]
-private let toolOrder = ["Claude", "Codex", "GLM", "Antigravity", "Aside"]
+private let toolOrder = ["Claude", "Codex", "GLM", "Antigravity", "Aside", "Devin"]
 private func toolName(_ kind: String) -> String {
     kind == "Claude" ? "Claude Code" : kind == "Antigravity" ? "Agy CLI" : kind == "Aside" ? "Aside" : kind
 }

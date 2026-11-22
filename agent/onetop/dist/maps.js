@@ -42,6 +42,23 @@
   // An empty split is a period without usage, not one still being checked.
   return {items,total:known||split?total:null,known,unknown,zero};
  }
+ // The selected period's recorded sessions, ended ones included (GET /api/usage-sessions), as rows usage() reads.
+ // Each is counted under the listed session tree it belongs to; a listed tree with no record in the period stays
+ // as it is (zero or unreported); sessions past the record's page are one tile. Its total is the token flow's.
+ function fromRecord(record,sessions,roots,period,lang='ko'){
+  const live=new Map((sessions||[]).map(s=>[s.id,s])),trees=new Map((roots||[]).map(s=>[s.id,s])),rows=[],shown=new Set();
+  let counted=0;
+  for(const e of record?.sessions||[]){
+   const s=live.get(e.id),tree=s&&(trees.get(s.root_session_id)||trees.get(s.id));
+   const base=tree||{id:e.id,kind:e.kind,project:e.project,title:e.title,model:e.model,app:e.app};
+   rows.push({...base,map_id:base.id,usage:{windows:{[period]:e.tokens}}});shown.add(base.id);
+   counted+=sum(e.tokens)||0;
+  }
+  for(const s of roots||[])if(!shown.has(s.id))rows.push(s);
+  const rest=(sum(record?.tokens)||0)-counted;
+  if(record?.next_offset!=null&&rest>0)rows.push({id:'record-rest',kind:null,project:text(lang,'Other sessions','그 외 세션'),usage:{windows:{[period]:[rest,0,0,0]}}});
+  return rows;
+ }
  // Balanced recursive partition: each rectangle preserves exact value / total area.
  function layout(items,width=100,height=100){
   const result=[];
@@ -115,5 +132,5 @@
   if(!c.available)return `<div class="context-total">— <small>${text(lang,'Input report unavailable','입력 사용량 미보고')}</small></div><p class="map-explanation">${text(lang,'No context ratio is inferred from lifetime tokens.','세션 누적 토큰으로 컨텍스트 비율을 추정하지 않습니다.')}</p>`;
   return `<div class="context-total">${format(c.used)} <small>/ ${c.cap?format(c.cap):text(lang,'capacity unknown','용량 미보고')}</small><span class="context-percent">${c.percent===null?'—':c.percent.toFixed(1)+'%'}</span></div><p class="map-explanation">${text(lang,'Last request input','마지막 요청 입력')} · ${esc(c.model||'—')}${c.observed?' · '+new Date(c.observed*1000).toLocaleTimeString(lang==='en'?'en-US':'ko-KR',{hour:'2-digit',minute:'2-digit'}):''}${c.over?' · '+text(lang,'Capacity mismatch','용량 보고 불일치'):''}</p>`;
  }
- root.OneTopMaps={usage,layout,context,draw,legend,contextMarkup,format};
+ root.OneTopMaps={usage,fromRecord,layout,context,draw,legend,contextMarkup,format};
 })(globalThis);

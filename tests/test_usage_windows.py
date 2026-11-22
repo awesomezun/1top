@@ -1,5 +1,7 @@
 import sqlite3
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import Mock,patch
 from onetop.usage import window_usage,WINDOWS
 from onetop.server import Collector
@@ -112,7 +114,9 @@ class RollingUsageTests(unittest.TestCase):
         c.read_tracker=tracker
         from onetop.weekly_usage import initialize
         initialize(self.db)
-        with patch('onetop.server.time.time',return_value=self.now), patch('onetop.aside.discover',return_value=[]):c.collect()
+        # An empty home: the apps' own databases (Devin, Antigravity) on the machine running the tests are not read.
+        with tempfile.TemporaryDirectory() as home, patch('onetop.server.HOME',Path(home)), \
+                patch('onetop.server.time.time',return_value=self.now), patch('onetop.aside.discover',return_value=[]):c.collect()
         known,unknown=c.snapshot['sessions']
         self.assertEqual(known['usage']['windows']['24h'],[0,0,0,0])
         self.assertIsNone(unknown['usage']['windows']['24h'])

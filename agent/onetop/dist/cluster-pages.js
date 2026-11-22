@@ -24,7 +24,7 @@
  function tokenFlowData(events,minutes,updated,range){
   const end=range?.end??(Math.floor((Number.isFinite(updated)?updated:0)/60)*60+60),start=range?.start??(end-minutes*60),step=range?.step??Math.max(minutes>300?900:minutes>60?300:60,Math.ceil(minutes/240)*60),n=Math.max(1,Math.ceil((end-start)/step));
   const reports=events.map(e=>({t:e.t,kind:typeof e.kind==='string'&&e.kind.trim()?e.kind.trim():'unknown',n:e.n??((e.fresh??0)+(e.cached??0)+(e.written??0)+(e.output??0))})).filter(e=>Number.isFinite(e.t)&&e.t>=start&&e.t<end&&Number.isFinite(e.n)&&e.n>=0);
-  const canonical=['Claude','Codex','GLM','Antigravity','Aside'],rank=k=>canonical.includes(k)?canonical.indexOf(k):canonical.length;
+  const canonical=['Claude','Codex','GLM','Antigravity','Aside','Devin'],rank=k=>canonical.includes(k)?canonical.indexOf(k):canonical.length;
   const series=[...new Set(reports.map(e=>e.kind))].sort((a,b)=>rank(a)-rank(b)||(a<b?-1:a>b?1:0));
   const bins=Array.from({length:n},()=>Object.fromEntries(series.map(k=>[k,0])));
   for(const e of reports)bins[Math.floor((e.t-start)/step)][e.kind]+=e.n;

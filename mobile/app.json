@@ -2,7 +2,7 @@
   "expo": {
     "name": "1top",
     "slug": "onetop",
-    "version": "4.10.3",
+    "version": "4.11.1",
     "scheme": "onetop",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "si.onetop.mobile",
-      "buildNumber": "22",
+      "buildNumber": "24",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "si.onetop.mobile",
-      "versionCode": 25,
+      "versionCode": 27,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#0d1218"

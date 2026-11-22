@@ -68,7 +68,7 @@ struct ClusterReadings {
     var trip: Trip?
 
     static let reconnectStates: Set<String> = ["login_required", "login_expired", "credential_store_unavailable", "access_denied"]
-    static let kinds = ["Claude", "Codex", "GLM", "Antigravity", "Aside"]
+    static let kinds = ["Claude", "Codex", "GLM", "Antigravity", "Aside", "Devin"]
     static let hour = 3600.0, stall = 15 * 60.0, contextFull = 0.9
     static func valid(_ n: Double?) -> Bool { n.map { $0.isFinite && $0 >= 0 } ?? false }
 

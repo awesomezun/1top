@@ -53,7 +53,7 @@
  const UNCONFIRMED=DELIVERY.delivery_unconfirmed[3];
  const TYPING={responding:'생각하는 중…',working:'작업 중…',writing:'작성 중…'};
  // Who answers: the AI's name and a small sparkle in its tool colour, as the phones show them.
- const AI_COLOR={Claude:'var(--claude)',Codex:'var(--codex)',GLM:'var(--glm)',Antigravity:'#619db9',Aside:'#a99bdb'};
+ const AI_COLOR={Claude:'var(--claude)',Codex:'var(--codex)',GLM:'var(--glm)',Antigravity:'#619db9',Aside:'#a99bdb',Devin:'#c97a96'};
  const aiName=kind=>kind==='Claude'?'Claude Code':kind==='Antigravity'?'Agy CLI':kind||'AI';
  const SPARKLE='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c.6 5.2 4.8 9.4 10 10-5.2.6-9.4 4.8-10 10-.6-5.2-4.8-9.4-10-10 5.2-.6 9.4-4.8 10-10Z"/></svg>';
  const PHOTO_PROMPT={ko:'첨부한 사진을 확인해 주세요.',en:'Please inspect the attached image(s).',zh:'请查看附上的图片。'};

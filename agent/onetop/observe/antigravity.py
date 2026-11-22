@@ -1,12 +1,26 @@
-"""Antigravity conversations: the presence lock a process holds, and its summary row."""
+"""Antigravity conversations: the presence lock a process holds, its summary row, and the tokens each model
+response reports in the conversation's own database. Titles, folders and numbers only."""
+import json
 import re
 import sqlite3
 import subprocess
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+from .readonly import connect
 
 LOCK = re.compile(r'^n(.+)/presence/([0-9a-f-]{36})\.lock$')
+CONVERSATION = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+# Agy CLI's data, and the ACP runtime's that apps (OpenBot) start with --app-data-dir=antigravity-acp.
+ROOTS = ('antigravity-cli', 'antigravity-acp')
+APP_ROOT = 'antigravity-acp'
+# A run the runtime lost keeps RUNNING in its summary; past this without a change it is over.
+STALE_RUN = 600
+# Steps read again on each change: a step can gain its usage after it was first stored.
+REREAD = 32
+MODELS = {}
 
 
 def stamp(value):
@@ -17,9 +31,166 @@ def stamp(value):
         return 0
 
 
+def roots(home):
+    return [Path(home)/'.gemini'/name for name in ROOTS if (Path(home)/'.gemini'/name/'conversations').is_dir()]
+
+
+def _varint(data, i):
+    value = shift = 0
+    while True:
+        byte = data[i]
+        i += 1
+        value |= (byte & 0x7f) << shift
+        shift += 7
+        if byte < 0x80:
+            return value, i
+        if shift > 63:
+            raise ValueError('varint')
+
+
+def fields(data):
+    """One protobuf message's own fields, {number: [value]}: varints as int, length-delimited as bytes."""
+    out, i, size = {}, 0, len(data or b'')
+    while i < size:
+        key, i = _varint(data, i)
+        number, wire = key >> 3, key & 7
+        if wire == 0:
+            value, i = _varint(data, i)
+        elif wire == 2:
+            length, i = _varint(data, i)
+            if i + length > size:
+                raise ValueError('truncated')
+            value, i = bytes(data[i:i+length]), i + length
+        elif wire in (1, 5):
+            i += 8 if wire == 1 else 4
+            continue
+        else:
+            raise ValueError('wire type')
+        out.setdefault(number, []).append(value)
+    return out
+
+
+def _int(values):
+    return values[0] if values and isinstance(values[0], int) else 0
+
+
+def _text(values):
+    try:
+        return values[0].decode()[:160] if values and isinstance(values[0], bytes) else ''
+    except UnicodeDecodeError:
+        return ''
+
+
+def _seconds(values):
+    if not values or not isinstance(values[0], bytes):
+        return 0
+    stamp_fields = fields(values[0])
+    return _int(stamp_fields.get(1)) + _int(stamp_fields.get(2)) / 1e9
+
+
+def response(metadata):
+    """A step's model usage (its metadata field 9): input, output, cache write and read, the model's number and the
+    response id. Input excludes the cache read. None for a step that called no model."""
+    top = fields(metadata)
+    if not top.get(9) or not isinstance(top[9][0], bytes):
+        return None
+    usage = fields(top[9][0])
+    rid = _text(usage.get(7)) or _text(usage.get(11))
+    tokens = [_int(usage.get(2)), _int(usage.get(5)), _int(usage.get(4)), _int(usage.get(3))]
+    if not rid or not sum(tokens):
+        return None
+    # Created, then started, generated and completed: the response is counted when it ended.
+    at = max(_seconds(top.get(n)) for n in (1, 6, 7, 8))
+    return {'id': rid, 'tokens': tokens, 'model': _int(usage.get(1)), 't': at}
+
+
+def model_names(db):
+    """The model's number → its id (gemini-4-neon), as the conversation's generation records name it."""
+    for (data,) in db.execute('SELECT data FROM gen_metadata WHERE length(data)<65536 ORDER BY idx DESC LIMIT 8'):
+        try:
+            top = fields(data)
+            generation = fields(top[1][0]) if top.get(1) and isinstance(top[1][0], bytes) else {}
+            number, name = _int(generation.get(3)), _text(generation.get(19))
+        except (ValueError, IndexError):
+            continue
+        if number and name:
+            MODELS[number] = name
+
+
+def usage(path, after=-1):
+    """Model responses in steps after index `after`, the last REREAD of those read again: (last index, [response]).
+    The caller counts each response id once."""
+    with closing(connect(path)) as db:
+        # A conversation stored anew numbers its steps from zero again.
+        top = db.execute('SELECT MAX(idx) FROM steps').fetchone()[0]
+        if (-1 if top is None else top) < after:
+            after = -1
+        rows = db.execute('SELECT idx,metadata FROM steps WHERE idx>? ORDER BY idx', (max(-1, after - REREAD),)).fetchall()
+        found = []
+        for idx, metadata in rows:
+            try:
+                item = response(metadata or b'')
+            except (ValueError, IndexError):
+                continue
+            if item:
+                found.append({**item, 'idx': idx})
+        if any(item['model'] not in MODELS for item in found):
+            try:
+                model_names(db)
+            except sqlite3.Error:
+                pass
+    for item in found:
+        item['model'] = MODELS.get(item['model'], '')
+    return (rows[-1][0] if rows else after), found
+
+
+def workspace(uris):
+    """The first local folder among a summary's workspace URIs."""
+    try:
+        values = json.loads(uris or '[]')
+    except ValueError:
+        return ''
+    for value in values if isinstance(values, list) else []:
+        parts = urlsplit(str(value))
+        path = unquote(parts.path).rstrip('/')
+        if parts.scheme == 'file' and path:
+            # OpenBot's own one-off checks run in a fresh temporary folder each: they are OpenBot's, not a project.
+            return 'OpenBot' if re.search(r'/openbot-profile-[^/]+$', path) else path
+    return ''
+
+
+def catalog(root, since=0):
+    """Summaries changed since `since`: {conversation id: {title, cwd, status, modified, parent}}."""
+    try:
+        with closing(connect(Path(root)/'conversation_summaries.db')) as db:
+            rows = db.execute('''SELECT conversation_id,title,workspace_uris,status,last_modified_time,parent_conversation_id
+                FROM conversation_summaries''').fetchall()
+    except (OSError, ValueError, sqlite3.Error):
+        return {}
+    out = {}
+    for cid, title, uris, status, modified, parent in rows:
+        at = stamp(modified)
+        if not CONVERSATION.fullmatch(str(cid)) or at < since:
+            continue
+        out[cid] = {'id': cid, 'title': ''.join(c for c in str(title or '') if c.isprintable()).strip()[:200],
+                    'cwd': workspace(uris), 'status': str(status or ''), 'modified': at, 'root': str(root),
+                    'parent': parent if CONVERSATION.fullmatch(str(parent or '')) else None}
+    return out
+
+
+def conversations(home, now, window=86400):
+    """Conversations of the ACP runtime that apps start, changed in the last day."""
+    root = Path(home)/'.gemini'/APP_ROOT
+    rows = sorted(catalog(root, now - window).values(), key=lambda r: -r['modified'])
+    for row in rows:
+        if row['status'] == 'CASCADE_RUN_STATUS_RUNNING' and now - row['modified'] > STALE_RUN:
+            row['status'] = 'CASCADE_RUN_STATUS_IDLE'
+    return rows[:200]
+
+
 def summaries(root, ids):
     try:
-        with closing(sqlite3.connect((Path(root)/'conversation_summaries.db').as_uri() + '?mode=ro', uri=True, timeout=1)) as db:
+        with closing(connect(Path(root)/'conversation_summaries.db')) as db:
             marks = ','.join('?' * len(ids))
             return {r[0]: {'title': r[1], 'status': r[2], 'modified': stamp(r[3])} for r in db.execute(
                 f'SELECT conversation_id,title,status,last_modified_time FROM conversation_summaries WHERE conversation_id IN ({marks})', list(ids))}

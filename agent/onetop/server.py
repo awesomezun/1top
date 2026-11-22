@@ -40,7 +40,7 @@ from .diagnostics import failure
 BASE = Path(__file__).resolve().parent
 HOME = Path.home()
 DATA = data_directory()
-KINDS = ['Claude', 'Codex', 'GLM', 'Antigravity', 'Aside']
+KINDS = ['Claude', 'Codex', 'GLM', 'Antigravity', 'Aside', 'Devin']
 ZERO = [0, 0, 0, 0]  # fresh input, cache read, cache write, output
 
 
@@ -479,6 +479,114 @@ class Collector:
                     total.update(model=thread['model'], last=thread['last'])
         return totals
 
+    def adapter_state(self, key):
+        """A conversation's running totals and the responses it has counted, kept across restarts (trackers)."""
+        cache = self.__dict__.setdefault('adapter_cache', {})
+        if key not in cache:
+            row = self.db.execute('SELECT data FROM trackers WHERE path=?', (key,)).fetchone()
+            cache[key] = json.loads(row[0]) if row else {'tokens': ZERO[:], 'model': '', 'last': 0, 'seen': {}, 'new': True}
+        return cache[key]
+
+    def count_response(self, key, kind, sid, item):
+        """One model response into its conversation's totals, and its tokens into events once: a repeated copy of
+        the response adds only what grew. True when anything changed."""
+        s = self.adapter_state(key)
+        old = s['seen'].get(item['id'], ZERO)
+        new = [max(a, b) for a, b in zip(item['tokens'], old)]
+        delta = [a - b for a, b in zip(new, old)]
+        if not sum(delta):
+            return False
+        s['seen'][item['id']] = new
+        s['tokens'] = [a + b for a, b in zip(s['tokens'], delta)]
+        if item['t'] >= s['last']:
+            s.update(model=item.get('session_model', item['model']) or s['model'], last=item['t'])
+        if item['t'] >= self.started:
+            self.db.execute('INSERT INTO events(t,sid,kind,fresh,cached,written,output,account,model,cwd) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                            (item['t'], sid, kind, *delta, None, item['model'] or None, item.get('cwd') or None))
+        return True
+
+    def save_adapter(self, key, kind, sid, item, now):
+        s = self.adapter_state(key)
+        if s.pop('new', False):
+            # Named in the catalog at once, so a period view names it after it has left the list.
+            from .sessions.devin import seat
+            cwd = item.get('cwd') or ''
+            name = seat(cwd, (getattr(self, 'observation', None) or {}).get('openbot_agents'))
+            session_archive.remember(self.db, [{'id': sid, 'kind': kind, 'title': item.get('title') or '', 'model': s['model'],
+                'project': name or Path(cwd).name, 'location': {'app': 'OpenBot' if name or cwd == 'OpenBot' else item.get('app', '')}}], now)
+        self.db.execute('INSERT OR REPLACE INTO trackers VALUES (?,?)', (key, json.dumps(s, separators=(',', ':'))))
+
+    def read_devin(self, now):
+        """T5: Devin's per-response reports become events once each; per-session totals for the listed rows."""
+        from .observe import devin
+        path = devin.database(HOME)
+        key = 'devin:' + str(path)
+        if path.is_file():
+            if not hasattr(self, 'devin_row'):
+                row = self.db.execute('SELECT data FROM trackers WHERE path=?', (key,)).fetchone()
+                self.devin_row = (json.loads(row[0]) if row else {}).get('row', 0)
+            try:
+                for _ in range(4):
+                    last, found = devin.usage(path, self.devin_row, now)
+                    touched = {}
+                    for item in found:
+                        sid, item = 'devin:' + item['session'], {**item, 'app': 'Devin'}
+                        if self.count_response(sid, 'Devin', sid, item):
+                            touched[sid] = item
+                    for sid, item in touched.items():
+                        self.save_adapter(sid, 'Devin', sid, item, now)
+                    if last == self.devin_row:
+                        break
+                    self.devin_row = last
+                    self.db.execute('INSERT OR REPLACE INTO trackers VALUES (?,?)', (key, json.dumps({'row': last})))
+            except (OSError, sqlite3.Error):
+                pass
+        return {s['conversation_id']: self.adapter_state(s['id']) for s in self.specs if s.get('usage_adapter') == 'devin'}
+
+    def read_antigravity(self, now, budget=24):
+        """Antigravity's per-response reports in each conversation's own database become events once each.
+        Files are read again only when they or their write-ahead log change, newest first, a few a collection."""
+        from .observe import antigravity
+        files = []
+        for root in antigravity.roots(HOME):
+            for path in (root/'conversations').glob('*.db'):
+                if not antigravity.CONVERSATION.fullmatch(path.stem):
+                    continue
+                try:
+                    st, wal = path.stat(), Path(str(path) + '-wal')
+                    mark = [st.st_mtime, st.st_size, *((wal.stat().st_mtime, wal.stat().st_size) if wal.exists() else (0, 0))]
+                except OSError:
+                    continue
+                files.append((max(mark[0], mark[2]), root, path, mark))
+        catalogs = {}
+        for _, root, path, mark in sorted(files, key=lambda f: -f[0]):
+            key = 'antigravity:' + path.stem
+            s = self.adapter_state(key)
+            if s.get('mark') == mark:
+                continue
+            if budget <= 0:
+                break
+            budget -= 1
+            if root not in catalogs:
+                catalogs[root] = antigravity.catalog(root)
+            info = catalogs[root].get(path.stem, {})
+            try:
+                last, found = antigravity.usage(path, s.get('step', -1))
+            except (OSError, ValueError, sqlite3.Error):
+                # Unreadable as it stands (another layout, or busy): tried again once it changes.
+                last, found = s.get('step', -1), []
+            for item in found:
+                self.count_response(key, 'Antigravity', path.stem, {**item, 'cwd': info.get('cwd') or ''})
+            # Only responses that the next read can meet again need their ids; older steps are not read again.
+            if found:
+                again = {i['id'] for i in found}
+                s['seen'] = {rid: v for rid, v in s['seen'].items() if rid in again}
+            s.update(mark=mark, step=last)
+            # Agy CLI runs in whichever terminal; its app is known only while it is listed.
+            self.save_adapter(key, 'Antigravity', path.stem, {'cwd': info.get('cwd') or '', 'title': info.get('title') or ''}, now)
+        return {s['conversation_id']: self.adapter_state('antigravity:' + s['conversation_id'])
+                for s in self.specs if s['kind'] == 'Antigravity' and not s.get('path')}
+
     def read_continuation(self, spec, roots, telemetry_sessions, now):
         from .claude_statusline import session_binding
         sources = [source for source in spec['continuation_sources'] if source.get('path')]
@@ -557,6 +665,8 @@ class Collector:
         except sqlite3.Error:telemetry = {'available':False}
         telemetry_sessions = session_index(telemetry)
         mausbot = self.read_openmausbot(now)
+        devin = self.read_devin(now)
+        antigravity = self.read_antigravity(now)
         for src in self.specs:
             from .sessions import public
             s=public(src)
@@ -575,6 +685,13 @@ class Collector:
             if s.get('usage_adapter') == 'openmausbot' and s.get('conversation_id') in mausbot:
                 ledger = mausbot[s['conversation_id']]
                 s.update(tokens=ledger['tokens'], model=ledger['model'] or s['model'], last_usage=ledger['last'])
+            # T5: Devin's sessions and Antigravity's conversations, counted from their own response reports. An
+            # Antigravity conversation not read yet (a few files a collection) is still loading, not zero.
+            ledger = (devin if s.get('usage_adapter') == 'devin' else antigravity if s['kind'] == 'Antigravity' else {}).get(s.get('conversation_id'))
+            if ledger and (s['kind'] == 'Devin' or 'mark' in ledger):
+                s.update(tokens=ledger['tokens'][:], model=ledger['model'] or s['model'], last_usage=ledger['last'])
+            elif ledger is not None:
+                s['loading'] = True
             if s['path']:
                 try:
                     if s.get('continuation_sources'):

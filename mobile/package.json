@@ -1,6 +1,6 @@
 {
   "name": "onetop-mobile",
-  "version": "4.10.3",
+  "version": "4.11.1",
   "main": "expo-router/entry",
   "dependencies": {
     "@react-native-community/netinfo": "12.0.1",

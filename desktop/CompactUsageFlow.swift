@@ -74,7 +74,7 @@ struct CompactUsageFlow: View {
         return (value / scale).formatted(.number.precision(.significantDigits(1...3))) + suffix
     }
     private func color(_ kind: String) -> Color {
-        ["Claude", "Codex", "GLM", "Antigravity", "Aside"].contains(kind)
+        ["Claude", "Codex", "GLM", "Antigravity", "Aside", "Devin"].contains(kind)
             ? AgentPalette.color(kind) : Color(red: 139/255, green: 147/255, blue: 159/255)
     }
     private func time(_ timestamp: Double?) -> String {

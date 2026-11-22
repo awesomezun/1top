@@ -24,7 +24,7 @@
  function settings(){try{return normalize(JSON.parse(root.localStorage?.getItem(KEY)||'null'));}catch{return normalize(null);}}
  function save(v){const s=normalize(v);try{root.localStorage?.setItem(KEY,JSON.stringify(s));}catch{}return s;}
  const kindName=k=>k==='Claude'?'Claude Code':k==='Antigravity'?'Agy CLI':k;
- const COLORS={Claude:'#bd8965',Codex:'#378d76',GLM:'#7c86bd',Antigravity:'#619db9',Aside:'#a99bdb'};
+ const COLORS={Claude:'#bd8965',Codex:'#378d76',GLM:'#7c86bd',Antigravity:'#619db9',Aside:'#a99bdb',Devin:'#c97a96'};
  const money=v=>!valid(v)?'—':v>=100?'$'+Math.round(v).toLocaleString('en-US'):'$'+v.toFixed(2);
  const times=r=>valid(r)?(r<99.95?r.toFixed(1):String(Math.round(r))):'—';
  const monthName=m=>{const [y,n]=String(m||'').split('-').map(Number);return y&&n?new Date(y,n-1,1).toLocaleDateString(locale(),{month:'short'}):'';};
