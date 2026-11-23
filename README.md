@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/awesomezun/1top/releases/tag/v4.12.2"><img alt="Release 4.12.2" src="https://img.shields.io/badge/release-4.12.2_preview-9dff3c?style=flat-square&labelColor=15181c"></a>
+  <a href="https://github.com/awesomezun/1top/releases/tag/v4.13.0"><img alt="Release 4.13.0" src="https://img.shields.io/badge/release-4.13.0_preview-9dff3c?style=flat-square&labelColor=15181c"></a>
   <img alt="macOS, Windows, iPhone and Android" src="https://img.shields.io/badge/macOS_·_Windows_·_iPhone_·_Android-6ccfa9?style=flat-square&labelColor=15181c">
   <img alt="Korean, English and Chinese" src="https://img.shields.io/badge/한국어_·_English_·_中文-9ab9ff?style=flat-square&labelColor=15181c">
   <a href="LICENSE"><img alt="AGPL-3.0 license" src="https://img.shields.io/badge/license-AGPL--3.0-e9b25c?style=flat-square&labelColor=15181c"></a>
@@ -38,15 +38,15 @@ See which AI is running on which computer, how fast it burns your weekly limit a
 
 | | Platform | Get it |
 | :---: | --- | --- |
-| <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13+ | [**1top-4.12.2-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v4.12.2/1top-4.12.2-macos-arm64.dmg) |
-| <img src="assets/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.12.2-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.12.2/1top-4.12.2-windows-x64-setup.exe) |
-| <img src="https://cdn.simpleicons.org/android/3DDC84" width="22" alt=""> | **Android** 7+ | [**1top-4.12.2-android.apk**](https://github.com/awesomezun/1top/releases/download/v4.12.2/1top-4.12.2-android.apk) · Google Play coming soon |
+| <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13+ | [**1top-4.13.0-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v4.13.0/1top-4.13.0-macos-arm64.dmg) |
+| <img src="assets/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.13.0-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.13.0/1top-4.13.0-windows-x64-setup.exe) |
+| <img src="https://cdn.simpleicons.org/android/3DDC84" width="22" alt=""> | **Android** 7+ | [**1top-4.13.0-android.apk**](https://github.com/awesomezun/1top/releases/download/v4.13.0/1top-4.13.0-android.apk) · Google Play coming soon |
 | <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **iPhone** | App Store coming soon |
 | 🌐 | **Browser** | [1top.si/app](https://1top.si/app?demo=1) — the demo needs no install |
 
-4.12.2 is a preview. The files, `SHA256SUMS` and `build-info.json` are in the [release](https://github.com/awesomezun/1top/releases/tag/v4.12.2). The Mac app is not notarized yet and the Windows installer is not code-signed yet, so macOS and Windows may ask you to confirm the first launch.
+4.13.0 is a preview. The files, `SHA256SUMS` and `build-info.json` are in the [release](https://github.com/awesomezun/1top/releases/tag/v4.13.0). The Mac app is not notarized yet and the Windows installer is not code-signed yet, so macOS and Windows may ask you to confirm the first launch.
 
-**New in 4.12.2:** Antigravity conversations are found in any folder, including the accounts OpenBot keeps in folders of their own, and each response names its own model. Phones and the web still get every report every three seconds, while the relay keeps only an hourly backup, and a computer that is alone on its account no longer asks for other computers' totals. After a computer goes offline with no one watching, the last screen can be up to an hour old.
+**New in 4.13.0:** a computer's report to your phone and the web is compressed to about a sixth, so a slow uplink keeps the three-second pace instead of dropping the connection. With 4.12.2: Antigravity conversations are found in any folder, including the accounts OpenBot keeps in folders of their own, each response names its own model, and the relay keeps only an hourly backup. After a computer goes offline with no one watching, the last screen can be up to an hour old.
 
 ## What you can see
 
