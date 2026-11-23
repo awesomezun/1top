@@ -1,4 +1,4 @@
-import json,tempfile,threading,time,unittest
+import gzip,json,tempfile,threading,time,unittest
 from pathlib import Path
 from unittest.mock import Mock
 from onetop.bridge import CloudLink,export_snapshot,save_private
@@ -120,6 +120,44 @@ class ReportSizeTests(unittest.TestCase):
         self.assertEqual(len(export_snapshot({'updated': 1, 'started': 0, 'events': [], 'sessions': rows[:250]})['sessions']), 250)
 
 
+class SlowUplinkTests(unittest.TestCase):
+    """A report has its own time to leave; waiting for a message, and a send that fails, keep the short one."""
+    def test_a_report_may_take_longer_than_the_wait_for_a_message(self):
+        from onetop import bridge
+        link, steps = bridge.CloudLink.__new__(bridge.CloudLink), []
+        class Socket:
+            def settimeout(self, seconds): steps.append(seconds)
+            def send(self, raw): steps.append(raw)
+        link.ws = Socket()
+        link.send_report({'sessions': [{'id': 'a', 'title': '\uac00'}]})
+        self.assertEqual(steps, [30, '{"type":"snapshot","data":{"sessions":[{"id":"a","title":"\uac00"}]}}', 3])
+        class Broken(Socket):
+            def send(self, raw): raise OSError('gone')
+        steps.clear(); link.ws = Broken()
+        with self.assertRaises(OSError): link.send_report({})
+        self.assertEqual(steps, [30, 3])
+
+    def test_a_report_is_gzipped_only_for_a_relay_that_says_it_takes_that(self):
+        from onetop import bridge
+        link, sent = bridge.CloudLink.__new__(bridge.CloudLink), []
+        class Socket:
+            def settimeout(self, seconds): pass
+            def send(self, raw): sent.append(('text', raw))
+            def send_binary(self, raw): sent.append(('binary', raw))
+        link.ws, rows = Socket(), [{'id': f's{i}', 'title': '\uac00', 'status': 'idle'} for i in range(200)]
+        link.send_report({'sessions': rows})
+        link.gzip = True; link.send_report({'sessions': rows})
+        (plain, text), (kind, packed) = sent
+        self.assertEqual((plain, kind), ('text', 'binary'))
+        self.assertEqual(gzip.decompress(packed).decode(), text)
+        self.assertLess(len(packed) * 5, len(text.encode()))
+
+    def test_the_relays_first_word_comes_before_the_first_report(self):
+        for policy, expected in (({'gzip': True}, 'binary'), ({}, 'text'), ({'gzip': 'yes'}, 'text'), (None, 'text')):
+            link, sent, asked = OtherComputerTests.run_link(self, [{'others': False, **policy}] * 2 if policy is not None else [])
+            self.assertEqual({kind for kind in link.kinds}, {expected} if policy is not None else set(), policy)
+
+
 class OtherComputerTests(unittest.TestCase):
     """A lone computer does not ask the relay for other computers' totals; with another one, or an older relay, it does."""
     def run_link(self, policies):
@@ -130,17 +168,19 @@ class OtherComputerTests(unittest.TestCase):
             link = bridge.CloudLink.__new__(bridge.CloudLink)
             link.collector = mock.Mock(state_for_cloud=lambda: {'ready': True}, speed_for_cloud=lambda state: [])
             link.controller = mock.Mock(decorate=lambda state: state)
-            link.stop = threading.Event(); link.status = ''; link.relay = 'https://relay.test'; link.ws = None
+            link.kinds = []; link.stop = threading.Event(); link.status = ''; link.relay = 'https://relay.test'; link.ws = None
             link.config = {'device_id': 'd', 'device_token': 't'}; link.workspace_usage = {'devices': [{'id': 'old'}], 'updated': 1}
             link.data_dir = Path(folder)
             frames = iter(policies)
             class Socket:
-                def send(self, raw): sent.append(json.loads(raw)['type'])
+                def send(self, raw): link.kinds.append('text'); sent.append(json.loads(raw)['type'])
+                def send_binary(self, raw): link.kinds.append('binary'); sent.append(json.loads(gzip.decompress(raw))['type'])
                 def recv(self):
                     link.workspace_checked = 0
                     try: return json.dumps({'type': 'report_policy', 'interval': 3, **next(frames)})
                     except StopIteration:
                         link.stop.set(); raise bridge.websocket.WebSocketTimeoutException()
+                def settimeout(self, seconds): pass
                 def close(self): pass
             def opened(*handlers):
                 def open_(request, timeout):
@@ -157,8 +197,8 @@ class OtherComputerTests(unittest.TestCase):
     def test_a_lone_computer_stops_asking_and_drops_old_totals(self):
         link, sent, asked = self.run_link([{'others': False}] * 5)
         self.assertGreaterEqual(sent.count('snapshot'), 5)
-        # One read before the relay's first word on this connection, none after it.
-        self.assertEqual(len(asked), 1)
+        # The relay's word comes before the first report, so it never asks.
+        self.assertEqual(asked, [])
         self.assertEqual(link.workspace_usage['devices'], [])
 
     def test_another_computer_is_asked_about_and_kept(self):
@@ -168,7 +208,7 @@ class OtherComputerTests(unittest.TestCase):
 
     def test_a_second_computer_joining_resumes_asking(self):
         link, sent, asked = self.run_link([{'others': False}, {'others': False}, {'others': True}, {'others': True}])
-        self.assertEqual(len(asked), 1 + 2)
+        self.assertEqual(len(asked), 2)
         self.assertEqual(link.workspace_usage['devices'], [{'id': 'b'}])
 
     def test_an_older_relay_changes_nothing(self):

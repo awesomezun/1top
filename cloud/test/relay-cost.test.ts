@@ -63,7 +63,7 @@ describe('relay cost',()=>{
 
  it('tells a lone computer that there is no other, and each computer when that changes',async()=>{
   const hub=e.HUBS.get(e.HUBS.idFromName('cost-others')),a=await open(hub,'device','a');
-  await until(()=>policies(a).length);expect(policies(a).at(-1)).toEqual({type:'report_policy',interval:300,others:false});
+  await until(()=>policies(a).length);expect(policies(a).at(-1)).toEqual({type:'report_policy',interval:300,others:false,gzip:true});
   const viewer=await open(hub,'browser','v');await until(()=>policies(a).at(-1).interval===3);expect(policies(a).at(-1).others).toBe(false);
   const b=await open(hub,'device','b');await until(()=>policies(a).at(-1).others===true&&policies(b).length);expect(policies(b).at(-1).others).toBe(true);
   // The same computer connecting again is not another computer.

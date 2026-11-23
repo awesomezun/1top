@@ -1,5 +1,5 @@
 """Outbound-only cloud connection. No inbound ports exposed to the network."""
-import json,math,os,platform,secrets,socket,threading,time,urllib.request,urllib.error,ssl,webbrowser,subprocess
+import gzip,json,math,os,platform,secrets,socket,threading,time,urllib.request,urllib.error,ssl,webbrowser,subprocess
 from urllib.parse import urlsplit
 from pathlib import Path
 import certifi
@@ -184,6 +184,9 @@ def export_snapshot(state):
         'periods':[period_metrics(w) for w in state.get('period_usage',{}).get('windows',[])]}
 
 
+# Seconds a report may take to leave this computer.
+SEND_S=30
+
 class CloudLink:
     def __init__(self,collector,controller,data_dir,relay=None):
         self.collector=collector;self.controller=controller;self.data_dir=data_dir
@@ -191,7 +194,7 @@ class CloudLink:
         self.stop=threading.Event();self.action_lock=threading.Lock();self.ws=None
         self.history_lock=threading.Lock();self.message_lock=threading.Lock();self.receipt_lock=threading.RLock()
         self.status='Not connected'
-        self.workspace_usage={'devices':[], 'updated':0};self.alone=False
+        self.workspace_usage={'devices':[], 'updated':0};self.alone=False;self.gzip=False
         try:self.config=json.loads(self.config_file.read_text())
         except (OSError,ValueError):self.config=None
         saved=(self.config or {}).get('relay',RELAY)
@@ -315,16 +318,20 @@ class CloudLink:
                 self.ws=websocket.create_connection(self.relay.replace('https://','wss://')+'/api/device/socket',
                     header={'Authorization':'Bearer '+self.config['device_token'],'User-Agent':'1top/'+__version__},timeout=3,
                     suppress_origin=True,redirect_limit=0,sslopt={'ca_certs':certifi.where()})
-                self.status='Connected';delay=1;last=0;interval=60;self.alone=False
+                self.status='Connected';delay=1;last=0;interval=60;self.alone=self.gzip=False
+                # The relay's first word (its report policy) comes before the first report, so that one is gzipped and
+                # asks for other computers' totals only when there are any. A silent relay is waited for 3 seconds.
+                heard=False
                 while not self.stop.is_set():
-                    if time.monotonic()-last>=interval:
+                    if heard and time.monotonic()-last>=interval:
                         state=self.collector.state_for_cloud()
                         if state.get('ready'):
                             payload=export_snapshot(self.controller.decorate(state))
                             payload['speed_periods']=self.collector.speed_for_cloud(state)
-                            self.ws.send(json.dumps({'type':'snapshot','data':payload},ensure_ascii=False))
+                            self.send_report(payload)
                             self.read_workspace_usage()
                         last=time.monotonic()
+                    heard=True
                     try:
                         raw=self.ws.recv()
                         if not raw:break
@@ -333,6 +340,7 @@ class CloudLink:
                         if message.get('type')=='report_policy':
                             interval=report_interval(message.get('interval'))
                             if interval==3:last=0
+                            self.gzip=message.get('gzip') is True
                             self.other_computers(message.get('others'))
                         if message.get('type')=='history_request':threading.Thread(target=self.read_history,args=(message,),daemon=True).start()
                         if message.get('type')=='mailbox_request':threading.Thread(target=self.read_mailbox,args=(message,),daemon=True).start()
@@ -352,6 +360,17 @@ class CloudLink:
                     except Exception:pass
             if self.stop.wait(delay):break
             delay=min(60,delay*2+secrets.randbelow(3))
+
+    def send_report(self,payload):
+        # A report of many sessions takes a slow uplink longer than the 3 seconds the loop waits for a message; cutting
+        # it off there only made this computer connect again and send it whole once more.
+        report=json.dumps({'type':'snapshot','data':payload},ensure_ascii=False,separators=(',',':'))
+        self.ws.settimeout(SEND_S)
+        try:
+            # About a sixth of the text. A relay from before 1.15.0 does not announce it and gets the text.
+            if getattr(self,'gzip',False):self.ws.send_binary(gzip.compress(report.encode(),6))
+            else:self.ws.send(report)
+        finally:self.ws.settimeout(3)
 
     def other_computers(self,value):
         # The relay says whether the account has another computer connected; an older relay says nothing, and this

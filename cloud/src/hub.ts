@@ -16,6 +16,21 @@ const json=(value:unknown,status=200)=>Response.json(value,{status});
 // seconds, and other computers count it as current for one interval and a minute. They read its totals from its
 // connection (at most TOTALS_MS old while it reports), so those do not need storage.
 const PERSIST_MS=3600000,CLEANUP_MS=3600000,IDLE_REPORT_S=300,TOTALS_MS=15000;
+// A message as text, and a device's gzip report before and after it is unpacked: a small frame cannot become a huge one.
+const MAX_TEXT=4194304,MAX_GZIP=1048576;
+async function unzip(data:ArrayBuffer):Promise<string>{
+  const stream=new DecompressionStream('gzip'),writer=stream.writable.getWriter(),reader=stream.readable.getReader();
+  // A broken frame is reported by the reader; the writer's copy of that error needs no second handler.
+  writer.write(new Uint8Array(data)).then(()=>writer.close()).catch(()=>{});
+  const parts:Uint8Array[]=[];let size=0;
+  for(;;){
+    const {value,done}=await reader.read();if(done)break;
+    size+=value.byteLength;if(size>MAX_TEXT){reader.cancel().catch(()=>{});throw Error('Message too large');}
+    parts.push(value);
+  }
+  const all=new Uint8Array(size);let offset=0;for(const part of parts){all.set(part,offset);offset+=part.length;}
+  return new TextDecoder('utf-8',{fatal:true,ignoreBOM:false}).decode(all);
+}
 const attached=(ws:WebSocket)=>ws.deserializeAttachment() as Attachment;
 const totalsOf=(d:DeviceSnapshot):SpeedPeriod[]=>d.speed_periods?.length?d.speed_periods:d.periods.map(p=>({
   key:p.key,seconds:SPEED_SECONDS[p.key],tokens:p.tokens.reduce((a,b)=>a+b,0),
@@ -81,11 +96,12 @@ export class AccountHub extends DurableObject<Env> {
     });
   }
   connected(role:Attachment['role']){return this.ctx.getWebSockets(role).filter(ws=>ws.readyState===1&&attached(ws).expires>Date.now());}
-  /** Each computer's pace, and whether the account has another computer connected whose totals it should ask for. */
+  /** Each computer's pace, whether the account has another computer connected whose totals it should ask for, and that
+   *  this relay takes its reports gzipped. */
   reportPolicy(){
     const interval=this.connected('browser').length?3:IDLE_REPORT_S,ids=new Set(this.connected('device').map(ws=>attached(ws).id));
     for(const ws of this.ctx.getWebSockets('device'))if(ws.readyState===1){
-      const id=attached(ws).id;ws.send(JSON.stringify({type:'report_policy',interval,others:[...ids].some(other=>other!==id)}));
+      const id=attached(ws).id;ws.send(JSON.stringify({type:'report_policy',interval,others:[...ids].some(other=>other!==id),gzip:true}));
     }
   }
   /** The last viewer leaving backs up what was on screen, unless storage is at most one idle interval behind it. */
@@ -196,7 +212,12 @@ export class AccountHub extends DurableObject<Env> {
     const a=ws.deserializeAttachment() as Attachment;
     if(ws.readyState!==1)return;
     if(a.expires<Date.now()){ws.close(4003,'Session expired');return;}
-    if(typeof message!=='string'||new TextEncoder().encode(message).byteLength>4194304){ws.close(1009,'Message too large');return;}
+    if(typeof message!=='string'){
+      if(a.role!=='device'||message.byteLength>MAX_GZIP){ws.close(1009,'Message too large');return;}
+      try{message=await unzip(message);}catch{ws.close(1008,'Invalid device message');return;}
+      if(ws.readyState!==1)return;
+    }
+    if(new TextEncoder().encode(message).byteLength>MAX_TEXT){ws.close(1009,'Message too large');return;}
     if(message==='ping'){ws.send('pong');return;}
     try {
       const value=JSON.parse(message);
