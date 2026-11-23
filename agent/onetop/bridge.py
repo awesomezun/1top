@@ -118,7 +118,10 @@ def export_reports(report):
 
 def export_snapshot(state):
     sessions=[]
-    for s in state.get('sessions',[]):
+    # The relay refuses a report of more than 250 sessions whole: those at rest are left out first.
+    rows=state.get('sessions',[])
+    if len(rows)>250:rows=sorted(rows,key=lambda s:s.get('status') not in ('working','waiting','subagents'))[:250]
+    for s in rows:
         loc=s.get('location') or {};term=s.get('orca_terminal') or {};r=s.get('resources') or {};u=s.get('usage') or {}
         capabilities=[]
         identified=bool(s.get('control_key'))
@@ -188,7 +191,7 @@ class CloudLink:
         self.stop=threading.Event();self.action_lock=threading.Lock();self.ws=None
         self.history_lock=threading.Lock();self.message_lock=threading.Lock();self.receipt_lock=threading.RLock()
         self.status='Not connected'
-        self.workspace_usage={'devices':[], 'updated':0}
+        self.workspace_usage={'devices':[], 'updated':0};self.alone=False
         try:self.config=json.loads(self.config_file.read_text())
         except (OSError,ValueError):self.config=None
         saved=(self.config or {}).get('relay',RELAY)
@@ -312,7 +315,7 @@ class CloudLink:
                 self.ws=websocket.create_connection(self.relay.replace('https://','wss://')+'/api/device/socket',
                     header={'Authorization':'Bearer '+self.config['device_token'],'User-Agent':'1top/'+__version__},timeout=3,
                     suppress_origin=True,redirect_limit=0,sslopt={'ca_certs':certifi.where()})
-                self.status='Connected';delay=1;last=0;interval=60
+                self.status='Connected';delay=1;last=0;interval=60;self.alone=False
                 while not self.stop.is_set():
                     if time.monotonic()-last>=interval:
                         state=self.collector.state_for_cloud()
@@ -330,6 +333,7 @@ class CloudLink:
                         if message.get('type')=='report_policy':
                             interval=report_interval(message.get('interval'))
                             if interval==3:last=0
+                            self.other_computers(message.get('others'))
                         if message.get('type')=='history_request':threading.Thread(target=self.read_history,args=(message,),daemon=True).start()
                         if message.get('type')=='mailbox_request':threading.Thread(target=self.read_mailbox,args=(message,),daemon=True).start()
                         if message.get('type')=='action':
@@ -349,9 +353,17 @@ class CloudLink:
             if self.stop.wait(delay):break
             delay=min(60,delay*2+secrets.randbelow(3))
 
+    def other_computers(self,value):
+        # The relay says whether the account has another computer connected; an older relay says nothing, and this
+        # computer keeps asking. Without one there is nothing to add, so earlier totals go too.
+        self.alone=value is False
+        if self.alone:self.workspace_usage={'devices':[], 'updated':time.time()}
+
     def read_workspace_usage(self):
         # The existing paired device credential reads numerical totals only.
         # Network failure never replaces the local collector's measurements.
+        if getattr(self,'alone',False):
+            return
         if time.time()-getattr(self,'workspace_checked',0)<15:
             return
         self.workspace_checked=time.time()

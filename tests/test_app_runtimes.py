@@ -1,6 +1,7 @@
 """Session contract T5: Devin sessions and Antigravity conversations, from their own databases, and their tokens.
 Synthetic databases in each tool's layout; no conversation text."""
 import json
+import os
 import sqlite3
 import tempfile
 import unittest
@@ -9,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from onetop import server
-from onetop.observe import antigravity, devin, readonly
+from onetop.observe import antigravity, devin, locations, openbot, readonly
 from onetop.sessions import resolve
 
 NOW = 1795330000.0
@@ -137,6 +138,25 @@ class Devin(unittest.TestCase):
         self.assertEqual(c.db.execute("SELECT project, app, title FROM session_catalog WHERE sid='devin:surf-verse'").fetchone(),
                          ('Atlas', 'OpenBot', 'Usage map check'))
 
+    def test_a_database_a_running_devin_holds_elsewhere_is_read_too(self):
+        with tempfile.TemporaryDirectory() as other:
+            other = Path(other).resolve()/'sessions.db'
+            with closing(devin_db(other)) as db:
+                db.execute("INSERT INTO sessions(id,working_directory,backend_type,model,agent_mode,created_at,last_activity_at,title) VALUES('far','/w','b','m','a',?,?,'Far')", (int(NOW), int(NOW)))
+                db.execute('INSERT INTO message_nodes(session_id,node_id,chat_message,created_at) VALUES(?,?,?,?)', ('far', 1, message('assistant', 'f1', (7, 0, 0, 3), 'stop'), NOW - 400))
+                db.commit()
+            places = locations.Locations(self.home.name)
+            with patch.object(locations, 'look', lambda pid: (['devin', 'acp'], [str(other)])):
+                places.update([{'pid': 9, 'birth': 1.0, 'name': 'devin'}], 1000)
+            self.assertEqual(len(places.devin_databases()), 2)
+            self.assertIn('far', [r['id'] for r in devin.read(self.home.name, NOW + 10, databases=places.devin_databases())])
+            c = collector()
+            c.observer = type('O', (), {'locations': places})()
+            c.specs = [{'id': f'devin:{s}', 'conversation_id': s, 'usage_adapter': 'devin', 'kind': 'Devin'} for s in ('far', 'surf-verse')]
+            with patch.object(server, 'HOME', Path(self.home.name)):
+                totals = c.read_devin(NOW)
+            self.assertEqual((totals['far']['tokens'], totals['surf-verse']['tokens']), ([7, 0, 0, 3], [5, 2100, 50, 50]))
+
     def test_a_summarising_call_counts_but_keeps_the_sessions_model(self):
         self.db.execute('INSERT INTO message_nodes(session_id,node_id,chat_message,created_at) VALUES(?,?,?,?)',
                         ('surf-verse', 9, message('assistant', 'm5', (100, 0, 0, 7000), 'stop', model='compactor'), NOW - 10))
@@ -225,6 +245,112 @@ class Antigravity(unittest.TestCase):
             self.assertEqual(totals[cid]['tokens'], [37655, 70723, 0, 2991])
             self.assertEqual(c.db.execute('SELECT COUNT(*), SUM(fresh+cached+written+output), MIN(kind), MIN(cwd) FROM events').fetchone(),
                              (3, 111369, 'Antigravity', '/work/mail'))
+
+    def test_every_folder_is_found_whoever_keeps_it(self):
+        """Antigravity's own, an OpenBot account's, and any folder a running process names or holds open."""
+        own, account, named, held = (f'{n}fa7e536-2ffb-42c6-8dad-73d116b82664' for n in 'abcd')
+        with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as elsewhere:
+            home, elsewhere = Path(home).resolve(), Path(elsewhere).resolve()
+            places = {own: home/'.gemini'/'antigravity-acp', named: elsewhere/'given'/'data', held: elsewhere/'open'/'antigravity-acp',
+                      account: openbot.database(home).parent/'provider-accounts'/'a1'/'antigravity-acp'}
+            for n, (cid, root) in enumerate(places.items()):
+                self.conversation(root, cid, [(0, step_metadata('r-' + cid, 100 + n, 10))])
+                self.summaries(root, [(cid, 'Task', json.dumps([f'file://{AGENT}']), 'CASCADE_RUN_STATUS_IDLE', '2026-11-22 06:06:20+00:00', '')])
+            live = {71: (['antigravity', 'acp', f'--gemini-dir={elsewhere}/given', '--app-data-dir', 'data'], []),
+                    72: (['antigravity', 'acp'], [str(places[held]/'conversation_summaries.db'), '/etc/hosts'])}
+            procs = [{'pid': p, 'birth': 1.0, 'name': 'antigravity'} for p in live] + [{'pid': 73, 'birth': 1.0, 'name': 'bash'}]
+            with patch.object(locations, 'look', lambda pid: live[pid]) as look:
+                found = locations.Locations(home)
+                self.assertEqual({r for r in found.antigravity_roots()}, {places[own], places[account]})
+                found.update(procs, 1000)
+            self.assertEqual(set(found.antigravity_roots()), set(places.values()))
+            self.assertEqual(set(found.app_roots()), set(places.values()))
+            self.assertEqual({r['id'] for r in antigravity.conversations(home, 1795327600, folders=found.app_roots())}, set(places))
+            # The process ends and 1top starts again: its folder is still known, and read once.
+            later = locations.Locations(home, json.loads(json.dumps(found.known())))
+            later.update([], 2000)
+            self.assertEqual(set(later.antigravity_roots()), set(places.values()))
+            c = collector()
+            c.observer = type('O', (), {'locations': later})()
+            c.specs = [{'id': cid, 'conversation_id': cid, 'kind': 'Antigravity', 'path': None} for cid in places]
+            with patch.object(server, 'HOME', home):
+                totals = c.read_antigravity(NOW)
+                c.read_antigravity(NOW + 5)
+            self.assertEqual({cid: totals[cid]['tokens'][0] for cid in places}, {cid: 100 + n for n, cid in enumerate(places)})
+            self.assertEqual(c.db.execute('SELECT COUNT(*) FROM events').fetchone(), (4,))
+
+    def test_a_conversation_copied_to_another_accounts_folder_is_counted_once(self):
+        cid = 'fa7e536a-2ffb-42c6-8dad-73d116b82664'
+        with tempfile.TemporaryDirectory() as home:
+            steps = [(0, step_metadata('a', 100, 10)), (1, step_metadata('b', 200, 20))]
+            accounts = openbot.database(home).parent/'provider-accounts'
+            older = self.conversation(accounts/'a1'/'antigravity-acp', cid, steps)
+            newer = self.conversation(accounts/'a2'/'antigravity-acp', cid, steps + [(2, step_metadata('c', 300, 30))])
+            os.utime(older, (NOW, NOW))
+            os.utime(newer, (NOW + 100, NOW + 100))
+            c = collector()
+            c.specs = [{'id': cid, 'conversation_id': cid, 'kind': 'Antigravity', 'path': None}]
+            with patch.object(server, 'HOME', Path(home)):
+                for n in range(3):
+                    totals = c.read_antigravity(NOW + n)
+            self.assertEqual(totals[cid]['tokens'], [600, 0, 0, 60])
+            self.assertEqual(c.db.execute('SELECT COUNT(*) FROM events').fetchone(), (3,))
+
+    def test_each_response_names_its_own_model(self):
+        """Antigravity gives several models one number; a response's own generation record tells them apart."""
+        cid = 'fa7e536a-2ffb-42c6-8dad-73d116b82664'
+        with tempfile.TemporaryDirectory() as home:
+            path = self.conversation(Path(home)/'.gemini'/'antigravity-acp', cid,
+                                     [(i, step_metadata(rid, 100, 10, model=1417)) for i, rid in enumerate(('a', 'b', 'c'))], names=())
+            with closing(sqlite3.connect(path)) as db:
+                for i, (rid, name) in enumerate((('a', 'gemini-4-argon-trial'), ('b', 'gemini-4-argon-c'))):
+                    db.execute('INSERT INTO gen_metadata VALUES(?,?,0)', (i, pb((1, pb((3, 1417), (4, pb((1, 1417), (7, rid))), (19, name))))))
+                db.commit()
+            antigravity.MODELS.clear()
+            _, found = antigravity.usage(path)
+            # The one without a record yet has the number's newest name.
+            self.assertEqual([f['model'] for f in found], ['gemini-4-argon-trial', 'gemini-4-argon-c', 'gemini-4-argon-c'])
+
+    def test_a_long_run_that_stores_only_in_its_database_is_still_working(self):
+        cid = 'fa7e536a-2ffb-42c6-8dad-73d116b82664'
+        with tempfile.TemporaryDirectory() as home:
+            root, at = Path(home)/'.gemini'/'antigravity-acp', 1795327580
+            path = self.conversation(root, cid, [(0, step_metadata('a', 1, 1))])
+            self.summaries(root, [(cid, 'Long', json.dumps([f'file://{AGENT}']), 'CASCADE_RUN_STATUS_RUNNING', '2026-11-22 06:06:20+00:00', '')])
+            os.utime(path, (at + 1500, at + 1500))
+            self.assertEqual(antigravity.conversations(home, at + 1600)[0]['status'], 'CASCADE_RUN_STATUS_RUNNING')
+            self.assertEqual(antigravity.conversations(home, at + 2200)[0]['status'], 'CASCADE_RUN_STATUS_IDLE')
+
+    def test_a_parent_stays_listed_with_the_work_it_started(self):
+        """A parent whose last word was days ago keeps its children in its seat, whichever folder each is in."""
+        top, parent, child, old = (f'{n}fa7e536-2ffb-42c6-8dad-73d116b82664' for n in 'abcd')
+        seat = json.dumps([f'file://{AGENT}'])
+        with tempfile.TemporaryDirectory() as home:
+            own, account = Path(home)/'.gemini'/'antigravity-acp', openbot.database(home).parent/'provider-accounts'/'a1'/'antigravity-acp'
+            for root in (own, account):
+                root.mkdir(parents=True)
+            self.summaries(own, [(top, 'Top', seat, 'CASCADE_RUN_STATUS_IDLE', '2026-11-18 06:00:00+00:00', ''),
+                                 (parent, 'Lead', seat, 'CASCADE_RUN_STATUS_IDLE', '2026-11-19 06:00:00+00:00', top),
+                                 (old, 'Over', seat, 'CASCADE_RUN_STATUS_IDLE', '2026-11-19 06:00:00+00:00', '')])
+            self.summaries(account, [(child, '', seat, 'CASCADE_RUN_STATUS_IDLE', '2026-11-22 06:06:20+00:00', parent)])
+            found = antigravity.conversations(home, 1795327600)
+            self.assertEqual([r['id'] for r in found], [child, parent, top])
+            rows = resolve({'captured_at': 1795327600, 'processes': [], 'claude_registry': {}, 'claude_transcripts': {}, 'codex_logs': [],
+                            'orca_terminals': [], 'tmux_panes': {}, 'aside_sessions': [], 'antigravity_conversations': found,
+                            'openbot_agents': [{'workspace': AGENT, 'name': 'Scribe'}], 'openbot_running': True})
+            self.assertEqual({r['id']: (r['location']['app'], r['root_session_id']) for r in rows}, {i: ('OpenBot', top) for i in (top, parent, child)})
+
+    def test_what_a_process_names_and_holds(self):
+        home = Path('/h')
+        self.assertEqual(locations.started(['antigravity', 'acp', '--gemini-dir=/a b/x', '--app-data-dir=antigravity-acp'], home), (Path('/a b/x/antigravity-acp'), True))
+        self.assertEqual(locations.started(['antigravity', 'acp', '--app-data-dir', 'other'], home), (Path('/h/.gemini/other'), True))
+        self.assertEqual(locations.started(['agy', '--dangerously-skip-permissions'], home), (None, False))
+        self.assertEqual(locations.holder('/x/presence/1.lock'), Path('/x'))
+        self.assertEqual(locations.holder('/x/conversations/1.db'), Path('/x'))
+        self.assertIsNone(locations.holder('/x/conversations/1.db-wal'))
+        self.assertEqual([locations.tool(n) for n in ('antigravity', 'agy', 'agy.exe', 'agy_acp_server.par', 'devin', 'node')],
+                         ['antigravity', 'antigravity', 'antigravity', 'antigravity', 'devin', None])
+        self.assertEqual(locations.look(2**31 - 7), ([], []))
 
     def test_a_wal_database_without_its_log_is_read_as_it_stands(self):
         with tempfile.TemporaryDirectory() as home:

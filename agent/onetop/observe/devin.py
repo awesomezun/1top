@@ -51,16 +51,24 @@ def state(role, finish, at, now):
     return 'busy' if 0 <= now - at < OPEN_TURN else 'idle'
 
 
-def read(home, now, window=86400):
-    """Sessions with activity in the last day, newest first."""
-    path = database(home)
+def read(home, now, window=86400, databases=None):
+    """Sessions with activity in the last day, newest first, in every database Devin keeps."""
+    found = {}
+    for path in databases if databases is not None else [database(home)]:
+        for row in sessions(path, now, window):
+            if row['id'] not in found or row['updated'] > found[row['id']]['updated']:
+                found[row['id']] = row
+    return sorted(found.values(), key=lambda r: -r['updated'])[:200]
+
+
+def sessions(path, now, window):
     if not path.is_file():
         return []
     try:
         with closing(connect(path)) as db:
             rows = db.execute('''SELECT id, working_directory, model, title, created_at, last_activity_at FROM sessions
                 WHERE hidden=0 AND last_activity_at>? ORDER BY last_activity_at DESC LIMIT 200''', (now - window,)).fetchall()
-            sessions = []
+            found = []
             for sid, cwd, model, title, created, updated in rows:
                 if not ID.fullmatch(str(sid)):
                     continue
@@ -68,11 +76,11 @@ def read(home, now, window=86400):
                 last = db.execute('''SELECT json_extract(chat_message,'$.role') AS role, json_extract(chat_message,'$.metadata.finish_reason'),
                     created_at FROM message_nodes WHERE session_id=? AND role IS NOT 'system' ORDER BY row_id DESC LIMIT 1''', (sid,)).fetchone()
                 role, finish, at = last or ('', '', stamp(updated))
-                sessions.append({'id': sid, 'cwd': str(cwd or ''), 'model': str(model or '')[:160],
-                                 'title': ''.join(c for c in str(title or '') if c.isprintable()).strip()[:200],
-                                 'created': stamp(created), 'updated': stamp(updated),
-                                 'status': state(role, finish, stamp(at), now), 'status_at': stamp(at)})
-            return sessions
+                found.append({'id': sid, 'cwd': str(cwd or ''), 'model': str(model or '')[:160],
+                              'title': ''.join(c for c in str(title or '') if c.isprintable()).strip()[:200],
+                              'created': stamp(created), 'updated': stamp(updated),
+                              'status': state(role, finish, stamp(at), now), 'status_at': stamp(at)})
+            return found
     except (OSError, ValueError, sqlite3.Error):
         return []
 

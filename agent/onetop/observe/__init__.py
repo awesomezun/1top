@@ -2,13 +2,15 @@
 import platform
 import time
 from pathlib import Path
-from . import processes, claude_registry, transcripts, orca, codex, aside, tmux, antigravity, openbot, openmausbot, devin
+from . import processes, claude_registry, transcripts, orca, codex, aside, tmux, antigravity, openbot, openmausbot, devin, locations
 from ..discovery import claude_transcript
 
 
 class Observer:
-    def __init__(self, home=None):
+    def __init__(self, home=None, known=None):
         self.home = home or Path.home()
+        # Where the apps' tools keep their data, and the folders known from earlier runs.
+        self.locations = locations.Locations(self.home, known)
         self.processes = processes.Reader()
         self.transcripts = transcripts.Reader()
         self.paths = {}
@@ -49,8 +51,9 @@ class Observer:
         # T5: Devin sessions and the ACP runtime's Antigravity conversations, from their own databases.
         found = {k: record.get(k) for k in ('devin_sessions', 'antigravity_conversations')}
         if None in found.values() or now - self.apps_at >= 5:
-            found, self.apps_at = {'devin_sessions': devin.read(self.home, now),
-                                   'antigravity_conversations': antigravity.conversations(self.home, now)}, now
+            places = self.locations
+            found, self.apps_at = {'devin_sessions': devin.read(self.home, now, databases=places.devin_databases()),
+                                   'antigravity_conversations': antigravity.conversations(self.home, now, folders=places.app_roots())}, now
         result = {**record, **found, 'captured_at': now, 'orca_agents': seats,
                   'antigravity_sessions': antigravity.refresh(record.get('antigravity_sessions', [])), 'claude_registry':regs, 'claude_transcripts':observed,
                   'codex_logs':logs, 'aside_sessions':aside.read(self.home, now, running), 'openmausbot_threads': bots}
@@ -60,6 +63,7 @@ class Observer:
     def read(self, run):
         procs = self.processes.read()
         self.run, self.agents_at = run, 0
+        self.locations.update(procs, time.time())
         record = {'schema':'onetop.session-capture.v1', 'captured_at':time.time(), 'platform':platform.system(),
             'processes':procs, 'orca_terminals':orca.read(run), 'antigravity_sessions':antigravity.read(procs, run),
             'openbot_agents':openbot.read(self.home, procs), 'tmux_panes':tmux.read(run),

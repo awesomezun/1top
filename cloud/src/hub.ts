@@ -1,18 +1,25 @@
 import {historyQuery,historyData} from './history';
 import { DurableObject } from 'cloudflare:workers';
 import {reconcileSubscription,checkout} from './billing';
-import { snapshot, action, accountAlias, text, mailboxRows, SPEED_SECONDS, type DeviceSnapshot } from './protocol';
+import { snapshot, action, accountAlias, text, mailboxRows, SPEED_SECONDS, type DeviceSnapshot, type SpeedPeriod } from './protocol';
 export interface Env { DB:D1Database; HUBS:DurableObjectNamespace<AccountHub>; FIREBASE_PROJECT_ID:string; WEB_ORIGINS:string; WEB_URL:string; PAIRING_ENABLED?:string; BILLING_ENABLED?:string; STRIPE_SECRET_KEY?:string; STRIPE_WEBHOOK_SECRET?:string; STRIPE_PRICE_ID?:string; PLAN_MAX_DEVICES?:string; DEPLOYMENT_MODE?:string; OWNER_USER_ID?:string; }
-type Attachment = {role:'device'|'browser';id:string;expires:number;name?:string;platform?:string;allow_control?:boolean;
+type Totals = {received:number;periods:SpeedPeriod[]};
+type Attachment = {role:'device'|'browser';id:string;expires:number;name?:string;platform?:string;allow_control?:boolean;totals?:Totals;
   history_at?:number;history?:{request_id:string;device_id:string;expires:number};mailbox_at?:number;mailbox?:{request_id:string;device_id:string;session_id:string;expires:number}};
 type StoredDevice = {id:string;name:string;platform:string;received:number;snapshot:DeviceSnapshot};
 type Receipt = {request:Omit<ReturnType<typeof action>,'prompt'|'attachments'>|ReturnType<typeof accountAlias>;fingerprint?:string;created:number;status:string;message?:string};
 const json=(value:unknown,status=200)=>Response.json(value,{status});
-// Cost (Workers Paid): a computer that is being watched reports every 3 seconds; viewers get every report, storage one
-// at most every PERSIST_MS, and the hub wakes for cleanup hourly, or at a session's expiry when that comes first.
-// With no one watching, a computer reports every IDLE_REPORT_S seconds, and other computers count it as current for one
-// interval and a minute.
-const PERSIST_MS=30000,CLEANUP_MS=3600000,IDLE_REPORT_S=300;
+// Cost (Workers Paid): a computer that is being watched reports every 3 seconds and viewers get every report. Storage
+// only backs up the last one, for a first screen and for a computer that went away: at most every PERSIST_MS, when the
+// last viewer leaves, and when a computer disconnects while its report is still in memory. The hub wakes for cleanup
+// hourly, or at a session's expiry when that comes first. With no one watching, a computer reports every IDLE_REPORT_S
+// seconds, and other computers count it as current for one interval and a minute. They read its totals from its
+// connection (at most TOTALS_MS old while it reports), so those do not need storage.
+const PERSIST_MS=3600000,CLEANUP_MS=3600000,IDLE_REPORT_S=300,TOTALS_MS=15000;
+const attached=(ws:WebSocket)=>ws.deserializeAttachment() as Attachment;
+const totalsOf=(d:DeviceSnapshot):SpeedPeriod[]=>d.speed_periods?.length?d.speed_periods:d.periods.map(p=>({
+  key:p.key,seconds:SPEED_SECONDS[p.key],tokens:p.tokens.reduce((a,b)=>a+b,0),
+  known:d.sessions.some(s=>s.tokens!==null)||p.tokens.some(n=>n>0),partial:p.partial}));
 export class AccountHub extends DurableObject<Env> {
   // Each computer's latest report and when it last reached storage. Both go with the object when it hibernates; storage
   // is then at most PERSIST_MS behind, and the next report fills them again.
@@ -73,21 +80,35 @@ export class AccountHub extends DurableObject<Env> {
       await storage.delete(['snapshot:'+id,...Array.from({length:old?.parts||0},(_,i)=>'snapshot-part:'+id+':'+i)]);
     });
   }
+  connected(role:Attachment['role']){return this.ctx.getWebSockets(role).filter(ws=>ws.readyState===1&&attached(ws).expires>Date.now());}
+  /** Each computer's pace, and whether the account has another computer connected whose totals it should ask for. */
   reportPolicy(){
-    const watching=this.ctx.getWebSockets('browser').some(ws=>ws.readyState===1&&(ws.deserializeAttachment() as Attachment).expires>Date.now());
-    for(const ws of this.ctx.getWebSockets('device'))if(ws.readyState===1)ws.send(JSON.stringify({type:'report_policy',interval:watching?3:IDLE_REPORT_S}));
+    const interval=this.connected('browser').length?3:IDLE_REPORT_S,ids=new Set(this.connected('device').map(ws=>attached(ws).id));
+    for(const ws of this.ctx.getWebSockets('device'))if(ws.readyState===1){
+      const id=attached(ws).id;ws.send(JSON.stringify({type:'report_policy',interval,others:[...ids].some(other=>other!==id)}));
+    }
+  }
+  /** The last viewer leaving backs up what was on screen, unless storage is at most one idle interval behind it. */
+  async viewersGone(){
+    if(this.connected('browser').length)return;
+    for(const device of [...this.latest.values()])
+      if(this.latest.has(device.id)&&device.received-(this.persisted.get(device.id)||0)>=IDLE_REPORT_S*1000)await this.keepDevice(device,true);
   }
   async fetch(request:Request):Promise<Response> {
     const u=new URL(request.url),path=u.pathname;
     if(path==='/usage'&&request.method==='GET'){
-      const records=await this.devices();
-      const devices=records.filter(d=>d.id!==u.searchParams.get('exclude')).map(d=>{
-        const current=this.ctx.getWebSockets('device:'+d.id).some(ws=>ws.readyState===1&&(ws.deserializeAttachment() as Attachment).expires>Date.now());
-        const periods=d.snapshot.speed_periods?.length?d.snapshot.speed_periods:d.snapshot.periods.map(p=>({
-          key:p.key,seconds:SPEED_SECONDS[p.key],tokens:p.tokens.reduce((a,b)=>a+b,0),
-          known:d.snapshot.sessions.some(s=>s.tokens!==null)||p.tokens.some(n=>n>0),partial:p.partial}));
-        return {id:d.id,received:d.received,online:current&&Date.now()-d.received<(IDLE_REPORT_S+60)*1000,periods};
-      });
+      const exclude=u.searchParams.get('exclude'),totals=new Map<string,Totals>(),current=new Set<string>();
+      for(const ws of this.connected('device')){
+        const a=attached(ws),live=this.latest.get(a.id);current.add(a.id);
+        if(live)totals.set(a.id,{received:live.received,periods:totalsOf(live.snapshot)});else if(a.totals)totals.set(a.id,a.totals);
+      }
+      // A computer that went away, or connected before its connection carried totals, is read from its backup.
+      for(const key of (await this.ctx.storage.list({prefix:'snapshot:'})).keys()){
+        const id=key.slice(9);if(id===exclude||totals.has(id))continue;
+        const backup=await this.readDevice(id);if(backup)totals.set(id,{received:backup.received,periods:totalsOf(backup.snapshot)});
+      }
+      const devices=[...totals].filter(([id])=>id!==exclude).map(([id,t])=>(
+        {id,received:t.received,online:current.has(id)&&Date.now()-t.received<(IDLE_REPORT_S+60)*1000,periods:t.periods}));
       return json({devices});
     }
     if(path==='/billing/checkout'&&request.method==='POST'){
@@ -210,6 +231,7 @@ export class AccountHub extends DurableObject<Env> {
         if(old&&Date.now()-old.received<2000)return; // bound each device's update rate
         const device:StoredDevice={id:a.id,name:a.name||'Computer',platform:a.platform||'',received:Date.now(),snapshot:clean};
         await this.keepDevice(device);this.broadcast({type:'snapshot',device:{...device,online:true}});
+        if(!a.totals||device.received-a.totals.received>=TOTALS_MS){a.totals={received:device.received,periods:totalsOf(clean)};ws.serializeAttachment(a);}
       } else if(value.type==='history') {
         for(const browser of this.ctx.getWebSockets('browser')){
           const attached=browser.deserializeAttachment() as Attachment,pending=attached.history;
@@ -236,13 +258,14 @@ export class AccountHub extends DurableObject<Env> {
     }catch{ws.close(1008,'Invalid device message');}
   }
   async webSocketClose(ws:WebSocket){
-    this.reportPolicy();const a=ws.deserializeAttachment() as Attachment;
-    if(a.role!=='device'||this.isOnline(a.id))return;
+    this.reportPolicy();const a=attached(ws);
+    if(a.role==='browser')return this.viewersGone();
+    if(this.isOnline(a.id))return;
     // A computer that goes away leaves its last report in storage.
     const last=this.latest.get(a.id);if(last&&(this.persisted.get(a.id)||0)<last.received)await this.keepDevice(last,true);
     this.broadcast({type:'offline',device_id:a.id});
   }
-  async webSocketError(ws:WebSocket){ws.close(1011,'Connection error');}
+  async webSocketError(ws:WebSocket){ws.close(1011,'Connection error');if(attached(ws).role==='browser')await this.viewersGone();}
   async alarm(){
     const now=Date.now();for(const ws of this.ctx.getWebSockets()){const a=ws.deserializeAttachment() as Attachment;if(a.expires<now)ws.close(4003,'Session expired');}
     const snapshots=await this.ctx.storage.list<StoredDevice>({prefix:'snapshot:'});

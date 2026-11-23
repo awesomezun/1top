@@ -1,4 +1,4 @@
-import json,tempfile,time,unittest
+import json,tempfile,threading,time,unittest
 from pathlib import Path
 from unittest.mock import Mock
 from onetop.bridge import CloudLink,export_snapshot,save_private
@@ -110,3 +110,69 @@ class ReportIntervalTests(unittest.TestCase):
         self.assertEqual(report_interval(86400), 600)
         for value in (None, '300', True, float('nan')):
             self.assertEqual(report_interval(value), 60)
+
+
+class ReportSizeTests(unittest.TestCase):
+    def test_a_report_never_carries_more_sessions_than_the_relay_takes(self):
+        rows = [{'id': f's{i}', 'kind': 'Claude', 'status': 'working' if i in (5, 290) else 'idle'} for i in range(300)]
+        out = [s['id'] for s in export_snapshot({'updated': 1, 'started': 0, 'events': [], 'sessions': rows})['sessions']]
+        self.assertEqual((len(out), out[:3]), (250, ['s5', 's290', 's0']))
+        self.assertEqual(len(export_snapshot({'updated': 1, 'started': 0, 'events': [], 'sessions': rows[:250]})['sessions']), 250)
+
+
+class OtherComputerTests(unittest.TestCase):
+    """A lone computer does not ask the relay for other computers' totals; with another one, or an older relay, it does."""
+    def run_link(self, policies):
+        from unittest import mock
+        from onetop import bridge
+        sent, asked = [], []
+        with tempfile.TemporaryDirectory() as folder:
+            link = bridge.CloudLink.__new__(bridge.CloudLink)
+            link.collector = mock.Mock(state_for_cloud=lambda: {'ready': True}, speed_for_cloud=lambda state: [])
+            link.controller = mock.Mock(decorate=lambda state: state)
+            link.stop = threading.Event(); link.status = ''; link.relay = 'https://relay.test'; link.ws = None
+            link.config = {'device_id': 'd', 'device_token': 't'}; link.workspace_usage = {'devices': [{'id': 'old'}], 'updated': 1}
+            link.data_dir = Path(folder)
+            frames = iter(policies)
+            class Socket:
+                def send(self, raw): sent.append(json.loads(raw)['type'])
+                def recv(self):
+                    link.workspace_checked = 0
+                    try: return json.dumps({'type': 'report_policy', 'interval': 3, **next(frames)})
+                    except StopIteration:
+                        link.stop.set(); raise bridge.websocket.WebSocketTimeoutException()
+                def close(self): pass
+            def opened(*handlers):
+                def open_(request, timeout):
+                    asked.append(request.full_url)
+                    return mock.MagicMock(__enter__=lambda s: mock.Mock(read=lambda n: b'{"devices":[{"id":"b"}]}'))
+                return mock.Mock(open=open_)
+            with mock.patch.object(bridge.websocket, 'create_connection', lambda *a, **k: Socket()), \
+                 mock.patch.object(bridge, 'export_snapshot', lambda state: {}), \
+                 mock.patch.object(bridge.urllib.request, 'build_opener', opened), \
+                 mock.patch.object(bridge.urllib.request, 'HTTPSHandler', lambda **k: None):
+                link.run()
+        return link, sent, asked
+
+    def test_a_lone_computer_stops_asking_and_drops_old_totals(self):
+        link, sent, asked = self.run_link([{'others': False}] * 5)
+        self.assertGreaterEqual(sent.count('snapshot'), 5)
+        # One read before the relay's first word on this connection, none after it.
+        self.assertEqual(len(asked), 1)
+        self.assertEqual(link.workspace_usage['devices'], [])
+
+    def test_another_computer_is_asked_about_and_kept(self):
+        link, sent, asked = self.run_link([{'others': True}] * 4)
+        self.assertEqual(len(asked), sent.count('snapshot'))
+        self.assertEqual(link.workspace_usage['devices'], [{'id': 'b'}])
+
+    def test_a_second_computer_joining_resumes_asking(self):
+        link, sent, asked = self.run_link([{'others': False}, {'others': False}, {'others': True}, {'others': True}])
+        self.assertEqual(len(asked), 1 + 2)
+        self.assertEqual(link.workspace_usage['devices'], [{'id': 'b'}])
+
+    def test_an_older_relay_changes_nothing(self):
+        link, sent, asked = self.run_link([{}] * 4)
+        self.assertEqual(len(asked), sent.count('snapshot'))
+        for value in (None, 0, 'false', {}):
+            link.alone = True; link.other_computers(value); self.assertFalse(link.alone)

@@ -328,8 +328,9 @@ class Collector:
         from .observe import Observer
         from .sessions import resolve
         if not hasattr(self, 'observer'):
-            self.observer = Observer(HOME)
+            self.observer = Observer(HOME, self.known_locations())
         record = self.observer.read(run)
+        self.remember_locations()
         specs = resolve(record)
         self.observation = record
         self.specs = specs
@@ -516,18 +517,40 @@ class Collector:
                 'project': name or Path(cwd).name, 'location': {'app': 'OpenBot' if name or cwd == 'OpenBot' else item.get('app', '')}}], now)
         self.db.execute('INSERT OR REPLACE INTO trackers VALUES (?,?)', (key, json.dumps(s, separators=(',', ':'))))
 
+    def known_locations(self):
+        """Data folders seen in earlier runs (observe/locations.py): an account's folder stays known after its process."""
+        try:
+            row = self.db.execute("SELECT data FROM trackers WHERE path='locations'").fetchone()
+            self.locations_saved = json.loads(row[0]) if row else {}
+        except (AttributeError, TypeError, ValueError, sqlite3.Error):
+            self.locations_saved = {}
+        return self.locations_saved
+
+    def remember_locations(self):
+        try:
+            known = json.loads(json.dumps(self.observer.locations.known()))
+            if known == getattr(self, 'locations_saved', None) or not self.db:
+                return
+            self.db.execute("INSERT OR REPLACE INTO trackers VALUES ('locations',?)", (json.dumps(known),))
+            self.locations_saved = known
+        except (AttributeError, TypeError, sqlite3.Error):
+            pass
+
     def read_devin(self, now):
         """T5: Devin's per-response reports become events once each; per-session totals for the listed rows."""
         from .observe import devin
-        path = devin.database(HOME)
-        key = 'devin:' + str(path)
-        if path.is_file():
-            if not hasattr(self, 'devin_row'):
+        places = getattr(getattr(self, 'observer', None), 'locations', None)
+        rows = self.__dict__.setdefault('devin_row', {})
+        for path in places.devin_databases() if places else [devin.database(HOME)]:
+            key = 'devin:' + str(path)
+            if not path.is_file():
+                continue
+            if key not in rows:
                 row = self.db.execute('SELECT data FROM trackers WHERE path=?', (key,)).fetchone()
-                self.devin_row = (json.loads(row[0]) if row else {}).get('row', 0)
+                rows[key] = (json.loads(row[0]) if row else {}).get('row', 0)
             try:
                 for _ in range(4):
-                    last, found = devin.usage(path, self.devin_row, now)
+                    last, found = devin.usage(path, rows[key], now)
                     touched = {}
                     for item in found:
                         sid, item = 'devin:' + item['session'], {**item, 'app': 'Devin'}
@@ -535,9 +558,9 @@ class Collector:
                             touched[sid] = item
                     for sid, item in touched.items():
                         self.save_adapter(sid, 'Devin', sid, item, now)
-                    if last == self.devin_row:
+                    if last == rows[key]:
                         break
-                    self.devin_row = last
+                    rows[key] = last
                     self.db.execute('INSERT OR REPLACE INTO trackers VALUES (?,?)', (key, json.dumps({'row': last})))
             except (OSError, sqlite3.Error):
                 pass
@@ -547,8 +570,9 @@ class Collector:
         """Antigravity's per-response reports in each conversation's own database become events once each.
         Files are read again only when they or their write-ahead log change, newest first, a few a collection."""
         from .observe import antigravity
-        files = []
-        for root in antigravity.roots(HOME):
+        places = getattr(getattr(self, 'observer', None), 'locations', None)
+        files = {}
+        for root in places.antigravity_roots() if places else antigravity.roots(HOME):
             for path in (root/'conversations').glob('*.db'):
                 if not antigravity.CONVERSATION.fullmatch(path.stem):
                     continue
@@ -557,9 +581,12 @@ class Collector:
                     mark = [st.st_mtime, st.st_size, *((wal.stat().st_mtime, wal.stat().st_size) if wal.exists() else (0, 0))]
                 except OSError:
                     continue
-                files.append((max(mark[0], mark[2]), root, path, mark))
+                # A conversation copied to another folder (an account moved) is read where it last changed.
+                at = max(mark[0], mark[2])
+                if path.stem not in files or at > files[path.stem][0]:
+                    files[path.stem] = (at, root, path, mark)
         catalogs = {}
-        for _, root, path, mark in sorted(files, key=lambda f: -f[0]):
+        for _, root, path, mark in sorted(files.values(), key=lambda f: -f[0]):
             key = 'antigravity:' + path.stem
             s = self.adapter_state(key)
             if s.get('mark') == mark:
