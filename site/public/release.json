@@ -1,19 +1,19 @@
 {
-  "version": "4.11.2",
+  "version": "4.12.2",
   "status": "preview",
   "signed": false,
   "notarized": false,
-  "releases": "https://github.com/awesomezun/1top/releases/tag/v4.11.2",
+  "releases": "https://github.com/awesomezun/1top/releases/tag/v4.12.2",
   "platforms": {
     "macos": {
       "architecture": "arm64",
-      "url": "https://github.com/awesomezun/1top/releases/download/v4.11.2/1top-4.11.2-macos-arm64.dmg",
-      "version": "4.11.2",
+      "url": "https://github.com/awesomezun/1top/releases/download/v4.12.2/1top-4.12.2-macos-arm64.dmg",
+      "version": "4.12.2",
       "status": "preview",
       "signed": false,
       "notarized": false,
-      "sha256": "9a356205731f402f1cdec294252e8027a0fad4136c2ee4b7a20c6cdf1b01e8bb",
-      "build": 25
+      "sha256": "92ccfc076dc23948be2a22ab5c67c7f1ff3e6c68764a07dff62f9defbe00a044",
+      "build": 28
     },
     "windows": {
       "architecture": "x64",
@@ -25,42 +25,42 @@
       "store_certified": false,
       "legacy_preview": {
         "architecture": "x64",
-        "url": "https://github.com/awesomezun/1top/releases/download/v4.11.2/1top-4.11.2-windows-x64-setup.exe",
-        "sha256": "9367a4d1593f040073a8e06ce7cb8efbd92aa8285acb8a5c6e852b2826294084",
-        "version": "4.11.2",
+        "url": "https://github.com/awesomezun/1top/releases/download/v4.12.2/1top-4.12.2-windows-x64-setup.exe",
+        "sha256": "e646b90bad1d49120fbd7dbf5f2f06a3aaabab72d617346599370dedf23c4afc",
+        "version": "4.12.2",
         "signed": false,
         "status": "preview"
       },
-      "version": "4.11.2",
+      "version": "4.12.2",
       "test_msix": {
-        "version": "4.11.2.0",
-        "url": "https://github.com/awesomezun/1top/releases/download/v4.11.2/1top-4.11.2.0-windows-x64-test.msix",
-        "sha256": "ce8d034c9047d8a822398af67bd49d9382d8a2b46dbfdf05597762e910e686f0",
+        "version": "4.12.2.0",
+        "url": "https://github.com/awesomezun/1top/releases/download/v4.12.2/1top-4.12.2.0-windows-x64-test.msix",
+        "sha256": "37cd0409d32cc9f019d18b0e28044642d7238ece4680218f55b6a843ee524528",
         "status": "test-only",
         "store_certified": false
       }
     },
     "android": {
       "status": "preview",
-      "version": "4.11.2",
+      "version": "4.12.2",
       "signed": true,
-      "url": "https://github.com/awesomezun/1top/releases/download/v4.11.2/1top-4.11.2-android.apk",
-      "sha256": "a704e383e340663e393c809dee111efdde81e6261ef86c72436e42f04b92f341",
-      "version_code": 28,
+      "url": "https://github.com/awesomezun/1top/releases/download/v4.12.2/1top-4.12.2-android.apk",
+      "sha256": "7e9e3ea670439363e4ce32e5d3abc697e525ced69b813bb7b361693e2003b6c5",
+      "version_code": 31,
       "bundle": {
-        "url": "https://github.com/awesomezun/1top/releases/download/v4.11.2/1top-4.11.2-android.aab",
-        "sha256": "8ab3e10e002273e765620de5c51be8cbadba08aeb48d28e5cdd841f39b9748d2"
+        "url": "https://github.com/awesomezun/1top/releases/download/v4.12.2/1top-4.12.2-android.aab",
+        "sha256": "42959cb8f4a46d37a91123038cd5b4f49c30d6d438035c22e586a2972b324708"
       }
     },
     "ios": {
       "status": "native-device-preview-store-distribution-pending",
-      "version": "4.11.2",
-      "build": 25,
+      "version": "4.12.2",
+      "build": 28,
       "development": {
         "status": "registered-device-only",
         "bundle_id": "si.onetop.mobile.dev",
-        "url": "https://github.com/awesomezun/1top/releases/download/v4.11.2/1top-4.11.2-ios-development.ipa",
-        "sha256": "f21589eaa50de86639e48bc06ce7df82620655744e14c53eab60bd6d4eda484e"
+        "url": "https://github.com/awesomezun/1top/releases/download/v4.12.2/1top-4.12.2-ios-development.ipa",
+        "sha256": "b5b4e4b4f5b676a2813de7b10ee66e0e899e97f80311ddb022e1096e82c76b96"
       }
     }
   }

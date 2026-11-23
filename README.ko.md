@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/awesomezun/1top/releases/tag/v4.11.2"><img alt="릴리스 4.11.2" src="https://img.shields.io/badge/릴리스-4.11.2_프리뷰-9dff3c?style=flat-square&labelColor=15181c"></a>
+  <a href="https://github.com/awesomezun/1top/releases/tag/v4.12.2"><img alt="릴리스 4.12.2" src="https://img.shields.io/badge/릴리스-4.12.2_프리뷰-9dff3c?style=flat-square&labelColor=15181c"></a>
   <img alt="macOS, Windows, iPhone, Android" src="https://img.shields.io/badge/macOS_·_Windows_·_iPhone_·_Android-6ccfa9?style=flat-square&labelColor=15181c">
   <img alt="한국어, 영어, 중국어" src="https://img.shields.io/badge/한국어_·_English_·_中文-9ab9ff?style=flat-square&labelColor=15181c">
   <a href="LICENSE"><img alt="AGPL-3.0 라이선스" src="https://img.shields.io/badge/라이선스-AGPL--3.0-e9b25c?style=flat-square&labelColor=15181c"></a>
@@ -39,15 +39,15 @@
 
 | | 플랫폼 | 받기 |
 | :---: | --- | --- |
-| <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13 이상 | [**1top-4.11.2-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v4.11.2/1top-4.11.2-macos-arm64.dmg) |
-| <img src="assets/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.11.2-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.11.2/1top-4.11.2-windows-x64-setup.exe) |
-| <img src="https://cdn.simpleicons.org/android/3DDC84" width="22" alt=""> | **Android** 7 이상 | [**1top-4.11.2-android.apk**](https://github.com/awesomezun/1top/releases/download/v4.11.2/1top-4.11.2-android.apk) · Google Play 준비 중 |
+| <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13 이상 | [**1top-4.12.2-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v4.12.2/1top-4.12.2-macos-arm64.dmg) |
+| <img src="assets/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.12.2-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.12.2/1top-4.12.2-windows-x64-setup.exe) |
+| <img src="https://cdn.simpleicons.org/android/3DDC84" width="22" alt=""> | **Android** 7 이상 | [**1top-4.12.2-android.apk**](https://github.com/awesomezun/1top/releases/download/v4.12.2/1top-4.12.2-android.apk) · Google Play 준비 중 |
 | <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **iPhone** | App Store 준비 중 |
 | 🌐 | **브라우저** | [1top.si/app](https://1top.si/app?demo=1) — 체험은 설치가 필요 없습니다 |
 
-4.11.2는 프리뷰입니다. 파일과 `SHA256SUMS`, `build-info.json`은 [릴리스](https://github.com/awesomezun/1top/releases/tag/v4.11.2)에 있습니다. 맥 앱은 아직 공증 전이고 윈도우 설치 파일은 아직 코드 서명 전이라, 처음 실행할 때 macOS와 Windows가 확인을 물을 수 있습니다.
+4.12.2는 프리뷰입니다. 파일과 `SHA256SUMS`, `build-info.json`은 [릴리스](https://github.com/awesomezun/1top/releases/tag/v4.12.2)에 있습니다. 맥 앱은 아직 공증 전이고 윈도우 설치 파일은 아직 코드 서명 전이라, 처음 실행할 때 macOS와 Windows가 확인을 물을 수 있습니다.
 
-**4.11.2에서 달라진 점:** Devin이나 Antigravity로 도는 OpenBot 에이전트의 세션과 토큰이 나오고, 터미널의 Agy CLI 세션에도 토큰이 나옵니다. 사용량 맵은 선택한 기간에 쓴 세션을 끝난 것까지 모두 세서 토큰 흐름 합계와 맞습니다. 세션 표의 기간 열은 모든 세션을 토큰으로 보여 주고, 주간 한도는 소진 속도 계기판에 그대로 남습니다. Claude Code의 검색 도구가 미확인 세션으로 잡히던 문제도 고쳤습니다.
+**4.12.2에서 달라진 점:** Antigravity 대화를 어느 폴더에 있든 찾습니다. OpenBot이 계정마다 따로 두는 폴더도 포함되고, 응답마다 실제 모델 이름이 나옵니다. 휴대폰과 웹에는 지금처럼 3초마다 새 값이 가고, 릴레이는 한 시간에 한 번만 백업합니다. 컴퓨터가 한 대면 다른 컴퓨터 합계를 묻지 않습니다. 아무도 보지 않을 때 꺼진 컴퓨터의 마지막 화면은 최대 한 시간 전 것일 수 있습니다.
 
 ## 볼 수 있는 것
 
