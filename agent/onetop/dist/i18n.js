@@ -23,6 +23,24 @@ window.OneTopI18n=(()=>{
  entries.push(['세션 사용량 기간','Session time range','会话用量时段'],['계정별 주간 사용량 요약','Weekly account usage','每周账户用量'],['현재 세션 사용량 비율 맵','Current session usage map','当前会话用量分布'],['세션 사용량 표시 단위','Session usage unit','会话用量单位'],['AI 모델 필터','AI model filter','AI 模型筛选'],['세션 상태 필터','Session status filter','会话状态筛选'],['세션 정렬','Session order','会话排序'],['컴퓨터 리소스 요약','Computer resources summary','电脑资源概览'],['전체 컴퓨터 CPU 사용률','Whole-computer CPU usage','整台电脑 CPU 用量']);
  entries.push(['계정 이름 바꾸기','Rename account','重命名账户'],['계정 이름','Account name','账户名称'],['저장','Save','保存'],['24자까지 쓸 수 있습니다. 비우고 저장하면 번호로 돌아갑니다.','Up to 24 characters. Save it empty to go back to the number.','最多 24 个字符。留空保存即恢复为编号。'],['이름을 저장하지 못했습니다.','Could not save the name.','无法保存名称。'],['저장 응답을 확인하지 못했습니다. 잠시 뒤 다시 확인해 주세요.','The save was not confirmed. Check again in a moment.','未确认保存结果，请稍后再查看。']);
  entries.push(['다시 연결','Reconnect','重新连接'],['macOS 승인 기다리는 중…','Waiting for macOS approval…','正在等待 macOS 批准…'],['macOS가 저장된 로그인 사용을 한 번 묻습니다. 다시 묻지 않습니다.','macOS asks once to use the saved sign-in and won’t ask again.','macOS 会询问一次是否使用已保存的登录，之后不再询问。'],['수집기 연결을 확인한 뒤 다시 시도해 주세요.','Check the collector connection, then try again.','请先确认采集器连接后再试。']);
+ entries.push(
+  ['공식 로그인 창에서 연결할 계정을 선택하세요. Claude·Codex 추가 계정은 별도 프로필에 저장하며, 기존 작업의 로그인은 유지됩니다.','Choose an account in the official login window. Additional Claude and Codex accounts use separate profiles; existing sessions keep their login.','在官方登录窗口中选择要连接的账户。新增的 Claude 和 Codex 账户保存在独立配置中，现有工作会话的登录状态会保留。'],
+  ['모델 풀 한도 · 로그인 ↗','Model pool limits · Sign in ↗','模型池额度 · 登录 ↗'],
+  ['터미널 로그인 ↗','Terminal sign in ↗','终端登录 ↗'],
+  ['세션 추적 · 로그인 ↗','Session tracking · Sign in ↗','会话追踪 · 登录 ↗'],
+  ['API 키 한도 연결 ▾','Connect API key limits ▾','连接 API 密钥额度 ▾'],
+  ['API 키','API key','API 密钥'],
+  ['로컬에 저장하고 한도 연결','Save locally and connect limits','保存到本地并连接额度'],
+  ['설치된 CLI의 로그인 터미널과 브라우저가 열립니다. Claude는 로그인 직후 macOS 키체인 허용을 1회 승인하면 바로 연결됩니다. Aside 등 로컬 앱 세션은 별도 로그인 없이 자동 감지됩니다.','Opens the installed CLI login terminal and browser. For Claude, approve the one-time macOS Keychain prompt right after signing in to connect immediately. Local app sessions such as Aside are detected automatically without signing in.','将打开已安装 CLI 的登录终端和浏览器。Claude 登录后只需批准一次 macOS 钥匙串授权即可立即连接。Aside 等本地应用会话无需登录即可自动检测。'],
+  ['Z.ai / Zhipu API 키 입력','Enter Z.ai / Zhipu API key','输入 Z.ai / 智谱 API 密钥'],
+  ['GLM (Z.ai) API 키를 저장하는 중…','Saving GLM (Z.ai) API key…','正在保存 GLM (Z.ai) API 密钥…'],
+  ['GLM API 키를 저장하지 못했습니다.','Could not save the GLM API key.','无法保存 GLM API 密钥。'],
+  ['Google (Agy CLI) 계정 로그인…','Sign in to a Google (Agy CLI) account…','登录 Google (Agy CLI) 账户…'],
+  ['Google Gemini CLI 로그인…','Sign in to Google Gemini CLI…','登录 Google Gemini CLI…'],
+  ['Devin 계정 로그인…','Sign in to a Devin account…','登录 Devin 账户…'],
+  ['최근 Codex 세션','Recent Codex session','最近的 Codex 会话'],
+  ['최근 Claude 세션','Recent Claude session','最近的 Claude 会话']
+ );
  entries.push(['기간 지정','Custom range','自定义时段'],['최소 10분 · 상한 없음','At least 10 minutes · No upper limit','至少 10 分钟 · 无上限'],['기간 단위','Duration unit','时长单位'],['일','Days','天'],['전체 기록','All history','全部记录'],['적용','Apply','应用'],['10분 이상의 유효한 기간을 입력하세요.','Enter a valid duration of at least 10 minutes.','请输入至少 10 分钟的有效时长。'],['기간을 불러오는 중…','Loading time range…','正在加载时段…']);
  entries.push(['전체','All','全部'],['1개월','1mo','1个月'],['1주일','1w','1周'],['사용 기간','Time range','使用时段'],['기간 직접 입력','Enter duration','直接输入时长'],['기간 입력 예: 30분, 36시간, 7일','Try 30m, 36h or 7d','例如 30分钟、36小时、7天']);
  entries.push(['좌우로 끌어 열 너비 조절','Drag left or right to resize column','左右拖动以调整列宽']);

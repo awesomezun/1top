@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 import psutil
 from ..platform_support import owned_process, process_terminal
+from .. import _rust_bridge
 
 CLI_NAMES = {'claude':'Claude','codex':'Codex','gemini':'Gemini','opencode':'OpenCode',
     'aider':'Aider','goose':'Goose','agy':'Antigravity','qwen':'Qwen Code',
@@ -17,7 +18,7 @@ ERRORS = (psutil.Error, OSError, SystemError, AttributeError)
 SID = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}$')
 
 
-def cli_kind(name, args, exe=''):
+def _py_cli_kind(name, args, exe=''):
     name = str(name).replace('\\', '/').rsplit('/', 1)[-1].lower().removesuffix('.exe')
     if name in CLI_NAMES:
         return CLI_NAMES[name]
@@ -37,13 +38,35 @@ def cli_kind(name, args, exe=''):
     return None
 
 
-def explicit_session(args):
+def cli_kind(name, args, exe=''):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_cli_kind(name, args, exe)
+    s_args = [str(a) for a in (args or ())]
+    if m == 'new':
+        return _rust_bridge.native.proc_cli_kind(str(name), s_args, str(exe or ''))
+    return _rust_bridge.shadow_check('processes.cli_kind', _py_cli_kind(name, args, exe),
+                                     _rust_bridge.native.proc_cli_kind(str(name), s_args, str(exe or '')))
+
+
+def _py_explicit_session(args):
     for i, value in enumerate(args):
         if value in ('--resume', '--session-id', 'resume') and i + 1 < len(args) and SID.fullmatch(args[i+1]):
             return args[i+1]
         if value.startswith('--session-id=') and SID.fullmatch(value.split('=', 1)[1]):
             return value.split('=', 1)[1]
     return None
+
+
+def explicit_session(args):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_explicit_session(args)
+    s_args = [str(a) for a in (args or ())]
+    if m == 'new':
+        return _rust_bridge.native.proc_explicit_session(s_args)
+    return _rust_bridge.shadow_check('processes.explicit_session', _py_explicit_session(args),
+                                     _rust_bridge.native.proc_explicit_session(s_args))
 
 
 CLAUDE_FLAGS = set('''--dangerously-skip-permissions --allow-dangerously-skip-permissions --resume --continue
@@ -104,7 +127,7 @@ def describe(row):
     return {'kind': kind, 'role': role, 'explicit_session': row.get('explicit_session') or explicit_session(args)}
 
 
-def argv_shape(args):
+def _py_argv_shape(args):
     if not args:
         return []
     first = str(args[0]).replace('\\', '/')
@@ -119,6 +142,17 @@ def argv_shape(args):
         else:
             result.append('<path>' if value.startswith('/') else '<json>' if value.startswith('{') else '<arg>')
     return result
+
+
+def argv_shape(args):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_argv_shape(args)
+    s_args = [str(a) for a in (args or ())]
+    if m == 'new':
+        return _rust_bridge.native.proc_argv_shape(s_args)
+    return _rust_bridge.shadow_check('processes.argv_shape', _py_argv_shape(args),
+                                     _rust_bridge.native.proc_argv_shape(s_args))
 
 
 class Reader:

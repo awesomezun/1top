@@ -1,6 +1,7 @@
 """Bounded, cached transcript facts. Bodies and tool inputs are never retained."""
 import json
 from pathlib import Path
+from .. import _rust_bridge
 
 TAIL = 262144
 LIMIT = 64 * 1024 * 1024
@@ -53,7 +54,7 @@ def boundary(event):
     return None
 
 
-def facts(raw):
+def _py_facts(raw):
     events = []
     for line in raw.split(b'\n'):
         try:
@@ -63,6 +64,16 @@ def facts(raw):
         except (ValueError, UnicodeError):
             continue
     return events
+
+
+def facts(raw):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_facts(raw)
+    buf = bytes(raw)
+    if m == 'new':
+        return _rust_bridge.native.transcript_facts(buf)
+    return _rust_bridge.shadow_check('transcripts.facts', _py_facts(raw), _rust_bridge.native.transcript_facts(buf))
 
 
 def latest(events):

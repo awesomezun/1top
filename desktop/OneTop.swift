@@ -382,6 +382,13 @@ final class OneTopApp: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopo
         guard !testing else { return }; let p = Process()
         p.executableURL = Bundle.main.bundleURL.appendingPathComponent("Contents/Resources/agent/onetop-agent"); p.arguments = pair ? ["connect"] + (relay.map { ["--relay", $0] } ?? []) : ["run", "--headless"]
         var env = ProcessInfo.processInfo.environment; env["ONETOP_DATA"] = dataDir.path
+        for contaminated in [
+            "WSL_DISTRO_NAME", "WSL_INTEROP", "GEMINI_HOME", "OPENBOT_AGENT_PROCESS",
+            "AGY_CLI_FORCE_FILE_TOKEN_STORAGE", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_APP_DATA_DIR",
+            "ANTIGRAVITY_AGENTAPI_EXE", "ANTIGRAVITY_CONVERSATION_ID", "ANTIGRAVITY_CSRF_TOKEN",
+            "ANTIGRAVITY_LS_ADDRESS", "ANTIGRAVITY_LS_VERSION", "ANTIGRAVITY_PROJECT_ID",
+            "ANTIGRAVITY_SOURCE_METADATA", "ANTIGRAVITY_TRAJECTORY_ID"
+        ] { env.removeValue(forKey: contaminated) }
         env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (env["PATH"] ?? ""); p.environment = env
         let log = dataDir.appendingPathComponent("companion.log")
         if let size = try? FileManager.default.attributesOfItem(atPath: log.path)[.size] as? Int, size > 1_000_000 { try? FileManager.default.removeItem(at: log) }

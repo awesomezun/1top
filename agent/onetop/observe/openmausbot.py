@@ -5,6 +5,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
+from .. import _rust_bridge
 
 ID = re.compile(r'[A-Za-z0-9_-]{1,120}')
 KINDS = {'claudeAgent': 'Claude', 'codexAgent': 'Codex'}
@@ -49,7 +50,7 @@ def turn(row):
             'tokens': [max(0, prompt - cached), cached, 0, count(row.get('output'))]}
 
 
-def read(home, now, window=86400):
+def _py_read(home, now, window=86400):
     """Threads with a turn in the last day, for their session rows."""
     threads = {}
     for path in ledgers(home, now):
@@ -69,3 +70,16 @@ def read(home, now, window=86400):
                 if item['t'] >= thread['updated']:
                     thread.update(bot=item['bot'], kind=item['kind'], model=item['model'], updated=item['t'])
     return sorted(threads.values(), key=lambda r: -r['updated'])
+
+
+def read(home, now, window=86400):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_read(home, now, window)
+    if m == 'new':
+        return _rust_bridge.native.obs_openmausbot_read(str(home), float(now), float(window))
+    return _rust_bridge.shadow_check(
+        'openmausbot.read',
+        _py_read(home, now, window),
+        _rust_bridge.native.obs_openmausbot_read(str(home), float(now), float(window)),
+    )

@@ -273,17 +273,40 @@ def agy_rows(payload, source_id, now):
     return rows
 
 
+def _clean_agy_env(guard_dir=None):
+    keep = ('HOME', 'USER', 'LOGNAME', 'TMPDIR', 'LANG', 'LC_ALL', 'SSL_CERT_FILE',
+            'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy',
+            'SYSTEMROOT', 'SystemRoot', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP')
+    env = {k: os.environ[k] for k in keep if os.environ.get(k)}
+    base_path = os.environ.get('PATH', '') if os.name == 'nt' else '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin'
+    env['PATH'] = (str(guard_dir) + ':' + base_path) if (guard_dir and os.name != 'nt') else base_path
+    env['AGY_CLI_DISABLE_AUTO_UPDATE'] = 'true'
+    return env
+
+
 def agy_query(source, now):
-    env = {**os.environ, 'AGY_CLI_DISABLE_AUTO_UPDATE': 'true'}
-    version = subprocess.run(cli_command(source.cli, '--version'), env=env,
+    import tempfile
+    ver_env = _clean_agy_env()
+    version = subprocess.run(cli_command(source.cli, '--version'), env=ver_env,
         stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5, text=True)
     match = re.search(r'(\d+)\.(\d+)\.(\d+)', version.stdout)
     if not match or tuple(map(int, match.groups())) < (1, 1, 11):
         raise ProviderError('unsupported_cli')
-    result = subprocess.run(cli_command(source.cli, '-p', '/usage', '--output-format', 'json',
-        '--print-timeout', '20s', '--log-file', os.devnull,
-        '--settings', '{"disableSlashCommands":false}'), env=env, cwd=str(Path.home()),
-        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=28, text=True)
+    with tempfile.TemporaryDirectory(prefix='1top-agy-guard-') as td:
+        marker = Path(td) / 'browser_attempted'
+        if os.name != 'nt':
+            stub = f"#!/bin/sh\n: > '{str(marker).replace(chr(39), chr(39)+chr(92)+chr(39)+chr(39))}'\nexit 1\n"
+            for name in ('open', 'xdg-open'):
+                p = Path(td) / name
+                p.write_text(stub)
+                p.chmod(0o700)
+        env = _clean_agy_env(td if os.name != 'nt' else None)
+        result = subprocess.run(cli_command(source.cli, '-p', '/usage', '--output-format', 'json',
+            '--print-timeout', '20s', '--log-file', os.devnull,
+            '--settings', '{"disableSlashCommands":false}'), env=env, cwd=str(Path.home()),
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=28, text=True)
+        if marker.exists():
+            raise ProviderError('login_required')
     if result.returncode or len(result.stdout.encode()) > MAX_BYTES:
         raise ProviderError('provider_unavailable')
     try:
@@ -345,6 +368,10 @@ class ProviderQuotaSampler:
             code = error.code
             if code == 'unsafe_cli_response':
                 self.disabled.add(source.id)
+            elif code in ('login_required', 'access_denied'):
+                self.retry_after[source.id] = (now + 1800, code)
+            elif source.kind == 'Antigravity' and code == 'provider_unavailable':
+                self.retry_after[source.id] = (now + 300, code)
         except urllib.error.HTTPError as error:
             code = {401: 'login_required', 403: 'access_denied', 429: 'rate_limited'}.get(error.code, 'provider_unavailable')
             delay = 600 if code == 'login_required' else 120

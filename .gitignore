@@ -26,6 +26,9 @@ site/.git/
 site/dist/
 
 cloud/.selfhost/
+rust/target/
+agent/onetop/_onetop_rs*.so
+agent/onetop/_onetop_rs*.pyd
 
 # Internal docs (QA and release records, handoffs, design and research notes) live in the private
 # awesomezun/1top-docs repository. Clone it here as docs/ to read them beside the code; never commit them here.

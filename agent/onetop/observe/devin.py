@@ -7,6 +7,7 @@ from pathlib import Path
 import sqlite3
 
 from .readonly import connect
+from .. import _rust_bridge
 
 ID = re.compile(r'[A-Za-z0-9_.:-]{1,120}')
 # Devin's own helper calls (summarising a long conversation) report their tokens under a role name, not the model
@@ -61,7 +62,7 @@ def read(home, now, window=86400, databases=None):
     return sorted(found.values(), key=lambda r: -r['updated'])[:200]
 
 
-def sessions(path, now, window):
+def _py_sessions(path, now, window):
     if not path.is_file():
         return []
     try:
@@ -85,7 +86,20 @@ def sessions(path, now, window):
         return []
 
 
-def usage(path, after=0, now=None, limit=5000):
+def sessions(path, now, window):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_sessions(path, now, window)
+    if m == 'new':
+        return _rust_bridge.native.devin_sessions(str(path), float(now), float(window))
+    return _rust_bridge.shadow_check(
+        'devin.sessions',
+        _py_sessions(path, now, window),
+        _rust_bridge.native.devin_sessions(str(path), float(now), float(window)),
+    )
+
+
+def _py_usage(path, after=0, now=None, limit=5000):
     """Responses stored after row `after`: (last row read, [response]). A response kept twice (a branch of the
     conversation copies its messages) has one id; the caller counts each id once. A response just stored without
     its numbers yet is read again next time."""
@@ -108,3 +122,21 @@ def usage(path, after=0, now=None, limit=5000):
                     'session_model': '' if model in HELPERS else model,
                     'cwd': str(cwd or ''), 'title': ''.join(c for c in str(title or '') if c.isprintable()).strip()[:200]})
     return last, out
+
+
+def usage(path, after=0, now=None, limit=5000):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_usage(path, after, now, limit)
+    now_arg = None if now is None else float(now)
+    if m == 'new':
+        try:
+            return _rust_bridge.native.devin_usage(str(path), int(after), now_arg, int(limit))
+        except RuntimeError as err:
+            _rust_bridge.reraise_sqlite(err)
+    py_res = _py_usage(path, after, now, limit)
+    try:
+        rs_res = _rust_bridge.native.devin_usage(str(path), int(after), now_arg, int(limit))
+    except RuntimeError as err:
+        _rust_bridge.reraise_sqlite(err)
+    return _rust_bridge.shadow_check('devin.usage', py_res, rs_res)

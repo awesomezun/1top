@@ -167,7 +167,7 @@ struct ClusterReadings {
     static func historical(_ c: Calibration, _ q: AccountQuota, now: Double) -> Bool {
         let reset = q.windows.first { $0.isWeekly }?.reset
         guard q.kind == "Claude", c.kind == "Claude", c.source == "historical_provider_calibration",
-              ["claude_statusline", "historical_provider_report"].contains(c.report_source ?? ""), valid(now),
+              ["claude_statusline", "historical_provider_report", "claude_oauth"].contains(c.report_source ?? ""), valid(now),
               let to = c.to, valid(to), to > 0, to <= now, let cr = c.reset, valid(cr), cr > now,
               let reset, valid(reset), abs(reset - cr) <= 60, let until = c.valid_until, valid(until), until > now,
               until <= Swift.min(cr, to + 86400) else { return false }

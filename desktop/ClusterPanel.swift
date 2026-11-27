@@ -1653,13 +1653,16 @@ struct QuickCluster<SessionsPage: View>: View {
         VStack(alignment: .leading, spacing: m(2)) {
             HStack(spacing: m(8)) {
                 if a.reconnect {
-                    let waiting = model.authorizing == a.id
-                    Button { model.authorizeAccount(a.id) } label: {
-                        Text(tr(waiting ? "macOS 승인 기다리는 중…" : "다시 로그인")).font(m.font(.caption, .semibold)).foregroundStyle(theme.amber)
+                    let isClaude = a.kind == "Claude"
+                    let waiting = isClaude && model.authorizing == a.id
+                    Button {
+                        if isClaude { model.authorizeAccount(a.id) } else { model.addAccount(a.kind) }
+                    } label: {
+                        Text(tr(isClaude ? (waiting ? "macOS 승인 기다리는 중…" : "다시 연결") : "다시 로그인")).font(m.font(.caption, .semibold)).foregroundStyle(theme.amber)
                             .padding(.horizontal, m(10)).frame(height: m(26))
                             .background(theme.amber.opacity(0.12), in: RoundedRectangle(cornerRadius: m(8)))
                             .overlay(RoundedRectangle(cornerRadius: m(8)).stroke(theme.amber.opacity(0.55)))
-                    }.buttonStyle(.plain).disabled(model.authorizing != nil || !model.fresh)
+                    }.buttonStyle(.plain).disabled((isClaude ? model.authorizing != nil : model.busy) || !model.fresh)
                 } else {
                     Text(caption + " ") + Text(a.added.map { "+" + ClusterReadings.number($0) + "%" } ?? "—").fontWeight(.semibold).foregroundColor(tint)
                 }
@@ -1689,7 +1692,13 @@ struct QuickCluster<SessionsPage: View>: View {
     /// The panel's own account menu, the same as the + beside its weekly limits.
     private func addAccountMenu() {
         let menu = NSMenu()
-        for (title, kind) in [("Claude Code 계정 로그인…", "Claude"), ("Codex 계정 로그인…", "Codex")] {
+        for (title, kind) in [
+            ("Claude Code 계정 로그인…", "Claude"),
+            ("Codex 계정 로그인…", "Codex"),
+            ("Google (Agy CLI) 계정 로그인…", "Antigravity"),
+            ("Google Gemini CLI 로그인…", "Gemini"),
+            ("Devin 계정 로그인…", "Devin"),
+        ] {
             let action = ClusterMenuAction { [model] in model.addAccount(kind) }
             let item = NSMenuItem(title: tr(title), action: #selector(ClusterMenuAction.run), keyEquivalent: "")
             item.target = action; item.representedObject = action

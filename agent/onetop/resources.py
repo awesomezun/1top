@@ -5,6 +5,7 @@ import platform
 import time
 from pathlib import Path
 import psutil
+from . import _rust_bridge
 
 
 def counter_rate(current,previous,seconds):
@@ -12,7 +13,7 @@ def counter_rate(current,previous,seconds):
     return (current-previous)/seconds
 
 
-def host_cpu_percent(current,previous):
+def _py_host_cpu_percent(current,previous):
     """Whole-host busy share, following psutil's platform counter semantics."""
     if previous is None or current.keys()!=previous.keys():return None
     delta={key:max(0,value-previous[key]) for key,value in current.items()}
@@ -23,6 +24,16 @@ def host_cpu_percent(current,previous):
     if total<=0:return None
     busy=total-delta.get('idle',0)-delta.get('iowait',0)
     return round(max(0,min(100,100*busy/total)),1)
+
+
+def host_cpu_percent(current,previous):
+    m=_rust_bridge.mode()
+    if m=='old':return _py_host_cpu_percent(current,previous)
+    cur={str(k):float(v) for k,v in current.items()}
+    prev={str(k):float(v) for k,v in previous.items()} if previous is not None else None
+    if m=='new':return _rust_bridge.native.res_host_cpu_percent(cur,prev)
+    return _rust_bridge.shadow_check('resources.host_cpu_percent',_py_host_cpu_percent(current,previous),
+                                     _rust_bridge.native.res_host_cpu_percent(cur,prev))
 
 
 def owner_of(pid,parents,roots):
@@ -56,8 +67,42 @@ class ResourceSampler:
         self.previous={};self.last=None;self.io_previous={};self.history=collections.deque(maxlen=300)
         self.cores=psutil.cpu_count() or 1
         self.cpu_previous=None
+        self._native=None
+        if _rust_bridge.mode()=='new' and getattr(psutil.process_iter,'__module__','')=='psutil':
+            self._native=_rust_bridge.native.PyResourceSampler()
 
     def sample(self,sessions,shared_roots):
+        if self._native is not None and _rust_bridge.mode()=='new' and getattr(psutil.process_iter,'__module__','')=='psutil':
+            before=time.monotonic();dt=before-self.last if self.last is not None else 0
+            self.last=before
+            candidates={}
+            for spec in sessions:
+                if spec.get('is_subagent'):continue
+                runs=spec.get('runs') or ([{'pid':spec['pids'][0],'birth':spec.get('process_birth')}]
+                    if spec.get('process_started') and len(spec.get('pids',[]))==1 else [])
+                pairs=[]
+                for run in runs:
+                    birth=run.get('birth')
+                    if birth is None and spec.get('process_started'):
+                        try:birth=time.mktime(time.strptime(spec.get('process_started',''),'%a %b %d %H:%M:%S %Y'))
+                        except (ValueError,TypeError):continue
+                    pairs.append((int(run['pid']),None if birth is None else float(birth)))
+                if pairs:candidates[spec['id']]=pairs
+            snap,groups=self._native.sample(candidates,[int(p) for p in shared_roots])
+            for s in sessions:s['resources']=groups.get(s['id'])
+            try:
+                diskio=psutil.disk_io_counters()
+                old_disk=self.io_previous.get('disk')
+                if diskio:
+                    snap['host']['disk']['read']=counter_rate(diskio.read_bytes,old_disk[0] if old_disk else None,dt)
+                    snap['host']['disk']['write']=counter_rate(diskio.write_bytes,old_disk[1] if old_disk else None,dt)
+                    self.io_previous['disk']=(diskio.read_bytes,diskio.write_bytes)
+            except (psutil.Error,OSError):pass
+            try:
+                battery=psutil.sensors_battery()
+                if battery:snap['host']['battery']={'percent':battery.percent,'plugged':battery.power_plugged}
+            except (psutil.Error,OSError):pass
+            return snap
         before=time.monotonic();now=time.time();dt=before-self.last if self.last is not None else 0
         rows={};current={};denied=0
         for p in psutil.process_iter():

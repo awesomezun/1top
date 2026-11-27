@@ -1,0 +1,44 @@
+[workspace]
+members = [
+    "onetop-core",
+    "onetop-py",
+    "app",
+]
+resolver = "2"
+
+[workspace.package]
+version = "5.1.1"
+edition = "2021"
+license = "AGPL-3.0-only"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+regex = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+url = "2"
+percent-encoding = "2"
+unicode-general-category = "1"
+httpdate = "1"
+thiserror = "2"
+sysinfo = "0.33"
+sha2 = "0.10"
+hex = "0.4"
+glob = "0.3"
+flate2 = "1"
+base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
+rand = "0.8"
+subtle = "2"
+toml = "0.8"
+hostname = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking", "json", "stream"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+opt-level = 3

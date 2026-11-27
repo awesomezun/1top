@@ -341,7 +341,7 @@ function renderQuotas(){
  const accountRows=data.account_quotas||[],verifiedKinds=new Set(accountRows.map(q=>q.kind));
  const rows=[...accountRows,...data.quotas.filter(q=>!verifiedKinds.has(q.kind)).map(q=>({...q,account_label:'계정 연결 미확인',stale:true}))];
  const window=(w,k)=>`<div class="quota-window"><div class="quota-label"><span>${esc(w.label)}</span><b>${w.pct==null?'미확인':Number(w.pct.toFixed(1))+'% 사용'}</b></div><div class="track"><i style="background:${colors[k]||'#8d9ba8'};width:${Math.min(100,Math.max(0,w.pct||0))}%"></i></div><div class="quota-note">${w.reset?new Date(w.reset*1000).toLocaleString(OneTopI18n.locale(),{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})+' 초기화':'초기화 시각 미보고'}</div></div>`;
- $('quotas').innerHTML=rows.map(q=>`<article class="quota"><h3>${dot(q.kind)}${kindName(q.kind)}${accountChip(q.id,q.account_label)} <small>${esc(q.plan||'')}</small></h3><p class="quota-account">${esc(q.account_label)}${q.id?' · '+esc(q.id.slice(-6)):''}</p><div class="quota-window-pair">${(q.windows?.length?q.windows:['Claude','Codex'].includes(q.kind)?[{label:'5H',pct:null},{label:'주간',pct:null}]:[{label:'플랜 한도',pct:null}]).map(w=>window(w,q.kind)).join('')}</div><div class="quota-note ${q.stale?'quota-stale':''}">${esc(q.note)} · ${q.updated?'마지막 확인 '+ago(q.updated):'확인 불가 · 0%를 뜻하지 않음'}</div></article>`).join('');
+ $('quotas').innerHTML=rows.map(q=>`<article class="quota"><h3>${dot(q.kind)}${kindName(q.kind)}${accountChip(q.id,q.account_label)} <small>${esc(q.plan||'')}</small></h3><p class="quota-account">${esc(q.account_label)}${q.id?' · '+esc(q.id.slice(-6)):''}</p><div class="quota-window-pair">${(q.windows?.length?q.windows:['Claude','Codex'].includes(q.kind)?[{label:'5H',pct:null},{label:'주간',pct:null}]:[{label:'플랜 한도',pct:null}]).map(w=>window(w,q.kind)).join('')}</div><div class="quota-note ${q.stale?'quota-stale':''}">${esc(q.note)} · ${q.updated?'마지막 확인 '+ago(q.updated):'확인 불가 · 0%를 뜻하지 않음'}</div>${q.stale&&RECONNECT.has(q.status)?reconnectMarkup(q):''}</article>`).join('');
 }
 function renderSystem(){
  const sys=data.system;if(!sys)return;const h=sys.host;
@@ -461,6 +461,22 @@ $('skillSearch').oninput=renderSkills;
 $('addAccount').onclick=()=>$('accountDialog').showModal();
 $('closeAccounts').onclick=()=>$('accountDialog').close();
 let accountLoginBusy=false;
+$('accountDialog').addEventListener('submit',async e=>{
+ const form=e.target.closest('#glmConnectForm');if(!form||accountLoginBusy)return;
+ e.preventDefault();
+ const host=form.elements.host?.value||'api.z.ai',apiKey=form.elements.api_key?.value||'';
+ accountLoginBusy=true;const submit=form.querySelector('button[type=submit]');if(submit)submit.disabled=true;
+ $('accountLoginStatus').textContent='GLM (Z.ai) API 키를 저장하는 중…';
+ try{
+  if(!data?.action_token||!data.ready||Date.now()/1000-data.updated>20)throw Error('수집기 연결을 확인한 뒤 다시 시도해 주세요.');
+  const r=await fetch('/api/accounts/login',{method:'POST',headers:{'Content-Type':'application/json','X-Monitor-Token':data.action_token},body:JSON.stringify({kind:'GLM',host,api_key:apiKey}),signal:AbortSignal.timeout(20000)});
+  const result=await r.json();if(!r.ok)throw Error(result.message||'GLM API 키를 저장하지 못했습니다.');
+  if(form.elements.api_key)form.elements.api_key.value='';
+  $('accountLoginStatus').textContent=result.message;
+  setTimeout(refresh,2500);
+ }catch(error){$('accountLoginStatus').textContent=error.name==='TimeoutError'?'저장 응답을 확인하지 못했습니다. 잠시 뒤 다시 확인해 주세요.':error.message;}
+ finally{accountLoginBusy=false;if(submit)submit.disabled=false;}
+});
 $('accountDialog').addEventListener('click',async e=>{
  const b=e.target.closest('[data-account-login]');if(!b||accountLoginBusy)return;
  accountLoginBusy=true;const buttons=[...document.querySelectorAll('[data-account-login]')];buttons.forEach(x=>x.disabled=true);
@@ -663,7 +679,7 @@ function aliasMarkup(q){return `<form class="alias-form" data-alias-form="${esc(
 // so the same button opens the account's official sign-in again.
 const macHost=()=>(data?.system?.host?.os||'Darwin')==='Darwin';
 function reconnectMarkup(q){
- if(!macHost())return `<div class="weekly-reconnect"><button type="button" data-account-relogin="${esc(q.kind)}" data-account-id="${esc(q.id)}"${authorizing?' disabled':''}>${authorizing===q.id?'로그인 창을 여는 중…':'다시 로그인'}</button><small>${esc(authorizeNotes[q.id]||'이 계정의 공식 로그인 창을 엽니다. 같은 계정으로 다시 로그인하세요.')}</small></div>`;
+ if(!macHost()||q.kind!=='Claude')return `<div class="weekly-reconnect"><button type="button" data-account-relogin="${esc(q.kind)}" data-account-id="${esc(q.id)}"${authorizing?' disabled':''}>${authorizing===q.id?'로그인 창을 여는 중…':'다시 로그인'}</button><small>${esc(authorizeNotes[q.id]||'이 계정의 공식 로그인 창을 엽니다. 같은 계정으로 다시 로그인하세요.')}</small></div>`;
  return `<div class="weekly-reconnect"><button type="button" data-account-authorize="${esc(q.id)}"${authorizing?' disabled':''}>${authorizing===q.id?'macOS 승인 기다리는 중…':'다시 연결'}</button><small>${esc(authorizeNotes[q.id]||'macOS가 저장된 로그인 사용을 한 번 묻습니다. 다시 묻지 않습니다.')}</small></div>`;}
 $('weeklyOverview').addEventListener('click',e=>{
  const edit=e.target.closest('[data-alias-edit]');
@@ -682,27 +698,30 @@ $('weeklyOverview').addEventListener('submit',async e=>{
  }catch(error){aliasNote=error.name==='TimeoutError'?'저장 응답을 확인하지 못했습니다. 잠시 뒤 다시 확인해 주세요.':error.message;}
  finally{aliasSaving=false;render();}
 });
-$('weeklyOverview').addEventListener('click',async e=>{
+async function handleAccountReconnectClick(e){
  const relogin=e.target.closest('[data-account-relogin]');
  if(relogin&&!authorizing){
-  const id=relogin.dataset.accountId;authorizing=id;renderWeekly();
+  const id=relogin.dataset.accountId;authorizing=id;renderWeekly();renderQuotas();
   try{
    if(!data?.action_token||!data.ready)throw Error('수집기 연결을 확인한 뒤 다시 시도해 주세요.');
    const r=await fetch('/api/accounts/login',{method:'POST',headers:{'Content-Type':'application/json','X-Monitor-Token':data.action_token},body:JSON.stringify({kind:relogin.dataset.accountRelogin}),signal:AbortSignal.timeout(20000)});
    const result=await r.json().catch(()=>({}));authorizeNotes[id]=result.message||(r.ok?'로그인 창을 열었습니다.':'로그인 창을 열지 못했습니다.');
   }catch(error){authorizeNotes[id]=error.name==='TimeoutError'?'로그인 창 응답을 확인하지 못했습니다. 터미널을 먼저 확인해 주세요.':error.message;}
-  finally{authorizing=null;renderWeekly();}
+  finally{authorizing=null;renderWeekly();renderQuotas();}
   return;
  }
  const b=e.target.closest('[data-account-authorize]');if(!b||authorizing)return;
- const id=b.dataset.accountAuthorize;authorizing=id;renderWeekly();
+ const id=b.dataset.accountAuthorize;authorizing=id;renderWeekly();renderQuotas();
  try{
   if(!data?.action_token||!data.ready)throw Error('수집기 연결을 확인한 뒤 다시 시도해 주세요.');
   const r=await fetch('/api/accounts/authorize',{method:'POST',headers:{'Content-Type':'application/json','X-Monitor-Token':data.action_token},body:JSON.stringify({account_id:id}),signal:AbortSignal.timeout(125000)});
   const result=await r.json().catch(()=>({}));authorizeNotes[id]=result.message||(r.ok?'연결했습니다.':'연결하지 못했습니다.');
+  if(r.ok)setTimeout(refresh,2500);
  }catch(error){authorizeNotes[id]=error.name==='TimeoutError'?'승인 응답을 확인하지 못했습니다. 계정 상태가 바뀌었는지 먼저 확인해 주세요.':error.message;}
- finally{authorizing=null;renderWeekly();}
-});
+ finally{authorizing=null;renderWeekly();renderQuotas();}
+}
+$('weeklyOverview').addEventListener('click',handleAccountReconnectClick);
+$('quotas').addEventListener('click',handleAccountReconnectClick);
 function renderWeekly(){
  $('summary').hidden=false;$('weeklyOverview').hidden=false;
  const rows=(data.account_quotas||[]).filter(q=>provider==='all'||q.kind===provider);

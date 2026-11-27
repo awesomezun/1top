@@ -7,6 +7,7 @@ from pathlib import Path
 import os,re,shutil,subprocess
 import psutil
 from .platform_support import owned_process, process_terminal
+from . import _rust_bridge
 
 APP_NAMES={'Cursor','Visual Studio Code','Code','Code - Insiders','Windsurf','Zed',
            'WindowsTerminal','Windows Terminal','powershell','pwsh','cmd','conhost','OpenConsole','Antigravity','Terminal','iTerm','iTerm2','Warp','Ghostty','Alacritty',
@@ -16,11 +17,18 @@ def cli_kind(name,args,exe=''):
     from .observe.processes import cli_kind as classify
     return classify(name,args,exe)
 
-def app_from(path,name=''):
+def _py_app_from(path,name=''):
     match=re.search(r'([^/]+)\.app(?:/|$)',path or '')
     if match:return match.group(1),str(path).split('.app',1)[0]+'.app'
     base=Path(name).stem
     return (base,path or '') if base in APP_NAMES else ('','')
+
+def app_from(path,name=''):
+    m=_rust_bridge.mode()
+    if m=='old':return _py_app_from(path,name)
+    if m=='new':return _rust_bridge.native.proc_app_from(str(path or ''),str(name or ''))
+    return _rust_bridge.shadow_check('discovery.app_from',_py_app_from(path,name),
+                                     _rust_bridge.native.proc_app_from(str(path or ''),str(name or '')))
 
 # Claude Code 2.1 writes busy/shell/idle/waiting; busy and shell are an active turn.
 REGISTRY_STATES={'busy':'working','shell':'working'}

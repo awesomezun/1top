@@ -4,6 +4,7 @@ Prices are US dollars per million tokens, checked on PRICES_AS_OF against the so
 no row has no price: the report leaves it out and counts its tokens apart, never guessing a price.
 """
 import re
+from . import _rust_bridge
 
 PRICES_AS_OF = '2026-11-07'
 SOURCES = {
@@ -38,7 +39,7 @@ MODELS = [
 _COMPILED = [(re.compile(m[0]), m[1:]) for m in MODELS]
 
 
-def normalize(model):
+def _py_normalize(model):
     """Lower case, without a provider prefix, a context suffix like [1m] or a date suffix."""
     name = str(model or '').strip().lower()
     name = name.split('/')[-1]
@@ -47,9 +48,19 @@ def normalize(model):
     return name
 
 
-def price(model):
+def normalize(model):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_normalize(model)
+    arg = '' if not model else str(model)
+    if m == 'new':
+        return _rust_bridge.native.pricing_normalize(arg)
+    return _rust_bridge.shadow_check('pricing.normalize', _py_normalize(model), _rust_bridge.native.pricing_normalize(arg))
+
+
+def _py_price(model):
     """(input, cache read, cache write, output) per million tokens, or None when the model has no known price."""
-    name = normalize(model)
+    name = _py_normalize(model)
     if not name or name == 'unknown':
         return None
     for pattern, rest in _COMPILED:
@@ -58,17 +69,38 @@ def price(model):
     return None
 
 
-def value(model, tokens):
+def price(model):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_price(model)
+    arg = '' if not model else str(model)
+    if m == 'new':
+        return _rust_bridge.native.pricing_price(arg)
+    return _rust_bridge.shadow_check('pricing.price', _py_price(model), _rust_bridge.native.pricing_price(arg))
+
+
+def _py_value(model, tokens):
     """Dollars for [fresh input, cache read, cache write, output] tokens, or None without a price."""
-    p = price(model)
+    p = _py_price(model)
     if p is None:
         return None
     return sum(n * rate for n, rate in zip(tokens, p)) / 1e6
 
 
+def value(model, tokens):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_value(model, tokens)
+    arg = '' if not model else str(model)
+    toks = [float(x) for x in tokens]
+    if m == 'new':
+        return _rust_bridge.native.pricing_value(arg, toks)
+    return _rust_bridge.shadow_check('pricing.value', _py_value(model, toks), _rust_bridge.native.pricing_value(arg, toks))
+
+
 # What a month of each plan costs, by tool and the account's own plan words. None is a plan whose price is not
 # certain (ChatGPT Pro comes at $100, $200 or $500; team seats vary): the user picks it.
-def plan(kind, plan_name='', tier=''):
+def _py_plan(kind, plan_name='', tier=''):
     """(plan, label, price or None) for an account, from what the provider reports."""
     p = str(plan_name or '').strip().lower()
     t = str(tier or '').lower()
@@ -95,3 +127,15 @@ def plan(kind, plan_name='', tier=''):
         return (p or 'unknown'), ('GLM ' + p.title()).strip() if p else 'GLM', None
     label = {'Antigravity': 'Agy'}.get(kind, kind or '')
     return (p or 'unknown'), (label + ' ' + p.title()).strip() if p else label, None
+
+
+def plan(kind, plan_name='', tier=''):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_plan(kind, plan_name, tier)
+    k = str(kind or '')
+    pn = str(plan_name or '')
+    tr = str(tier or '')
+    if m == 'new':
+        return _rust_bridge.native.pricing_plan(k, pn, tr)
+    return _rust_bridge.shadow_check('pricing.plan', _py_plan(kind, plan_name, tier), _rust_bridge.native.pricing_plan(k, pn, tr))

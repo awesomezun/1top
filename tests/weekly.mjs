@@ -67,6 +67,10 @@ const historicalNow=200000,historyQuota={id:'a',kind:'Claude',stale:true,windows
 const historicalEstimate={...calibrated,calibration:{...calibrated.calibration,source:'historical_provider_calibration',kind:'Claude',report_source:'claude_statusline',to:190000,reset:250000,valid_until:250000}};
 assert.equal(W.historicalCalibration(historicalEstimate,historyQuota,historicalNow),true);
 assert.ok(Math.abs(W.sessionBurn(historicalEstimate,1000,historyQuota,historicalNow)-1.2)<1e-12);
+const oauthEstimate={...historicalEstimate,calibration:{...historicalEstimate.calibration,report_source:'claude_oauth'}};
+assert.equal(W.historicalCalibration(oauthEstimate,{...historyQuota,stale:false},historicalNow),true);
+assert.ok(Math.abs(W.sessionBurn(oauthEstimate,1000,{...historyQuota,stale:false},historicalNow)-1.2)<1e-12);
+assert.ok(Math.abs(W.sessionBurn(oauthEstimate,1000,historyQuota,historicalNow)-1.2)<1e-12);
 assert.match(W.basis(historicalEstimate),/저장된 제공자 보고/);
 for(const change of [{source:'old'},{kind:'Codex'},{report_source:'unknown'},{to:historicalNow+1},{valid_until:historicalNow},{valid_until:250001},{reset:250061},{to:100000},{to:null}]){
  const e={...historicalEstimate,calibration:{...historicalEstimate.calibration,...change}};

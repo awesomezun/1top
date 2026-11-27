@@ -735,6 +735,9 @@ struct QuickDashboard: View {
                 Menu {
                     Button(tr("Claude Code 계정 로그인…")) { model.addAccount("Claude") }
                     Button(tr("Codex 계정 로그인…")) { model.addAccount("Codex") }
+                    Button(tr("Google (Agy CLI) 계정 로그인…")) { model.addAccount("Antigravity") }
+                    Button(tr("Google Gemini CLI 로그인…")) { model.addAccount("Gemini") }
+                    Button(tr("Devin 계정 로그인…")) { model.addAccount("Devin") }
                 } label: { Image(systemName: "plus").font(m.font(.label, .semibold)) }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: m(18), height: m(14))
                     .disabled(!model.fresh || model.busy).accessibilityLabel(tr("구독 계정 추가 로그인"))
@@ -1096,16 +1099,19 @@ struct QuickDashboard: View {
             .overlay(RoundedRectangle(cornerRadius: m(8)).stroke(theme.line))
             .help(tr(quota.note) + (quota.updated > 0 ? " · " + Date(timeIntervalSince1970: quota.updated).formatted(date: .omitted, time: .shortened) : ""))
     }
-    /// macOS asks once for the saved sign-in; the button stays off while that question is open.
+    /// macOS asks once for the saved sign-in for Claude; other providers open their official CLI sign-in.
     private func reconnectButton(_ quota: AccountQuota) -> some View {
-        let waiting = model.authorizing == quota.id
+        let isClaude = quota.kind == "Claude"
+        let waiting = isClaude && model.authorizing == quota.id
         return VStack(alignment: .leading, spacing: m(4)) {
-            Button { model.authorizeAccount(quota.id) } label: {
-                Text(tr(waiting ? "macOS 승인 기다리는 중…" : "다시 연결")).font(m.font(.label, .semibold))
+            Button {
+                if isClaude { model.authorizeAccount(quota.id) } else { model.addAccount(quota.kind) }
+            } label: {
+                Text(tr(isClaude ? (waiting ? "macOS 승인 기다리는 중…" : "다시 연결") : "다시 로그인")).font(m.font(.label, .semibold))
                     .padding(.horizontal, m(10)).frame(height: m(26))
                     .background(theme.raised, in: RoundedRectangle(cornerRadius: m(6)))
-            }.buttonStyle(.plain).disabled(model.authorizing != nil || !model.fresh)
-            Text(tr("macOS가 저장된 로그인 사용을 한 번 묻습니다. 다시 묻지 않습니다.")).font(m.font(.caption)).foregroundStyle(theme.muted)
+            }.buttonStyle(.plain).disabled((isClaude ? model.authorizing != nil : model.busy) || !model.fresh)
+            Text(tr(isClaude ? "macOS가 저장된 로그인 사용을 한 번 묻습니다. 다시 묻지 않습니다." : "이 계정의 공식 로그인 창을 엽니다. 같은 계정으로 다시 로그인하세요.")).font(m.font(.caption)).foregroundStyle(theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }.padding(.top, m(2))
     }

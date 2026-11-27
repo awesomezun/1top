@@ -400,7 +400,7 @@ const working=s=>stateOf(s)==='working'||s.display_name===undefined&&(s.children
   const s=sessions().find(x=>x.id===id),z=Math.round(S.zoom*100);
   if(kind==='head')return [['open_browser','브라우저에서 열기'],['refresh','지금 새로고침'],['units',S.tokensMode?'세션을 주간 한도 %로 보기':'세션을 토큰으로 보기'],['zoom',T('화면 크기')+` ${z}%`,{sub:true}],'-',['login',(S.login.enabled?'✓ ':'')+T('로그인할 때 실행')],['open_remote','원격 대시보드 (선택)'],['connect','원격 기기 연결…'],'-',['restart','로컬 수집기 다시 시작'],['quit','1top 종료']];
   if(kind==='zoom')return [['zoom_in','확대',{off:S.zoom>=1.6}],['zoom_out','축소',{off:S.zoom<=.8}],['zoom_reset','기본 크기',{off:S.zoom===1}]];
-  if(kind==='accounts')return [['add:Claude','Claude Code 계정 로그인…'],['add:Codex','Codex 계정 로그인…']];
+  if(kind==='accounts')return [['add:Claude','Claude Code 계정 로그인…'],['add:Codex','Codex 계정 로그인…'],['add:Antigravity','Google (Agy CLI) 계정 로그인…'],['add:Gemini','Google Gemini CLI 로그인…'],['add:Devin','Devin 계정 로그인…']];
   if(kind==='session'&&s)return [['focus','터미널 바로가기',{off:!allows(s,'focus')}],['pause','작업 일시정지…',{off:!allows(s,'pause')}],['resume','새 요청으로 재개…',{off:!allows(s,'resume')}],'-',['terminate','CLI 종료…',{off:!allows(s,'terminate'),danger:true}]];
   return [];
  }
@@ -414,7 +414,7 @@ const working=s=>stateOf(s)==='working'||s.display_name===undefined&&(s.children
  // On a Mac, reconnecting asks macOS once for the saved sign-in; elsewhere the account's official sign-in opens again.
  const macHost=()=>(S.data?.system?.host?.os||'Darwin')==='Darwin';
  function reconnect(q,busy){
-  const mac=macHost(),waiting=S.authorizing===q.id;
+  const mac=macHost()&&q.kind==='Claude',waiting=S.authorizing===q.id;
   return `<div class="q-reconnect"><button type="button" data-act="${mac?'authorize':'relogin'}" data-account="${esc(q.id)}" data-kind="${esc(q.kind)}" ${busy||!fresh()?'disabled':''}>${esc(T(mac?(waiting?'macOS 승인 기다리는 중…':'다시 연결'):(waiting?'로그인 창을 여는 중…':'다시 로그인')))}</button><small>${esc(T(mac?'macOS가 저장된 로그인 사용을 한 번 묻습니다. 다시 묻지 않습니다.':'이 계정의 공식 로그인 창을 엽니다. 같은 계정으로 다시 로그인하세요.'))}</small></div>`;
  }
  const CONFIRM={pause:['작업을 일시정지할까요?','현재 작업에 Esc를 보냅니다. 세션은 유지되며, 실제 중단 여부는 수집 후 확인됩니다.','일시정지'],resume:['새 요청으로 작업을 재개할까요?','이전 작업을 이어서 진행하라는 새 요청을 보냅니다. 토큰을 다시 사용할 수 있습니다. 터미널에 작성 중인 입력이 없는지 확인하세요.','새 요청으로 재개'],terminate:['이 CLI를 종료할까요?','작업 중이면 먼저 중단을 요청하고, 멈춘 상태가 확인되면 해당 CLI만 종료합니다. 터미널 탭과 저장된 기록은 유지됩니다.','CLI 종료']};
@@ -459,7 +459,7 @@ const working=s=>stateOf(s)==='working'||s.display_name===undefined&&(s.children
    colors:{...COLORS,Aside:color('Aside')},kindName:toolName,fmt:clusterNumber,speed:root.OneTopSpeed,weekly:root.OneTopWeekly,reconnect:RECONNECT,accountChip:chip,name:sessionName};
   // The dials (side by side, or one above the other), then the window with its seven pages; the layout switch picks.
   // Its limits page signs in through the panel's own account menu and buttons.
-  const accountActs={add:'data-act="menu" data-menu="accounts"',relogin:q=>`data-act="${macHost()?'authorize':'relogin'}" data-account="${esc(q.id)}" data-kind="${esc(q.kind)}"`};
+  const accountActs={add:'data-act="menu" data-menu="accounts"',relogin:q=>`data-act="${macHost()&&q.kind==='Claude'?'authorize':'relogin'}" data-account="${esc(q.id)}" data-kind="${esc(q.kind)}"`};
   root.OneTopCluster.render($('qCluster'),{...ctx,panel:true,sessionsHost:list,accountActs,layout:LAYOUT?.layout.presets.cluster,...(root.OneTopClusterPages?{drawPage,drawFlow}:{})});
  }
  // The cluster window's pages, drawn by the same functions as the dashboard's (cluster-pages.js): the token

@@ -7,14 +7,25 @@ from datetime import datetime
 from pathlib import Path
 
 from .platform_support import data_directory
+from . import _rust_bridge
 
 _LEVEL = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.+\-]{0,63}$')
 _TAIL = 16 * 1024 * 1024
 
 
-def level(value):
+def _py_level(value):
     """Keep the provider's literal label without translating levels between tools."""
     return value if isinstance(value, str) and _LEVEL.fullmatch(value) else None
+
+
+def level(value):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_level(value)
+    arg = value if isinstance(value, str) else None
+    if m == 'new':
+        return _rust_bridge.native.effort_level(arg)
+    return _rust_bridge.shadow_check('effort.level', _py_level(value), _rust_bridge.native.effort_level(arg))
 
 
 def codex_level(payload):

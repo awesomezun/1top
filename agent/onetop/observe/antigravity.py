@@ -11,6 +11,7 @@ from urllib.parse import unquote, urlsplit
 
 from . import openbot
 from .readonly import connect
+from .. import _rust_bridge
 
 LOCK = re.compile(r'^n(.+)/presence/([0-9a-f-]{36})\.lock$')
 CONVERSATION = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
@@ -59,7 +60,7 @@ def _varint(data, i):
             raise ValueError('varint')
 
 
-def fields(data):
+def _py_fields(data):
     """One protobuf message's own fields, {number: [value]}: varints as int, length-delimited as bytes."""
     out, i, size = {}, 0, len(data or b'')
     while i < size:
@@ -81,6 +82,18 @@ def fields(data):
     return out
 
 
+def fields(data):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_fields(data)
+    raw = bytes(data or b'')
+    if m == 'new':
+        return _rust_bridge.native.ag_fields(raw)
+    py_res = _py_fields(data)
+    rs_res = _rust_bridge.native.ag_fields(raw)
+    return _rust_bridge.shadow_check('antigravity.fields', py_res, rs_res)
+
+
 def _int(values):
     return values[0] if values and isinstance(values[0], int) else 0
 
@@ -99,13 +112,13 @@ def _seconds(values):
     return _int(stamp_fields.get(1)) + _int(stamp_fields.get(2)) / 1e9
 
 
-def response(metadata):
+def _py_response(metadata):
     """A step's model usage (its metadata field 9): input, output, cache write and read, the model's number and the
     response id. Input excludes the cache read. None for a step that called no model."""
-    top = fields(metadata)
+    top = _py_fields(metadata)
     if not top.get(9) or not isinstance(top[9][0], bytes):
         return None
-    usage = fields(top[9][0])
+    usage = _py_fields(top[9][0])
     rid = _text(usage.get(7)) or _text(usage.get(11))
     tokens = [_int(usage.get(2)), _int(usage.get(5)), _int(usage.get(4)), _int(usage.get(3))]
     if not rid or not sum(tokens):
@@ -113,6 +126,18 @@ def response(metadata):
     # Created, then started, generated and completed: the response is counted when it ended.
     at = max(_seconds(top.get(n)) for n in (1, 6, 7, 8))
     return {'id': rid, 'tokens': tokens, 'model': _int(usage.get(1)), 't': at}
+
+
+def response(metadata):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_response(metadata)
+    raw = bytes(metadata or b'')
+    if m == 'new':
+        return _rust_bridge.native.ag_response(raw)
+    py_res = _py_response(metadata)
+    rs_res = _rust_bridge.native.ag_response(raw)
+    return _rust_bridge.shadow_check('antigravity.response', py_res, rs_res)
 
 
 def model_names(db, count):
@@ -138,7 +163,7 @@ def model_names(db, count):
     return responses, numbers
 
 
-def usage(path, after=-1):
+def _py_usage(path, after=-1):
     """Model responses in steps after index `after`, the last REREAD of those read again: (last index, [response]).
     The caller counts each response id once."""
     with closing(connect(path)) as db:
@@ -150,7 +175,7 @@ def usage(path, after=-1):
         found = []
         for idx, metadata in rows:
             try:
-                item = response(metadata or b'')
+                item = _py_response(metadata or b'')
             except (ValueError, IndexError):
                 continue
             if item:
@@ -167,7 +192,27 @@ def usage(path, after=-1):
     return (rows[-1][0] if rows else after), found
 
 
-def workspace(uris):
+def usage(path, after=-1):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_usage(path, after)
+    if m == 'new':
+        try:
+            last, found, numbers = _rust_bridge.native.ag_usage(str(path), int(after), MODELS)
+        except RuntimeError as err:
+            _rust_bridge.reraise_sqlite(err)
+        MODELS.update(numbers)
+        return last, found
+    before_models = dict(MODELS)
+    py_res = _py_usage(path, after)
+    try:
+        last, found, _ = _rust_bridge.native.ag_usage(str(path), int(after), before_models)
+    except RuntimeError as err:
+        _rust_bridge.reraise_sqlite(err)
+    return _rust_bridge.shadow_check('antigravity.usage', py_res, (last, found))
+
+
+def _py_workspace(uris):
     """The first local folder among a summary's workspace URIs."""
     try:
         values = json.loads(uris or '[]')
@@ -182,7 +227,17 @@ def workspace(uris):
     return ''
 
 
-def catalog(root):
+def workspace(uris):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_workspace(uris)
+    arg = None if uris is None else str(uris)
+    if m == 'new':
+        return _rust_bridge.native.ag_workspace(arg)
+    return _rust_bridge.shadow_check('antigravity.workspace', _py_workspace(uris), _rust_bridge.native.ag_workspace(arg))
+
+
+def _py_catalog(root):
     """A folder's summaries: {conversation id: {title, cwd, status, modified, parent}}."""
     try:
         with closing(connect(Path(root)/'conversation_summaries.db')) as db:
@@ -196,9 +251,18 @@ def catalog(root):
         if not CONVERSATION.fullmatch(str(cid)):
             continue
         out[cid] = {'id': cid, 'title': ''.join(c for c in str(title or '') if c.isprintable()).strip()[:200],
-                    'cwd': workspace(uris), 'status': str(status or ''), 'modified': at, 'root': str(root),
+                    'cwd': _py_workspace(uris), 'status': str(status or ''), 'modified': at, 'root': str(root),
                     'parent': parent if CONVERSATION.fullmatch(str(parent or '')) else None}
     return out
+
+
+def catalog(root):
+    m = _rust_bridge.mode()
+    if m == 'old':
+        return _py_catalog(root)
+    if m == 'new':
+        return _rust_bridge.native.ag_catalog(str(root))
+    return _rust_bridge.shadow_check('antigravity.catalog', _py_catalog(root), _rust_bridge.native.ag_catalog(str(root)))
 
 
 def changed(row):
