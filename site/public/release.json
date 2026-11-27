@@ -1,19 +1,19 @@
 {
-  "version": "4.13.0",
+  "version": "5.1.1",
   "status": "preview",
   "signed": false,
   "notarized": false,
-  "releases": "https://github.com/awesomezun/1top/releases/tag/v4.13.0",
+  "releases": "https://github.com/awesomezun/1top/releases/tag/v5.1.1",
   "platforms": {
     "macos": {
       "architecture": "arm64",
-      "url": "https://github.com/awesomezun/1top/releases/download/v4.13.0/1top-4.13.0-macos-arm64.dmg",
-      "version": "4.13.0",
+      "url": "https://github.com/awesomezun/1top/releases/download/v5.1.1/1top-5.1.1-macos-arm64.dmg",
+      "version": "5.1.1",
       "status": "preview",
       "signed": false,
       "notarized": false,
-      "sha256": "0fe3bbb68e8e199786907be5cc4c0b023727b1f5d9ce84d7e0d0f1cad8fa4ce2",
-      "build": 30
+      "sha256": "ed8448ee7f5c74c696716a74cab1ec6b8d266f35828f319f1f77ff2f5d4c3b6a",
+      "build": 36
     },
     "windows": {
       "architecture": "x64",
@@ -25,17 +25,17 @@
       "store_certified": false,
       "legacy_preview": {
         "architecture": "x64",
-        "url": "https://github.com/awesomezun/1top/releases/download/v4.13.0/1top-4.13.0-windows-x64-setup.exe",
-        "sha256": "09f9925686db662f4611300475b9537cdcf55f80699597a236a7cb0c80f01163",
-        "version": "4.13.0",
+        "url": "https://github.com/awesomezun/1top/releases/download/v5.1.1/1top-5.1.1-windows-x64-setup.exe",
+        "sha256": "4414c89a756e0b820db97856bbd678b6a351de77bee0e9fd41ed87189827b61c",
+        "version": "5.1.1",
         "signed": false,
         "status": "preview"
       },
-      "version": "4.13.0",
+      "version": "5.1.1",
       "test_msix": {
-        "version": "4.13.0.0",
-        "url": "https://github.com/awesomezun/1top/releases/download/v4.13.0/1top-4.13.0.0-windows-x64-test.msix",
-        "sha256": "9090d9ab5184863aaccaf012e6f82e9d117047f9dc06754ec479b7f485b201b0",
+        "version": "5.1.1.0",
+        "url": "https://github.com/awesomezun/1top/releases/download/v5.1.1/1top-5.1.1.0-windows-x64-test.msix",
+        "sha256": "7259bb2c3f525112ccf0fb78183500bb9f96a0d41d0e413e6957139e5e728e8c",
         "status": "test-only",
         "store_certified": false
       }

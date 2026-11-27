@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/awesomezun/1top/releases/tag/v4.13.0"><img alt="릴리스 4.13.0" src="https://img.shields.io/badge/릴리스-4.13.0_프리뷰-9dff3c?style=flat-square&labelColor=15181c"></a>
+  <a href="https://github.com/awesomezun/1top/releases/tag/v5.1.1"><img alt="릴리스 5.1.1" src="https://img.shields.io/badge/릴리스-5.1.1_프리뷰-9dff3c?style=flat-square&labelColor=15181c"></a>
   <img alt="macOS, Windows, iPhone, Android" src="https://img.shields.io/badge/macOS_·_Windows_·_iPhone_·_Android-6ccfa9?style=flat-square&labelColor=15181c">
   <img alt="한국어, 영어, 중국어" src="https://img.shields.io/badge/한국어_·_English_·_中文-9ab9ff?style=flat-square&labelColor=15181c">
   <a href="LICENSE"><img alt="AGPL-3.0 라이선스" src="https://img.shields.io/badge/라이선스-AGPL--3.0-e9b25c?style=flat-square&labelColor=15181c"></a>
@@ -39,15 +39,15 @@
 
 | | 플랫폼 | 받기 |
 | :---: | --- | --- |
-| <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13 이상 | [**1top-4.13.0-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v4.13.0/1top-4.13.0-macos-arm64.dmg) |
-| <img src="assets/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-4.13.0-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v4.13.0/1top-4.13.0-windows-x64-setup.exe) |
+| <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **macOS** · Apple Silicon, macOS 13 이상 | [**1top-5.1.1-macos-arm64.dmg**](https://github.com/awesomezun/1top/releases/download/v5.1.1/1top-5.1.1-macos-arm64.dmg) |
+| <img src="assets/readme/v4.6.1/windows.svg" width="22" alt=""> | **Windows** · x64 | [**1top-5.1.1-windows-x64-setup.exe**](https://github.com/awesomezun/1top/releases/download/v5.1.1/1top-5.1.1-windows-x64-setup.exe) |
 | <img src="https://cdn.simpleicons.org/android/3DDC84" width="22" alt=""> | **Android** 7 이상 | [**1top-4.13.0-android.apk**](https://github.com/awesomezun/1top/releases/download/v4.13.0/1top-4.13.0-android.apk) · Google Play 준비 중 |
 | <img src="https://cdn.simpleicons.org/apple/8e8e93" width="22" alt=""> | **iPhone** | App Store 준비 중 |
 | 🌐 | **브라우저** | [1top.si/app](https://1top.si/app?demo=1) — 체험은 설치가 필요 없습니다 |
 
-4.13.0는 프리뷰입니다. 파일과 `SHA256SUMS`, `build-info.json`은 [릴리스](https://github.com/awesomezun/1top/releases/tag/v4.13.0)에 있습니다. 맥 앱은 아직 공증 전이고 윈도우 설치 파일은 아직 코드 서명 전이라, 처음 실행할 때 macOS와 Windows가 확인을 물을 수 있습니다.
+5.1.1은 프리뷰입니다. 파일과 `SHA256SUMS`, `build-info.json`은 [릴리스](https://github.com/awesomezun/1top/releases/tag/v5.1.1)에 있습니다. 맥 앱은 아직 공증 전이고 윈도우 설치 파일은 아직 코드 서명 전이라, 처음 실행할 때 macOS와 Windows가 확인을 물을 수 있습니다.
 
-**4.13.0에서 달라진 점:** 컴퓨터가 휴대폰과 웹으로 보내는 보고를 약 6분의 1로 압축합니다. 업로드가 느린 인터넷에서도 연결이 끊기지 않고 3초 간격을 지킵니다. 4.12.2부터는 Antigravity 대화를 어느 폴더에 있든 찾고(OpenBot이 계정마다 따로 두는 폴더 포함), 응답마다 실제 모델 이름이 나오며, 릴레이는 한 시간에 한 번만 백업합니다. 아무도 보지 않을 때 꺼진 컴퓨터의 마지막 화면은 최대 한 시간 전 것일 수 있습니다.
+**5.1.1에서 달라진 점:** macOS 수집기를 순수 Rust 단독 실행 파일(`onetop-agent`)로 전환해 앱 크기와 메모리를 줄이고 수집 속도를 높였습니다. 최근 24시간 내 종료·대기 중인 Codex·Claude 세션도 기본 폴더·OpenBot·Orca·관리 계정·기억된 프로세스 폴더에서 중복 없이 찾아 `작업 중 아님`에 유지합니다. `agy` 한도 조회가 예기치 않게 브라우저 로그인 창을 띄우지 않도록 막았고, 구독 계정 추가에 Google Antigravity·Gemini CLI·Devin·GLM을 추가했으며, Claude OAuth 소진 속도 환산과 영어·중국어 번역을 보강했습니다.
 
 ## 볼 수 있는 것
 
